@@ -1,0 +1,172 @@
+# Claude Desktop MCP Setup
+
+PatchDIFF's Claude Desktop adapter is a local stdio MCP server, not a localhost HTTP MCP server.
+
+Claude Desktop launches the Python process directly and talks to it over stdin/stdout:
+
+```text
+Claude Desktop
+  -> launches
+backend/app/mcp/external_adapter.py
+  -> uses
+Postgres Docker container on localhost:5432
+```
+
+Do not connect Claude Desktop to `http://127.0.0.1:8000` for this setup. The FastAPI server is useful for health checks and future HTTP API work, but the current Claude Desktop MCP path is the stdio adapter.
+
+## 1. Start Postgres And Run Migrations
+
+From the Patch-DIFF repo root:
+
+```powershell
+docker compose up -d postgres
+.\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
+```
+
+You do not need to run `uvicorn` for the existing Claude Desktop MCP tools. Claude Desktop launches `app.mcp.external_adapter` itself.
+
+## 2. Smoke Test The Adapter
+
+From the repo root:
+
+```powershell
+$env:PYTHONPATH = "backend"
+'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | .\.venv\Scripts\python.exe -m app.mcp.external_adapter
+```
+
+Expected response includes:
+
+```json
+{
+  "serverInfo": {
+    "name": "patchdiff-mvp"
+  }
+}
+```
+
+If this works, Claude Desktop should be able to launch the adapter with the same Python executable and environment.
+
+## 3. Open Claude Desktop Config
+
+In Claude Desktop:
+
+```text
+Settings -> Developer -> Edit Config
+```
+
+On Windows, the config is usually:
+
+```text
+%APPDATA%\Claude\claude_desktop_config.json
+```
+
+Anthropic documents local Claude Desktop MCP servers separately from remote connectors. Local servers run on your machine, while remote connectors are configured through the Claude connector flow and must be reachable from Anthropic's infrastructure.
+
+References:
+
+- [Getting Started with Local MCP Servers on Claude Desktop](https://support.anthropic.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
+- [Get started with custom connectors using remote MCP](https://support.anthropic.com/en/articles/11175166-getting-started-with-custom-integrations-using-remote-mcp)
+
+## 4. Add PatchDIFF
+
+Use the venv Python directly so Claude Desktop launches the interpreter that has PatchDIFF's dependencies installed.
+
+Replace paths if your repo lives somewhere else:
+
+```json
+{
+  "mcpServers": {
+    "patchdiff": {
+      "type": "stdio",
+      "command": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\.venv\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "app.mcp.external_adapter"
+      ],
+      "env": {
+        "PYTHONPATH": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\backend",
+        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff"
+      }
+    }
+  }
+}
+```
+
+The `"type": "stdio"` field is included to make the transport explicit. If an older Claude Desktop build rejects that field, remove only `"type": "stdio"` and keep `command`, `args`, and `env`.
+
+## 5. Restart Claude Desktop
+
+Fully quit Claude Desktop, then reopen it.
+
+On Windows, make sure Claude Desktop is not just minimized to the tray. Quit it completely before reopening.
+
+## 6. Verify Tools In Claude Desktop
+
+Open a new chat and check the MCP/connectors UI:
+
+```text
++ button near the message box, labeled "+" -> Connectors
+```
+
+You should see `patchdiff` and tools such as:
+
+```text
+patchdiff_handle_upload
+patchdiff_initialize_target
+patchdiff_build_prompt_context
+patchdiff_submit_pdcp
+patchdiff_get_target
+patchdiff_export_target
+patchdiff_save
+patchdiff_replay
+```
+
+If the server fails to start, check Claude Desktop's Developer settings and MCP logs.
+
+## Important Gotcha
+
+This can work:
+
+```json
+"command": "py",
+"args": ["-3", "-m", "app.mcp.external_adapter"]
+```
+
+But only if the Python launched by `py -3` has all PatchDIFF dependencies installed.
+
+For this repo, dependencies are normally installed into:
+
+```text
+.\.venv\Scripts\python.exe
+```
+
+The safer Claude Desktop config is:
+
+```json
+"command": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\.venv\\Scripts\\python.exe",
+"args": ["-m", "app.mcp.external_adapter"]
+```
+
+That avoids the common failure where Claude Desktop launches global Python but PatchDIFF dependencies only exist in the virtual environment.
+
+## Bottom Line
+
+Use the stdio config, not `localhost:8000`:
+
+```json
+{
+  "mcpServers": {
+    "patchdiff": {
+      "type": "stdio",
+      "command": "C:\\ABSOLUTE\\PATH\\TO\\Patch-DIFF\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "app.mcp.external_adapter"],
+      "env": {
+        "PYTHONPATH": "C:\\ABSOLUTE\\PATH\\TO\\Patch-DIFF\\backend",
+        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff"
+      }
+    }
+  }
+}
+```
+
+Postgres must be running, migrations must be applied, and Claude Desktop will launch the adapter process itself.

@@ -1,0 +1,196 @@
+"""External MCP stdio adapter for the PatchDIFF internal tool registry.
+
+The adapter is intentionally thin: transport concerns live here, while all
+PatchDIFF behavior remains owned by the existing internal registry/tool layer.
+"""
+
+from __future__ import annotations
+
+import inspect
+import json
+import sys
+from types import NoneType, UnionType
+from typing import Any, TextIO, get_args, get_origin, get_type_hints
+
+from app.mcp import tools as _registered_tools  # noqa: F401 - imports register tool handlers
+from app.mcp.server import registry
+
+
+PROTOCOL_VERSION = "2024-11-05"
+SERVER_NAME = "patchdiff-mvp"
+SERVER_VERSION = "0.1.0"
+EXPECTED_TOOL_NAMES = registry.names()
+
+TOOL_DESCRIPTIONS: dict[str, str] = {
+    "patchdiff_handle_upload": "Initialize a canonical PatchDIFF target from uploaded document content.",
+    "patchdiff_initialize_target": "Initialize a canonical PatchDIFF target.",
+    "patchdiff_build_prompt_context": "Build MCP prompt context for a target and user edit request.",
+    "patchdiff_submit_pdcp": "Submit untrusted .pdcp content through deterministic validation and commit services.",
+    "patchdiff_get_regeneration_context": "Return structured regeneration context for a rejected PDCP attempt.",
+    "patchdiff_build_regeneration_prompt": "Build a regeneration prompt from a rejected PDCP attempt.",
+    "patchdiff_request_regeneration": "Submit supplied regenerated .pdcp content as a new validation attempt.",
+    "patchdiff_save": "Create a SAVE snapshot and advance the editing cycle without mutating target content.",
+    "patchdiff_replay": "Replay accepted PDCP logs and verify the reconstructed current hash.",
+    "patchdiff_export_target": "Export the current canonical target content and metadata.",
+    "patchdiff_get_target": "Return the current canonical target state.",
+    "patchdiff_get_pdcp_log": "Return append-only PDCP log entries for a target.",
+    "patchdiff_get_manifest_ledger": "Return accepted-only manifest ledger entries for a target.",
+}
+
+
+class ExternalMCPAdapter:
+    """Minimal JSON-RPC MCP adapter backed by the internal PatchDIFF registry."""
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "name": name,
+                "description": TOOL_DESCRIPTIONS.get(name, f"PatchDIFF tool {name}."),
+                "inputSchema": _input_schema_for(name),
+            }
+            for name in registry.names()
+        ]
+
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        if name not in registry.names():
+            return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
+        try:
+            payload = registry.call(name, **(arguments or {}))
+        except TypeError as exc:
+            return _tool_error(f"Invalid arguments for {name}: {exc}")
+        except Exception as exc:  # pragma: no cover - defensive transport boundary
+            return _tool_error(f"PatchDIFF MCP tool failed: {exc}")
+        return _tool_result(payload)
+
+    def handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
+        request_id = request.get("id")
+        method = request.get("method")
+
+        if method in {"notifications/initialized", "initialized"}:
+            return None
+        if request.get("jsonrpc") != "2.0" or not isinstance(method, str):
+            return _rpc_error(request_id, -32600, "Invalid JSON-RPC request.")
+
+        if method == "initialize":
+            return _rpc_result(
+                request_id,
+                {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+                },
+            )
+        if method == "tools/list":
+            return _rpc_result(request_id, {"tools": self.list_tools()})
+        if method == "tools/call":
+            params = request.get("params") or {}
+            name = params.get("name")
+            arguments = params.get("arguments") or {}
+            if not isinstance(name, str) or not isinstance(arguments, dict):
+                return _rpc_error(request_id, -32602, "tools/call requires name and object arguments.")
+            return _rpc_result(request_id, self.call_tool(name, arguments))
+        if method == "resources/list":
+            return _rpc_result(request_id, {"resources": []})
+        if method == "prompts/list":
+            return _rpc_result(request_id, {"prompts": []})
+        return _rpc_error(request_id, -32601, f"Unsupported MCP method: {method}")
+
+
+def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
+    """Serve newline-delimited JSON-RPC requests over stdio."""
+
+    adapter = ExternalMCPAdapter()
+    for line in input_stream:
+        if not line.strip():
+            continue
+        try:
+            request = json.loads(line)
+        except json.JSONDecodeError as exc:
+            response = _rpc_error(None, -32700, f"Parse error: {exc.msg}")
+        else:
+            if not isinstance(request, dict):
+                response = _rpc_error(None, -32600, "JSON-RPC message must be an object.")
+            else:
+                response = adapter.handle_request(request)
+        if response is not None:
+            output_stream.write(json.dumps(response, separators=(",", ":"), sort_keys=True) + "\n")
+            output_stream.flush()
+
+
+def main() -> None:
+    serve_stdio()
+
+
+def _input_schema_for(name: str) -> dict[str, Any]:
+    handler = registry.handler(name)
+    signature = inspect.signature(handler)
+    type_hints = get_type_hints(handler)
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for parameter_name, parameter in signature.parameters.items():
+        properties[parameter_name] = _schema_for_annotation(type_hints.get(parameter_name, parameter.annotation))
+        if parameter.default is inspect.Parameter.empty:
+            required.append(parameter_name)
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+        "additionalProperties": False,
+    }
+    if required:
+        schema["required"] = required
+    return schema
+
+
+def _schema_for_annotation(annotation: Any) -> dict[str, Any]:
+    if annotation is inspect.Parameter.empty:
+        return {}
+
+    origin = get_origin(annotation)
+    if origin in {UnionType, None} and hasattr(annotation, "__args__"):
+        args = get_args(annotation)
+    elif origin is not None:
+        args = get_args(annotation)
+    else:
+        args = ()
+
+    if args and NoneType in args:
+        non_null = [arg for arg in args if arg is not NoneType]
+        if len(non_null) == 1:
+            schema = _schema_for_annotation(non_null[0])
+            schema_type = schema.get("type")
+            if isinstance(schema_type, str):
+                schema["type"] = [schema_type, "null"]
+            return schema
+
+    if annotation is str:
+        return {"type": "string"}
+    if annotation is int:
+        return {"type": "integer"}
+    if annotation is bool:
+        return {"type": "boolean"}
+    if annotation is float:
+        return {"type": "number"}
+    return {}
+
+
+def _tool_result(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "content": [{"type": "text", "text": json.dumps(payload, sort_keys=True)}],
+        "isError": False,
+    }
+
+
+def _tool_error(message: str) -> dict[str, Any]:
+    return {"content": [{"type": "text", "text": message}], "isError": True}
+
+
+def _rpc_result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": request_id, "result": result}
+
+
+def _rpc_error(request_id: Any, code: int, message: str) -> dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+
+
+if __name__ == "__main__":
+    main()

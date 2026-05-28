@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16.3-alpine
+    container_name: patchdiff-postgres
+    environment:
+      POSTGRES_DB: patchdiff
+      POSTGRES_USER: patchdiff
+      POSTGRES_PASSWORD: patchdiff
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U patchdiff -d patchdiff"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - patchdiff_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  patchdiff_postgres_data:
+

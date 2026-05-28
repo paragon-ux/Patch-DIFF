@@ -1,0 +1,19 @@
+PDCP 0.2.3
+target_file_id: aae935dd-1427-4801-ad60-b8ec95040234
+target_type: text/markdown
+target_hash: a6333b692ba173b6af95e22de630b63e41f52198164d5f592f599c8edf8c1de3
+
+# MANIFEST
+# change_id: chg_001
+# intent: Update the editing description.
+# input_state: The document says PatchDIFF edits documents through full rewrites.
+# output_state: The document says PatchDIFF edits documents through validated PDCP transactions.
+# affected_region: introductory sentence
+# user_visible_change: The description now reflects PDCP transaction editing.
+# risk: low
+
+<<<<<<< MATCH
+PatchDIFF edits documents through validated PDCP transactions.
+=======
+PatchDIFF edits documents through full rewrites.
+>>>>>>> REPLACE
