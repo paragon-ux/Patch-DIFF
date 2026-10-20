@@ -24,11 +24,13 @@ def resolve_match_span(
     target_text: str,
     match_text: str,
     disambiguation: Mapping[str, str] | None = None,
+    *,
+    overlapping: bool = True,
 ) -> MatchSpan:
     """Resolve a MATCH payload to exactly one target span or reject canonically."""
 
     target = canonicalize_text(target_text)
-    occurrences = find_exact_occurrences(target, match_text)
+    occurrences = find_exact_occurrences(target, match_text, overlapping=overlapping)
 
     if not occurrences:
         raise MatchResolutionError(FailureReason.MATCH_ABSENT, "MATCH text was not found.")

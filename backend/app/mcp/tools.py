@@ -7,15 +7,17 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.core.validity import validity_levels
 from app.mcp.server import registry
 from app.services.export_service import export_target, get_target
-from app.services.pdcp_service import SubmitPDCPResult, submit_pdcp
+from app.services.pdcp_service import SubmitPDCPResult, submit_edits, submit_pdcp
 from app.services.prompt_context_service import build_prompt_context
 from app.services.regeneration_service import (
     build_regeneration_context,
     build_regeneration_prompt,
     request_regeneration,
 )
+from app.services.read_service import clamp_limit, find_occurrences, read_target
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
 from app.services.target_service import initialize_target
@@ -51,13 +53,22 @@ def patchdiff_initialize_target(
     content_type: str,
     project_id: str | None = None,
 ) -> dict[str, Any]:
+    project_uuid: uuid.UUID | None = None
+    if project_id is not None:
+        project_uuid = _try_coerce_uuid(project_id)
+        if project_uuid is None:
+            return {
+                "status": "invalid_argument",
+                "project_id": str(project_id),
+                "failure_detail": "project_id is not a valid UUID.",
+            }
     with SessionLocal() as session:
         result = initialize_target(
             session,
             filename=filename,
             content=content,
             target_type=content_type,
-            project_id=uuid.UUID(project_id) if project_id else None,
+            project_id=project_uuid,
         )
     return {
         "target_file_id": str(result.target_file_id),
@@ -80,6 +91,7 @@ def patchdiff_submit_pdcp(
     parent_pdcp_log_id: str | None = None,
     regeneration_attempt: int | None = None,
     regeneration_source: str | None = None,
+    client_request_id: str | None = None,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
         result = submit_pdcp(
@@ -89,11 +101,69 @@ def patchdiff_submit_pdcp(
             expected_target_version=expected_target_version,
             expected_current_hash=expected_current_hash,
             submission_source=source,
-            parent_pdcp_log_id=uuid.UUID(parent_pdcp_log_id) if parent_pdcp_log_id else None,
+            parent_pdcp_log_id=parent_pdcp_log_id,
             regeneration_attempt=regeneration_attempt,
             regeneration_source=regeneration_source,
+            client_request_id=client_request_id,
         )
     return _submit_result_to_payload(result)
+
+
+@registry.register("patchdiff_submit_edits")
+def patchdiff_submit_edits(
+    *,
+    target_file_id: str,
+    intent: str,
+    edits: list[dict],
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
+    source: str = "model_response",
+    parent_pdcp_log_id: str | None = None,
+    attempt: int | None = None,
+    client_request_id: str | None = None,
+) -> dict[str, Any]:
+    """Typed transaction submit. At least one of expected_target_version / expected_current_hash is required."""
+
+    with SessionLocal() as session:
+        result = submit_edits(
+            session,
+            target_file_id=target_file_id,
+            intent=intent,
+            edits=edits,
+            expected_target_version=expected_target_version,
+            expected_current_hash=expected_current_hash,
+            submission_source=source,
+            parent_pdcp_log_id=parent_pdcp_log_id,
+            attempt=attempt,
+            client_request_id=client_request_id,
+        )
+    return _submit_result_to_payload(result)
+
+
+@registry.register("patchdiff_read_target")
+def patchdiff_read_target(*, target_file_id: str, start: int = 0, length: int | None = None) -> dict[str, Any]:
+    with SessionLocal() as session:
+        return read_target(session, target_file_id=target_file_id, start=start, length=length)
+
+
+@registry.register("patchdiff_find_occurrences")
+def patchdiff_find_occurrences(
+    *,
+    target_file_id: str,
+    text: str,
+    context_chars: int = 40,
+    start_occurrence: int = 1,
+    max_results: int = 200,
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        return find_occurrences(
+            session,
+            target_file_id=target_file_id,
+            text=text,
+            context_chars=context_chars,
+            start_occurrence=start_occurrence,
+            max_results=max_results,
+        )
 
 
 @registry.register("patchdiff_get_target")
@@ -146,6 +216,10 @@ def patchdiff_replay(*, target_file_id: str) -> dict[str, Any]:
         "target_file_id": str(result.target_file_id),
         "reconstructed_hash": result.reconstructed_hash,
         "current_hash": result.current_hash,
+        "reconstructed_version": result.reconstructed_version,
+        "current_version": result.current_version,
+        "materialized_state_matches": result.materialized_state_matches,
+        "materialized_state_checks": result.materialized_state_checks,
         "accepted_transactions_replayed": result.accepted_transactions_replayed,
         "failure_reason": result.failure_reason.value if result.failure_reason else None,
         "failure_detail": result.failure_detail,
@@ -154,30 +228,80 @@ def patchdiff_replay(*, target_file_id: str) -> dict[str, Any]:
 
 
 @registry.register("patchdiff_get_pdcp_log")
-def patchdiff_get_pdcp_log(*, target_file_id: str, limit: int = 50) -> dict[str, Any]:
+def patchdiff_get_pdcp_log(
+    *,
+    target_file_id: str,
+    limit: int = 50,
+    before_sequence: int | None = None,
+    status: str | None = None,
+    content_hash: str | None = None,
+    client_request_id: str | None = None,
+    include_content: bool = False,
+) -> dict[str, Any]:
+    """Bounded, newest-first page of append-only attempts (accepted and rejected).
+
+    Page by passing the smallest returned `log_sequence` as `before_sequence`.
+    `content_hash` or `client_request_id` finds earlier submissions (e.g. after a lost response).
+    """
+
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_file_id),
+            "failure_detail": "target_file_id is not a valid UUID.",
+            "entries": [],
+        }
+    if before_sequence is not None and before_sequence < 1:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_file_id),
+            "failure_detail": "before_sequence must be >= 1.",
+            "entries": [],
+        }
+
+    query = select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_uuid)
+    if before_sequence is not None:
+        query = query.where(AppendOnlyPdcpLogs.log_sequence < before_sequence)
+    if status is not None:
+        query = query.where(AppendOnlyPdcpLogs.status == status)
+    if content_hash is not None:
+        query = query.where(AppendOnlyPdcpLogs.pdcp_content_hash == content_hash)
+    if client_request_id is not None:
+        query = query.where(AppendOnlyPdcpLogs.client_request_id == client_request_id)
     with SessionLocal() as session:
         rows = session.scalars(
-            select(AppendOnlyPdcpLogs)
-            .where(AppendOnlyPdcpLogs.target_file_id == uuid.UUID(target_file_id))
-            .order_by(AppendOnlyPdcpLogs.log_sequence.desc())
-            .limit(limit)
+            query.order_by(AppendOnlyPdcpLogs.log_sequence.desc()).limit(clamp_limit(limit))
         ).all()
-    return {
-        "entries": [
-            {
-                "pdcp_log_id": str(row.pdcp_log_id),
-                "status": row.status,
-                "failure_reason": row.failure_reason,
-                "before_hash": row.before_hash,
-                "after_hash": row.after_hash,
-                "parent_pdcp_log_id": str(row.parent_pdcp_log_id) if row.parent_pdcp_log_id else None,
-                "regeneration_attempt": row.regeneration_attempt,
-                "regeneration_source": row.regeneration_source,
-                "created_at": row.created_at.isoformat(),
-            }
-            for row in rows
-        ]
-    }
+    entries = []
+    for row in rows:
+        entry = {
+            "pdcp_log_id": str(row.pdcp_log_id),
+            "log_sequence": row.log_sequence,
+            "status": row.status,
+            "failure_reason": row.failure_reason,
+            "failure_detail": row.failure_detail,
+            "failed_change_id": row.failed_change_id,
+            "before_hash": row.before_hash,
+            "after_hash": row.after_hash,
+            "before_version": row.before_version,
+            "after_version": row.after_version,
+            "pdcp_content_hash": row.pdcp_content_hash,
+            "protocol_version": row.protocol_version,
+            "runtime_version": row.runtime_version,
+            "submission_source": row.submission_source,
+            "parent_pdcp_log_id": str(row.parent_pdcp_log_id) if row.parent_pdcp_log_id else None,
+            "regeneration_attempt": row.regeneration_attempt,
+            "regeneration_source": row.regeneration_source,
+            "client_request_id": row.client_request_id,
+            "request_fingerprint": row.request_fingerprint,
+            "diagnostic": row.diagnostic_json,
+            "created_at": row.created_at.isoformat(),
+        }
+        if include_content:
+            entry["pdcp_content"] = row.pdcp_content
+        entries.append(entry)
+    return {"entries": entries}
 
 
 @registry.register("patchdiff_get_manifest_ledger")
@@ -185,17 +309,32 @@ def patchdiff_get_manifest_ledger(
     *,
     target_file_id: str,
     include_previous_cycles: bool = False,
+    limit: int | None = None,
 ) -> dict[str, Any]:
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_file_id),
+            "failure_detail": "target_file_id is not a valid UUID.",
+            "entries": [],
+        }
     with SessionLocal() as session:
-        target = session.get(CloudTargetFiles, uuid.UUID(target_file_id))
+        target = session.get(CloudTargetFiles, target_uuid)
         if target is None:
-            return {"entries": []}
+            return {"status": "not_found", "target_file_id": str(target_file_id), "entries": []}
         query = select(AppendOnlyManifestLedger).where(
             AppendOnlyManifestLedger.target_file_id == target.target_file_id
         )
         if not include_previous_cycles:
             query = query.where(AppendOnlyManifestLedger.editing_cycle_id == target.active_editing_cycle_id)
-        rows = session.scalars(query.order_by(AppendOnlyManifestLedger.ledger_sequence)).all()
+        ordered = query.order_by(AppendOnlyManifestLedger.ledger_sequence)
+        if limit is not None:
+            # Newest `limit` entries, returned oldest-first.
+            newest = query.order_by(AppendOnlyManifestLedger.ledger_sequence.desc()).limit(clamp_limit(limit))
+            rows = list(reversed(session.scalars(newest).all()))
+        else:
+            rows = session.scalars(ordered).all()
     return {
         "entries": [
             {
@@ -206,6 +345,8 @@ def patchdiff_get_manifest_ledger(
                 "affected_region": row.affected_region,
                 "user_visible_change": row.user_visible_change,
                 "risk": row.risk,
+                "origin": row.origin,
+                "derived": row.derived_json,
                 "created_at": row.created_at.isoformat(),
             }
             for row in rows
@@ -258,6 +399,8 @@ def patchdiff_request_regeneration(
     regenerated_pdcp_content: str | None = None,
     regeneration_attempt: int = 1,
     regeneration_source: str = "mcp_host",
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
         result = request_regeneration(
@@ -267,6 +410,8 @@ def patchdiff_request_regeneration(
             regenerated_pdcp_content=regenerated_pdcp_content,
             regeneration_attempt=regeneration_attempt,
             regeneration_source=regeneration_source,
+            expected_target_version=expected_target_version,
+            expected_current_hash=expected_current_hash,
         )
     if "result" in result and isinstance(result["result"], SubmitPDCPResult):
         result["result"] = _submit_result_to_payload(result["result"])
@@ -284,6 +429,10 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
             "pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
             "manifest_entries_added": result.manifest_entries_added,
             "warnings": list(result.warnings),
+            "validity": validity_levels("accepted", None, stage=result.validation_stage),
+            "evidence": {"changes": list(result.change_facts)},
+            "deduplicated": result.deduplicated,
+            "client_request_id": result.client_request_id,
         }
     return {
         "status": "rejected",
@@ -297,4 +446,16 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
         "current_hash": result.current_hash,
         "pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
         "diagnostic": result.diagnostic,
+        "validity": validity_levels("rejected", result.failure_reason, stage=result.validation_stage),
+        "deduplicated": result.deduplicated,
+        "client_request_id": result.client_request_id,
     }
+
+
+def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None

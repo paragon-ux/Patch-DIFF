@@ -157,6 +157,13 @@ class AppendOnlyPdcpLogs(TimestampMixin, Base):
         Index("ix_append_only_pdcp_logs_target_created_at", "target_file_id", "created_at"),
         Index("ix_append_only_pdcp_logs_parent", "parent_pdcp_log_id"),
         Index("ix_append_only_pdcp_logs_status_failure", "status", "failure_reason"),
+        Index(
+            "uq_pdcp_logs_target_client_request_id",
+            "target_file_id",
+            "client_request_id",
+            unique=True,
+            postgresql_where=text("client_request_id IS NOT NULL"),
+        ),
     )
 
     pdcp_log_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -183,6 +190,8 @@ class AppendOnlyPdcpLogs(TimestampMixin, Base):
     before_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     after_hash: Mapped[str | None] = mapped_column(String(64))
     change_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    client_request_id: Mapped[str | None] = mapped_column(Text)
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
 
 class AppendOnlyManifestLedger(TimestampMixin, Base):
@@ -207,11 +216,16 @@ class AppendOnlyManifestLedger(TimestampMixin, Base):
     change_index: Mapped[int] = mapped_column(Integer, nullable=False)
     change_id: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[str] = mapped_column(Text, nullable=False)
-    input_state: Mapped[str] = mapped_column(Text, nullable=False)
-    output_state: Mapped[str] = mapped_column(Text, nullable=False)
-    affected_region: Mapped[str] = mapped_column(Text, nullable=False)
-    user_visible_change: Mapped[str] = mapped_column(Text, nullable=False)
-    risk: Mapped[str] = mapped_column(Text, nullable=False)
+    # NULL for typed (patchdiff-tx/1) rows: those four fields are not collected there.
+    input_state: Mapped[str | None] = mapped_column(Text)
+    output_state: Mapped[str | None] = mapped_column(Text)
+    affected_region: Mapped[str | None] = mapped_column(Text)
+    user_visible_change: Mapped[str | None] = mapped_column(Text)
+    risk: Mapped[str | None] = mapped_column(Text)
+    # 'pdcp_manifest' = model-asserted manifest fields; 'typed' = advisory intent plus
+    # runtime-derived facts in derived_json.
+    origin: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pdcp_manifest'"))
+    derived_json: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class CurrentPdcpFiles(TimestampMixin, Base):

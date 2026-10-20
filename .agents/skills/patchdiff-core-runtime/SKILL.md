@@ -1,307 +1,135 @@
 ---
 name: patchdiff-core-runtime
-description: Use when implementing or reviewing the deterministic PatchDIFF core runtime: .pdcp parsing, protocol validation, canonicalization, exact MATCH/REPLACE, disambiguation, transaction application, and failure labels.
+description: Use when implementing or reviewing the deterministic PatchDIFF core runtime: typed and .pdcp parsing, protocol validation, canonicalization, exact MATCH/REPLACE, overlapping match enumeration, disambiguation, sequential application, runtime-derived change facts, and stage-aware validity reporting.
 ---
 
 # PatchDIFF Core Runtime Skill
 
 ## Core Boundary
 
-PatchDIFF core runtime is deterministic.
+The PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`) is pure and deterministic.
 
-It receives declarative `.pdcp` transaction files and validates them against canonical target state.
+It receives declarative transactions (`patchdiff-tx/1` typed records or `0.2.3` legacy `.pdcp` text) and validates them against canonical target state.
 
 The core runtime may:
 
-- parse `.pdcp` files
-- validate protocol structure
-- validate transaction applicability
-- apply accepted transactions atomically
+- parse `patchdiff-tx/1` and `0.2.3` transaction formats
+- validate protocol structure and transaction applicability
+- enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.0`)
+- resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, and legacy `region_hint`)
+- simulate sequential `MATCH/REPLACE` operations in memory
+- compute runtime-derived `change_facts` (`span_start`, `span_end`, char lengths, SHA-256 digests)
 - reject invalid transactions without target mutation
-- return structured rejection diagnostics
-- support deterministic replay inputs
+- classify stage-aware validity (`ValidationStage` -> `protocol_valid`, `transaction_valid`, `task_correct`, `semantic`)
+- support deterministic replay across recorded `(protocol_version, runtime_version)` profiles
 
 The core runtime must not:
 
-- call an LLM
-- call an MCP tool
-- construct prompts
-- choose a model
-- hold model credentials
-- run an agent loop
-- silently repair submitted PDCP
-- perform fuzzy matching
-- perform semantic matching
-- perform automatic merge
-- partially commit a failed transaction
+- call an LLM or hold model credentials
+- call an MCP tool or depend on FastAPI / SQLAlchemy / Postgres
+- construct prompts or run an agent loop
+- silently repair submitted transactions
+- perform fuzzy, semantic, or AST matching
+- perform automatic merge or partial commits
 - execute model-generated code
 
-Every PDCP, however produced, is untrusted until validated by the deterministic core runtime.
+Every transaction, however produced, is untrusted until validated by the deterministic core runtime.
 
-## PDCP File Boundary
+## Transaction Input Formats
 
-PDCP files use the `.pdcp` extension.
+PatchDIFF supports two declarative transaction input formats:
 
-PDCP is a declarative PatchDIFF transaction format, not Python, JavaScript, C, JSON, YAML, or any target language.
+1. **Typed transaction (`patchdiff-tx/1`, primary)**:
+   - Structured JSON: `target_file_id`, required guard (`expected_target_version` and/or `expected_current_hash`), top-level `intent`, ordered `edits[]`.
+   - Each edit contains required `match` and `replace`, plus optional advisory `change_id`, `rationale`, `risk`, and disambiguation fields (`occurrence_index`, `anchor_before`, `anchor_after`).
+   - Parsed by `backend/app/pdcp/typed.py`. Delimiter-collision-free; minimal mandatory prose overhead.
+2. **Legacy `.pdcp` (v0.2.3, frozen)**:
+   - Declarative plain text with `PDCP 0.2.3` header, 7 required manifest fields per block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters.
+   - Parsed by `backend/app/pdcp/parser.py`. Retained for backward compatibility and historical replay.
 
-The trusted runtime may be implemented in Python, for example as `changeOperator.py`.
+Neither format is executable code. Both lower into `ParsedPDCP` and execute through the shared `apply_pdcp_transaction` applier.
 
-The `.pdcp` file itself must never be executable.
+## Line Endings & Canonical Target Text
 
-Keep this boundary:
+Target text in memory and Postgres must always be LF-normalized UTF-8 (`\n`).
 
-```text
-.pdcp file = declarative transaction artifact
-.py file = trusted runtime implementation
-target file = Markdown/Python/YAML/JSON/prose/etc.
+Incoming CRLF (`\r\n`) and CR (`\r`) must be normalized to LF before processing.
+
+Exact string matching operates on character code-points, case-sensitive and whitespace-sensitive.
+
+## Match Enumeration & Overlapping Spans
+
+In `patchdiff-mvp-0.2.0`, string searching enumerates **all exact occurrences**, including overlapping matches:
+
+```python
+# app/pdcp/matcher.py
+def find_all_occurrences(text: str, pattern: str, overlapping: bool = True) -> list[int]:
+    ...
 ```
 
-Do not use Python-style target declarations as the primary PDCP header.
+For legacy replay under `patchdiff-mvp-0.1.0`, non-overlapping stepping (`index += len(pattern)`) is preserved.
 
-Use protocol-native PDCP headers defined in `PDCP_FORMAT.md`.
-
-## Forbidden PDCP Content
-
-Do not introduce into `.pdcp` files:
-
-- executable recursion functions
-- generated `applyPDCP` functions
-- imports
-- loops
-- conditionals
-- runtime logic
-- tool calls
-- shell commands
-- network calls
-- filesystem calls
-
-Payloads may contain code-like text when that text belongs to the target file.
-
-Executable-looking text inside `MATCH` or `REPLACE` payloads is opaque target-native text.
-
-Executable logic outside payloads is invalid.
-
-## Canonicalization
-
-Canonicalization applies to:
-
-- target content
-- `MATCH` payload
-- `REPLACE` payload
-
-Rules:
-
-```text
-encoding: UTF-8
-newline form: LF
-line-ending handling: normalize CRLF and CR to LF
-tab handling: preserve tabs exactly
-space handling: preserve spaces exactly
-trailing whitespace: preserve exactly
-trailing final newline: preserve exactly
-Unicode normalization: none
-```
-
-Do not apply NFC, NFD, NFKC, or NFKD normalization.
-
-Use one shared canonicalization helper.
-
-## Hashing
-
-Use SHA-256 over UTF-8 bytes of canonicalized target text.
-
-Use one shared hash helper.
-
-Required hash concepts:
-
-- `current_hash`
-- `before_hash`
-- `after_hash`
-- optional `target_hash`
-- optional `expected_current_hash`
-
-For rejected transactions:
-
-```text
-before_hash = hash at validation time
-after_hash = null
-```
-
-## MATCH/REPLACE Semantics
-
-`MATCH` is an exact optimistic concurrency precondition.
-
-`REPLACE` is target-native replacement text.
-
-Matching is:
-
-- exact
-- case-sensitive
-- whitespace-sensitive after canonicalization
-- multiline
-- left-to-right over Unicode codepoint positions
-- performed over the full current in-memory buffer
-
-The runtime must not perform:
-
-- fuzzy matching
-- semantic matching
-- token matching
-- language-aware matching
-- fallback matching
-- automatic repair
-
-A `MATCH` block must match exactly one span unless disambiguation resolves multiple exact occurrences to exactly one span.
-
-Zero matches reject.
-
-Multiple unresolved matches reject.
-
-## Sequential Mutation
-
-A PDCP file is one atomic transaction containing ordered changes.
-
-Changes are evaluated sequentially against the progressively updated in-memory buffer.
-
-```text
-Change 1 sees the original target.
-Change 2 sees the target after Change 1.
-Change 3 sees the target after Changes 1 and 2.
-```
-
-Do not resolve all `MATCH` blocks against the original target before applying replacements.
-
-After each selected `MATCH` span is replaced, mutate the in-memory buffer immediately.
-
-Commit only the final buffer after every change succeeds.
-
-## Deletion And Insertion
-
-Deletion:
-
-```text
-non-empty MATCH + empty REPLACE = deletion
-```
-
-Whitespace-only `REPLACE` is valid.
-
-Zero-length `MATCH` is invalid.
-
-Pure insertion must be represented as anchored replacement:
-
-```text
-<<<<<<< MATCH
-Existing anchor text
-=======
-Existing anchor text
-
-Inserted content.
->>>>>>> REPLACE
-```
-
-Do not implement cursor insertion in the MVP.
+If pattern is not found: return `match_absent`.
+If pattern occurs multiple times and disambiguation is missing or fails: return `match_ambiguous`.
 
 ## Disambiguation
 
-Disambiguation applies only after multiple exact `MATCH` occurrences are found.
+When a `MATCH` pattern occurs multiple times in the current buffer, explicit disambiguation is required:
 
-Supported fields:
+1. `occurrence_index` (0-based integer index among all matches).
+2. `anchor_before` (literal prefix immediately preceding the intended match).
+3. `anchor_after` (literal suffix immediately following the intended match).
+4. Legacy `region_hint` (line range hint in `0.2.3`).
 
-- `anchor_before`
-- `anchor_after`
-- `occurrence_index`
-- `region_hint`
-- `target_hash`
+If the disambiguator does not isolate exactly one occurrence, reject with `disambiguation_invalid`.
 
-Resolution algorithm:
+## Sequential In-Memory Simulation
 
-```text
-1. Find all exact full-span MATCH occurrences in the current in-memory buffer.
-2. If zero occurrences exist, reject.
-3. If exactly one occurrence exists, select it.
-4. If multiple occurrences exist, start with all exact occurrences in left-to-right order.
-5. If occurrence_index is present, interpret it as 1-based over the global list of exact occurrences.
-6. If occurrence_index is valid, filter to that one candidate.
-7. If anchor_before is present, retain candidates where anchor_before appears before the candidate span.
-8. If anchor_after is present, retain candidates where anchor_after appears after the candidate span.
-9. region_hint is advisory only and must not select a candidate.
-10. If exactly one candidate remains, select it.
-11. If zero or multiple candidates remain, reject with disambiguation_invalid.
-```
+Edits in a transaction are applied sequentially to an in-memory buffer:
 
-If multiple exact occurrences exist and no disambiguation is present, return `match_ambiguous`.
+1. Edit 1 matches against initial transaction-start text.
+2. Edit 1 replaces its match in memory, producing intermediate buffer $T_1$.
+3. Edit 2 matches against intermediate buffer $T_1$.
+4. Repeat for all $N$ edits.
 
-If disambiguation is present but does not resolve exactly one candidate, return `disambiguation_invalid`.
+If Edit $k$ ($k > 1$) fails to match $T_{k-1}$:
+- Check if Edit $k$'s match text existed in the initial start buffer $T_0$.
+- If it existed in $T_0$, return `sequential_match_invalid`.
+- Otherwise return `match_absent`.
 
-## Failure Labels
+Both reject the entire transaction atomically.
 
-Use only the canonical failure enum from `PATCHDIFF_CORE_SPEC.md` and `TEST_MATRIX.md`.
+## Runtime-Derived Change Facts
 
-Core PDCP rejection reasons include:
+During sequential application, the applier computes exact runtime facts for each applied change:
+- `span_start`: code-point offset where match began in intermediate buffer
+- `span_end`: code-point offset where match ended (`span_start + len(match)`)
+- `match_length`: length of matched text
+- `replace_length`: length of replacement text
+- `match_sha256`: SHA-256 hash of matched text
+- `replace_sha256`: SHA-256 hash of replacement text
 
-```text
-context_missing
-context_invalid
-target_not_found
-target_encoding_invalid
-manifest_missing
-manifest_invalid
-block_malformed
-match_absent
-match_ambiguous
-disambiguation_invalid
-target_hash_mismatch
-target_version_mismatch
-target_diverged
-executable_logic_detected
-sequential_match_invalid
-transaction_internal_error
-```
+These facts are returned in `change_facts` and persisted in `append_only_manifest_ledger.derived_json`.
 
-Replay-only failure reasons include:
+## Stage-Aware Validity Reporting
 
-```text
-replay_hash_mismatch
-replay_protocol_invalid
-replay_transaction_invalid
-```
+Validation failures are categorized by `ValidationStage`:
+- `PROTOCOL_DECODE`: syntax errors, invalid JSON, missing required fields.
+- `TARGET_RESOLUTION`: target file not found.
+- `CONCURRENCY_GUARD`: `target_version_mismatch`, `target_hash_mismatch`, `target_diverged`.
+- `MATCH_RESOLUTION`: `match_absent`, `match_ambiguous`, `disambiguation_invalid`.
+- `SEQUENTIAL_SIMULATION`: `sequential_match_invalid`.
 
-Do not create new failure labels without updating the controlling build docs and tests.
+The core runtime reports four validity levels:
+- `protocol_valid`: boolean
+- `transaction_valid`: boolean
+- `task_correct`: always `"not_evaluated"` (evaluated by host test runners/linters)
+- `semantic`: always `"not_evaluated"` (evaluated by host/user review)
 
-## match_absent vs sequential_match_invalid
+Acceptance means protocol-valid and transaction-valid. It never claims task correctness.
 
-When a `MATCH` fails during a later change, distinguish ordinary absence from sequential invalidity.
+## Atomic Commit Result
 
-Rule:
-
-```text
-If change N, where N > 1, fails to match the current in-memory buffer,
-and the same MATCH text would have matched the original transaction-start buffer,
-return sequential_match_invalid.
-
-Otherwise return match_absent.
-```
-
-Both failures reject the full transaction atomically.
-
-## Atomic Application Result
-
-A PDCP file is the smallest atomic commit unit.
-
-No target mutation may be committed until:
-
-- parsing succeeds
-- protocol validation succeeds
-- target exists
-- hash/version guards pass
-- every `MATCH` resolves exactly once or disambiguates exactly once
-- every replacement succeeds in memory
-- final hash is computed
-
-If any step fails:
-
-- target remains unchanged
-- failure is surfaced with a canonical failure reason
-- `after_hash = null`
-
-The core runtime should return a deterministic result object that the service/persistence layer can use to commit accepted transactions or log rejected transactions.
+The transaction is the smallest atomic unit:
+- If all edits apply successfully: target advances to `new_version`, `new_hash` is computed, and `change_facts` are emitted.
+- If any edit fails: target remains unchanged, failure reason and diagnostic are surfaced, and `after_hash = null`.

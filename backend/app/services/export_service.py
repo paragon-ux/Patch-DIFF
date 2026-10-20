@@ -11,7 +11,14 @@ from app.storage.models import CloudTargetFiles
 
 
 def get_target(session: Session, *, target_file_id: uuid.UUID | str) -> dict[str, Any]:
-    target = session.get(CloudTargetFiles, _coerce_uuid(target_file_id))
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_file_id),
+            "failure_detail": "target_file_id is not a valid UUID.",
+        }
+    target = session.get(CloudTargetFiles, target_uuid)
     if target is None:
         return {"status": "not_found", "target_file_id": str(target_file_id)}
     return {
@@ -31,7 +38,14 @@ def export_target(
     target_file_id: uuid.UUID | str,
     format: str = "original_text",
 ) -> dict[str, Any]:
-    target = session.get(CloudTargetFiles, _coerce_uuid(target_file_id))
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_file_id),
+            "failure_detail": "target_file_id is not a valid UUID.",
+        }
+    target = session.get(CloudTargetFiles, target_uuid)
     if target is None:
         return {"status": "not_found", "target_file_id": str(target_file_id)}
     return {
@@ -46,5 +60,10 @@ def export_target(
     }
 
 
-def _coerce_uuid(value: uuid.UUID | str) -> uuid.UUID:
-    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None

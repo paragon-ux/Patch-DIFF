@@ -16,6 +16,9 @@ class AcceptedCoreResult:
     change_count: int
     status: Literal["accepted"] = "accepted"
     manifest_entries: tuple[Any, ...] = field(default_factory=tuple)
+    # Runtime-derived facts, one per applied change (spans, payload lengths/hashes).
+    # These are computed by the runtime, never asserted by the proposer.
+    change_facts: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)

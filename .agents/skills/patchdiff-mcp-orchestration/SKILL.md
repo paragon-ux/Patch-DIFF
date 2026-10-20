@@ -1,230 +1,98 @@
 ---
 name: patchdiff-mcp-orchestration
-description: Use when implementing or reviewing the MCP-first PatchDIFF server layer: upload events, prompt context construction, model PDCP response handling, rejection diagnostics, regeneration orchestration, and target export.
+description: Use when implementing, testing, or reviewing MCP tools, the stdio JSON-RPC adapter, typed transaction schemas, authoritative reads/searches, request idempotency, and host-owned retry orchestration.
 ---
 
 # PatchDIFF MCP Orchestration Skill
 
-## Architecture
+## Transport & System Boundaries
 
-PatchDIFF MVP is MCP-first and server-side.
+PatchDIFF is an authoritative transaction service exposed over Model Context Protocol (MCP).
 
-Core architecture:
+The service boundaries are strict:
 
 ```text
-PatchDIFF server = orchestration + deterministic runtime
-MCP = transport/interface
-Chatbot/model = PDCP generator
+PatchDIFF server = deterministic transaction runtime + authoritative read/commit service
+MCP = transport/interface (stdio JSON-RPC adapter / internal registry)
+Host / Chatbot / Model = planning, context selection, proposal generator, retry owner
 Postgres = canonical working substrate
 ```
 
-The user interacts with the chatbot, not a PatchDIFF frontend.
+The host (e.g., Claude Desktop, custom agent runner) owns planning, prompt building, context selection, and retries.
 
-The PatchDIFF server receives events over MCP, manages target state, constructs prompt context, receives `.pdcp` transaction files, submits them to the deterministic core runtime, orchestrates regeneration when needed, and exports target state.
+The PatchDIFF MCP service provides deterministic validation, authoritative bounded reads, exact search, atomic target updates, append-only logging with idempotency, manifest recording, and replay.
 
-## Runtime Separation
+## Tool Surface Overview
 
-MCP orchestration is in scope for the MVP.
+PatchDIFF provides 16 tools across five functional areas:
 
-The deterministic core runtime must remain separate from MCP orchestration.
+1. **Target Lifecycle**:
+   - `patchdiff_handle_upload`: register uploaded file content as a target.
+   - `patchdiff_initialize_target`: create or overwrite a managed document.
+   - `patchdiff_get_target`: inspect current version, hash, length, and metadata.
+   - `patchdiff_export_target`: retrieve current full text for saving/export.
+2. **Authoritative Reads & Exact Search**:
+   - `patchdiff_read_target`: bounded slice reading with code-point offset `start`, `length`, and `next_start` pagination.
+   - `patchdiff_find_occurrences`: exact string search returning all occurrence code-point spans, snippet context, `start_occurrence`, `max_results`, and `next_occurrence_index`.
+3. **Guarded Edit Submission**:
+   - `patchdiff_submit_edits`: primary typed edit submission (`patchdiff-tx/1`). Requires `expected_target_version` and/or `expected_current_hash`. Supports `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage.
+   - `patchdiff_submit_pdcp`: legacy `.pdcp` text submission (frozen v0.2.3 format).
+4. **Checkpoints, Replay & History**:
+   - `patchdiff_save`: snapshots target and rotates editing cycle.
+   - `patchdiff_replay`: deterministically reconstructs target from initial state and accepted history.
+   - `patchdiff_get_pdcp_log`: bounded newest-first inspection of attempt history.
+   - `patchdiff_get_manifest_ledger`: bounded inspection of accepted changes with runtime facts.
+5. **Bounded Preview & Deprecated Wrappers**:
+   - `patchdiff_build_prompt_context`: convenience bounded prefix preview (`context_truncated`).
+   - `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`: deprecated server-prompt wrappers preserved for compatibility.
 
-The MCP layer may:
+## Modern Host Workflow
 
-- receive document-upload events over MCP
-- initialize a canonical target from uploaded content
-- build prompt context for the chatbot/model
-- route prompt context through MCP
-- receive model-emitted `.pdcp` content
-- store submitted PDCP as current pending transaction
-- submit PDCP content to the deterministic core runtime
-- receive accepted/rejected results
-- construct regeneration prompts after rejection
-- request regenerated PDCP over MCP
-- submit regenerated PDCP as a new attempt
-- export or return the current target through MCP
+The expected host-owned orchestration loop:
 
-The MCP layer must not bypass the deterministic core runtime.
-
-A regenerated PDCP is never applied directly by MCP orchestration. It must be submitted through the same validation path and validated from scratch.
-
-## User Interaction Flow
-
-Expected MVP flow:
-
-```text
-1. User uploads document in chat.
-2. PatchDIFF server receives upload event over MCP.
-3. PatchDIFF initializes canonical cloud target.
-4. User requests an edit in chat.
-5. PatchDIFF constructs prompt context.
-6. Chatbot/model emits declarative .pdcp transaction.
-7. PatchDIFF receives .pdcp response.
-8. PatchDIFF validates .pdcp deterministically.
-9. PatchDIFF applies accepted edits atomically.
-10. PatchDIFF requests regeneration on rejection when appropriate.
-11. PatchDIFF returns status and exports target when requested.
+```mermaid
+sequenceDiagram
+    participant Host
+    participant Server as PatchDIFF MCP Server
+    Host->>Server: patchdiff_read_target / patchdiff_find_occurrences
+    Server-->>Host: version, current_hash, exact text slices/spans
+    Host->>Server: patchdiff_submit_edits (guards + edits + client_request_id)
+    alt Accepted
+        Server-->>Host: accepted, new_version, change_facts, validity
+        Host->>Host: run external tests / linters (task correctness)
+    else Rejected
+        Server-->>Host: rejected, failure_reason, diagnostic, pdcp_log_id
+        Host->>Server: fresh read / find_occurrences
+        Host->>Server: patchdiff_submit_edits (parent_pdcp_log_id = rejected id)
+    end
 ```
 
-Do not build a frontend as the primary MVP interface.
+## Request Idempotency & Lost Responses
 
-A debug console, audit viewer, or replay inspector may be added later, but is not the MVP user surface.
+Hosts should provide `client_request_id` (a UUIDv4 string) with `patchdiff_submit_edits` and `patchdiff_submit_pdcp`.
 
-## Upload Event Handling
+- When a request is received, the server checks `uq_pdcp_logs_target_client_request_id` under per-target row lock.
+- If an existing log with that `client_request_id` matches the request fingerprint, the cached response is returned immediately with `idempotent_replay: true`.
+- If a duplicate `client_request_id` has conflicting arguments, it is rejected with `client_request_id_conflict`.
+- If a client call times out, repeating the exact call with the same `client_request_id` safely succeeds even if the first attempt committed and advanced the target version.
 
-On document upload event, the PatchDIFF server should:
+## Stdio Adapter Details
 
-- receive uploaded content and metadata over MCP
-- validate the content is a supported UTF-8 text-like target
-- initialize `cloud_target_file`
-- canonicalize uploaded content
-- compute initial hash
-- create initial editing cycle
-- create initial snapshot
-- return `target_file_id`, `target_type`, `version`, and `current_hash`
+The stdio adapter (`backend/app/mcp/external_adapter.py`):
+- Communicates via newline-delimited JSON-RPC over `stdin` and `stdout`.
+- Advertises the full schema of all tools in `tools/list`, including `TYPED_EDIT_JSON_SCHEMA` for `patchdiff_submit_edits`.
+- Validates JSON-RPC `params`: if `params` is provided and is not a JSON object, it returns error `-32602` (`Invalid params: params must be an object`).
+- Pass-through execution: delegates tool execution to `registry.call(...)` and returns standard JSON-RPC response or `-32603` internal error.
 
-The chatbot UI must not perform PatchDIFF logic.
-
-## Prompt Context Construction
-
-PatchDIFF server constructs prompt context automatically.
-
-Prompt context may include:
-
-- `target_file_id`
-- `target_type`
-- current target version/hash
-- relevant target spans
-- document structure summary when available
-- current accepted manifest ledger
-- user edit request
-- PDCP output rules
-- canonicalization and exact-match requirements
-- previous rejection diagnostics when regenerating
-
-The model's job is to generate valid declarative `.pdcp`.
-
-PatchDIFF must not ask the model to generate executable apply functions.
-
-## PDCP Response Handling
-
-When the model emits a `.pdcp` response, the PatchDIFF server should:
-
-- receive the `.pdcp` content over MCP
-- store it as `current_pdcp_file` with status such as `pending_validation`
-- submit it to the deterministic core runtime
-- receive accepted/rejected result
-- update persistence through the service/persistence layer
-- return status to the chat session
-
-Use PDCP terminology, not “program file” terminology.
-
-Preferred terms:
-
-- `current_pdcp_file`
-- `append_only_pdcp_log`
-- `.pdcp transaction file`
-
-Avoid implying PDCP is executable.
-
-## Rejection And Regeneration
-
-Rejected PDCPs are normal transaction outcomes.
-
-On rejection, the PatchDIFF server may:
-
-- store rejected PDCP log entry
-- return structured diagnostics
-- construct regeneration prompt
-- include fresh target context if needed
-- include failed change ID and failure reason
-- request a regenerated PDCP over MCP
-- submit regenerated PDCP as a new transaction attempt
-
-The regenerated PDCP must:
-
-- be submitted explicitly
-- receive its own log entry
-- be validated from scratch
-- use current canonical target state
-- produce its own accepted or rejected result
-
-Rejected attempts must remain append-only log entries.
-
-Accepted attempts must not erase prior rejected attempts.
-
-## Regeneration Prompt Requirements
-
-Regeneration prompt should include:
-
-- original user edit request
-- rejection failure reason
-- failure detail
-- failed change ID when available
-- current target version/hash
-- current accepted manifest ledger
-- fresh relevant target spans
-- PDCP format rules
-- instruction to regenerate a fresh `.pdcp` transaction from scratch
-
-The regeneration prompt must not instruct the model to bypass validation or generate executable apply logic.
-
-## MCP Tool Boundary
-
-MCP tools should expose orchestration operations such as:
-
-- initialize target from upload
-- build prompt context
-- submit PDCP response
-- get target
-- export target
-- get PDCP log
-- get manifest ledger
-- save target
-- replay target
-- get regeneration context
-- request regeneration, if the project owns that flow
-
-MCP tools must not write directly to target content except through accepted core runtime transactions.
-
-MCP tools must not mark rejected transactions as accepted.
-
-MCP tools must not delete append-only logs.
-
-## Export And SAVE
-
-The PatchDIFF server should support:
-
-- exporting current canonical target
-- returning current target content to the chat session when requested
-- SAVE checkpointing
-- active editing-cycle compaction
-- preserving full PDCP log for audit/replay
-
-SAVE does not mean “write target changes.” Accepted PDCP transactions already update the canonical target.
-
-## Stream Interception
-
-Complete `.pdcp` submission is the MVP-safe path.
-
-Stream interception of partial model output is MVP+ unless explicitly prioritized.
-
-If stream interception is implemented later, it must not apply partial PDCPs or bypass validation.
-
-## Forbidden MCP Behavior
+## Forbidden MCP Orchestration Behavior
 
 Do not let MCP orchestration:
 
-- apply generated text directly to targets
-- mutate target content without the core runtime
+- apply unvalidated model text directly to targets
+- mutate target content without the deterministic core runtime
 - bypass exact `MATCH/REPLACE` validation
-- delete rejected attempts
-- overwrite append-only logs
-- execute PDCP content
+- delete rejected attempts from `append_only_pdcp_logs`
+- execute model-generated code or script files
 - treat model output as trusted
-- silently repair malformed PDCP
-
-The only mutation path is:
-
-```text
-submitted .pdcp -> deterministic core validation -> accepted transaction -> atomic commit
-```
+- silently repair malformed edits or guess ambiguous matches
+- merge concurrent edits or perform partial commits

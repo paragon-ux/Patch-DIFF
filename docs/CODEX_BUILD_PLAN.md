@@ -2,144 +2,76 @@
 
 ## Scope
 
-This document defines the next implementation/testing roadmap for PatchDIFF MVP.
+This document records the architectural build phases of PatchDIFF, from initial MVP foundations through Phase 9 (Modernization & Remediation, completed and verified).
 
-The current pass is documentation-only. Do not implement runtime source code, tests, migrations, Docker files, package files, frontend code, or real external MCP adapter wiring in this pass.
+Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
+As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
-## Planning Rules
+---
 
-- Follow `AGENTS.md`, `docs/MCP_FIRST_MVP.md`, `docs/MCP_TOOLS.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/PDCP_FORMAT.md`, `docs/DATA_MODEL.md`, and `docs/TEST_MATRIX.md` first.
-- Preserve MCP-first architecture.
-- Use the existing internal MCP tool registry/wrapper layer until Phase 7.
-- Do not bypass deterministic parser, validator, matcher, applier, or service paths.
-- Do not add frontend or chat UI code.
-- Do not use SQLite for MVP persistence testing.
-- Keep real external MCP adapter wiring deferred until contract/E2E tests exist.
+## Build Phases Summary
 
-## Done / Mostly Done
+```text
+Phase 1: Local runtime confidence & pure core (COMPLETED)
+Phase 2: PDCP format robustness baseline & delimiters (COMPLETED)
+Phase 3: Internal MCP tool contract tests (COMPLETED)
+Phase 4: MCP E2E happy / reject / lineage flows (COMPLETED)
+Phase 5: Model output robustness through MCP (COMPLETED)
+Phase 6: SAVE / Replay / Export through MCP (COMPLETED)
+Phase 7: Real external MCP stdio adapter wiring (COMPLETED)
+Phase 8: Offline evaluation foundation (COMPLETED)
+Phase 9: Modernization & Argon Remediation (COMPLETED & VERIFIED 2026-10-20)
+```
 
-- Phase 1: local runtime confidence
-- Phase 2: PDCP format robustness baseline
-- unit tests
-- integration tests
-- manual PDCP smoke test
+---
 
-Manual ChatGPT testing exposed model-output rendering risk. That finding now moves into automated MCP product-surface tests.
+## Completed Phases
 
-## Phase 3. Internal MCP Tool Contract Tests
+### Phase 1–8: Initial MVP Baseline
+- Built pure deterministic core runtime (`backend/app/core/`, `backend/app/pdcp/`).
+- Established Postgres persistence layer (`cloud_target_files`, `append_only_pdcp_logs`, `append_only_manifest_ledger`, `target_snapshots`, `editing_cycles`) under Alembic migration `20260510_0001_initial_schema`.
+- Implemented MCP tool registry and stdio JSON-RPC adapter (`backend/app/mcp/external_adapter.py`).
+- Added initial test suites for parser robustness, delimiter validation, SAVE checkpoints, and deterministic replay.
 
-Goal:
+### Phase 9: Modernization & Remediation (Completed 2026-10-20)
+Remediated the incomplete prototype left by Claude Sonnet, aligned PatchDIFF with primary vendor evidence (E1–E8), and verified all contracts (C1–C6) against live Postgres and a real stdio MCP subprocess:
 
-- prove every internal MCP tool wrapper calls service-layer workflows and cannot bypass deterministic validation
+1. **Primary External Evidence Grounding (R2)**:
+   - Fetched and verified primary vendor documentation on 2026-10-20 for Claude Text Editor Tool (`text_editor_20250728`, E1), OpenAI Apply Patch tool (`apply_patch`, E2), Claude Checkpointing (E3), Claude Memory (E4), Claude Hooks (E5), Antigravity Review Changes Editor (E6), Antigravity MCP integration (E7), and MCP Python SDK (`v2.3.0`, E8).
+2. **C1 (Typed Transactions Primary, Legacy PDCP Frozen)**:
+   - Implemented `patchdiff_submit_edits` accepting `intent`, `edits[]`, required state guard (`expected_target_version` / `expected_current_hash`), optional `client_request_id`, `parent_pdcp_log_id`, and `attempt`.
+   - MCP `tools/list` advertises complete `TYPED_EDIT_JSON_SCHEMA` for `edits` items.
+   - Preserved `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`) as a frozen legacy format sharing the same deterministic applier.
+3. **C2 (Stage-Based Validity & Format-Specific Diagnostics)**:
+   - Implemented `ValidationStage` enum and stage-driven `validity_levels(...)` reporting (`protocol_valid`, `transaction_valid`, `task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
+   - Format-specific diagnostics: typed rejections report `format: "patchdiff-tx/1"`, `requires_new_submission: true`, `allowed_edit_fields`, and `required_edit_fields` without leaking PDCP manifest keys.
+   - Robust UUID and lineage validation: malformed `target_file_id` returns `CONTEXT_INVALID`; missing target returns `TARGET_NOT_FOUND`; invalid parent log ID logs a `CONTEXT_INVALID` rejection on the target with `parent_pdcp_log_id = null`.
+4. **C3 (Matcher Overlap Fix, Explicit Profile Dispatch & Component Checks)**:
+   - Fixed `matcher.py` to count all exact matches including overlaps (`overlapping=True`).
+   - Implemented `SUPPORTED_RUNTIME_PROFILES` with explicit dispatch for `"patchdiff-mvp-0.2.0"` (current) and `"patchdiff-mvp-0.1.0"` (legacy non-overlapping replay).
+   - `patchdiff_replay` validates initial snapshot hash, contiguous version chains, before/after hashes, and reports component-level `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`).
+5. **C4 (Request Idempotency & Lost-Response Recovery)**:
+   - Migration `20261020_0002` added `client_request_id`, `request_fingerprint`, and partial unique index `uq_pdcp_logs_target_client_request_id`.
+   - Deduplicated requests with identical fingerprints recover their terminal outcome (`deduplicated: true`) prior to evaluating stale guards.
+   - Conflicting reuse with different payloads rejects with `CONTEXT_INVALID`.
+6. **C5 (Ledger Schema & Derived Facts)**:
+   - Migration `20261020_0002` added `origin` and `derived_json` to `append_only_manifest_ledger`, relaxing legacy prose columns to nullable.
+   - Populated `derived_json` (`span_start`, `span_end`, `matched_sha256`, char counts) on all accepted ledger rows across both typed and PDCP inputs.
+7. **C6 (Authoritative Reads, Exact Search & Pagination)**:
+   - Implemented `patchdiff_read_target` with `next_start` continuation.
+   - Implemented `patchdiff_find_occurrences` with `start_occurrence`, `max_results`, `next_occurrence_index`, and `returned_count`.
+   - Added `client_request_id` filter and `limit` clamping to `patchdiff_get_pdcp_log`.
+8. **Real Stdio Subprocess E2E Testing**:
+   - Added `test_real_stdio_subprocess_mcp_full_modernized_workflow` executing all 8 steps of the product workflow over stdio JSON-RPC backed by live Postgres.
+9. **Documentation & Skills Coherence (R3)**:
+   - Rewrote all active documentation files and workspace skills coherently, eliminating contradictory amendment footers.
 
-Acceptance criteria:
+---
 
-- upload/initialize creates canonical target state
-- prompt context includes target metadata, current hash/version, user request, relevant target context, manifest summary, and PDCP rules
-- valid PDCP accepts through MCP and mutates target
-- invalid PDCP rejects through MCP without target mutation
-- accepted and rejected PDCP log rows are written
-- manifest ledger appends only for accepted PDCP
-- SAVE, replay, export, PDCP log, and manifest ledger tools return service-backed payloads
-- wrapper code does not directly update `cloud_target_files.current_content`
+## Verification Summary (2026-10-20)
 
-## Phase 4. MCP E2E Happy / Reject / Regenerate Flows
-
-Goal:
-
-- test the product workflow through MCP/internal tool wrappers without a frontend
-
-Acceptance criteria:
-
-- happy path covers upload, prompt context, valid submit, target read, log read, ledger read, and export
-- rejection path covers bad MATCH, `match_absent`, unchanged target, rejected log, and no accepted ledger entry
-- regeneration path covers rejected parent, regeneration context, corrected regenerated PDCP, separate accepted child log, and exactly one target mutation
-
-## Phase 5. Model Output Robustness Through MCP
-
-Goal:
-
-- convert manual ChatGPT-rendering failures into automated MCP regression tests
-
-Acceptance criteria:
-
-- corrupted separator delimiters reject
-- corrupted REPLACE terminators reject
-- extra prose before or after PDCP rejects if unsupported
-- blockquote-rendered delimiters reject
-- full rewritten document instead of PDCP rejects
-- executable apply function outside payload rejects
-- malformed manifest rejects
-- all corrupted outputs leave target unchanged and log rejected attempts
-- regeneration context can be produced for rejected malformed outputs
-- raw code-block contents PDCP submits successfully
-
-## Phase 6. SAVE / Replay / Export Through MCP
-
-Goal:
-
-- prove durable workflow operations work through the actual MCP-facing interface
-
-Acceptance criteria:
-
-- MCP SAVE creates snapshot and editing-cycle transition
-- MCP SAVE does not mutate target content/hash/version
-- MCP replay reconstructs current hash
-- MCP replay ignores `current_pdcp_files`
-- MCP replay ignores manifest ledger as operational truth
-- MCP export returns current content, target type, version, and hash
-
-## Phase 7. Real External MCP Adapter Wiring
-
-Goal:
-
-- wire the real external MCP SDK/server adapter after internal contract tests exist
-
-Acceptance criteria:
-
-- external MCP adapter exposes the same tool names and payload semantics
-- Phase 3-6 E2E tests or equivalent transport tests pass through real MCP transport
-- adapter calls the same service layer as internal wrappers
-- adapter does not bypass `patchdiff_submit_pdcp`
-- no frontend, model UI, or chat UI is added
-
-## Phase 8. Benchmark / Evaluation Suite
-
-Goal:
-
-- measure product reliability and regression behavior over representative MCP workflows
-
-Acceptance criteria:
-
-- benchmark suite includes valid PDCP acceptance, malformed-output rejection, regeneration recovery, SAVE/replay/export consistency, and basic latency/log-integrity measurements
-- benchmark scenarios use MCP tool paths rather than direct parser/applier calls
-- benchmark outputs are reproducible enough for later CI or release gating
-
-## Deferred Work
-
-Keep deferred unless explicitly reprioritized:
-
-- frontend/debug console
-- chat UI implementation
-- stream-intercepted partial PDCP handling
-- restore-to-version
-- rich/binary document targets
-- semantic validation
-- AST parsing
-- fuzzy repair
-- production auth/billing
-- external MCP adapter before Phase 7
-
-## Exit Condition For This Milestone
-
-The milestone is complete when MCP contract and E2E tests prove:
-
-- upload initializes canonical targets
-- prompt context can be built through MCP
-- valid `.pdcp` applies atomically through MCP submit
-- invalid or malformed `.pdcp` rejects without mutation through MCP submit
-- accepted and rejected attempts are append-only logged
-- accepted manifest entries ledger only on success
-- regeneration creates separate attempts validated from scratch
-- SAVE/replay/export work through MCP
-- MCP orchestration cannot bypass deterministic core validation
+- Live Postgres (`postgres:16.3-alpine` on Docker `127.0.0.1:5432`): verified.
+- Alembic migration `upgrade -> downgrade -> upgrade` cycle: verified.
+- Pure core unit tests: **174 / 174 passed**.
+- Postgres integration & stdio subprocess tests: **87 / 87 passed** (Total: **261 passed**).
+- Offline payload and verdict accounting: **OK** across all 5 scenarios and 3 proposal variants.

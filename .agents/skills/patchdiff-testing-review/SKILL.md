@@ -1,249 +1,91 @@
 ---
 name: patchdiff-testing-review
-description: Use when adding tests, reviewing implementation, verifying completion, or checking for PatchDIFF protocol and MCP-first architecture drift.
+description: Use when adding tests, reviewing implementation, verifying completion, or auditing for PatchDIFF protocol and MCP-first architectural consistency.
 ---
 
-# PatchDIFF Testing And Review Skill
+# PatchDIFF Testing and Review Skill
 
-## Completion Rule
+## Verification Standards
 
-Do not claim completion unless relevant tests pass.
+Do not claim completion unless verification passes against live Postgres.
 
-Changes touching parser, validator, matcher, applier, persistence, SAVE, replay, MCP orchestration, or regeneration flow must include or update tests.
+PatchDIFF verification spans four rigorous layers:
 
-Use `TEST_MATRIX.md` as the complete source of truth once it exists.
+1. **Pure Unit Tests (`backend/tests/unit/`)**:
+   - Matcher, disambiguator, and sequential applier.
+   - Equivalence of `patchdiff-tx/1` typed records and `.pdcp` v0.2.3 on the shared applier.
+   - Version profile resolution (`SUPPORTED_RUNTIME_PROFILES`).
+   - Stage-aware validity level computation (`ValidationStage` -> 4 levels).
+   - Stdio adapter JSON-RPC protocol compliance (e.g., `-32602` on invalid params).
+   - Offline Alembic migration rendering and downgrade safety checks.
+2. **Postgres Integration Tests (`backend/tests/integration/`)**:
+   - Full tool workflows via internal registry against live Postgres.
+   - Concurrency guards, row-level locking (`SELECT ... FOR UPDATE`), and stale version/hash rejections.
+   - Request idempotency via `client_request_id` (safe retry after commit, replay response caching, conflict rejection on changed parameters).
+   - Live Alembic migration verification: full `0001 -> 0002 -> 0001 -> 0002` upgrade/downgrade cycle, and data-loss prevention guard when typed ledger rows exist.
+   - Deterministic replay with `materialized_state_checks` verification.
+3. **External Stdio MCP Subprocess Tests (`backend/tests/integration/test_external_mcp_e2e.py`)**:
+   - Launches `backend/app/mcp/external_adapter.py` as a real OS child process over stdin/stdout pipes.
+   - Executes full multi-turn editing workflows (`patchdiff_initialize_target` -> `patchdiff_read_target` -> `patchdiff_submit_edits` -> `patchdiff_save` -> `patchdiff_replay` -> `patchdiff_export_target`).
+   - Verifies JSON-RPC 2.0 framing, `tools/list` schema advertising, and error handling.
+4. **Offline Evaluation (`evaluation/offline_eval.py`)**:
+   - Evaluates byte overhead and applier verdict equivalence across 5 canonical scenarios:
+     1. 1 tiny edit
+     2. 5 small edits
+     3. 1 edit, 2 KB span
+     4. Quotes, backslashes, and Unicode
+     5. Payload containing a literal delimiter line (`<<<<<<< MATCH`)
+   - Reports exact UTF-8 byte sizes for persisted records (`pdcp_content`) and wire MCP tool arguments.
+   - Confirms verdict equivalence between formats on the shared applier.
 
-Do not rely on SQLite to prove persistence correctness.
+## How To Run Tests
 
-Do not assume a frontend.
+```powershell
+# 1. Pure unit tests
+.\.venv\Scripts\python.exe -m pytest backend/tests/unit -q
 
-## Core Parser And Protocol Tests
+# 2. Live Postgres integration tests (Postgres running on localhost:5432)
+$env:DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
+.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q
 
-Required categories:
+# 3. Full test suite
+$env:DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
+.\.venv\Scripts\python.exe -m pytest -q
 
-- valid minimal `.pdcp` parses
-- protocol-native PDCP header parses
-- missing protocol header rejects
-- missing target ID rejects
-- malformed target header rejects
-- missing manifest rejects
-- missing required manifest field rejects
-- duplicate manifest field rejects
-- invalid risk rejects
-- duplicate `change_id` rejects
-- malformed `MATCH/REPLACE` block rejects
-- empty `MATCH` rejects
-- delimiter collision rejects deterministically
-- executable logic outside payload rejects
-- executable-looking text inside payload is allowed
-
-## MATCH Tests
-
-Required categories:
-
-- exact single match succeeds
-- zero match rejects
-- duplicate match rejects
-- disambiguated duplicate succeeds
-- invalid disambiguation rejects
-- case mismatch rejects
-- whitespace mismatch rejects
-- multiline match succeeds
-- CRLF target canonicalizes to LF
-- Unicode-equivalent but codepoint-different strings do not silently normalize
-
-## Replacement Tests
-
-Required categories:
-
-- empty `REPLACE` deletes
-- whitespace-only `REPLACE` succeeds
-- anchored insertion succeeds
-- zero-length insertion rejects
-
-## Sequential Mutation Tests
-
-Required categories:
-
-- second change sees first change's replacement
-- second change against original state returns `sequential_match_invalid`
-- overlapping sequential edits succeed when valid
-- overlapping sequential edits fail when invalid
-
-## Transaction Tests
-
-Required categories:
-
-- one failed change rolls back all changes
-- rejected PDCP appends log when possible but does not append manifest ledger
-- accepted PDCP appends log and manifest ledger
-- `before_hash` and `after_hash` are correct
-- target hash mismatch rejects
-- target version mismatch rejects
-- target divergence rejects
-- accepted transaction mutates only selected `MATCH` spans
-
-## Postgres Integration Tests
-
-Required categories:
-
-- Alembic migrations create schema
-- accepted transaction is atomic
-- rejected transaction does not mutate target
-- row-level locking prevents same-target interleaving
-- different targets can commit independently
-- target version/hash guards work
-- append-only PDCP log is preserved
-- accepted-only manifest ledger is preserved
-- rejected attempts remain visible
-- regeneration attempts are separate log entries
-- SAVE snapshots and advances editing cycle
-- SAVE failure does not clear active context
-- replay reconstructs target from accepted logs
-- altered log causes replay hash mismatch
-
-## MCP Contract Tests
-
-Required categories:
-
-- upload event initializes target
-- upload event creates initial snapshot and editing cycle
-- prompt context is constructed from target metadata, manifest ledger, and relevant spans
-- model PDCP response is stored as pending current PDCP
-- submitted PDCP reaches deterministic core runtime
-- accepted PDCP returns success status to MCP caller
-- rejected PDCP returns structured diagnostics to MCP caller
-- regeneration prompt is constructed after rejection
-- regenerated PDCP is submitted as a new attempt
-- regenerated PDCP is validated from scratch
-- MCP orchestration cannot bypass core validation
-- MCP orchestration cannot write directly to target content
-- export returns current canonical target
-- SAVE can be triggered through MCP
-- replay can be triggered through MCP
-
-## Regeneration Flow Tests
-
-Required categories:
-
-- `match_absent` maps to context refresh recommendation
-- `match_ambiguous` maps to disambiguation recommendation
-- malformed PDCP maps to format-fix recommendation
-- regenerated PDCP creates a new attempt
-- regenerated accepted PDCP does not erase prior rejected attempt
-- regenerated rejected PDCP remains logged
-- regeneration retry limits, if implemented, are adapter policy
-- core runtime never calls model/MCP during validation
-- model/MCP output is treated as untrusted until core validation succeeds
-
-## Review Mode
-
-If the user asks for a review, prioritize findings.
-
-Report:
-
-- correctness bugs
-- MCP-first architecture drift
-- executable-PDCP drift
-- frontend-first assumptions
-- protocol drift
-- atomicity violations
-- replay inconsistencies
-- duplicate logic
-- missing tests
-- unclear failure labels
-- SAVE/history violations
-- security-boundary violations
-- hidden mutation outside selected `MATCH` spans
-- direct target writes from MCP orchestration
-- SQLite usage as MVP persistence
-
-Findings should come before summaries.
-
-If no findings are found, state that clearly and mention residual risks or testing gaps.
-
-## Code Quality Checks
-
-Before adding a helper, search for existing implementations.
-
-Watch for duplicate logic in:
-
-- canonicalization
-- hashing
-- PDCP header parsing
-- manifest parsing
-- failure labels
-- exact occurrence detection
-- disambiguation
-- transaction application
-- replay
-- SAVE cycle handling
-- MCP tool response shapes
-- regeneration diagnostic mapping
-
-Repeated functions with similar behavior are a review finding.
-
-Prefer one shared implementation.
-
-## Verification
-
-Run the narrowest useful test command first.
-
-Then run the broader suite when feasible.
-
-Do not claim tests passed unless they were actually run.
-
-If tests cannot be run, state:
-
-- what was not run
-- why it was not run
-- what command should be run next
-
-## Git Safety
-
-You may be in a dirty worktree.
-
-Never revert user changes unless explicitly asked.
-
-Never use destructive commands such as:
-
-```text
-git reset --hard
-git checkout -- <path>
+# 4. Offline evaluation
+.\.venv\Scripts\python.exe evaluation/offline_eval.py
 ```
 
-unless explicitly approved.
+## Review Checklist
 
-Do not amend commits unless explicitly requested.
+When reviewing PatchDIFF code or documentation, audit against these invariants:
 
-If unexpected unrelated changes appear, stop and ask the user how to proceed.
+- [ ] **Core Purity**: Core runtime files (`backend/app/core/`, `backend/app/pdcp/`) must have zero imports of FastAPI, SQLAlchemy, Postgres, MCP, or LLM SDKs.
+- [ ] **Language Neutrality**: Matcher and applier treat text as exact character sequences (LF-normalized UTF-8); no AST, language heuristics, or fuzzy matching.
+- [ ] **Overlapping Matches**: In `patchdiff-mvp-0.2.0`, string search finds all exact occurrences including overlaps; legacy non-overlapping is preserved under `patchdiff-mvp-0.1.0`.
+- [ ] **Sequential In-Memory Simulation**: Edits apply sequentially to in-memory buffers; intermediate state transitions are verified; `change_facts` are emitted.
+- [ ] **Per-Target Atomic Commit**: Commits occur under `SELECT ... FOR UPDATE`; all edits apply or none do; no cross-target transactions.
+- [ ] **Append-Only Lineage**: Every attempt logs to `append_only_pdcp_logs`; rejected attempts preserve failure reasons; retry attempts track `parent_pdcp_log_id`.
+- [ ] **Request Idempotency**: `client_request_id` prevents duplicate application, returns cached responses with `idempotent_replay: true`, and rejects fingerprint conflicts.
+- [ ] **Manifest Ledger**: Records accepted edits only, sets `origin` (`'typed'` or `'pdcp_0.2.3'`), and populates `derived_json` with runtime facts.
+- [ ] **Stage-Aware Validity**: Reports four levels (`protocol_valid`, `transaction_valid`, `task_correct`, `semantic`). `task_correct` and `semantic` must always be `"not_evaluated"`.
+- [ ] **Deterministic Replay**: Dispatches on `(protocol_version, runtime_version)` profiles; verifies initial snapshot hash, per-log content hash, and returns `materialized_state_checks`.
+- [ ] **Documentation Coherence**: Main body of all active documents reflects modernized contracts; no contradictory "Modernization amendment" footers remain.
 
-Keep edits focused and avoid broad refactors unless necessary.
+## Reporting Work
 
-## Final Response Shape
-
-When reporting work, be concise.
-
-Prefer:
+When reporting completion, be concise and provide concrete proof:
 
 ```text
-Implemented X.
+Implemented / Remediated X.
 
 Changed:
 - path/to/file.py
-- tests/test_file.py
+- docs/FILE.md
 
 Verified:
-- pytest ...
-
-Notes:
-- ...
+- Unit tests: N passed
+- Integration tests: N passed (live Postgres)
+- Subprocess E2E: passed
+- Offline eval: passed (verdict equivalence verified)
 ```
-
-List tests run.
-
-List tests not run.
-
-Do not paste large files unless requested.
-
-Do not claim completion without verification.

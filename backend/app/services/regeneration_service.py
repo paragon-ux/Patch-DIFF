@@ -1,4 +1,11 @@
-"""Regeneration context and prompt orchestration services."""
+"""Regeneration context and prompt orchestration services.
+
+DEPRECATED (see docs/MODERNIZATION_ARCHITECTURE.md, decision A1). Hosts own retry
+decisions and prompt wording: they should re-read the target with
+``read_target`` / ``find_occurrences`` and resubmit through ``submit_edits`` with a
+``parent_pdcp_log_id``. These functions remain only as a compatibility wrapper for
+existing clients.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +25,14 @@ def build_regeneration_context(
     pdcp_log_id: uuid.UUID | str,
     user_request: str | None = None,
 ) -> dict[str, Any]:
-    log = session.get(AppendOnlyPdcpLogs, _coerce_uuid(pdcp_log_id))
+    log_uuid = _try_coerce_uuid(pdcp_log_id)
+    if log_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "pdcp_log_id": str(pdcp_log_id),
+            "failure_detail": "pdcp_log_id is not a valid UUID.",
+        }
+    log = session.get(AppendOnlyPdcpLogs, log_uuid)
     if log is None:
         return {"status": "not_found", "pdcp_log_id": str(pdcp_log_id)}
     target = session.get(CloudTargetFiles, log.target_file_id)
@@ -85,13 +99,18 @@ def request_regeneration(
     regenerated_pdcp_content: str | None = None,
     regeneration_attempt: int = 1,
     regeneration_source: str = "mcp_host",
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
 ) -> dict[str, Any]:
     context = build_regeneration_context(session, pdcp_log_id=pdcp_log_id, user_request=user_request)
+    if context.get("status") != "ready":
+        # Unknown parent log or target: report it instead of dereferencing a missing row.
+        return context
     prompt = build_regeneration_prompt(context)
     if regenerated_pdcp_content is None:
         return {"status": "context_ready", "regeneration_context": context, "regeneration_prompt": prompt}
 
-    log = session.get(AppendOnlyPdcpLogs, _coerce_uuid(pdcp_log_id))
+    log = session.get(AppendOnlyPdcpLogs, _try_coerce_uuid(pdcp_log_id))
     parent_log_id = log.pdcp_log_id
     target_file_id = log.target_file_id
     if session.in_transaction():
@@ -100,6 +119,8 @@ def request_regeneration(
         session,
         target_file_id=target_file_id,
         pdcp_content=regenerated_pdcp_content,
+        expected_target_version=expected_target_version,
+        expected_current_hash=expected_current_hash,
         submission_source="regeneration",
         parent_pdcp_log_id=parent_log_id,
         regeneration_attempt=regeneration_attempt,
@@ -113,5 +134,10 @@ def request_regeneration(
     }
 
 
-def _coerce_uuid(value: uuid.UUID | str) -> uuid.UUID:
-    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
