@@ -8,7 +8,7 @@ Link the design invariant, architecture decision, public contract, and implement
 
 ## Category impact
 
-Use [PR Review Standard v1.0.0](https://github.com/paragon-ux/Patch-DIFF/blob/HEAD/docs/PR_REVIEW_STANDARD.md). Map every changed file in the review report.
+Use [PR Review Standard v1.0.0](https://github.com/paragon-ux/Patch-DIFF/blob/f56a30850adbe9c8f0402e3029a5a18f5f2cca41/docs/PR_REVIEW_STANDARD.md). Map every changed file in the review report.
 
 | Category | Impacted files / reason not applicable |
 | --- | --- |
