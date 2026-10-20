@@ -39,9 +39,9 @@ Run with: `pytest backend/tests/unit -q`
 
 ---
 
-## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 87 Tests)
+## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 100 Tests)
 
-Run with: `$env:DATABASE_URL="..."; pytest backend/tests/integration -q`
+Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -q`
 
 | Module | Requirements / Capabilities Tested |
 | --- | --- |

@@ -203,7 +203,7 @@ def test_real_stdio_subprocess_mcp_full_modernized_workflow() -> None:
     env = {
         **os.environ,
         "PYTHONPATH": str(BACKEND),
-        "DATABASE_URL": settings.database_url,
+        "PATCHDIFF_DATABASE_URL": settings.database_url,
     }
     proc = subprocess.Popen(
         [sys.executable, "-m", "app.mcp.external_adapter"],

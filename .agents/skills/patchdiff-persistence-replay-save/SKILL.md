@@ -40,10 +40,10 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
    - `editing_cycles`
    - `target_snapshots`
 2. `20261020_0002_typed_ledger.py`:
-   - Adds `client_request_id` (UUID) and `request_fingerprint` (CHAR(64)) to `append_only_pdcp_logs`.
+   - Adds `client_request_id` TEXT NULL (UUID format) and `request_fingerprint` (CHAR(64)) to `append_only_pdcp_logs`.
    - Adds partial unique index `uq_pdcp_logs_target_client_request_id` where `client_request_id IS NOT NULL`.
    - Makes `manifest_ledger` legacy prose columns nullable (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`).
-   - Adds `origin` VARCHAR(16) NOT NULL (default `'pdcp_manifest'`) and `derived_json` JSONB NULL to `append_only_manifest_ledger`.
+   - Adds `origin` TEXT NOT NULL (default `'pdcp_manifest'`) and `derived_json` JSONB NULL to `append_only_manifest_ledger`.
    - Guarded downgrade: refuses to downgrade to `0001` if typed ledger rows exist (`origin = 'typed'`).
 
 Migrations must always run cleanly on live Postgres:
@@ -55,13 +55,13 @@ $env:PYTHONPATH = "backend"
 ## Append-Only Attempt Log (`append_only_pdcp_logs`)
 
 Every submission (accepted or rejected) creates an append-only row:
-- `sequence_id`: strictly ascending sequence number.
+- `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
 - `target_file_id`: foreign key to `cloud_target_files`.
 - `protocol_version`: `'patchdiff-tx/1'` or `'0.2.3'`.
 - `runtime_version`: `'patchdiff-mvp-0.2.0'` (or historical `'patchdiff-mvp-0.1.0'`).
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
-- `client_request_id`: client-supplied UUID for idempotency.
+- `client_request_id`: client-supplied UUID string (TEXT) for idempotency.
 - `request_fingerprint`: SHA-256 hash of submission parameters.
 - `parent_pdcp_log_id`: link to predecessor log in retry lineage.
 - `before_version`, `after_version`: target version progression.
@@ -72,9 +72,10 @@ Every submission (accepted or rejected) creates an append-only row:
 ## Accepted-Only Manifest Ledger (`append_only_manifest_ledger`)
 
 Only accepted transactions record rows in the manifest ledger:
-- `origin`: `'typed'` for `patchdiff_submit_edits`, `'pdcp_manifest'` for `patchdiff_submit_pdcp`.
+- `ledger_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
+- `origin`: `'typed'` for `patchdiff_submit_edits`, `'pdcp_manifest'` for `patchdiff_submit_pdcp` (TEXT).
 - `derived_json`: JSONB object containing exact runtime facts computed by the applier:
-  - `span_start`, `span_end`, `match_length`, `replace_length`, `match_sha256`, `replace_sha256`.
+  - `span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`.
 - For typed rows, legacy prose fields (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`) are `NULL`.
 
 ## SAVE Checkpoints & Editing Cycles

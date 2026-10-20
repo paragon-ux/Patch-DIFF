@@ -96,21 +96,27 @@ Still accepted through `patchdiff_submit_pdcp`, frozen, and fully replayable. Us
 
 ## 7. Lost responses & request idempotency
 
-PatchDIFF supports request idempotency via the optional `client_request_id` parameter (UUIDv4) in both `patchdiff_submit_edits` and `patchdiff_submit_pdcp`.
+PatchDIFF distinguishes between **request-ID recovery** and **state guards** (see [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), D5):
+- client_request_id is the primary mechanism to uniquely identify a submission attempt and recover its recorded outcome.
+- expected_target_version is a strictly monotonic version guard that prevents acceptance against an older version.
+- expected_current_hash is an applicability check, but does **not** uniquely identify a request and can repeat across no-op edits or ABA histories.
 
-### Using `client_request_id` (Recommended)
-Pass a distinct client-generated `client_request_id` with your submission:
-- If a response is dropped or a network call times out, replay the identical request with the same `client_request_id`.
-- The server detects the completed transaction under per-target row locking, returns the original response with `deduplicated: true`, and skips re-execution.
-- If the original submission was accepted and advanced target version, a retry with the same `client_request_id` safely succeeds rather than failing with `target_version_mismatch`.
-- If the request payload is changed for the same `client_request_id`, the server rejects it with `client_request_id_conflict`.
+### Using client_request_id (Recommended)
+Pass a distinct client-generated client_request_id (UUIDv4) with your submission:
+- If a response is dropped or a network call times out, resubmit the identical request with the same client_request_id.
+- The server detects the completed transaction under per-target row locking, returns the original response with deduplicated: true, and skips re-execution.
+- If the original submission was accepted and advanced the target version, a retry with the same client_request_id safely succeeds rather than failing with 	arget_version_mismatch.
+- If the request payload is changed for the same client_request_id, the server rejects it with client_request_id_conflict.
 
-### Manual Recovery (When `client_request_id` is omitted)
-If `client_request_id` was not provided and a submit call times out, do **not** blindly resubmit with a new read. A verbatim retry with the old guard cannot apply twice (it is rejected as stale). To discover whether the attempt landed:
+### Manual Recovery (When client_request_id is omitted)
+If client_request_id was not provided and a submit call times out, do **not** assume an unkeyed retry will safely recover state:
+- An unkeyed retry with expected_target_version will fail with 	arget_version_mismatch if the version advanced, but this alone cannot distinguish whether your attempt committed or a concurrent writer advanced the document.
+- An unkeyed retry with only expected_current_hash fails with 	arget_hash_mismatch if the edit was already applied (or if another writer changed the text). Crucially, a hash-only guard does not uniquely identify a request: across no-op edits or ABA edit sequences that restore the previous hash, an unkeyed hash-only retry could misapply.
 
-1. Re-read the target (`patchdiff_read_target`) and compare `version` with the guard you sent. If it advanced by one, something was accepted.
-2. Call `patchdiff_get_pdcp_log(limit=5)` and inspect the newest entries (`status`, `before_version`, `after_hash`, `submission_source`, `parent_pdcp_log_id`) to confirm whether it was your attempt.
-3. If the attempt was accepted, continue from the new version. If it failed or never arrived, re-read and submit a new attempt.
+To safely discover whether an unkeyed attempt landed:
+1. Inspect recent attempts using patchdiff_get_pdcp_log(limit=5) to check whether your submission was logged (status, efore_version, fter_hash, submission_source, parent_pdcp_log_id, and pdcp_content if needed).
+2. Authoritatively read current target state using patchdiff_read_target to observe the fresh ersion and current_hash.
+3. If the attempt was accepted, continue from the new version. If it was rejected or never arrived at the server, derive the replacement edit from the fresh read and submit a new attempt (supplying a client_request_id and linking parent_pdcp_log_id if rejected).
 
 ## 8. What is outside the guarantee
 

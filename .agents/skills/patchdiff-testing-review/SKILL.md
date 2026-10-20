@@ -45,11 +45,11 @@ PatchDIFF verification spans four rigorous layers:
 .\.venv\Scripts\python.exe -m pytest backend/tests/unit -q
 
 # 2. Live Postgres integration tests (Postgres running on localhost:5432)
-$env:DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
+$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
 .\.venv\Scripts\python.exe -m pytest backend/tests/integration -q
 
 # 3. Full test suite
-$env:DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
+$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
 .\.venv\Scripts\python.exe -m pytest -q
 
 # 4. Offline evaluation
@@ -67,7 +67,7 @@ When reviewing PatchDIFF code or documentation, audit against these invariants:
 - [ ] **Per-Target Atomic Commit**: Commits occur under `SELECT ... FOR UPDATE`; all edits apply or none do; no cross-target transactions.
 - [ ] **Append-Only Lineage**: Every attempt logs to `append_only_pdcp_logs`; rejected attempts preserve failure reasons; retry attempts track `parent_pdcp_log_id`.
 - [ ] **Request Idempotency**: `client_request_id` prevents duplicate application, returns cached responses with `deduplicated: true`, and rejects fingerprint conflicts.
-- [ ] **Manifest Ledger**: Records accepted edits only, sets `origin` (`'typed'` or `'pdcp_0.2.3'`), and populates `derived_json` with runtime facts.
+- [ ] **Manifest Ledger**: Records accepted edits only, sets `origin` (`'typed'` or `'pdcp_manifest'`), and populates `derived_json` with runtime facts.
 - [ ] **Stage-Aware Validity**: Reports four levels (`protocol_valid`, `transaction_valid`, `task_correct`, `semantic`). `task_correct` and `semantic` must always be `"not_evaluated"`.
 - [ ] **Deterministic Replay**: Dispatches on `(protocol_version, runtime_version)` profiles; verifies initial snapshot hash, per-log content hash, and returns `materialized_state_checks`.
 - [ ] **Documentation Coherence**: Main body of all active documents reflects modernized contracts; no contradictory "Modernization amendment" footers remain.

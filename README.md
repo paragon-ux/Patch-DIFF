@@ -139,7 +139,7 @@ Run unit and integration tests against live Postgres:
 .\.venv\Scripts\python.exe -m pytest backend/tests/unit -q
 
 # Integration tests (live Postgres & real stdio subprocess)
-$env:DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
+$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
 .\.venv\Scripts\python.exe -m pytest backend/tests/integration -q
 
 # Offline evaluation (payload bytes and applier verdict equivalence)
