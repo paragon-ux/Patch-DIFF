@@ -7,6 +7,7 @@ legacy PDCP path reach the same verdict through the one shared applier.
 from __future__ import annotations
 
 import json
+import uuid
 
 import pytest
 
@@ -307,3 +308,54 @@ def test_validate_client_request_id() -> None:
         validate_client_request_id("x" * 129)
     with pytest.raises(ProtocolValidationError):
         validate_client_request_id(123)
+
+
+def test_run_001_unhashable_risk_raises_protocol_validation_error() -> None:
+    for unhashable_risk in (["low"], {"level": "low"}, (["nested"],)):
+        with pytest.raises(ProtocolValidationError) as exc_info:
+            parse_typed_record(record([{"match": "a", "replace": "b", "risk": unhashable_risk}]))
+        assert exc_info.value.failure_reason is FailureReason.MANIFEST_INVALID
+
+
+def test_mcp_001_colon_in_change_id_and_nullable_schema() -> None:
+    # Colon is valid in change_id
+    tx = parse_typed_record(record([{"match": "a", "replace": "b", "change_id": "part:01"}]))
+    assert tx.edits[0].change_id == "part:01"
+
+    # Schema allows string and null for change_id
+    assert TYPED_EDIT_JSON_SCHEMA["properties"]["change_id"]["type"] == ["string", "null"]
+    assert ":" in TYPED_EDIT_JSON_SCHEMA["properties"]["change_id"]["pattern"]
+
+    # Schema enforces minLength: 1 for rationale, runtime rejects whitespace-only
+    assert TYPED_EDIT_JSON_SCHEMA["properties"]["rationale"]["minLength"] == 1
+    with pytest.raises(ProtocolValidationError) as exc1:
+        parse_typed_record(record([{"match": "a", "replace": "b", "rationale": ""}]))
+    assert exc1.value.failure_reason is FailureReason.MANIFEST_INVALID
+
+    with pytest.raises(ProtocolValidationError) as exc2:
+        parse_typed_record(record([{"match": "a", "replace": "b", "rationale": "   "}]))
+    assert exc2.value.failure_reason is FailureReason.MANIFEST_INVALID
+
+
+def test_mcp_002_schema_requires_guard() -> None:
+    from app.mcp.external_adapter import ExternalMCPAdapter, _input_schema_for
+
+    schema = _input_schema_for("patchdiff_submit_edits")
+    assert "anyOf" in schema
+    assert schema["anyOf"] == [
+        {"required": ["expected_target_version"]},
+        {"required": ["expected_current_hash"]},
+    ]
+
+    adapter = ExternalMCPAdapter()
+    res = adapter.call_tool(
+        "patchdiff_submit_edits",
+        {
+            "target_file_id": str(uuid.uuid4()),
+            "intent": "edit without guard",
+            "edits": [{"match": "a", "replace": "b"}],
+        },
+    )
+    assert res.get("isError") is True
+    assert "At least one of expected_target_version or expected_current_hash is required" in res["content"][0]["text"]
+

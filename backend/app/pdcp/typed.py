@@ -52,7 +52,7 @@ ALLOWED_TYPED_EDIT_FIELDS = (
     "risk",
 )
 _EDIT_KEYS = frozenset(ALLOWED_TYPED_EDIT_FIELDS)
-_CHANGE_ID_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
+_CHANGE_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _CLIENT_REQUEST_ID_RE = re.compile(r"^[\x21-\x7e]{1,128}$")
 
@@ -72,12 +72,13 @@ TYPED_EDIT_JSON_SCHEMA: dict[str, Any] = {
             "description": "Exact replacement text (empty string deletes the matched span).",
         },
         "change_id": {
-            "type": "string",
-            "pattern": r"^[A-Za-z0-9_.\-]{1,64}$",
+            "type": ["string", "null"],
+            "pattern": r"^[A-Za-z0-9_.:-]{1,64}$",
             "description": "Optional unique identifier within the transaction (defaults to chg_001, ...).",
         },
         "rationale": {
             "type": ["string", "null"],
+            "minLength": 1,
             "description": "Optional advisory rationale for this individual edit.",
         },
         "risk": {
@@ -288,7 +289,7 @@ def _parse_edit(raw: Any, index: int) -> TypedEdit:
     raw_id = raw.get("change_id")
     change_id = default_id if raw_id is None else raw_id
     if not isinstance(change_id, str) or not _CHANGE_ID_RE.match(change_id):
-        raise _error(FailureReason.MANIFEST_INVALID, "change_id must match [A-Za-z0-9_.-]{1,64}.", default_id)
+        raise _error(FailureReason.MANIFEST_INVALID, "change_id must match [A-Za-z0-9_.:-]{1,64}.", default_id)
 
     unknown = set(raw) - _EDIT_KEYS
     if unknown:
@@ -312,7 +313,7 @@ def _parse_edit(raw: Any, index: int) -> TypedEdit:
         raise _error(FailureReason.MANIFEST_INVALID, "rationale must be a non-empty string when present.", change_id)
 
     risk = raw.get("risk")
-    if risk is not None and risk not in VALID_RISK_VALUES:
+    if risk is not None and (not isinstance(risk, str) or risk not in VALID_RISK_VALUES):
         raise _error(FailureReason.MANIFEST_INVALID, "Invalid risk value.", change_id)
 
     occurrence_index = raw.get("occurrence_index")

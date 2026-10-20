@@ -349,3 +349,76 @@ def test_submit_preserves_caller_owned_transaction() -> None:
             # Session must remain in transaction (service did not commit caller's transaction)
             assert session.in_transaction()
 
+
+def test_run_002_distinguish_protocol_hash_validation_from_target_hash_applicability() -> None:
+    target_id = create_target("hello world")
+    target_uuid = uuid.UUID(str(target_id))
+
+    with SessionLocal() as session:
+        # Case 1: Conflicting header and manifest target_hash within the PDCP document
+        # This is a protocol validation error (PROTOCOL_VALIDATION stage)
+        header_hash = "0" * 64
+        manifest_hash = "1" * 64
+        conflicting_pdcp = f"""PDCP 0.2.3
+target_file_id: {target_uuid}
+target_type: text/plain
+target_hash: {header_hash}
+
+# MANIFEST
+# change_id: chg_001
+# intent: update
+# input_state: exists
+# output_state: new
+# affected_region: all
+# user_visible_change: yes
+# risk: low
+# target_hash: {manifest_hash}
+
+<<<<<<< MATCH
+hello
+=======
+hi
+>>>>>>> REPLACE"""
+
+        res_proto = submit_pdcp(
+            session,
+            target_file_id=target_id,
+            pdcp_content=conflicting_pdcp,
+        )
+        assert res_proto.status == "rejected"
+        assert res_proto.failure_reason is FailureReason.TARGET_HASH_MISMATCH
+        assert res_proto.validation_stage is ValidationStage.PROTOCOL_VALIDATION
+
+        # Case 2: Document is protocol-valid, but header target_hash does not match DB target state
+        # This is a transaction applicability error (TRANSACTION_APPLICABILITY stage)
+        mismatch_hash = "f" * 64
+        valid_doc_pdcp = f"""PDCP 0.2.3
+target_file_id: {target_uuid}
+target_type: text/plain
+target_hash: {mismatch_hash}
+
+# MANIFEST
+# change_id: chg_001
+# intent: update
+# input_state: exists
+# output_state: new
+# affected_region: all
+# user_visible_change: yes
+# risk: low
+
+<<<<<<< MATCH
+hello
+=======
+hi
+>>>>>>> REPLACE"""
+
+        res_app = submit_pdcp(
+            session,
+            target_file_id=target_id,
+            pdcp_content=valid_doc_pdcp,
+        )
+        assert res_app.status == "rejected"
+        assert res_app.failure_reason is FailureReason.TARGET_HASH_MISMATCH
+        assert res_app.validation_stage is ValidationStage.TRANSACTION_APPLICABILITY
+
+

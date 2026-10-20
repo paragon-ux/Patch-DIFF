@@ -49,6 +49,11 @@ from app.storage.repositories import select_target_for_update
 _HEX_64_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
+class TargetHashApplicabilityError(ProtocolValidationError):
+    """Raised when a valid PDCP header target_hash does not match the target's current hash."""
+    pass
+
+
 def sanitize_expected_target_version(val: Any) -> tuple[int | None, bool]:
     if val is None:
         return None, True
@@ -129,7 +134,7 @@ def submit_pdcp(
                 "PDCP target_file_id does not match the submitted target.",
             )
         if parsed.header.target_hash is not None and parsed.header.target_hash != target.current_hash:
-            raise ProtocolValidationError(
+            raise TargetHashApplicabilityError(
                 FailureReason.TARGET_HASH_MISMATCH,
                 "PDCP target_hash does not match the current target hash.",
             )
@@ -504,14 +509,18 @@ def _submit(
                 protocol_version=protocol_version,
                 stage=stage,
             )
-        except ProtocolValidationError as exc:
-            # PDCP header `target_hash` precondition is checked after parse_pdcp + validate_pdcp
-            # succeed, so it is a transaction-applicability rejection over a valid protocol envelope.
-            stage = (
-                ValidationStage.TRANSACTION_APPLICABILITY
-                if exc.failure_reason is FailureReason.TARGET_HASH_MISMATCH
-                else ValidationStage.PROTOCOL_VALIDATION
+        except TargetHashApplicabilityError as exc:
+            stage = ValidationStage.TRANSACTION_APPLICABILITY
+            core_result = _core_rejection(
+                exc.failure_reason,
+                exc.failure_detail,
+                before_hash,
+                exc.failed_change_id,
+                protocol_version=protocol_version,
+                stage=stage,
             )
+        except ProtocolValidationError as exc:
+            stage = ValidationStage.PROTOCOL_VALIDATION
             core_result = _core_rejection(
                 exc.failure_reason,
                 exc.failure_detail,

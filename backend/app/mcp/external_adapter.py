@@ -59,8 +59,16 @@ class ExternalMCPAdapter:
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         if name not in registry.names():
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
+        args = arguments or {}
+        if name == "patchdiff_submit_edits":
+            has_ver = "expected_target_version" in args and args["expected_target_version"] is not None
+            has_hash = "expected_current_hash" in args and args["expected_current_hash"] is not None
+            if not has_ver and not has_hash:
+                return _tool_error(
+                    "Invalid arguments for patchdiff_submit_edits: At least one of expected_target_version or expected_current_hash is required."
+                )
         try:
-            payload = registry.call(name, **(arguments or {}))
+            payload = registry.call(name, **args)
         except TypeError as exc:
             return _tool_error(f"Invalid arguments for {name}: {exc}")
         except Exception as exc:  # pragma: no cover - defensive transport boundary
@@ -156,6 +164,11 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     }
     if required:
         schema["required"] = required
+    if name == "patchdiff_submit_edits":
+        schema["anyOf"] = [
+            {"required": ["expected_target_version"]},
+            {"required": ["expected_current_hash"]},
+        ]
     return schema
 
 
