@@ -76,7 +76,7 @@ If pattern occurs multiple times and disambiguation is missing or fails: return 
 
 When a `MATCH` pattern occurs multiple times in the current buffer, explicit disambiguation is required:
 
-1. `occurrence_index` (0-based integer index among all matches).
+1. `occurrence_index` (1-based integer index among all matches, matching `patchdiff_find_occurrences`).
 2. `anchor_before` (literal prefix immediately preceding the intended match).
 3. `anchor_after` (literal suffix immediately following the intended match).
 4. Legacy `region_hint` (line range hint in `0.2.3`).

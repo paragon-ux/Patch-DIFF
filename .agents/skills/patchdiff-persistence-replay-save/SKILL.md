@@ -14,12 +14,12 @@ Target mutations require row-level locking:
 ```text
 Incoming submit
   -> BEGIN TRANSACTION
-  -> SELECT ... FROM managed_targets WHERE target_file_id = :id FOR UPDATE
+  -> SELECT ... FROM cloud_target_files WHERE target_file_id = :id FOR UPDATE
   -> Check client_request_id idempotency in append_only_pdcp_logs
   -> Check version / hash concurrency guards
   -> Apply transaction deterministically in memory
   -> If accepted:
-       UPDATE managed_targets (content, version, hash)
+       UPDATE cloud_target_files (current_content, current_version, current_hash)
        INSERT INTO append_only_pdcp_logs (status='accepted')
        INSERT INTO append_only_manifest_ledger (with origin and derived_json)
      If rejected:
@@ -34,7 +34,7 @@ Target mutation is strictly atomic: all edits succeed or none do. Rejected attem
 Schema migrations are managed by Alembic in `backend/app/migrations/`:
 
 1. `20260510_0001_initial_schema.py`:
-   - `managed_targets`
+   - `cloud_target_files` (managed targets)
    - `append_only_pdcp_logs`
    - `append_only_manifest_ledger`
    - `editing_cycles`
@@ -42,8 +42,8 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
 2. `20261020_0002_typed_ledger.py`:
    - Adds `client_request_id` (UUID) and `request_fingerprint` (CHAR(64)) to `append_only_pdcp_logs`.
    - Adds partial unique index `uq_pdcp_logs_target_client_request_id` where `client_request_id IS NOT NULL`.
-   - Makes `manifest_ledger` prose columns nullable (`rationale`, `risk_level`, `verification`, `regression_watch`).
-   - Adds `origin` VARCHAR(16) NOT NULL (default `'pdcp_0.2.3'`) and `derived_json` JSONB NULL to `append_only_manifest_ledger`.
+   - Makes `manifest_ledger` legacy prose columns nullable (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`).
+   - Adds `origin` VARCHAR(16) NOT NULL (default `'pdcp_manifest'`) and `derived_json` JSONB NULL to `append_only_manifest_ledger`.
    - Guarded downgrade: refuses to downgrade to `0001` if typed ledger rows exist (`origin = 'typed'`).
 
 Migrations must always run cleanly on live Postgres:
@@ -56,7 +56,7 @@ $env:PYTHONPATH = "backend"
 
 Every submission (accepted or rejected) creates an append-only row:
 - `sequence_id`: strictly ascending sequence number.
-- `target_file_id`: foreign key to `managed_targets`.
+- `target_file_id`: foreign key to `cloud_target_files`.
 - `protocol_version`: `'patchdiff-tx/1'` or `'0.2.3'`.
 - `runtime_version`: `'patchdiff-mvp-0.2.0'` (or historical `'patchdiff-mvp-0.1.0'`).
 - `status`: `'accepted'` or `'rejected'`.
@@ -72,10 +72,10 @@ Every submission (accepted or rejected) creates an append-only row:
 ## Accepted-Only Manifest Ledger (`append_only_manifest_ledger`)
 
 Only accepted transactions record rows in the manifest ledger:
-- `origin`: `'typed'` for `patchdiff_submit_edits`, `'pdcp_0.2.3'` for `patchdiff_submit_pdcp`.
+- `origin`: `'typed'` for `patchdiff_submit_edits`, `'pdcp_manifest'` for `patchdiff_submit_pdcp`.
 - `derived_json`: JSONB object containing exact runtime facts computed by the applier:
   - `span_start`, `span_end`, `match_length`, `replace_length`, `match_sha256`, `replace_sha256`.
-- For typed rows, prose fields (`rationale`, `risk_level`, `verification`, `regression_watch`) may be `NULL`.
+- For typed rows, legacy prose fields (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`) are `NULL`.
 
 ## SAVE Checkpoints & Editing Cycles
 

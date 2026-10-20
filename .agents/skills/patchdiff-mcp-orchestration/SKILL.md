@@ -72,7 +72,7 @@ sequenceDiagram
 Hosts should provide `client_request_id` (a UUIDv4 string) with `patchdiff_submit_edits` and `patchdiff_submit_pdcp`.
 
 - When a request is received, the server checks `uq_pdcp_logs_target_client_request_id` under per-target row lock.
-- If an existing log with that `client_request_id` matches the request fingerprint, the cached response is returned immediately with `idempotent_replay: true`.
+- If an existing log with that `client_request_id` matches the request fingerprint, the cached response is returned immediately with `deduplicated: true`.
 - If a duplicate `client_request_id` has conflicting arguments, it is rejected with `client_request_id_conflict`.
 - If a client call times out, repeating the exact call with the same `client_request_id` safely succeeds even if the first attempt committed and advanced the target version.
 

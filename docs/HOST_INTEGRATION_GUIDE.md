@@ -101,7 +101,7 @@ PatchDIFF supports request idempotency via the optional `client_request_id` para
 ### Using `client_request_id` (Recommended)
 Pass a distinct client-generated `client_request_id` with your submission:
 - If a response is dropped or a network call times out, replay the identical request with the same `client_request_id`.
-- The server detects the completed transaction under per-target row locking, returns the original response with `idempotent_replay: true`, and skips re-execution.
+- The server detects the completed transaction under per-target row locking, returns the original response with `deduplicated: true`, and skips re-execution.
 - If the original submission was accepted and advanced target version, a retry with the same `client_request_id` safely succeeds rather than failing with `target_version_mismatch`.
 - If the request payload is changed for the same `client_request_id`, the server rejects it with `client_request_id_conflict`.
 

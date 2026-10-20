@@ -66,7 +66,7 @@ When reviewing PatchDIFF code or documentation, audit against these invariants:
 - [ ] **Sequential In-Memory Simulation**: Edits apply sequentially to in-memory buffers; intermediate state transitions are verified; `change_facts` are emitted.
 - [ ] **Per-Target Atomic Commit**: Commits occur under `SELECT ... FOR UPDATE`; all edits apply or none do; no cross-target transactions.
 - [ ] **Append-Only Lineage**: Every attempt logs to `append_only_pdcp_logs`; rejected attempts preserve failure reasons; retry attempts track `parent_pdcp_log_id`.
-- [ ] **Request Idempotency**: `client_request_id` prevents duplicate application, returns cached responses with `idempotent_replay: true`, and rejects fingerprint conflicts.
+- [ ] **Request Idempotency**: `client_request_id` prevents duplicate application, returns cached responses with `deduplicated: true`, and rejects fingerprint conflicts.
 - [ ] **Manifest Ledger**: Records accepted edits only, sets `origin` (`'typed'` or `'pdcp_0.2.3'`), and populates `derived_json` with runtime facts.
 - [ ] **Stage-Aware Validity**: Reports four levels (`protocol_valid`, `transaction_valid`, `task_correct`, `semantic`). `task_correct` and `semantic` must always be `"not_evaluated"`.
 - [ ] **Deterministic Replay**: Dispatches on `(protocol_version, runtime_version)` profiles; verifies initial snapshot hash, per-log content hash, and returns `materialized_state_checks`.
