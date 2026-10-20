@@ -23,7 +23,7 @@ jobs:
           --health-retries 10
     env:
       PATCHDIFF_DATABASE_URL: postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff
-      PYTHONPATH: backend
+      PYTHONPATH: .:backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
