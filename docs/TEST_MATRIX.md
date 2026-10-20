@@ -18,7 +18,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ---
 
-## 1. Pure Unit Test Matrix (`backend/tests/unit/`, 174 Tests)
+## 1. Pure Unit Test Matrix (`backend/tests/unit/`, 178 Tests)
 
 Run with: `pytest backend/tests/unit -q`
 
@@ -39,7 +39,7 @@ Run with: `pytest backend/tests/unit -q`
 
 ---
 
-## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 101 Tests)
+## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 135 Tests)
 
 Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -q`
 
@@ -71,3 +71,7 @@ Checks:
 - Persisted record UTF-8 byte accounting (`append_only_pdcp_logs.pdcp_content`).
 - MCP tool request JSON wire byte accounting (`tools/call` arguments).
 - Strict separation of serialization framing overhead from reduced-manifest prose savings.
+
+## PR #3 regression additions
+
+The submission schema domain tests validate actual tools/list schemas against live service results and durable audit rows, including null guards, whitespace prose, integer boundaries and newline-suffixed IDs/hashes. The migration tests independently create owned schemas for populated legacy preservation and typed-history downgrade refusal, including unchanged rows/revision and replay after refusal.

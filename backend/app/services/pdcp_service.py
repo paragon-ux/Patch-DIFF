@@ -67,7 +67,7 @@ def sanitize_expected_target_version(val: Any) -> tuple[int | None, bool]:
 def sanitize_expected_current_hash(val: Any) -> tuple[str | None, bool]:
     if val is None:
         return None, True
-    if isinstance(val, str) and bool(_HEX_64_RE.match(val)):
+    if isinstance(val, str) and bool(_HEX_64_RE.fullmatch(val)):
         return val, True
     return None, False
 

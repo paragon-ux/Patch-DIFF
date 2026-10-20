@@ -43,20 +43,20 @@ Submitted over MCP via `patchdiff_submit_edits`:
 
 ### Top-Level Properties
 - `target_file_id` (`string`, required): UUID of target document.
-- `intent` (`string`, required non-empty): High-level transaction intent for audit logs and ledger.
+- `intent` (`string`, required nonblank): High-level transaction intent for audit logs and ledger.
 - `edits` (`array`, required, `minItems: 1`): Ordered list of edits executed sequentially.
-- `expected_target_version` (`integer >= 0 | null`): Version precondition guard.
-- `expected_current_hash` (`string | null`): 64-hex SHA-256 target hash precondition guard.
+- `expected_target_version` (`integer 0..2^63-1 | null`): Version precondition guard.
+- `expected_current_hash` (`string | null`): exactly 64 lowercase hex SHA-256 target hash precondition guard.
 - *Guard requirement*: At least one of `expected_target_version` or `expected_current_hash` must be non-null.
 - `client_request_id` (`string | null`, optional): 1..128 printable ASCII characters without whitespace for request deduplication.
 - `parent_pdcp_log_id` (`string | null`, optional): UUID of rejected parent attempt when retrying.
-- `attempt` (`integer >= 1 | null`, optional): Retry attempt counter.
+- `attempt` (`integer 1..2^31-1 | null`, optional): Retry attempt counter.
 
 ### Edit Item Schema (`TYPED_EDIT_JSON_SCHEMA`)
-- `match` (`string`, required non-empty): Exact target text to match.
+- `match` (`string`, required nonblank): Exact target text to match.
 - `replace` (`string`, required): Replacement text. Empty string `""` denotes deletion.
-- `change_id` (`string | null`, optional): Alphanumeric identifier (`^[A-Za-z0-9_.:-]{1,64}$`). Defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate IDs reject with `FailureReason.MANIFEST_INVALID`.
-- `rationale` (`string | null`, optional): Per-edit explanation.
+- `change_id` (`string | null`, optional): A complete 1–64-character identifier containing only ASCII letters, digits, underscore, period, colon or hyphen; trailing newlines reject. Defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate IDs reject with `FailureReason.MANIFEST_INVALID`.
+- `rationale` (`string | null`, optional): Nonblank per-edit explanation when supplied.
 - `risk` (`"low" | "medium" | "high" | null`, optional): Advisory risk classification.
 - `occurrence_index` (`integer >= 1 | null`, optional): 1-based index over exact matches.
 - `anchor_before` (`string | null`, optional): Exact substring that must precede candidate span.

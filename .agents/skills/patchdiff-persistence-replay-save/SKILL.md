@@ -40,7 +40,7 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
    - `editing_cycles`
    - `target_snapshots`
 2. `20261020_0002_typed_ledger.py`:
-   - Adds `client_request_id` TEXT NULL (UUID format) and `request_fingerprint` (CHAR(64)) to `append_only_pdcp_logs`.
+   - Adds `client_request_id` TEXT NULL (1–128 printable ASCII characters without whitespace) and `request_fingerprint` (VARCHAR(64)) to `append_only_pdcp_logs`.
    - Adds partial unique index `uq_pdcp_logs_target_client_request_id` where `client_request_id IS NOT NULL`.
    - Makes `manifest_ledger` legacy prose columns nullable (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`).
    - Adds `origin` TEXT NOT NULL (default `'pdcp_manifest'`) and `derived_json` JSONB NULL to `append_only_manifest_ledger`.
@@ -61,7 +61,7 @@ Every submission (accepted or rejected) creates an append-only row:
 - `runtime_version`: `'patchdiff-mvp-0.2.0'` (or historical `'patchdiff-mvp-0.1.0'`).
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
-- `client_request_id`: client-supplied UUID string (TEXT) for idempotency.
+- `client_request_id`: client-supplied TEXT key for idempotency (1–128 printable ASCII characters without whitespace; `req-001` is valid, a UUID is optional).
 - `request_fingerprint`: SHA-256 hash of submission parameters.
 - `parent_pdcp_log_id`: link to predecessor log in retry lineage.
 - `before_version`, `after_version`: target version progression.
@@ -76,7 +76,7 @@ Only accepted transactions record rows in the manifest ledger:
 - `origin`: `'typed'` for `patchdiff_submit_edits`, `'pdcp_manifest'` for `patchdiff_submit_pdcp` (TEXT).
 - `derived_json`: JSONB object containing exact runtime facts computed by the applier:
   - `span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`.
-- For typed rows, legacy prose fields (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`) are `NULL`.
+- For typed rows, legacy prose fields (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`) are `NULL` except that supplied advisory `risk` is retained.
 
 ## SAVE Checkpoints & Editing Cycles
 
@@ -92,14 +92,14 @@ Replay reconstructs target state strictly from initial target content plus accep
 flowchart TD
     A[Start Replay] --> B[Fetch target & initial snapshot]
     B --> C{Initial snapshot hash matches?}
-    C -- No --> F1[Return initial_snapshot_corrupted]
+    C -- No --> F1[Return replay_protocol_invalid]
     C -- Yes --> D[Initialize replay buffer = snapshot content]
-    D --> E[Fetch accepted logs in sequence_id order]
+    D --> E[Fetch accepted logs in log_sequence order]
     E --> G{Has next log?}
     G -- No --> H[Replay complete: verify final buffer against target]
     G -- Yes --> I[Dispatch parser on protocol_version]
     I --> J[Check log.pdcp_content_hash]
-    J -- Mismatch --> F2[Return pdcp_content_tampered]
+    J -- Mismatch --> F2[Return replay_protocol_invalid]
     J -- Match --> K[Resolve overlapping matches via runtime_version]
     K --> L[Simulate transaction on replay buffer]
     L --> M{Computed hash == log.after_hash?}

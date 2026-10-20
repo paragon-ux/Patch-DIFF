@@ -96,27 +96,26 @@ Still accepted through `patchdiff_submit_pdcp`, frozen, and fully replayable. Us
 
 ## 7. Lost responses & request idempotency
 
-PatchDIFF distinguishes between **request-ID recovery** and **state guards** (see [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), D5):
-- client_request_id is the primary mechanism to uniquely identify a submission attempt and recover its recorded outcome.
-- expected_target_version is a strictly monotonic version guard that prevents acceptance against an older version.
-- expected_current_hash is an applicability check, but does **not** uniquely identify a request and can repeat across no-op edits or ABA histories.
+PatchDIFF distinguishes request identity from state guards (C4 / D5):
+- `client_request_id` identifies a proposal and recovers its recorded terminal outcome.
+- `expected_target_version` is monotonic: an old version rejects after another acceptance, without proving which request committed.
+- `expected_current_hash` checks state, not request identity. A no-op edit keeps the hash; an ABA sequence restores it. An unkeyed hash-only retry can therefore apply again.
 
-### Using client_request_id (Recommended)
-Pass a distinct client-generated client_request_id (UUIDv4) with your submission:
-- If a response is dropped or a network call times out, resubmit the identical request with the same client_request_id.
-- The server detects the completed transaction under per-target row locking, returns the original response with deduplicated: true, and skips re-execution.
-- If the original submission was accepted and advanced the target version, a retry with the same client_request_id safely succeeds rather than failing with 	arget_version_mismatch.
-- If the request payload is changed for the same client_request_id, the server rejects it with client_request_id_conflict.
+### Keyed recovery (recommended)
 
-### Manual Recovery (When client_request_id is omitted)
-If client_request_id was not provided and a submit call times out, do **not** assume an unkeyed retry will safely recover state:
-- An unkeyed retry with expected_target_version will fail with 	arget_version_mismatch if the version advanced, but this alone cannot distinguish whether your attempt committed or a concurrent writer advanced the document.
-- An unkeyed retry with only expected_current_hash fails with 	arget_hash_mismatch if the edit was already applied (or if another writer changed the text). Crucially, a hash-only guard does not uniquely identify a request: across no-op edits or ABA edit sequences that restore the previous hash, an unkeyed hash-only retry could misapply.
+Choose a distinct `client_request_id`: 1–128 printable ASCII characters without whitespace, such as `req-001`. A UUID is an allowed choice, not a requirement.
 
-To safely discover whether an unkeyed attempt landed:
-1. Inspect recent attempts using patchdiff_get_pdcp_log(limit=5) to check whether your submission was logged (status, efore_version, fter_hash, submission_source, parent_pdcp_log_id, and pdcp_content if needed).
-2. Authoritatively read current target state using patchdiff_read_target to observe the fresh ersion and current_hash.
-3. If the attempt was accepted, continue from the new version. If it was rejected or never arrived at the server, derive the replacement edit from the fresh read and submit a new attempt (supplying a client_request_id and linking parent_pdcp_log_id if rejected).
+If a response is lost, resend the identical proposal with the same request ID and original guards. Under the target lock, the service returns the recorded outcome with `deduplicated: true`, without reapplying it, even if target state has since advanced. Reusing that ID for different proposal content rejects with `failure_reason: "context_invalid"` and `diagnostic.existing_pdcp_log_id`; it does not overwrite the original attempt.
+
+### Unkeyed recovery
+
+Typed submission requires a version and/or hash guard. Legacy `patchdiff_submit_pdcp` keeps guards optional for compatibility; an unguarded retry has no state-guard protection. Prefer a request ID for both formats.
+
+After an unkeyed timeout:
+
+1. Query `patchdiff_get_pdcp_log`, using `content_hash` when available and `include_content: true` when needed. Compare the original payload, guards and lineage. Page backward with the oldest returned `log_sequence` as `before_sequence` until the relevant history is examined; an empty page ends traversal. A five-entry sample or a one-version advance is not proof of request identity.
+2. Absence from one page does not mean the request never arrived. Even after traversal, a still-running original call may commit later; identical unkeyed proposals may be indistinguishable. Treat an ambiguous outcome as unknown. Read current state authoritatively and reconcile the requested effect before generating another proposal; do not infer permission to reapply from missing history alone.
+3. When a replacement proposal is warranted, derive it from a fresh read, assign a new request ID, and link `parent_pdcp_log_id` only to a known rejected attempt. If the earlier attempt is known accepted, continue from its result.
 
 ## 8. What is outside the guarantee
 

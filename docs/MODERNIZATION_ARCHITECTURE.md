@@ -203,8 +203,6 @@ flowchart LR
 
 ## 6. Verification Summary
 
-All runtime, database, migration, and stdio subprocess contracts have been verified locally on `2026-10-20`:
-- Live Postgres (`postgres:16.3-alpine` via Docker Compose on `127.0.0.1:5432`): Alembic migration `upgrade -> 20260510_0001 -> 20261020_0002 -> downgrade 20260510_0001 -> upgrade head` verified; downgrade guard against deleting typed ledger rows verified on live Postgres.
-- Unit test suite (`backend/tests/unit`): **174 passed**.
-- Postgres integration & real stdio MCP subprocess E2E test suite (`backend/tests/integration`): **87 passed** (total **261 passed**).
-- Offline payload and applier equivalence evaluation (`evaluation/offline_eval.py`): **OK** across all 5 scenarios and 3 proposal variants.
+Current remediation verification and finding status are recorded in [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md), section 6, and revision-pinned reports under docs/reviews/. The prior 174/87 aggregate is historical and does not certify subsequent fixes. The current local suite has 178 unit and 135 live Postgres integration cases, including real stdio subprocess execution and isolated populated migration preservation/refusal checks. Independent review and CI evidence must identify the actual executed revision before merge.
+
+No live-model comparative study or external Desktop-host performance claim is established by these deterministic tests.

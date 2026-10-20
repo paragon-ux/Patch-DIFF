@@ -73,12 +73,13 @@ TYPED_EDIT_JSON_SCHEMA: dict[str, Any] = {
         },
         "change_id": {
             "type": ["string", "null"],
-            "pattern": r"^[A-Za-z0-9_.:-]{1,64}$",
+            "pattern": r"^[A-Za-z0-9_.:-]{1,64}(?![\s\S])",
             "description": "Optional unique identifier within the transaction (defaults to chg_001, ...).",
         },
         "rationale": {
             "type": ["string", "null"],
             "minLength": 1,
+            "pattern": r"\S",
             "description": "Optional advisory rationale for this individual edit.",
         },
         "risk": {
@@ -131,7 +132,7 @@ def validate_client_request_id(client_request_id: Any) -> str | None:
 
     if client_request_id is None:
         return None
-    if not isinstance(client_request_id, str) or not _CLIENT_REQUEST_ID_RE.match(client_request_id):
+    if not isinstance(client_request_id, str) or not _CLIENT_REQUEST_ID_RE.fullmatch(client_request_id):
         raise _error(
             FailureReason.CONTEXT_INVALID,
             "client_request_id must be 1..128 printable ASCII characters without whitespace.",
@@ -210,7 +211,7 @@ def parse_typed_record(record: Any) -> TypedTransaction:
         raise _error(FailureReason.CONTEXT_INVALID, "expected_target_version must be a non-negative integer.")
 
     expected_hash = record.get("expected_current_hash")
-    if expected_hash is not None and (not isinstance(expected_hash, str) or not _SHA256_RE.match(expected_hash)):
+    if expected_hash is not None and (not isinstance(expected_hash, str) or not _SHA256_RE.fullmatch(expected_hash)):
         raise _error(FailureReason.CONTEXT_INVALID, "expected_current_hash must be lowercase SHA-256 hex.")
 
     intent = record.get("intent")
@@ -288,7 +289,7 @@ def _parse_edit(raw: Any, index: int) -> TypedEdit:
 
     raw_id = raw.get("change_id")
     change_id = default_id if raw_id is None else raw_id
-    if not isinstance(change_id, str) or not _CHANGE_ID_RE.match(change_id):
+    if not isinstance(change_id, str) or not _CHANGE_ID_RE.fullmatch(change_id):
         raise _error(FailureReason.MANIFEST_INVALID, "change_id must match [A-Za-z0-9_.:-]{1,64}.", default_id)
 
     unknown = set(raw) - _EDIT_KEYS

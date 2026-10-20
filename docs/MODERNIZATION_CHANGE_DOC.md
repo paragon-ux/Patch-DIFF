@@ -1,6 +1,6 @@
 # PatchDIFF Modernization Change Document
 
-Status: **implemented and verified against live Postgres and stdio MCP subprocess (2026-10-20)**.
+Status: **remaining review corrections implemented; 313 tests pass against live Postgres, including stdio and isolated populated migrations (2026-10-20). Independent closure review pending.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
@@ -84,9 +84,9 @@ To resolve R3 (contradictory "Modernization amendment" footers), all active docu
 | --- | --- |
 | `docker compose up -d` (`postgres:16.3-alpine` on `127.0.0.1:5432`) | Container `patchdiff-postgres` healthy |
 | `alembic -c backend/app/migrations/alembic.ini upgrade head -> downgrade 20260510_0001 -> upgrade head` | Full migration cycle succeeded cleanly on empty/legacy DB; downgrade guard raised `Cannot downgrade 20261020_0002: typed ledger rows exist` when typed rows were present |
-| `.\.venv\Scripts\python.exe -m pytest backend/tests/unit -q` | **174 passed** |
-| `.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q` | **101 passed** (against live Postgres `127.0.0.1:5432/patchdiff`, including real stdio subprocess E2E test) |
-| `.\.venv\Scripts\python.exe -m pytest -q` | **275 passed** |
+| `.\.venv\Scripts\python.exe -m pytest backend/tests/unit -q` | **178 passed** |
+| `.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q` | **135 passed** (against live Postgres `127.0.0.1:5432/patchdiff`, including real stdio subprocess E2E test) |
+| `.\.venv\Scripts\python.exe -m pytest -q` | **313 passed** |
 | `$env:PYTHONPATH="backend"; .\.venv\Scripts\python.exe evaluation/offline_eval.py` | **OK** (verdict equivalence across all 5 scenarios and 3 proposal variants) |
 
 ### 5.2 Offline Payload Accounting Output (`evaluation/offline_eval.py`)
@@ -112,26 +112,37 @@ payload has a delimiter line              462            338          162       
 ```
 
 
-## 6. PR #1 Comprehensive Second Review Remediation (Revision 2)
+## 6. PR #3 — Remaining-finding remediation
 
-Following the PR Review Standard v1.1.0 second review of PR #1, all 17 findings (1 P1, 12 P2, 4 P3) were resolved according to the strict 8-step remediation plan:
+The [head-pinned recheck](reviews/PR-1-60fa01f-findings-recheck.md) closed 11 original findings, retained six, and identified TEST-001. It supersedes the earlier blanket closure claim. Historical review reports are preserved; original finding identities and priorities below are retained.
 
-| Finding ID | Priority | Category | Commit | Summary of Remediation & Acceptance Evidence |
-| --- | --- | --- | --- | --- |
-| `DB-002` | **P1** | Database & Persistence | `c1df5b9` | Added `.execution_options(populate_existing=True)` on `select_target_for_update` in `repositories.py`. In `pdcp_service.py` (`_submit`) and `save_service.py`, detected pending uncommitted direct target mutations via `session.identity_key`, wrapped target lock execution in `session.no_autoflush`, and rejected unauthorized mutations with `CONTEXT_INVALID` before autoflush or refresh could discard or flush them. Added 2-session concurrency integration tests verifying row lock serialization. |
-| `DB-001` | **P2** | Database & Persistence | `c1df5b9` | In `replay_service.py`, wrapped replay execution in an explicit database transaction (`_transaction(session)`) and acquired `select_target_for_update(target_uuid)` to serialize all replay input reads (target, initial snapshot, accepted logs) against participating writers. Added 2-session concurrency test verifying writer serialization during replay. |
-| `ARCH-001` | **P2** | Architecture & Contracts | `30dd14f` | In `read_service.py`, enforced `DEFAULT_READ_CHARS = 4_000` and `MAX_READ_CHARS = 8_000` for all target reads, clamping effective defaults when `max_length` override is provided. Verified long target returns 4,000 code points by default and is capped at 8,000 for oversized requests. |
-| `ARCH-002` | **P2** | Architecture & Contracts | `30dd14f` | In `patchdiff_get_manifest_ledger`, implemented bounded pagination using exclusive `before_sequence` over `ledger_sequence`. Clamped limit to `[1, 200]` (default 50), fetched `effective_limit + 1` to compute `has_more` and `next_sequence`, and ordered returned entries oldest-first. Verified complete traversal across 230 multi-cycle entries without gaps or duplicates. |
-| `MCP-001` | **P2** | MCP Transport & Protocols | `b5a54f3` | In `backend/app/pdcp/typed.py`, relaxed `change_id` regex to `^[A-Za-z0-9_.:-]{1,64}$` to allow colons, made `change_id` type nullable `["string", "null"]`, and added `minLength: 1` to `rationale` to reject whitespace-only strings. |
-| `MCP-002` | **P2** | MCP Transport & Protocols | `b5a54f3` | In `backend/app/mcp/external_adapter.py`, added `anyOf` schema constraint requiring at least one guard (`expected_target_version` or `expected_current_hash`) and added pre-execution validation rejecting unguarded submissions before handler dispatch. |
-| `RUN-001` | **P2** | Core Runtime | `b5a54f3` | In `backend/app/pdcp/typed.py`, added explicit type check `not isinstance(risk, str)` before enum membership check, strictly rejecting boolean values (`True`/`False`) as invalid risk. |
-| `RUN-002` | **P2** | Core Runtime | `b5a54f3` | In `backend/app/services/pdcp_service.py`, introduced `TargetHashApplicabilityError` to distinguish live DB target hash mismatches (reported as `TRANSACTION_APPLICABILITY`) from internal PDCP header parse mismatches (reported as `PROTOCOL_VALIDATION`). |
-| `RUN-003` | **P2** | Core Runtime | `abeb58e` | In `backend/app/services/pdcp_service.py`, enforced strict integer validation on `attempt` (`1..2^31-1`), strictly rejecting boolean values, strings, non-integers, and negative numbers. |
-| `SVC-001` | **P2** | Service & Workflows | `abeb58e` | In `backend/app/services/pdcp_service.py`, added `sanitize_expected_target_version`, `sanitize_expected_current_hash`, and `sanitize_regeneration_attempt` to normalize metadata before any DB flush. Oversized or invalid guard values write `None` to the constrained DB column while preserving raw values in `diagnostic_json`. |
-| `SVC-002` | **P3** | Service & Workflows | `abeb58e` | In `_resolve_parent_log`, enforced `parent.status == "rejected"`, strictly rejecting attempts that cite an accepted or malformed parent log. |
-| `SCRIPT-001` | **P2** | Evaluation & Scripts | `78b16e6` | In `evaluation/offline_eval.py`, added independent oracle expected verdicts and hashes across all 5 evaluation scenarios, and restricted the delimiter expressibility gap exemption strictly to the literal delimiter line scenario (`name == "payload has a delimiter line"`). |
-| `DOC-001` | **P2** | Documentation | Current | In `docs/HOST_INTEGRATION_GUIDE.md` Section 7, removed unconditional claims that hash-only retries recover state, explained that `client_request_id` is the primary recovery mechanism, and documented hash-only failure modes across ABA/no-op histories. |
-| `DOC-002` | **P3** | Documentation | Current | Replaced all remaining occurrences of `DATABASE_URL` with `PATCHDIFF_DATABASE_URL` across `README.md`, `docs/TEST_MATRIX.md`, `evaluation/README.md`, `.agents/skills/`, and `test_external_mcp_e2e.py`. |
-| `DOC-003` | **P3** | Documentation | `44fc6e1` | Corrected historical spec filenames in `AGENTS.md` and `docs/MODERNIZATION_ARCHITECTURE.md` to `docs/PatchDIFF-Protocol-Spec-v0.2.3.md` and `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`. |
-| `SKILL-001` | **P2** | Skills & Tooling | Current | In `.agents/skills/patchdiff-core-runtime/SKILL.md`, aligned validation stages with the 5 exact C2 stages: `PRECONDITION_GUARD`, `PROTOCOL_VALIDATION`, `TRANSACTION_APPLICABILITY`, `COMMIT_GUARD`, `ACCEPTED`. |
-| `SKILL-002` | **P3** | Skills & Tooling | Current | Aligned fact names (`matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`, `span_start`, `span_end`), storage types (`origin` is TEXT, `client_request_id` is TEXT, sequences are `BigInteger`), and documented that anchors match anywhere in the preceding/following buffer. |
+| Finding ID | Priority | Implementation / acceptance evidence | Status |
+| --- | --- | --- | --- |
+| DB-002 | P1 | c1df5b9; locked refresh, pending mutation rejection, retained-state/caller transaction and synchronized live recheck | Closed at prior recheck |
+| DB-001 | P2 | c1df5b9; fresh locked replay inputs and synchronized writer-blocking recheck | Closed at prior recheck |
+| ARCH-001 | P2 | 30dd14f; 4,000/8,000 bounds with Unicode continuation | Closed at prior recheck |
+| ARCH-002 | P2 | 30dd14f; bounded 230-entry/two-cycle traversal | Closed at prior recheck |
+| DOC-002 | P2 | 68dce30; actual configuration variable and parent/child chain | Closed at prior recheck |
+| DOC-003 | P3 | 44fc6e1; historical reference paths resolve | Closed at prior recheck |
+| RUN-001 | P2 | b5a54f3; unhashable risk rejection and durable audit verified | Closed at prior recheck |
+| RUN-002 | P2 | b5a54f3; multi-fault stage provenance verified | Closed at prior recheck |
+| SVC-001 | P2 | abeb58e; only rejected parents support retry lineage | Closed at prior recheck |
+| SVC-002 | P3 | abeb58e; strict attempt metadata validation | Closed at prior recheck |
+| SCRIPT-001 | P2 | 78b16e6; independent verdict/hash oracle fault-injected | Closed at prior recheck |
+| MCP-001 | P2 | Discovery advertises non-null guard alternatives, nonblank prose, storage integer bounds and exact hash/ID domains. Actual schema validated with a test-only jsonschema validator against live submission and persisted outcomes. Unguarded known-target calls reach durable service rejection. | Implemented; independent recheck pending |
+| MCP-002 | P2 | Full-string change-ID validation rejects trailing newline, preserves colon/null/default/uniqueness behavior; schema and live boundary cases covered. | Implemented; independent recheck pending |
+| RUN-003 | P2 | Strict hash fullmatch before persistence; typed and legacy newline-hash calls reject normally, preserve raw evidence, leave constrained metadata null and retain durable rejection. | Implemented; independent recheck pending |
+| DOC-001 | P2 | Recovery guide distinguishes paged history, unknown outcomes and still-running requests, optional legacy guards, actual conflict payload and printable-ASCII request IDs. | Implemented; independent recheck pending |
+| SKILL-001 | P3 | Exact validity enum/phase table, null unreached stages and true simulation validity at commit failure. | Implemented; independent recheck pending |
+| SKILL-002 | P3 | One-based indices, real matcher signature, advisory region hint, actual ID/storage/sequence names and typed risk behavior. | Implemented; independent recheck pending |
+| TEST-001 (new) | P2 | Unique owned schemas and actual sessions/version zero; populated legacy accepted/rejected history survives upgrade/downgrade/upgrade; typed downgrade refusal preserves rows and revision and remains replayable. | Implemented; independent recheck pending |
+
+### Verification scope
+
+- Complete local suite: **313 passed** (178 unit, 135 live Postgres integration), including real stdio subprocess rejection/audit workflow.
+- Focused schema/audit + typed unit checks: **86 passed**.
+- Migration module independently: **6 passed**, including populated legacy preservation and typed-history refusal in isolated schemas.
+- Offline evaluation: **OK**. Results measure bytes and deterministic outcomes, not model performance.
+- Alembic accepts an explicitly supplied connection so migration tests control isolation and transaction scope without downgrading shared data. Ordinary CLI migration setup is unchanged.
+- jsonschema is a test-only direct dependency, pinned with its transitive dependencies in requirements.lock; no production schema-validation dependency or transport rejection layer was added.
+- A separate live stdio/Postgres session and independent review will be recorded with their actual revision before merge. No new CI or review approval is claimed here.

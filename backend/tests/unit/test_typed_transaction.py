@@ -161,15 +161,15 @@ def test_empty_replace_is_deletion_and_allowed() -> None:
 
 
 def test_canonical_record_is_deterministic_and_round_trips() -> None:
-    rec = record([{"replace": "é\nb", "match": "a"}], hash_="0" * 64)
+    rec = record([{"replace": "Ã©\nb", "match": "a"}], hash_="0" * 64)
     reordered = {key: rec[key] for key in reversed(list(rec))}
     text = canonical_record_json(rec)
     assert text == canonical_record_json(reordered)
     assert canonical_sha256(text) == canonical_sha256(canonical_record_json(reordered))
     assert json.loads(text)["format"] == TYPED_PROTOCOL_VERSION
-    assert "é" in text  # ensure_ascii disabled: payload stays readable and byte-stable
+    assert "Ã©" in text  # ensure_ascii disabled: payload stays readable and byte-stable
     decoded = decode_record(text)
-    assert decoded.edits[0].replace == "é\nb"
+    assert decoded.edits[0].replace == "Ã©\nb"
     assert decoded.expected_current_hash == "0" * 64
 
 
@@ -317,7 +317,7 @@ def test_run_001_unhashable_risk_raises_protocol_validation_error() -> None:
         assert exc_info.value.failure_reason is FailureReason.MANIFEST_INVALID
 
 
-def test_mcp_001_colon_in_change_id_and_nullable_schema() -> None:
+def test_mcp_002_colon_in_change_id_and_nullable_schema() -> None:
     # Colon is valid in change_id
     tx = parse_typed_record(record([{"match": "a", "replace": "b", "change_id": "part:01"}]))
     assert tx.edits[0].change_id == "part:01"
@@ -337,25 +337,16 @@ def test_mcp_001_colon_in_change_id_and_nullable_schema() -> None:
     assert exc2.value.failure_reason is FailureReason.MANIFEST_INVALID
 
 
-def test_mcp_002_schema_requires_guard() -> None:
-    from app.mcp.external_adapter import ExternalMCPAdapter, _input_schema_for
+def test_mcp_001_schema_requires_non_null_guard() -> None:
+    from jsonschema import Draft202012Validator
+    from app.mcp.external_adapter import ExternalMCPAdapter
 
-    schema = _input_schema_for("patchdiff_submit_edits")
-    assert "anyOf" in schema
-    assert schema["anyOf"] == [
-        {"required": ["expected_target_version"]},
-        {"required": ["expected_current_hash"]},
-    ]
-
-    adapter = ExternalMCPAdapter()
-    res = adapter.call_tool(
-        "patchdiff_submit_edits",
-        {
-            "target_file_id": str(uuid.uuid4()),
-            "intent": "edit without guard",
-            "edits": [{"match": "a", "replace": "b"}],
-        },
-    )
-    assert res.get("isError") is True
-    assert "At least one of expected_target_version or expected_current_hash is required" in res["content"][0]["text"]
-
+    schema = next(t["inputSchema"] for t in ExternalMCPAdapter().list_tools() if t["name"] == "patchdiff_submit_edits")
+    validator = Draft202012Validator(schema)
+    args = {"target_file_id": TARGET_ID, "intent": "Edit", "edits": [{"match": "a", "replace": "b"}]}
+    assert not validator.is_valid(args)
+    assert not validator.is_valid({**args, "expected_target_version": None})
+    assert not validator.is_valid({**args, "expected_target_version": None, "expected_current_hash": None})
+    assert validator.is_valid({**args, "expected_target_version": 0})
+    assert validator.is_valid({**args, "expected_current_hash": "a" * 64})
+    assert validator.is_valid({**args, "expected_target_version": 0, "expected_current_hash": "a" * 64})
