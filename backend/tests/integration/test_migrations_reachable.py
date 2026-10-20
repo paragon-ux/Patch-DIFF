@@ -83,3 +83,42 @@ def test_live_postgres_schema_has_0002_columns_and_unique_index() -> None:
             ).all()
         }
         assert "uq_pdcp_logs_target_client_request_id" in indexes
+
+
+def test_live_migration_refuses_downgrade_when_typed_rows_exist() -> None:
+    """Verifies live PostgreSQL refusal to downgrade migration 0002 when typed history exists."""
+    import uuid
+    import pytest
+    from alembic import command
+    from alembic.config import Config
+    from app.core.config import settings
+    from app.services.target_service import initialize_target
+    from app.services.pdcp_service import submit_edits
+
+    config = Config(str(MIGRATIONS / "alembic.ini"))
+    config.set_main_option("script_location", str(MIGRATIONS))
+    config.set_main_option("sqlalchemy.url", settings.database_url)
+
+    command.upgrade(config, "head")
+
+    with SessionLocal() as session:
+        typed_count = session.execute(
+            text("SELECT COUNT(*) FROM append_only_manifest_ledger WHERE origin = 'typed'")
+        ).scalar()
+
+    if typed_count == 0:
+        target_id = str(uuid.uuid4())
+        initialize_target(target_file_id=target_id, filename="guard.txt", initial_content="alpha beta")
+        submit_edits(
+            target_file_id=target_id,
+            expected_target_version=1,
+            intent="Create typed history row for downgrade test",
+            edits=[{"match": "beta", "replace": "gamma"}],
+        )
+
+    try:
+        with pytest.raises(Exception) as exc_info:
+            command.downgrade(config, "20260510_0001")
+        assert "Cannot downgrade 20261020_0002: typed ledger rows exist" in str(exc_info.value)
+    finally:
+        command.upgrade(config, "head")

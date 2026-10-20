@@ -39,7 +39,7 @@ Run with: `pytest backend/tests/unit -q`
 
 ---
 
-## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 100 Tests)
+## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 101 Tests)
 
 Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -q`
 

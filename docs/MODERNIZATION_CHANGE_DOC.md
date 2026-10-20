@@ -85,8 +85,8 @@ To resolve R3 (contradictory "Modernization amendment" footers), all active docu
 | `docker compose up -d` (`postgres:16.3-alpine` on `127.0.0.1:5432`) | Container `patchdiff-postgres` healthy |
 | `alembic -c backend/app/migrations/alembic.ini upgrade head -> downgrade 20260510_0001 -> upgrade head` | Full migration cycle succeeded cleanly on empty/legacy DB; downgrade guard raised `Cannot downgrade 20261020_0002: typed ledger rows exist` when typed rows were present |
 | `.\.venv\Scripts\python.exe -m pytest backend/tests/unit -q` | **174 passed** |
-| `.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q` | **100 passed** (against live Postgres `127.0.0.1:5432/patchdiff`, including real stdio subprocess E2E test) |
-| `.\.venv\Scripts\python.exe -m pytest -q` | **274 passed** |
+| `.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q` | **101 passed** (against live Postgres `127.0.0.1:5432/patchdiff`, including real stdio subprocess E2E test) |
+| `.\.venv\Scripts\python.exe -m pytest -q` | **275 passed** |
 | `$env:PYTHONPATH="backend"; .\.venv\Scripts\python.exe evaluation/offline_eval.py` | **OK** (verdict equivalence across all 5 scenarios and 3 proposal variants) |
 
 ### 5.2 Offline Payload Accounting Output (`evaluation/offline_eval.py`)
