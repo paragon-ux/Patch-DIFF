@@ -1,6 +1,6 @@
 # PatchDIFF PR Review Standard
 
-Version: 1.0.0
+Version: 1.1.0
 Status: required by AGENTS.md when this change is adopted
 Established: 2026-10-20
 
@@ -38,7 +38,7 @@ For each intentional departure from a contract, require a recorded decision, com
 
 ## 3. Required categories
 
-Each category has its own coverage statement, finding list, verification gaps, and verdict.
+Each category has its own coverage statement, independently triaged P1/P2/P3 finding lists, verification gaps, and verdict.
 
 | ID | Category | Required review questions |
 | --- | --- | --- |
@@ -63,9 +63,15 @@ For each category include:
 
 1. **Scope:** changed files and relevant unchanged dependencies examined.
 2. **Coverage:** complete, partial, or not reviewed; specify what remains.
-3. **Finding list:** independent findings with category-prefixed stable IDs, or "No findings identified within the reviewed scope."
-4. **Verification:** tests inspected, tests executed, CI evidence inspected, and missing proof.
-5. **Verdict:** changes required, no findings within reviewed scope, incomplete, or not applicable with a reason.
+3. **P1 — high priority:** independently triaged blocking findings, or an explicit empty/unassessed statement.
+4. **P2 — medium priority:** independently triaged actionable findings, or an explicit empty/unassessed statement.
+5. **P3 — low priority:** independently triaged advisory findings, or an explicit empty/unassessed statement.
+6. **Verification:** tests inspected, tests executed, CI evidence inspected, and missing proof.
+7. **Verdict:** changes required, no findings within reviewed scope, incomplete, or not applicable with a reason.
+
+Every category must contain all three triage headings, even when a bucket is empty. For reviewed scope, write "None identified within reviewed scope"; for unreviewed scope, write "Not assessed." Do not equate an empty bucket with complete coverage. Order findings by severity within their owning category. Classify each finding from its impact and trigger; do not copy priority from a previous review automatically.
+
+Verification gaps and unresolved questions remain separate from the P1/P2/P3 finding buckets unless evidence establishes a concrete defect. Record priority changes with a reason and preserve finding IDs. An exceptional P0 emergency is escalated explicitly in addition to the required three buckets.
 
 A category with findings and partial coverage records both facts. "Not applicable" means the category has no relevant change or dependency, not that it was skipped.
 
@@ -131,7 +137,7 @@ Re-review each fix in its primary category and all affected categories. A fix co
 1. Review metadata and evidence limits.
 2. File-to-category inventory and coverage matrix.
 3. Architecture-to-implementation trace.
-4. Ten category sections, each with its own finding list and verdict.
+4. Ten category sections, each with separate P1, P2, and P3 finding lists, verification gaps, and its own verdict.
 5. Cross-category root causes and rationale for remediation order.
 6. Verification record and remaining gaps.
 7. Overall disposition and finding closure table.
@@ -142,4 +148,5 @@ Reports are stored under docs/reviews/. Preserve reports at their reviewed revis
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.0 | 2026-10-20 | Require explicit P1/P2/P3 triage inside every category, including empty versus unassessed buckets; preserve separate verification gaps. |
 | 1.0.0 | 2026-10-20 | Establish category-separated review, provenance, explicit coverage, evidence distinctions, and finding closure. |
