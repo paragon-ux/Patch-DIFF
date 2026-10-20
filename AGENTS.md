@@ -153,7 +153,7 @@ Do not claim completion unless relevant tests pass against live Postgres:
 
 ## PR Review Standard
 
-All PR reviews must follow [PR Review Standard v1.0.0](docs/PR_REVIEW_STANDARD.md). Record the base and head SHAs, map every changed file to a primary category, and give each required category its own coverage statement, finding list, verification gaps, and verdict.
+All PR reviews must follow [PR Review Standard v1.1.0](docs/PR_REVIEW_STANDARD.md). Record the base and head SHAs, map every changed file to a primary category, and give each required category its own coverage statement, separate P1/P2/P3 finding lists, verification gaps, and verdict. Empty reviewed buckets must say so; unreviewed buckets must say not assessed.
 
 Trace architecture and contracts before recommending runtime changes. Keep source inspection, local execution, and CI evidence separate. Passing tests or a prior approval cannot replace category review. Do not recommend approval with unreviewed material categories or unresolved blocking findings.
 
