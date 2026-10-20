@@ -17,7 +17,13 @@ from app.services.regeneration_service import (
     build_regeneration_prompt,
     request_regeneration,
 )
-from app.services.read_service import clamp_limit, find_occurrences, read_target
+from app.services.read_service import (
+    DEFAULT_HISTORY_LIMIT,
+    MAX_HISTORY_LIMIT,
+    clamp_limit,
+    find_occurrences,
+    read_target,
+)
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
 from app.services.target_service import initialize_target
@@ -310,7 +316,13 @@ def patchdiff_get_manifest_ledger(
     target_file_id: str,
     include_previous_cycles: bool = False,
     limit: int | None = None,
+    before_sequence: int | None = None,
 ) -> dict[str, Any]:
+    """Bounded, oldest-first page of accepted manifest ledger entries within the newest page.
+
+    Page backward by passing the smallest returned `ledger_sequence` as `before_sequence`.
+    """
+
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         return {
@@ -318,26 +330,64 @@ def patchdiff_get_manifest_ledger(
             "target_file_id": str(target_file_id),
             "failure_detail": "target_file_id is not a valid UUID.",
             "entries": [],
+            "has_more": False,
+            "next_sequence": None,
         }
+    if before_sequence is not None and (
+        isinstance(before_sequence, bool) or not isinstance(before_sequence, int) or before_sequence < 1
+    ):
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_file_id),
+            "failure_detail": "before_sequence must be >= 1.",
+            "entries": [],
+            "has_more": False,
+            "next_sequence": None,
+        }
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_file_id),
+            "failure_detail": "limit must be a positive integer.",
+            "entries": [],
+            "has_more": False,
+            "next_sequence": None,
+        }
+
+    effective_limit = clamp_limit(limit, default=DEFAULT_HISTORY_LIMIT, maximum=MAX_HISTORY_LIMIT)
+
     with SessionLocal() as session:
         target = session.get(CloudTargetFiles, target_uuid)
         if target is None:
-            return {"status": "not_found", "target_file_id": str(target_file_id), "entries": []}
+            return {
+                "status": "not_found",
+                "target_file_id": str(target_file_id),
+                "entries": [],
+                "has_more": False,
+                "next_sequence": None,
+            }
         query = select(AppendOnlyManifestLedger).where(
             AppendOnlyManifestLedger.target_file_id == target.target_file_id
         )
         if not include_previous_cycles:
             query = query.where(AppendOnlyManifestLedger.editing_cycle_id == target.active_editing_cycle_id)
-        ordered = query.order_by(AppendOnlyManifestLedger.ledger_sequence)
-        if limit is not None:
-            # Newest `limit` entries, returned oldest-first.
-            newest = query.order_by(AppendOnlyManifestLedger.ledger_sequence.desc()).limit(clamp_limit(limit))
-            rows = list(reversed(session.scalars(newest).all()))
-        else:
-            rows = session.scalars(ordered).all()
+        if before_sequence is not None:
+            query = query.where(AppendOnlyManifestLedger.ledger_sequence < before_sequence)
+
+        # Fetch effective_limit + 1 rows ordered desc to determine has_more
+        rows = session.scalars(
+            query.order_by(AppendOnlyManifestLedger.ledger_sequence.desc()).limit(effective_limit + 1)
+        ).all()
+
+    has_more = len(rows) > effective_limit
+    page_rows = rows[:effective_limit]
+    next_sequence = page_rows[-1].ledger_sequence if has_more and page_rows else None
+    ordered_rows = list(reversed(page_rows))
+
     return {
         "entries": [
             {
+                "ledger_sequence": row.ledger_sequence,
                 "change_id": row.change_id,
                 "intent": row.intent,
                 "input_state": row.input_state,
@@ -349,8 +399,10 @@ def patchdiff_get_manifest_ledger(
                 "derived": row.derived_json,
                 "created_at": row.created_at.isoformat(),
             }
-            for row in rows
-        ]
+            for row in ordered_rows
+        ],
+        "has_more": has_more,
+        "next_sequence": next_sequence,
     }
 
 

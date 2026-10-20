@@ -146,6 +146,43 @@ def test_slice_content_uses_canonical_line_endings() -> None:
     assert slice_content("a\r\nb")["text"] == "a\nb"
 
 
+def test_arch_001_read_bounds_default_and_maximum() -> None:
+    # 9,000 unicode characters (9 chars repeated 1000 times)
+    content = "café ☕ \U0001F600 " * 1000
+    assert len(content) == 9_000
+
+    # Default read is 4,000 characters
+    res_default = slice_content(content)
+    assert res_default["start"] == 0
+    assert res_default["end"] == 4_000
+    assert res_default["total_chars"] == 9_000
+    assert len(res_default["text"]) == 4_000
+    assert res_default["truncated"] is True
+    assert res_default["next_start"] == 4_000
+
+    # Oversized read clamped to 8,000 characters
+    res_oversized = slice_content(content, start=0, length=20_000)
+    assert res_oversized["start"] == 0
+    assert res_oversized["end"] == 8_000
+    assert len(res_oversized["text"]) == 8_000
+    assert res_oversized["truncated"] is True
+    assert res_oversized["next_start"] == 8_000
+
+    # Complete traversal via next_start
+    first = slice_content(content, start=0, length=None)
+    assert first["end"] == 4_000 and first["next_start"] == 4_000
+    second = slice_content(content, start=first["next_start"], length=None)
+    assert second["start"] == 4_000 and second["end"] == 8_000 and second["next_start"] == 8_000
+    third = slice_content(content, start=second["next_start"], length=None)
+    assert third["start"] == 8_000 and third["end"] == 9_000
+    assert third["truncated"] is False and third["next_start"] is None
+
+    # Custom max override clamps effective default as well
+    res_custom = slice_content(content, start=0, length=None, max_length=1_000)
+    assert res_custom["end"] == 1_000
+    assert len(res_custom["text"]) == 1_000
+
+
 def test_occurrence_report_numbers_match_the_disambiguator_including_overlaps() -> None:
     report = occurrence_report("aaa", "aa", context_chars=1)
     assert report["occurrence_count"] == 2

@@ -119,3 +119,109 @@ def test_mcp_export_returns_current_canonical_content_type_version_and_hash() ->
         assert exported["content"] == target.current_content
         assert exported["hash"] == target.current_hash
         assert exported["version"] == target.version
+
+
+def test_arch_002_manifest_ledger_pagination_and_cycles() -> None:
+    # 1. Initialize target with 250 distinct lines
+    initial_lines = [f"item_{i:03d} = old" for i in range(1, 251)]
+    content = "\n".join(initial_lines)
+    upload = registry.call(
+        "patchdiff_handle_upload",
+        filename="manifest_paging.txt",
+        content=content,
+        content_type="text/plain",
+    )
+    target_id = upload["target_file_id"]
+
+    # 2. Cycle 1: Submit 110 edits in one atomic transaction
+    edits_c1 = [{"match": f"item_{i:03d} = old", "replace": f"item_{i:03d} = c1"} for i in range(1, 111)]
+    res1 = registry.call(
+        "patchdiff_submit_edits",
+        target_file_id=target_id,
+        intent="cycle 1 bulk edit",
+        edits=edits_c1,
+        expected_target_version=0,
+    )
+    assert res1["status"] == "accepted"
+
+    # Save target: closes cycle 1 (sequences 1..110), opens cycle 2
+    saved = registry.call(
+        "patchdiff_save",
+        target_file_id=target_id,
+        expected_current_hash=res1["after_hash"],
+    )
+    assert saved["status"] == "saved"
+
+    # 3. Cycle 2: Submit 120 edits (sequences 111..230)
+    edits_c2 = [{"match": f"item_{i:03d} = old", "replace": f"item_{i:03d} = c2"} for i in range(111, 231)]
+    res2 = registry.call(
+        "patchdiff_submit_edits",
+        target_file_id=target_id,
+        intent="cycle 2 bulk edit",
+        edits=edits_c2,
+        expected_target_version=1,
+    )
+    assert res2["status"] == "accepted"
+
+    # 4. Verify default limit (50) and active cycle only (default include_previous_cycles=False)
+    page_def = registry.call("patchdiff_get_manifest_ledger", target_file_id=target_id)
+    assert len(page_def["entries"]) == 50
+    assert page_def["has_more"] is True
+    assert page_def["next_sequence"] == page_def["entries"][0]["ledger_sequence"]
+    seqs_def = [e["ledger_sequence"] for e in page_def["entries"]]
+    assert seqs_def == sorted(seqs_def)
+    assert len(set(seqs_def)) == 50
+
+    # Explicit null limit produces identical default page
+    page_null = registry.call("patchdiff_get_manifest_ledger", target_file_id=target_id, limit=None)
+    assert len(page_null["entries"]) == 50
+    assert page_null["has_more"] is True
+    assert [e["ledger_sequence"] for e in page_null["entries"]] == seqs_def
+
+    # 5. Verify max cap (clamped to 200) across all cycles
+    page_cap = registry.call(
+        "patchdiff_get_manifest_ledger",
+        target_file_id=target_id,
+        include_previous_cycles=True,
+        limit=500,
+    )
+    assert len(page_cap["entries"]) == 200
+    assert page_cap["has_more"] is True
+    assert page_cap["next_sequence"] == page_cap["entries"][0]["ledger_sequence"]
+    seqs_cap = [e["ledger_sequence"] for e in page_cap["entries"]]
+    assert seqs_cap == sorted(seqs_cap)
+    assert len(set(seqs_cap)) == 200
+
+    # 6. Complete backward traversal across all 230 entries without gaps or duplicates
+    collected_entries = []
+    before_seq = None
+    while True:
+        page = registry.call(
+            "patchdiff_get_manifest_ledger",
+            target_file_id=target_id,
+            include_previous_cycles=True,
+            limit=50,
+            before_sequence=before_seq,
+        )
+        collected_entries = page["entries"] + collected_entries
+        if not page["has_more"]:
+            assert page["next_sequence"] is None
+            break
+        assert page["next_sequence"] is not None
+        before_seq = page["next_sequence"]
+
+    assert len(collected_entries) == 230
+    all_seqs = [e["ledger_sequence"] for e in collected_entries]
+    assert all_seqs == sorted(all_seqs)
+    assert len(set(all_seqs)) == 230
+
+    # 7. Invalid argument validation
+    assert (
+        registry.call("patchdiff_get_manifest_ledger", target_file_id=target_id, before_sequence=0)["status"]
+        == "invalid_argument"
+    )
+    assert (
+        registry.call("patchdiff_get_manifest_ledger", target_file_id=target_id, limit=0)["status"]
+        == "invalid_argument"
+    )
+

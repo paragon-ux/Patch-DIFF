@@ -16,7 +16,8 @@ from app.core.canonicalization import canonicalize_text
 from app.pdcp.matcher import find_exact_occurrences
 from app.storage.models import CloudTargetFiles
 
-MAX_READ_CHARS = 20_000
+DEFAULT_READ_CHARS = 4_000
+MAX_READ_CHARS = 8_000
 MAX_OCCURRENCES = 200
 MAX_CONTEXT_CHARS = 400
 MAX_HISTORY_LIMIT = 200
@@ -36,6 +37,7 @@ def slice_content(
     start: int = 0,
     length: int | None = None,
     *,
+    default_length: int = DEFAULT_READ_CHARS,
     max_length: int = MAX_READ_CHARS,
 ) -> dict[str, Any]:
     """Return a bounded slice of canonical content with explicit truncation and continuation info."""
@@ -43,7 +45,9 @@ def slice_content(
     text = canonicalize_text(content)
     total = len(text)
     begin = max(0, min(int(start), total))
-    wanted = max_length if length is None else max(0, min(int(length), max_length))
+    effective_max = max(1, int(max_length))
+    effective_default = min(max(1, int(default_length)), effective_max)
+    wanted = effective_default if length is None else max(0, min(int(length), effective_max))
     end = min(total, begin + wanted)
     truncated = end < total
     return {
