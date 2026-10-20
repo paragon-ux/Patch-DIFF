@@ -200,7 +200,12 @@ def parse_typed_record(record: Any) -> TypedTransaction:
         raise _error(FailureReason.CONTEXT_MISSING, "target_file_id is required.")
 
     version = record.get("expected_target_version")
-    if version is not None and (isinstance(version, bool) or not isinstance(version, int) or version < 0):
+    if version is not None and (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version < 0
+        or version > (2**63 - 1)
+    ):
         raise _error(FailureReason.CONTEXT_INVALID, "expected_target_version must be a non-negative integer.")
 
     expected_hash = record.get("expected_current_hash")

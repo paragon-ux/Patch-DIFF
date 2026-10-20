@@ -638,3 +638,140 @@ def test_regeneration_wrapper_passes_guards_and_handles_missing_parent() -> None
         )
         assert out["status"] == "rejected"
         assert out["result"].failure_reason is FailureReason.TARGET_VERSION_MISMATCH
+
+
+def test_run_003_sanitize_guard_metadata_before_persistence() -> None:
+    target_id = create_target("content to edit")
+    with SessionLocal() as session:
+        # 1. 65-character oversized hash
+        res_hash = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="oversized hash test",
+            edits=[_edit("content", "new_content")],
+            expected_current_hash="a" * 65,
+        )
+        assert res_hash.status == "rejected"
+        assert res_hash.failure_reason is FailureReason.CONTEXT_INVALID
+        log_hash = session.get(AppendOnlyPdcpLogs, res_hash.pdcp_log_id)
+        assert log_hash is not None
+        assert log_hash.expected_current_hash is None
+        assert log_hash.diagnostic_json.get("raw_expected_current_hash") == "a" * 65
+
+        # 2. Negative expected_target_version
+        res_ver = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="negative version test",
+            edits=[_edit("content", "new_content")],
+            expected_target_version=-1,
+        )
+        assert res_ver.status == "rejected"
+        assert res_ver.failure_reason is FailureReason.CONTEXT_INVALID
+        log_ver = session.get(AppendOnlyPdcpLogs, res_ver.pdcp_log_id)
+        assert log_ver is not None
+        assert log_ver.expected_target_version is None
+        assert log_ver.diagnostic_json.get("raw_expected_target_version") == -1
+
+        # 3. Non-integer attempt
+        res_att = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="bad attempt test",
+            edits=[_edit("content", "new_content")],
+            expected_target_version=0,
+            attempt="not-an-int",
+        )
+        assert res_att.status == "rejected"
+        assert res_att.failure_reason is FailureReason.CONTEXT_INVALID
+        log_att = session.get(AppendOnlyPdcpLogs, res_att.pdcp_log_id)
+        assert log_att is not None
+        assert log_att.regeneration_attempt is None
+        assert log_att.diagnostic_json.get("raw_attempt") == "not-an-int"
+
+
+def test_svc_001_parent_pdcp_log_id_must_reference_rejected_attempt() -> None:
+    target_id = create_target("initial text")
+    with SessionLocal() as session:
+        # First submission succeeds (accepted)
+        res_acc = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="valid edit",
+            edits=[_edit("initial", "updated")],
+            expected_target_version=0,
+        )
+        assert res_acc.status == "accepted"
+        acc_log_id = res_acc.pdcp_log_id
+
+        # Attempt to reference an accepted log must be rejected
+        res_bad_parent = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="retry pointing to accepted log",
+            edits=[_edit("updated", "new")],
+            expected_target_version=1,
+            parent_pdcp_log_id=acc_log_id,
+        )
+        assert res_bad_parent.status == "rejected"
+        assert res_bad_parent.failure_reason is FailureReason.CONTEXT_INVALID
+        assert "parent_pdcp_log_id must reference a rejected attempt." in res_bad_parent.failure_detail
+
+        # Create an actual rejected attempt (e.g. non-matching target content)
+        res_rej = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="edit that fails to match",
+            edits=[_edit("nonexistent", "whatever")],
+            expected_target_version=1,
+        )
+        assert res_rej.status == "rejected"
+        rej_log_id = res_rej.pdcp_log_id
+
+        # Referencing the rejected attempt succeeds and records lineage
+        res_retry = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="proper retry pointing to rejected log",
+            edits=[_edit("updated", "final")],
+            expected_target_version=1,
+            parent_pdcp_log_id=rej_log_id,
+            attempt=2,
+        )
+        assert res_retry.status == "accepted"
+        log_retry = session.get(AppendOnlyPdcpLogs, res_retry.pdcp_log_id)
+        assert log_retry is not None
+        assert log_retry.parent_pdcp_log_id == rej_log_id
+        assert log_retry.regeneration_attempt == 2
+
+
+def test_svc_002_attempt_argument_validation() -> None:
+    target_id = create_target("some text")
+    with SessionLocal() as session:
+        for bad_attempt in [0, -1, True, "1", 2**31]:
+            res = submit_edits(
+                session,
+                target_file_id=target_id,
+                intent="testing invalid attempt",
+                edits=[_edit("some", "other")],
+                expected_target_version=0,
+                attempt=bad_attempt,
+            )
+            assert res.status == "rejected"
+            assert res.failure_reason is FailureReason.CONTEXT_INVALID
+            assert "attempt must be an integer between 1 and 2147483647." in res.failure_detail
+
+        # Valid attempts persist properly
+        res_ok = submit_edits(
+            session,
+            target_file_id=target_id,
+            intent="valid attempt",
+            edits=[_edit("some", "other")],
+            expected_target_version=0,
+            attempt=1,
+        )
+        assert res_ok.status == "accepted"
+        log = session.get(AppendOnlyPdcpLogs, res_ok.pdcp_log_id)
+        assert log is not None
+        assert log.regeneration_attempt == 1
+

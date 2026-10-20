@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -44,6 +45,36 @@ from app.storage.models import (
     CurrentPdcpFiles,
 )
 from app.storage.repositories import select_target_for_update
+
+_HEX_64_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def sanitize_expected_target_version(val: Any) -> tuple[int | None, bool]:
+    if val is None:
+        return None, True
+    if isinstance(val, bool):
+        return None, False
+    if isinstance(val, int) and 0 <= val <= (2**63 - 1):
+        return val, True
+    return None, False
+
+
+def sanitize_expected_current_hash(val: Any) -> tuple[str | None, bool]:
+    if val is None:
+        return None, True
+    if isinstance(val, str) and bool(_HEX_64_RE.match(val)):
+        return val, True
+    return None, False
+
+
+def sanitize_regeneration_attempt(val: Any) -> tuple[int | None, bool]:
+    if val is None:
+        return None, True
+    if isinstance(val, bool):
+        return None, False
+    if isinstance(val, int) and 1 <= val <= (2**31 - 1):
+        return val, True
+    return None, False
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,6 +416,38 @@ def _submit(
                 request_fingerprint=fingerprint,
             )
 
+        sanitized_attempt, attempt_valid = sanitize_regeneration_attempt(regeneration_attempt)
+        if not attempt_valid:
+            rejection = _core_rejection(
+                FailureReason.CONTEXT_INVALID,
+                "attempt must be an integer between 1 and 2147483647.",
+                before_hash,
+                protocol_version=protocol_version,
+                stage=ValidationStage.PROTOCOL_VALIDATION,
+                diagnostic_extra={"raw_attempt": regeneration_attempt},
+            )
+            return _persist_rejection(
+                session,
+                target=target,
+                current_pdcp=current_pdcp,
+                pdcp_content=pdcp_content,
+                pdcp_content_hash=pdcp_content_hash,
+                expected_target_version=expected_target_version,
+                expected_current_hash=expected_current_hash,
+                submission_source=submission_source,
+                parent_pdcp_log_id=parent_uuid,
+                regeneration_attempt=regeneration_attempt,
+                regeneration_source=regeneration_source,
+                protocol_version=protocol_version,
+                parsed=None,
+                rejection=rejection,
+                before_hash=before_hash,
+                before_version=before_version,
+                stage=ValidationStage.PROTOCOL_VALIDATION,
+                client_request_id=validated_req_id,
+                request_fingerprint=fingerprint,
+            )
+
         guard_rejection, guard_stage = _guard_rejection(
             target=target,
             expected_target_version=expected_target_version,
@@ -557,11 +620,11 @@ def _guard_rejection(
             ),
             ValidationStage.PROTOCOL_VALIDATION,
         )
-    if expected_target_version is not None and (
-        isinstance(expected_target_version, bool)
-        or not isinstance(expected_target_version, int)
-        or expected_target_version < 0
-    ):
+    sanitized_version, version_valid = sanitize_expected_target_version(expected_target_version)
+    if not version_valid:
+        diag = {}
+        if expected_target_version is not None:
+            diag["raw_expected_target_version"] = expected_target_version
         return (
             _core_rejection(
                 FailureReason.CONTEXT_INVALID,
@@ -569,12 +632,15 @@ def _guard_rejection(
                 target.current_hash,
                 protocol_version=protocol_version,
                 stage=ValidationStage.PROTOCOL_VALIDATION,
+                diagnostic_extra=diag,
             ),
             ValidationStage.PROTOCOL_VALIDATION,
         )
-    if expected_current_hash is not None and (
-        not isinstance(expected_current_hash, str) or len(expected_current_hash) != 64
-    ):
+    sanitized_hash, hash_valid = sanitize_expected_current_hash(expected_current_hash)
+    if not hash_valid:
+        diag = {}
+        if expected_current_hash is not None:
+            diag["raw_expected_current_hash"] = expected_current_hash
         return (
             _core_rejection(
                 FailureReason.CONTEXT_INVALID,
@@ -582,10 +648,11 @@ def _guard_rejection(
                 target.current_hash,
                 protocol_version=protocol_version,
                 stage=ValidationStage.PROTOCOL_VALIDATION,
+                diagnostic_extra=diag,
             ),
             ValidationStage.PROTOCOL_VALIDATION,
         )
-    if expected_target_version is not None and target.version != expected_target_version:
+    if sanitized_version is not None and target.version != sanitized_version:
         return (
             _core_rejection(
                 FailureReason.TARGET_VERSION_MISMATCH,
@@ -596,7 +663,7 @@ def _guard_rejection(
             ),
             ValidationStage.PRECONDITION_GUARD,
         )
-    if expected_current_hash is not None and target.current_hash != expected_current_hash:
+    if sanitized_hash is not None and target.current_hash != sanitized_hash:
         return (
             _core_rejection(
                 FailureReason.TARGET_HASH_MISMATCH,
@@ -746,11 +813,24 @@ def _persist_rejection(
     client_request_id: str | None = None,
     request_fingerprint: str | None = None,
 ) -> SubmitPDCPResult:
+    sanitized_version, version_valid = sanitize_expected_target_version(expected_target_version)
+    sanitized_hash, hash_valid = sanitize_expected_current_hash(expected_current_hash)
+    sanitized_attempt, attempt_valid = sanitize_regeneration_attempt(regeneration_attempt)
+
+    diagnostic = dict(rejection.diagnostic) if rejection.diagnostic else {}
+    if not version_valid and expected_target_version is not None:
+        diagnostic["raw_expected_target_version"] = expected_target_version
+    if not hash_valid and expected_current_hash is not None:
+        diagnostic["raw_expected_current_hash"] = expected_current_hash
+    if not attempt_valid and regeneration_attempt is not None:
+        diagnostic["raw_attempt"] = regeneration_attempt
+        diagnostic["raw_regeneration_attempt"] = regeneration_attempt
+
     log = AppendOnlyPdcpLogs(
         target_file_id=target.target_file_id,
         editing_cycle_id=target.active_editing_cycle_id,
         parent_pdcp_log_id=parent_pdcp_log_id,
-        regeneration_attempt=regeneration_attempt,
+        regeneration_attempt=sanitized_attempt,
         regeneration_source=regeneration_source,
         submission_source=submission_source,
         protocol_version=protocol_version,
@@ -761,9 +841,9 @@ def _persist_rejection(
         failure_reason=rejection.failure_reason.value,
         failure_detail=rejection.failure_detail,
         failed_change_id=rejection.failed_change_id,
-        diagnostic_json=rejection.diagnostic,
-        expected_target_version=expected_target_version,
-        expected_current_hash=expected_current_hash,
+        diagnostic_json=diagnostic,
+        expected_target_version=sanitized_version,
+        expected_current_hash=sanitized_hash,
         before_version=before_version,
         after_version=None,
         before_hash=before_hash,
@@ -791,7 +871,7 @@ def _persist_rejection(
         failure_reason=rejection.failure_reason,
         failure_detail=rejection.failure_detail,
         failed_change_id=rejection.failed_change_id,
-        diagnostic=rejection.diagnostic,
+        diagnostic=diagnostic,
         validation_stage=stage,
         client_request_id=client_request_id,
     )
@@ -865,6 +945,7 @@ def _upsert_current_pdcp(
     regeneration_source: str | None,
     protocol_version: str = SUPPORTED_PROTOCOL_VERSION,
 ) -> CurrentPdcpFiles:
+    sanitized_attempt, _ = sanitize_regeneration_attempt(regeneration_attempt)
     existing = session.execute(
         select(CurrentPdcpFiles).where(CurrentPdcpFiles.target_file_id == target.target_file_id)
     ).scalar_one_or_none()
@@ -878,7 +959,7 @@ def _upsert_current_pdcp(
             status=status,
             submission_source=submission_source,
             parent_pdcp_log_id=parent_pdcp_log_id,
-            regeneration_attempt=regeneration_attempt,
+            regeneration_attempt=sanitized_attempt,
             regeneration_source=regeneration_source,
         )
         session.add(existing)
@@ -890,7 +971,7 @@ def _upsert_current_pdcp(
         existing.status = status
         existing.submission_source = submission_source
         existing.parent_pdcp_log_id = parent_pdcp_log_id
-        existing.regeneration_attempt = regeneration_attempt
+        existing.regeneration_attempt = sanitized_attempt
         existing.regeneration_source = regeneration_source
         existing.last_pdcp_log_id = None
     session.flush()
@@ -905,6 +986,7 @@ def _core_rejection(
     *,
     protocol_version: str = SUPPORTED_PROTOCOL_VERSION,
     stage: ValidationStage = ValidationStage.PROTOCOL_VALIDATION,
+    diagnostic_extra: dict[str, Any] | None = None,
 ) -> RejectedCoreResult:
     is_typed = protocol_version == TYPED_PROTOCOL_VERSION
     diagnostic: dict[str, Any] = {
@@ -942,6 +1024,8 @@ def _core_rejection(
                     "manifest_line_format": "# field_name: value",
                 }
             )
+    if diagnostic_extra:
+        diagnostic.update(diagnostic_extra)
     return RejectedCoreResult(
         failure_reason=reason,
         failure_detail=detail,
@@ -1009,6 +1093,8 @@ def _resolve_parent_log(
         return None, "parent_pdcp_log_id does not exist."
     if parent.target_file_id != target_uuid:
         return None, "parent_pdcp_log_id belongs to a different target_file_id."
+    if parent.status != "rejected":
+        return None, "parent_pdcp_log_id must reference a rejected attempt."
     return parent_uuid, None
 
 
