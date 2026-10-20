@@ -15,7 +15,7 @@ The core runtime may:
 
 - parse `patchdiff-tx/1` and `0.2.3` transaction formats
 - validate protocol structure and transaction applicability
-- enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.0`)
+- enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.1`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, and legacy `region_hint`)
 - simulate sequential `MATCH/REPLACE` operations in memory
 - compute runtime-derived `change_facts` (`span_start`, `span_end`, char lengths, SHA-256 digests)
@@ -59,7 +59,7 @@ Exact string matching operates on character code-points, case-sensitive and whit
 
 ## Match Enumeration & Overlapping Spans
 
-In `patchdiff-mvp-0.2.0`, string searching enumerates **all exact occurrences**, including overlapping matches:
+In `patchdiff-mvp-0.2.1`, string searching enumerates **all exact occurrences**, including overlapping matches:
 
 ```python
 # app/pdcp/matcher.py

@@ -1,6 +1,6 @@
 # PatchDIFF Modernization Change Document
 
-Status: **remaining review corrections implemented; 313 tests pass against live Postgres, including stdio and isolated populated migrations (2026-10-20). Independent closure review pending.**
+Status: **remaining review corrections implemented; 319 tests pass against live Postgres, including stdio and isolated populated migrations (2026-10-20). Independent closure review pending.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
@@ -13,7 +13,7 @@ PatchDIFF is modernized into a guarded transaction service with a typed primary 
 | 1 | Typed transaction input & schema | A2, A3, A6, **C1** | `patchdiff_submit_edits` accepts `intent`, `edits[]`, required guard (`expected_target_version` and/or `expected_current_hash`), optional `client_request_id`, `parent_pdcp_log_id`, `attempt`. Full item JSON Schema (`TYPED_EDIT_JSON_SCHEMA`) advertised in MCP `tools/list`. Persisted as canonical JSON with `protocol_version = "patchdiff-tx/1"`. |
 | 2 | Stage-based validity & format-specific diagnostics | A7, **C2** | `ValidationStage` (`PRECONDITION_GUARD`, `PROTOCOL_VALIDATION`, `TRANSACTION_APPLICABILITY`, `COMMIT_GUARD`, `ACCEPTED`) drives `validity_levels(...)`. Typed rejections report `format: "patchdiff-tx/1"`, `requires_new_submission: true`, and `allowed_edit_fields` / `required_edit_fields` without leaking PDCP manifest keys. |
 | 3 | Safe UUID & parent-lineage handling | **C2** | Malformed `target_file_id` returns `CONTEXT_INVALID`; nonexistent `target_file_id` returns `TARGET_NOT_FOUND`. Malformed, missing, or cross-target `parent_pdcp_log_id` logs a `CONTEXT_INVALID` rejection on the target with `parent_pdcp_log_id = null`. |
-| 4 | Matcher overlap fix & explicit replay profiles | A2, **C3** | `find_exact_occurrences` counts all exact spans (`overlapping=True`). `SUPPORTED_RUNTIME_PROFILES` maps `"patchdiff-mvp-0.1.0" -> False` and `"patchdiff-mvp-0.2.0" -> True`; unknown runtime/protocol versions fail replay with `REPLAY_PROTOCOL_INVALID`. |
+| 4 | Matcher overlap fix & explicit replay profiles | A2, **C3** | `find_exact_occurrences` counts all exact spans (`overlapping=True`). `SUPPORTED_RUNTIME_PROFILES` maps `"patchdiff-mvp-0.1.0" -> False` and `"patchdiff-mvp-0.2.1" -> True`; unknown runtime/protocol versions fail replay with `REPLAY_PROTOCOL_INVALID`. |
 | 5 | Replay integrity & materialized-state checks | **C3** | `replay_target` verifies initial snapshot ownership & hash, per-log target ownership, version contiguity, `before_hash`, `pdcp_content_hash`, and `after_hash`, and reports `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`). |
 | 6 | Request idempotency & lost-response recovery | A6, **C4** | `client_request_id` + `request_fingerprint` on `append_only_pdcp_logs` (`uq_pdcp_logs_target_client_request_id`). Duplicate requests recover the recorded terminal outcome (`deduplicated: true`) prior to stale-guard checks; conflicting reuse with a different payload rejects with `CONTEXT_INVALID`. |
 | 7 | Ledger schema & derived facts | A3, **C5** | Migration `20261020_0002` adds `origin` (`'pdcp_manifest'` or `'typed'`) and `derived_json` to `append_only_manifest_ledger`, relaxes legacy prose columns to nullable, and populates `derived_json` on both PDCP and typed acceptances. |
@@ -25,7 +25,7 @@ PatchDIFF is modernized into a guarded transaction service with a typed primary 
 
 | File | Role |
 | --- | --- |
-| `backend/app/core/versions.py` | `RUNTIME_VERSION = "patchdiff-mvp-0.2.0"`, `LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"`, `SUPPORTED_RUNTIME_PROFILES`, `UnsupportedRuntimeVersionError`, `resolve_overlapping_matches`. |
+| `backend/app/core/versions.py` | `RUNTIME_VERSION = "patchdiff-mvp-0.2.1"`, `LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"`, `SUPPORTED_RUNTIME_PROFILES`, `UnsupportedRuntimeVersionError`, `resolve_overlapping_matches`. |
 | `backend/app/core/validity.py` | `ValidationStage` enum and stage-aware `validity_levels(status, failure_reason, stage=...)`. |
 | `backend/app/core/result.py` | `AcceptedCoreResult.change_facts`. |
 | `backend/app/pdcp/matcher.py` | `find_exact_occurrences(target_text, match_text, *, overlapping=True)`. |
@@ -52,7 +52,7 @@ To resolve R3 (contradictory "Modernization amendment" footers), all active docu
 | --- | --- | --- | --- |
 | `AGENTS.md` | Layer 5 (Agent Rules) | Treated `.pdcp` as the only transaction format, required server-mediated regeneration, listed stale `skills/*.md` paths, and ended with a conflicting amendment footer. | States `patchdiff_submit_edits` (`patchdiff-tx/1`) as primary and `.pdcp` v0.2.3 as frozen legacy, host-owned retry via `patchdiff_read_target` / `patchdiff_find_occurrences`, stage-based validity, `client_request_id` idempotency, and exact `.agents/skills/patchdiff-*/SKILL.md` paths. |
 | `docs/MCP_FIRST_MVP.md` | Layer 3 (Active Spec) | Defined MVP around server-built prompts, model-emitted raw `.pdcp` only, and server-side regeneration orchestration, with a conflicting footer. | Defines the modernized MCP-first transaction service: typed `patchdiff_submit_edits` primary, `.pdcp` v0.2.3 legacy, authoritative read/search tools, host-owned retry, `client_request_id` idempotency, SAVE, and multi-format replay. |
-| `docs/PATCHDIFF_CORE_SPEC.md` | Layer 3 (Active Spec) | Described only `.pdcp` parsing, 7-field manifest requirement for all inputs, and `after_hash`-only replay, with a conflicting footer. | Specifies shared deterministic core semantics for both `patchdiff-tx/1` and `.pdcp` v0.2.3, overlapping-match enumeration (`patchdiff-mvp-0.2.0`) vs legacy replay profile (`patchdiff-mvp-0.1.0`), `ValidationStage`, `derived_json`, and component-level replay verification. |
+| `docs/PATCHDIFF_CORE_SPEC.md` | Layer 3 (Active Spec) | Described only `.pdcp` parsing, 7-field manifest requirement for all inputs, and `after_hash`-only replay, with a conflicting footer. | Specifies shared deterministic core semantics for both `patchdiff-tx/1` and `.pdcp` v0.2.3, overlapping-match enumeration (`patchdiff-mvp-0.2.1`) vs legacy replay profile (`patchdiff-mvp-0.1.0`), `ValidationStage`, `derived_json`, and component-level replay verification. |
 | `docs/MCP_TOOLS.md` | Layer 3 (Active Spec) | Listed 11 original tools as active and tacked new tools onto a footer. | Specifies all 14 MCP tools coherently in the main body, grouped into Core Lifecycle, Authoritative Reads & Search, Transaction Submission (Typed Primary + Legacy PDCP), Checkpointing/Replay/Audit, and Convenience/Deprecated Compatibility Tools, with full request/response schemas. |
 | `docs/DATA_MODEL.md` | Layer 3 (Active Spec) | Showed only migration `0001` columns (`append_only_manifest_ledger` all `NOT NULL`, no `origin`/`derived_json`, no `client_request_id`), with a footer. | Documents the full schema after migration `20261020_0002`, including `origin`, `derived_json`, nullable legacy prose columns, `client_request_id`, `request_fingerprint`, and `uq_pdcp_logs_target_client_request_id`. |
 | `docs/PDCP_FORMAT.md` | Layer 3 (Active Spec) | Presented `.pdcp` v0.2.3 as the only transaction format, with a footer. | Documents both transaction formats coherently: `patchdiff-tx/1` (primary typed JSON record) and `.pdcp` v0.2.3 (frozen declarative text format), including field mapping and shared applier semantics. |
@@ -84,9 +84,9 @@ To resolve R3 (contradictory "Modernization amendment" footers), all active docu
 | --- | --- |
 | `docker compose up -d` (`postgres:16.3-alpine` on `127.0.0.1:5432`) | Container `patchdiff-postgres` healthy |
 | `alembic -c backend/app/migrations/alembic.ini upgrade head -> downgrade 20260510_0001 -> upgrade head` | Full migration cycle succeeded cleanly on empty/legacy DB; downgrade guard raised `Cannot downgrade 20261020_0002: typed ledger rows exist` when typed rows were present |
-| `.\.venv\Scripts\python.exe -m pytest backend/tests/unit -q` | **178 passed** |
-| `.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q` | **135 passed** (against live Postgres `127.0.0.1:5432/patchdiff`, including real stdio subprocess E2E test) |
-| `.\.venv\Scripts\python.exe -m pytest -q` | **313 passed** |
+| `.\.venv\Scripts\python.exe -m pytest backend/tests/unit -q` | **181 passed** |
+| `.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q` | **138 passed** (against live Postgres `127.0.0.1:5432/patchdiff`, including real stdio subprocess E2E test) |
+| `.\.venv\Scripts\python.exe -m pytest -q` | **319 passed** |
 | `$env:PYTHONPATH="backend"; .\.venv\Scripts\python.exe evaluation/offline_eval.py` | **OK** (verdict equivalence across all 5 scenarios and 3 proposal variants) |
 
 ### 5.2 Offline Payload Accounting Output (`evaluation/offline_eval.py`)
@@ -139,10 +139,19 @@ The [head-pinned recheck](reviews/PR-1-60fa01f-findings-recheck.md) closed 11 or
 
 ### Verification scope
 
-- Complete local suite: **313 passed** (178 unit, 135 live Postgres integration), including real stdio subprocess rejection/audit workflow.
+- Complete local suite: **319 passed** (181 unit, 138 live Postgres integration), including real stdio subprocess rejection/audit workflow.
 - Focused schema/audit + typed unit checks: **86 passed**.
 - Migration module independently: **6 passed**, including populated legacy preservation and typed-history refusal in isolated schemas.
 - Offline evaluation: **OK**. Results measure bytes and deterministic outcomes, not model performance.
 - Alembic accepts an explicitly supplied connection so migration tests control isolation and transaction scope without downgrading shared data. Ordinary CLI migration setup is unchanged.
 - jsonschema is a test-only direct dependency, pinned with its transitive dependencies in requirements.lock; no production schema-validation dependency or transport rejection layer was added.
-- A separate live stdio/Postgres session and independent review will be recorded with their actual revision before merge. No new CI or review approval is claimed here.
+- Separate manual live stdio/Postgres verification at code revision 68b9c54 passed outside pytest: ten invalid submissions produced ten durable rejections with unchanged target/ledger; direct database inspection confirmed raw newline evidence and null constrained hashes. After restarting the server, the original request ID recovered its outcome before and after a later commit; final replay/export matched version 2. Evidence: [PR-3-live-verification.json](reviews/PR-3-live-verification.json).
+- Inspected PR CI run 39500094365 executed merge 6b398bdb3e206643dc40639223e32b71c0df7954 (code head 68b9c54 plus base 60fa01f): 178 unit and 135 integration tests passed, offline evaluation OK. Independent closure review remains pending.
+
+### Independent-review compatibility corrections
+
+The reviewer established two further defects in the first correction revision; neither is waived:
+- DB-003 (P1): stricter current ID parsing must not invalidate previously accepted records. New submissions now record patchdiff-mvp-0.2.1; replay explicitly dispatches original ID decoding for older supported profiles and retains bytes unchanged. Regression coverage exercises historical acceptance, current rejection and mixed-profile replay.
+- SVC-003 (P2): stricter new request-key validation must not prevent exact recovery of already-persisted legacy keys. The locked service performs exact lookup first, retaining fingerprint conflict checks. Both accepted and rejected prior outcomes recover without a new row; new invalid keys on other targets still reject.
+
+These corrections require a renewed live base-code acceptance/replay/recovery check and independent re-review before closure. The earlier 313-test result and manual JSON refer to code revision 68b9c54; they do not certify the compatibility delta.

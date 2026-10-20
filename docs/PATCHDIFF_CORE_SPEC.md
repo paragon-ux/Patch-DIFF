@@ -102,7 +102,7 @@ Matching is:
 - evaluated over the progressively updated in-memory buffer.
 - non-fuzzy: no semantic, AST, token, or automatic-repair matching.
 
-### Overlapping-Match Enumeration (`patchdiff-mvp-0.2.0`)
+### Overlapping-Match Enumeration (`patchdiff-mvp-0.2.1`)
 All exact occurrences of `MATCH` across the buffer are enumerated, including overlapping occurrences (advancing the search index by 1 code point rather than `len(match)`). For example, matching `"aa"` in `"aaa"` yields 2 occurrences (spans `0..2` and `1..3`) and rejects with `FailureReason.MATCH_AMBIGUOUS` unless explicitly disambiguated.
 
 ### Legacy Non-Overlapping Replay Mode (`patchdiff-mvp-0.1.0`)

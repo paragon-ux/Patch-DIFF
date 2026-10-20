@@ -18,7 +18,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ---
 
-## 1. Pure Unit Test Matrix (`backend/tests/unit/`, 178 Tests)
+## 1. Pure Unit Test Matrix (`backend/tests/unit/`, 181 Tests)
 
 Run with: `pytest backend/tests/unit -q`
 
@@ -27,7 +27,7 @@ Run with: `pytest backend/tests/unit -q`
 | `test_canonicalization.py` | LF line-ending normalization; preservation of exact whitespace, tabs, and trailing newlines; no Unicode normalization. |
 | `test_hashing.py` | Canonical SHA-256 computation over UTF-8 bytes. |
 | `test_failures.py` | Enum definitions and frozen failure reason sets. |
-| `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.0`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
+| `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.1`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
 | `test_parser.py` | Protocol header parsing; manifest line format; delimiter enforcement (`<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`); delimiter collision rejection (`FailureReason.BLOCK_MALFORMED`). |
 | `test_protocol_validator.py` | 7 required manifest fields (v0.2.3); risk value validation; structural purity (rejection of executable logic outside payloads). |
 | `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, `anchor_after`, and `region_hint`. |
@@ -39,7 +39,7 @@ Run with: `pytest backend/tests/unit -q`
 
 ---
 
-## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 135 Tests)
+## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 138 Tests)
 
 Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -q`
 

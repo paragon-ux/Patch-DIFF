@@ -127,7 +127,7 @@ The applier `apply_pdcp_transaction(target_content, parsed)`:
 1. Normalizes target content and payloads to LF.
 2. Checks header preconditions (if present).
 3. Simulates each change sequentially against the buffer:
-   - Locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.0`).
+   - Locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.1`).
    - Resolves disambiguation to exactly one span.
    - Slices buffer and splices `replace` immediately.
    - Computes `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests).

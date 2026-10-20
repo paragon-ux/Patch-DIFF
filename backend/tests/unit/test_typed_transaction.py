@@ -161,15 +161,15 @@ def test_empty_replace_is_deletion_and_allowed() -> None:
 
 
 def test_canonical_record_is_deterministic_and_round_trips() -> None:
-    rec = record([{"replace": "Ã©\nb", "match": "a"}], hash_="0" * 64)
+    rec = record([{"replace": "ÃƒÂ©\nb", "match": "a"}], hash_="0" * 64)
     reordered = {key: rec[key] for key in reversed(list(rec))}
     text = canonical_record_json(rec)
     assert text == canonical_record_json(reordered)
     assert canonical_sha256(text) == canonical_sha256(canonical_record_json(reordered))
     assert json.loads(text)["format"] == TYPED_PROTOCOL_VERSION
-    assert "Ã©" in text  # ensure_ascii disabled: payload stays readable and byte-stable
+    assert "ÃƒÂ©" in text  # ensure_ascii disabled: payload stays readable and byte-stable
     decoded = decode_record(text)
-    assert decoded.edits[0].replace == "Ã©\nb"
+    assert decoded.edits[0].replace == "ÃƒÂ©\nb"
     assert decoded.expected_current_hash == "0" * 64
 
 
@@ -350,3 +350,17 @@ def test_mcp_001_schema_requires_non_null_guard() -> None:
     assert validator.is_valid({**args, "expected_target_version": 0})
     assert validator.is_valid({**args, "expected_current_hash": "a" * 64})
     assert validator.is_valid({**args, "expected_target_version": 0, "expected_current_hash": "a" * 64})
+
+
+@pytest.mark.parametrize("runtime_version", ["patchdiff-mvp-0.1.0", "patchdiff-mvp-0.2.0"])
+def test_historical_decoding_retains_full_accepted_change_id(runtime_version):
+    raw = canonical_record_json(record([{"match": "a", "replace": "b", "change_id": "legacy\n"}]))
+    assert decode_record(raw, runtime_version=runtime_version).edits[0].change_id == "legacy\n"
+    with pytest.raises(ProtocolValidationError):
+        decode_record(raw)
+
+
+def test_unknown_decoding_profile_rejects():
+    from app.core.versions import UnsupportedRuntimeVersionError
+    with pytest.raises(UnsupportedRuntimeVersionError):
+        decode_record(canonical_record_json(record([{"match": "a", "replace": "b"}])), runtime_version="unknown")

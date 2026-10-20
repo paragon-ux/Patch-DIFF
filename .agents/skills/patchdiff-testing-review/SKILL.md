@@ -62,7 +62,7 @@ When reviewing PatchDIFF code or documentation, audit against these invariants:
 
 - [ ] **Core Purity**: Core runtime files (`backend/app/core/`, `backend/app/pdcp/`) must have zero imports of FastAPI, SQLAlchemy, Postgres, MCP, or LLM SDKs.
 - [ ] **Language Neutrality**: Matcher and applier treat text as exact character sequences (LF-normalized UTF-8); no AST, language heuristics, or fuzzy matching.
-- [ ] **Overlapping Matches**: In `patchdiff-mvp-0.2.0`, string search finds all exact occurrences including overlaps; legacy non-overlapping is preserved under `patchdiff-mvp-0.1.0`.
+- [ ] **Overlapping Matches**: In `patchdiff-mvp-0.2.1`, string search finds all exact occurrences including overlaps; legacy non-overlapping is preserved under `patchdiff-mvp-0.1.0`.
 - [ ] **Sequential In-Memory Simulation**: Edits apply sequentially to in-memory buffers; intermediate state transitions are verified; `change_facts` are emitted.
 - [ ] **Per-Target Atomic Commit**: Commits occur under `SELECT ... FOR UPDATE`; all edits apply or none do; no cross-target transactions.
 - [ ] **Append-Only Lineage**: Every attempt logs to `append_only_pdcp_logs`; rejected attempts preserve failure reasons; retry attempts track `parent_pdcp_log_id`.

@@ -6,7 +6,8 @@ cannot disagree about how a persisted transaction must be re-applied.
 
 from __future__ import annotations
 
-RUNTIME_VERSION = "patchdiff-mvp-0.2.0"
+RUNTIME_VERSION = "patchdiff-mvp-0.2.1"
+PREVIOUS_RUNTIME_VERSION = "patchdiff-mvp-0.2.0"
 
 # Logs written by this runtime enumerated MATCH candidates by skipping overlapping
 # spans. Accepted history written under it must replay identically.
@@ -17,6 +18,7 @@ LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"
 # inheriting current matching semantics.
 SUPPORTED_RUNTIME_PROFILES: dict[str, bool] = {
     LEGACY_RUNTIME_VERSION: False,
+    PREVIOUS_RUNTIME_VERSION: True,
     RUNTIME_VERSION: True,
 }
 
