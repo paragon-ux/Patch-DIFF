@@ -201,7 +201,26 @@ def _submit(
     pdcp_content_hash = canonical_sha256(pdcp_content)
 
     with _transaction(session):
-        target = session.execute(select_target_for_update(str(target_uuid))).scalar_one_or_none()
+        key = session.identity_key(CloudTargetFiles, target_uuid)
+        existing = session.identity_map.get(key)
+        if existing is not None and (existing in session.dirty or session.is_modified(existing)):
+            return SubmitPDCPResult(
+                status="rejected",
+                target_file_id=target_uuid,
+                pdcp_log_id=None,
+                before_hash=getattr(existing, "current_hash", None),
+                after_hash=None,
+                before_version=getattr(existing, "version", None),
+                after_version=None,
+                current_hash=getattr(existing, "current_hash", None),
+                current_version=getattr(existing, "version", None),
+                failure_reason=FailureReason.CONTEXT_INVALID,
+                failure_detail="Pending local direct modifications on target are not permitted.",
+                validation_stage=ValidationStage.PRECONDITION_GUARD,
+            )
+
+        with session.no_autoflush:
+            target = session.execute(select_target_for_update(str(target_uuid))).scalar_one_or_none()
         if target is None:
             return SubmitPDCPResult(
                 status="rejected",

@@ -153,3 +153,16 @@ def test_save_failure_after_snapshot_rolls_back_partial_state() -> None:
         assert target.active_editing_cycle_id == old_cycle_id
         assert active_count == 1
         assert save_snapshot_count == 0
+
+
+def test_save_rejects_pending_local_direct_modifications() -> None:
+    target_id = create_target("old")
+    with SessionLocal() as session:
+        target = session.get(CloudTargetFiles, target_id)
+        assert target is not None
+        target.current_content = "unauthorized local mutation"
+        result = save_target(session, target_file_id=target_id)
+        assert result.status == "rejected"
+        assert result.failure_reason is FailureReason.CONTEXT_INVALID
+        assert result.failure_detail == "Pending local direct modifications on target are not permitted."
+

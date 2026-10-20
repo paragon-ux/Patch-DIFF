@@ -48,7 +48,23 @@ def save_target(
         )
 
     with _transaction(session):
-        target = session.execute(select_target_for_update(target_uuid)).scalar_one_or_none()
+        key = session.identity_key(CloudTargetFiles, target_uuid)
+        existing = session.identity_map.get(key)
+        if existing is not None and (existing in session.dirty or session.is_modified(existing)):
+            return SaveResult(
+                status="rejected",
+                target_file_id=target_uuid,
+                snapshot_id=None,
+                closed_editing_cycle_id=None,
+                new_editing_cycle_id=None,
+                current_hash=getattr(existing, "current_hash", None),
+                version=getattr(existing, "version", None),
+                failure_reason=FailureReason.CONTEXT_INVALID,
+                failure_detail="Pending local direct modifications on target are not permitted.",
+            )
+
+        with session.no_autoflush:
+            target = session.execute(select_target_for_update(target_uuid)).scalar_one_or_none()
         if target is None:
             return SaveResult(
                 status="rejected",
