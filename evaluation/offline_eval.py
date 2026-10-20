@@ -29,6 +29,7 @@ import json
 import sys
 from typing import Any
 
+from app.core.hashing import canonical_sha256
 from app.core.result import AcceptedCoreResult
 from app.pdcp.applier import apply_pdcp_transaction
 from app.pdcp.parser import PDCPParseError, parse_pdcp
@@ -42,6 +43,54 @@ MATCHED_RATIONALE = (
     "input_state: Old text exists. | output_state: New text exists. | "
     "affected_region: example | user_visible_change: Text changes."
 )
+
+SCENARIOS = [
+    (
+        "1 tiny edit",
+        "old",
+        [("old", "new")],
+        "accepted",
+        canonical_sha256("new"),
+        "accepted",
+        canonical_sha256("new"),
+    ),
+    (
+        "5 small edits",
+        "a b c d e",
+        [("a", "1"), ("b", "2"), ("c", "3"), ("d", "4"), ("e", "5")],
+        "accepted",
+        canonical_sha256("1 2 3 4 5"),
+        "accepted",
+        canonical_sha256("1 2 3 4 5"),
+    ),
+    (
+        "1 edit, 2 KB span",
+        LONG_BODY,
+        [(LONG_BODY, LONG_BODY.replace("fox", "cat"))],
+        "accepted",
+        canonical_sha256(LONG_BODY.replace("fox", "cat")),
+        "accepted",
+        canonical_sha256(LONG_BODY.replace("fox", "cat")),
+    ),
+    (
+        "quotes+backslashes+unicode",
+        'say "hi" \\ \u00e9\u4e2d',
+        [('"hi" \\ \u00e9', '"yo" \\\\ \u4e2d')],
+        "accepted",
+        canonical_sha256('say "yo" \\\\ \u4e2d\u4e2d'),
+        "accepted",
+        canonical_sha256('say "yo" \\\\ \u4e2d\u4e2d'),
+    ),
+    (
+        "payload has a delimiter line",
+        "a\n=======\nb",
+        [("a\n=======\nb", "a\nb")],
+        "rejected:block_malformed",
+        None,
+        "accepted",
+        canonical_sha256("a\nb"),
+    ),
+]
 
 
 def pdcp_text(edits: list[tuple[str, str]]) -> str:
@@ -123,15 +172,6 @@ def _verdict(result: Any) -> tuple[str, str | None]:
     return f"rejected:{result.failure_reason.value}", None
 
 
-SCENARIOS = [
-    ("1 tiny edit", "old", [("old", "new")]),
-    ("5 small edits", "a b c d e", [("a", "1"), ("b", "2"), ("c", "3"), ("d", "4"), ("e", "5")]),
-    ("1 edit, 2 KB span", LONG_BODY, [(LONG_BODY, LONG_BODY.replace("fox", "cat"))]),
-    ("quotes+backslashes+unicode", 'say "hi" \\ \u00e9\u4e2d', [('"hi" \\ \u00e9', '"yo" \\\\ \u4e2d')]),
-    ("payload has a delimiter line", "a\n=======\nb", [("a\n=======\nb", "a\nb")]),
-]
-
-
 def main() -> int:
     print("=== 1. Persisted Record UTF-8 Bytes (append_only_pdcp_logs.pdcp_content) ===")
     header = (
@@ -141,7 +181,7 @@ def main() -> int:
     print(header)
     print("-" * len(header))
     all_equivalent = True
-    for name, target, edits in SCENARIOS:
+    for name, target, edits, exp_pdcp_v, exp_pdcp_h, exp_typed_v, exp_typed_h in SCENARIOS:
         p_raw = pdcp_text(edits)
         t_matched_persisted = typed_persisted_record_json(typed_matched_edits(edits))
         t_min_persisted = typed_persisted_record_json(typed_minimal_edits(edits))
@@ -154,9 +194,28 @@ def main() -> int:
         tmv, tmh = run_typed(target, t_matched_persisted)
         tnv, tnh = run_typed(target, t_min_persisted)
 
-        expressible_gap = pv.startswith("rejected:block_malformed") and tmv == "accepted" and tnv == "accepted"
+        # Oracle checks: actual verdicts/hashes must match independent expectations
+        pdcp_matches_oracle = (pv == exp_pdcp_v) and (ph == exp_pdcp_h)
+        typed_matches_oracle = (
+            (tmv == exp_typed_v and tmh == exp_typed_h)
+            and (tnv == exp_typed_v and tnh == exp_typed_h)
+        )
+
+        # SCRIPT-001: The delimiter scenario is the sole recognized expressibility gap
+        is_delimiter_scenario = (name == "payload has a delimiter line")
+        expressible_gap = (
+            is_delimiter_scenario
+            and pv.startswith("rejected:block_malformed")
+            and tmv == "accepted"
+            and tnv == "accepted"
+        )
         typed_agree = (tmv, tmh) == (tnv, tnh)
-        same = typed_agree and ((pv, ph) == (tmv, tmh) or expressible_gap)
+        same = (
+            pdcp_matches_oracle
+            and typed_matches_oracle
+            and typed_agree
+            and ((pv, ph) == (tmv, tmh) or expressible_gap)
+        )
         all_equivalent &= same
         note = " [PDCP delimiter collision]" if expressible_gap else ""
         print(
@@ -173,7 +232,7 @@ def main() -> int:
     )
     print(req_header)
     print("-" * len(req_header))
-    for name, _target, edits in SCENARIOS:
+    for name, _target, edits, *rest in SCENARIOS:
         p_req_bytes = len(pdcp_mcp_request_json(edits).encode("utf-8"))
         tm_req_bytes = len(typed_mcp_request_json(typed_matched_edits(edits)).encode("utf-8"))
         tn_req_bytes = len(typed_mcp_request_json(typed_minimal_edits(edits)).encode("utf-8"))
