@@ -151,6 +151,16 @@ Do not claim completion unless relevant tests pass against live Postgres:
 - Postgres integration tests (`backend/tests/integration/`), including live Alembic `upgrade -> downgrade -> upgrade` and real stdio MCP subprocess E2E workflow
 - Offline payload and verdict equivalence evaluation (`evaluation/offline_eval.py`)
 
+## PR Review Standard
+
+All PR reviews must follow [PR Review Standard v1.0.0](docs/PR_REVIEW_STANDARD.md). Record the base and head SHAs, map every changed file to a primary category, and give each required category its own coverage statement, finding list, verification gaps, and verdict.
+
+Trace architecture and contracts before recommending runtime changes. Keep source inspection, local execution, and CI evidence separate. Passing tests or a prior approval cannot replace category review. Do not recommend approval with unreviewed material categories or unresolved blocking findings.
+
+Store review reports in `docs/reviews/`. Close findings only with a fix commit, relevant evidence, and reviewer recheck. The concise implementation completion report in the testing skill does not replace the required PR review.
+
+Changes to the review format require a versioned change to `docs/PR_REVIEW_STANDARD.md`; reviewers must not silently omit categories or weaken evidence requirements.
+
 ## Skills
 
 Use the workspace skills in `.agents/skills/`:
