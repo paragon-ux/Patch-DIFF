@@ -1,6 +1,6 @@
 # PR #1 — Category-separated second review
 
-Review standard: 1.0.0  
+Review standard: 1.1.0  
 Review date: 2026-10-20  
 PR: https://github.com/paragon-ux/Patch-DIFF/pull/1  
 Base: 0c75c4054b5da01eb56c53ce5579c74014270f3a  
@@ -51,6 +51,12 @@ The findings below concern distinct broken or inconsistent obligations. They are
 
 **Scope:** MODERNIZATION_ARCHITECTURE.md, relevant service contracts and current bounded-read implementation. **Coverage:** partial.
 
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
+
 ### ARCH-001 — P2 — The bounded-read implementation contradicts the locked C6 contract
 
 - **Provenance:** [docs/MODERNIZATION_ARCHITECTURE.md:159–162](https://github.com/paragon-ux/Patch-DIFF/blob/39dcb4b049a030dc15b96b8672ee3236e4e99c7e/docs/MODERNIZATION_ARCHITECTURE.md#L159-L162) specifies default 4,000 characters and maximum 8,000. AGENTS.md places this architecture above implementation descriptions.
@@ -61,11 +67,21 @@ The findings below concern distinct broken or inconsistent obligations. They are
 - **Reasoning:** this is a measurable contract mismatch, not a preference for smaller responses. No claim is made that 8,000 is universally optimal.
 - **Status:** open; source-derived.
 
+### P3 — Low priority
+
+None identified within reviewed scope.
+
 **Category verdict:** changes required. The paper-to-modernization rationale and vendor claims still need a separate provenance audit before whole-category sign-off.
 
 ## DOC — Documentation and change records
 
 **Scope:** host recovery guidance and linked C4/submission behavior. **Coverage:** partial.
+
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
 
 ### DOC-001 — P2 — Manual lost-response recovery overstates the protection of an old guard
 
@@ -77,11 +93,25 @@ The findings below concern distinct broken or inconsistent obligations. They are
 - **Reasoning:** the implementation's keyed mechanism can be correct while the fallback instructions remain unsafe.
 - **Status:** open; source-derived. Corresponds to earlier second-review finding 5.
 
+### P3 — Low priority
+
+None identified within reviewed scope.
+
 **Category verdict:** changes required. This is not a sign-off on every active guide.
 
 ## SKILL — Skills and agent instructions
 
 **Scope:** AGENTS.md and all four .agents/skills/patchdiff-*/SKILL.md files. **Coverage:** source review of their current instructions; commands not executed.
+
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
+
+None identified within reviewed scope.
+
+### P3 — Low priority
 
 ### SKILL-001 — P3 — The core skill teaches validation stages absent from the contract and runtime
 
@@ -101,6 +131,12 @@ The findings below concern distinct broken or inconsistent obligations. They are
 
 **Scope:** typed item schema, schema publication, relevant submission API. **Coverage:** partial.
 
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
+
 ### MCP-001 — P2 — tools/list excludes a null value explicitly accepted by the typed contract
 
 - **Provenance:** C1 at [docs/MODERNIZATION_ARCHITECTURE.md:99–102](https://github.com/paragon-ux/Patch-DIFF/blob/39dcb4b049a030dc15b96b8672ee3236e4e99c7e/docs/MODERNIZATION_ARCHITECTURE.md#L99-L102) and [docs/MCP_TOOLS.md:132–139](https://github.com/paragon-ux/Patch-DIFF/blob/39dcb4b049a030dc15b96b8672ee3236e4e99c7e/docs/MCP_TOOLS.md#L132-L139) allow change_id=null, defaulting it to the indexed identifier.
@@ -111,11 +147,21 @@ The findings below concern distinct broken or inconsistent obligations. They are
 - **Reasoning:** this is an externally visible contract mismatch independently of parser error handling in RUN-001.
 - **Status:** open; source-derived.
 
+### P3 — Low priority
+
+None identified within reviewed scope.
+
 **Category verdict:** changes required; other tools' discovery contracts still need coverage.
 
 ## RUN — Core runtime, parsing, and validation
 
 **Scope:** typed optional-field parsing and legacy validation/stage propagation. **Coverage:** partial.
+
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
 
 ### RUN-001 — P2 — Unhashable risk input escapes canonical rejection and attempt logging
 
@@ -137,11 +183,21 @@ The findings below concern distinct broken or inconsistent obligations. They are
 - **Acceptance evidence:** multi-fault input reports protocol_valid=false and transaction_valid=null; a fully protocol-valid input whose header hash differs from the target still reports protocol_valid=true and transaction_valid=false. Neither mutates the target.
 - **Status:** open; source-derived. Corresponds to earlier finding 3.
 
+### P3 — Low priority
+
+None identified within reviewed scope.
+
 **Category verdict:** changes required.
 
 ## SVC — Services, orchestration, and audit semantics
 
 **Scope:** parent validation, retry attempt propagation, and persisted metadata. **Coverage:** partial.
+
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
 
 ### SVC-001 — P2 — Retry lineage accepts an accepted transaction as the rejected parent
 
@@ -152,6 +208,8 @@ The findings below concern distinct broken or inconsistent obligations. They are
 - **Required remediation:** enforce rejected status in the shared parent-validation path. Persist an ordinary context-invalid rejection with a null parent FK when the parent fails validation, matching the existing invalid-parent policy.
 - **Acceptance evidence:** accepted same-target parent is rejected and logged; rejected same-target parent succeeds; existing malformed, nonexistent, and cross-target cases remain covered.
 - **Status:** open; source-derived. Part of earlier finding 4.
+
+### P3 — Low priority
 
 ### SVC-002 — P3 — One-based retry attempt metadata has no value validation
 
@@ -169,6 +227,12 @@ The findings below concern distinct broken or inconsistent obligations. They are
 
 **Scope:** replay reads/checks, engine configuration, migration 0002 and model excerpts. **Coverage:** partial; no local DB execution.
 
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
+
 ### DB-001 — P2 — Replay health compares database states from different read instants
 
 - **Provenance:** C3 describes materialized_state_matches as integrity evidence for authoritative current state.
@@ -182,11 +246,21 @@ The findings below concern distinct broken or inconsistent obligations. They are
 
 **Migration verification gap:** CI performs upgrade/downgrade/upgrade before tests populate the schema. That proves the empty-schema roundtrip. The inspected migration test checks schema metadata; it does not execute a populated downgrade or its refusal path. The change document claims populated/typed-row guard verification, but an as-built statement is not independently executable proof. Add or supply reproducible isolated-Postgres evidence for populated legacy preservation and typed-history refusal. This is a missing-evidence statement, not an assertion that the migration is broken.
 
+### P3 — Low priority
+
+None identified within reviewed scope.
+
 **Category verdict:** changes required; populated migration safety remains unverified in this review.
 
 ## SCRIPT — Scripts, evaluation, and developer tooling
 
 **Scope:** evaluation/offline_eval.py and evaluation/README.md. **Coverage:** source reviewed; existing CI execution inspected.
+
+### P1 — High priority
+
+None identified within reviewed scope.
+
+### P2 — Medium priority
 
 ### SCRIPT-001 — P2 — The equivalence gate excuses an unexpected parser failure in any scenario
 
@@ -199,13 +273,27 @@ The findings below concern distinct broken or inconsistent obligations. They are
 - **Reasoning:** a comparison needs an independent oracle; shared failure or a broad exception is insufficient.
 - **Status:** open; source-derived. Current CI output is not claimed to contain that regression.
 
+### P3 — Low priority
+
+None identified within reviewed scope.
+
 **Category verdict:** changes required.
 
 ## TEST — Tests and CI
 
 **Scope:** CI workflow and logs; schema assertions, lineage/guard test excerpts, migration metadata tests. **Coverage:** partial.
 
-### Finding list
+### P1 — High priority
+
+No additional defect established in the inspected tests/CI scope.
+
+### P2 — Medium priority
+
+No additional defect established; verification gaps follow separately.
+
+### P3 — Low priority
+
+None identified within reviewed scope.
 
 No additional production defect is asserted in this category. The tests supply evidence and expose verification gaps associated with the findings above; those are not counted twice.
 
@@ -228,7 +316,17 @@ The unkeyed retry test at [backend/tests/integration/test_typed_submit_flow.py:3
 
 **Scope:** pyproject.toml and requirements.lock are changed, but were not substantively reviewed here. **Coverage:** not reviewed.
 
-### Finding list
+### P1 — High priority
+
+Not assessed.
+
+### P2 — Medium priority
+
+Not assessed.
+
+### P3 — Low priority
+
+Not assessed.
 
 No findings asserted. This does not establish compatibility, dependency safety, or reproducible installation.
 
