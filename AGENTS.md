@@ -34,7 +34,7 @@ Read project artifacts in this order:
 9. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop and usage guide)
 10. `docs/TEST_MATRIX.md` & `docs/CODEX_BUILD_PLAN.md`
 
-Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF_Protocol_Specification_v0_2_3.md`, `docs/PatchDIFF_Implementation_Specification_v0_2_3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/`, `docs/Archive/`) are preserved untouched for historical context.
+Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/`, `docs/Archive/`) are preserved untouched for historical context.
 
 If ambiguity remains, preserve PatchDIFF’s locked invariants and choose the simplest deterministic behavior.
 

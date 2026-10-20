@@ -261,9 +261,42 @@ Returns a bounded, newest-first page of append-only attempts (accepted and rejec
 - **Returns**: `entries[]` containing sequence, hashes, versions, failure reason/detail, `client_request_id`, `request_fingerprint`, `diagnostic`, and timestamps.
 
 ### `patchdiff_get_manifest_ledger`
-Returns accepted-only manifest ledger entries.
-- **Arguments**: `target_file_id`, `include_previous_cycles` (`boolean`, default `false`), `limit` (`integer | null`).
-- **Returns**: `entries[]` containing `change_id`, `intent`, `input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`, `origin` (`'typed'` or `'pdcp_manifest'`), `derived` (`span_start`, `span_end`, etc.), and `created_at`.
+Returns bounded, oldest-first accepted manifest ledger entries within the newest page.
+- **Arguments**:
+  - `target_file_id` (`string`, required): target UUID.
+  - `include_previous_cycles` (`boolean`, optional, default `false`): include entries from closed editing cycles.
+  - `limit` (`integer | null`, optional): page size clamped to `1..200` (default `50`). Omitted or null selects `50`.
+  - `before_sequence` (`integer >= 1 | null`, optional): exclusive upper bound on `ledger_sequence` for paging backward.
+- **Returns**:
+  ```json
+  {
+    "entries": [
+      {
+        "ledger_sequence": 1,
+        "change_id": "chg_001",
+        "intent": "Initial edit",
+        "input_state": null,
+        "output_state": null,
+        "affected_region": null,
+        "user_visible_change": null,
+        "risk": "low",
+        "origin": "typed",
+        "derived": {
+          "span_start": 0,
+          "span_end": 10,
+          "matched_chars": 10,
+          "replacement_chars": 12,
+          "matched_sha256": "...",
+          "replacement_sha256": "..."
+        },
+        "created_at": "2026-10-20T12:00:00Z"
+      }
+    ],
+    "has_more": false,
+    "next_sequence": null
+  }
+  ```
+- **Caller Note**: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal. Callers migrating from the legacy unbounded behavior must page via `before_sequence`.
 
 ---
 
