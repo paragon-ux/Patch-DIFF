@@ -113,7 +113,7 @@ F01 rejection context: newly recorded rejections persist immutable `diagnostic.f
   4. `COMMIT_GUARD`: Post-simulation re-check of `target.version` and `target.current_hash` (`TARGET_DIVERGED`). Reports `protocol_valid: true, transaction_valid: true`.
   5. `ACCEPTED`: Transaction committed. Reports `protocol_valid: true, transaction_valid: true`.
 - **Format-Specific Diagnostics**:
-  - Every rejection diagnostic includes `"format"` (`"patchdiff-tx/1"` or `"0.2.3"`), `"retryable"`, `"requires_new_submission": true`, and `"validation_stage"`.
+  - Durably recorded rejection diagnostics include `"format"` (`"patchdiff-tx/1"` or `"0.2.3"`), `"retryable"`, `"requires_new_submission": true`, and `"validation_stage"`. Unlinked precondition rejections (malformed/missing target or pending local direct modifications, with `pdcp_log_id: null`) retain their existing minimal diagnostic fields plus explicit unavailable failure context; their public validity fields still report the reached precondition stage.
   - Typed (`patchdiff-tx/1`) rejections never include PDCP-only keys (`requires_new_pdcp`, `missing_fields`, `invalid_fields`, `unknown_fields`, `allowed_manifest_fields`, `required_manifest_fields`, `manifest_line_format`). On `MANIFEST_INVALID` / `MANIFEST_MISSING`, typed rejections report `allowed_edit_fields`, `required_edit_fields`, and `valid_risk_values`.
   - Legacy PDCP (`0.2.3`) rejections include `"requires_new_pdcp": true` alongside `"requires_new_submission": true` and the PDCP manifest field lists.
 - **Lineage & UUID Safety**:
