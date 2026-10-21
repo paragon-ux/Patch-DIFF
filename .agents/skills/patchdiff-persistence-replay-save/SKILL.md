@@ -114,9 +114,9 @@ flowchart TD
 
 ### Component-Level Materialized State Checks
 The replay result provides detailed boolean verification:
-- `content_matches`: replay buffer matches current database content.
+- `content_matches`: raw stored current_content equals the reconstructed canonical replay buffer; never normalize stored text before comparing.
 - `stored_hash_matches`: logged `after_hash` of final log matches current database `current_hash`.
-- `recomputed_hash_matches`: recomputed hash of final replay buffer matches current database `current_hash`.
+- `recomputed_hash_matches`: canonical_sha256 of stored current_content equals the reconstructed hash (separate from stored_hash_matches).
 - `version_matches`: final log `after_version` matches current database `current_version`.
 - `materialized_state_matches`: `true` only when all four component checks pass.
 
@@ -125,3 +125,5 @@ Replay uses the exact `(protocol_version, runtime_version)` recorded on each log
 Current typed submissions record patchdiff-mvp-0.2.2. Replay explicitly retains patchdiff-mvp-0.2.1 overlapping matches with ignored singleton selectors, patchdiff-mvp-0.2.0 overlapping-match and original change-ID decoding behavior, plus the 0.1.0 non-overlapping profile. Strict new-key syntax does not prevent exact recovery of already-persisted request IDs; unknown/new invalid IDs still reject. Do not trim historical IDs or rewrite accepted history.
 
 The current 0.2.2 profile enforces every supplied selector even for one occurrence. All older supported profiles retain ignored singleton selectors. Resolve both profile settings in submission and replay; never repurpose a recorded profile.
+
+A successful reconstruction can report materialized_state_matches=false. CRLF/bare-CR storage corruption must fail content_matches even with matching canonical hashes; replay never repairs storage.

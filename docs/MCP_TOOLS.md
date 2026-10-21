@@ -232,7 +232,7 @@ Creates a `TargetSnapshots` row (`snapshot_reason = "save_checkpoint"`), closes 
 - **Returns**: `status: "saved"`, `target_file_id`, `snapshot_id`, `closed_editing_cycle_id`, `new_editing_cycle_id`, `current_hash`, `version`.
 
 ### `patchdiff_replay`
-Replays accepted logs against the initial snapshot, dispatching on `(protocol_version, runtime_version)`.
+Replays accepted logs against the initial snapshot, dispatching on `(protocol_version, runtime_version)`. A successful reconstruction may still report materialized_state_matches=false. content_matches compares raw stored content with the canonical reconstructed buffer; canonical hash checks retain their existing meaning. Replay reports divergence and never repairs storage.
 - **Arguments**: `target_file_id`.
 - **Returns**:
   ```json

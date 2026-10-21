@@ -235,7 +235,9 @@ Replay reconstructs canonical target state from the `initial_upload` snapshot pl
    - Verify `log.pdcp_content_hash == canonical_sha256(log.pdcp_content)`.
    - Verify `result.after_hash == log.after_hash`.
 3. Check reconstructed state against the materialized target and report `materialized_state_checks`:
-   - `content_matches`: `canonicalize(target.current_content) == replay_buffer`
+   - `content_matches`: `target.current_content == replay_buffer` (raw stored text; no pre-comparison normalization)
    - `stored_hash_matches`: `target.current_hash == reconstructed_hash`
    - `recomputed_hash_matches`: `canonical_sha256(target.current_content) == reconstructed_hash`
    - `version_matches`: `target.version == expected_version`
+
+DEV-DB-001 changes only materialized content health:canonical_sha256 and historical hashes remain unchanged. Successful history reconstruction is independent of materialized_state_matches; replay never repairs storage. CRLF/bare-CR storage divergence is visible even when its canonical hash agrees.

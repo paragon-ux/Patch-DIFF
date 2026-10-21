@@ -1,6 +1,6 @@
 # PatchDIFF Modernization Change Document
 
-Status: **DEV-RUN-001 implemented, independently rechecked and published as PR #4 with green live CI. DEV-RUN-002 invalid-text implementation passes683 tests; manual live verification and final independent recheck pass at893301e; publication/CI pending; other required workstreams remain open. Earlier 2026-10-20 closure and 319-test records below describe their pinned revisions, not closure of the new Devin findings. Current execution is recorded under docs/remediation/; the remaining required workstreams are still open.**
+Status: **DEV-RUN-001/002 and DEV-SVC-001 are implemented, independently rechecked and published as PRs #4/#5/#6 with inspected green CI. DEV-DB-001 is in verification; MCP arguments/paging and identity documentation remain open. Earlier 2026-10-20 closure and319-test records below apply to their pinned revisions. Current evidence is under docs/remediation/. No merge is authorized.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
@@ -8,13 +8,17 @@ Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_A
 
 New runtime 0.2.2 enforces all supplied selectors on singleton matches through the shared applier and locked submit path. Historical profiles preserve ignored-singleton semantics with a separate profile setting; overlap behavior and historical ID decoding are unchanged. The active core contract, architecture/profile table, MCP/PDCP fields, host typed/legacy examples and skills are reconciled. Verification and independent recheck are recorded in [the remediation workflow](remediation/WORKFLOW.md). No current whole-PR approval or completion of the other five defects is claimed.
 
-## Current remediation: DEV-RUN-002 (in progress)
+## Current remediation: DEV-RUN-002 (verified at893301e)
 
-The pre-coding decision is [the invalid-input evidence contract](remediation/DEV-RUN-002-decision.md). It selects a small reversible ASCII JSON envelope in existing rejected-attempt TEXT fields with safe JSONB markers, target_encoding_invalid / PROTOCOL_VALIDATION and deterministic invalid-only request identity. Valid serialization/hashes/fingerprints and all historical decoding are preserved. Read/search text receives safe invalid_argument responses without edit-attempt rows. No profile, migration, protocol operation or no-log exception is introduced. Implementation,683-test live suite, manual real stdio/direct-DB exercise and independent recheck pass at893301e. See remediation/DEV-RUN-002-review.md; remote publication/CI remains to be recorded.
+The pre-coding decision is [the invalid-input evidence contract](remediation/DEV-RUN-002-decision.md). It selects a small reversible ASCII JSON envelope in existing rejected-attempt TEXT fields with safe JSONB markers, target_encoding_invalid / PROTOCOL_VALIDATION and deterministic invalid-only request identity. Valid serialization/hashes/fingerprints and all historical decoding are preserved. Read/search text receives safe invalid_argument responses without edit-attempt rows. No profile, migration, protocol operation or no-log exception is introduced. Implementation,683-test live suite, manual real stdio/direct-DB exercise and independent recheck pass at893301e. See remediation/DEV-RUN-002-review.md; PR#5 is open atd8c71fe with inspected generated-merge4207996 CIgreen(500unit/183integration).
 
 ## Current remediation: DEV-SVC-001 (verified at3a7ddb0)
 
-Fingerprint conflicts will use the existing locked rejection helper to append distinct NULL-key attempts with the submitted fingerprint and bounded key/original-log diagnostics. The original keyed outcome stays immutable and recoverable. V01/V06/V07/V09 proof belongs here: actual synchronized duplicate/conflict sessions, READ COMMITTED visibility, outer commit/rollback/lock lifetime, and complete recovered facts after later edits. No rate limiter, profile bump, engine fork or blanket database catch is introduced. Implementation and independent verification are in progress, not closure.
+Fingerprint conflicts use the existing locked rejection helper to append distinct NULL-key attempts with the submitted fingerprint and bounded key/original-log diagnostics. The original keyed outcome stays immutable and recoverable. V01/V06/V07/V09 proof belongs here: actual synchronized duplicate/conflict sessions, READ COMMITTED visibility, outer commit/rollback/lock lifetime, and complete recovered facts after later edits. No rate limiter, profile bump, engine fork or blanket database catch is introduced. Implementation and independent verification are in progress, not closure.
+
+## Current remediation:DEV-DB-001
+
+Contract-first9de0a64 changes raw materialized-content comparison before implementation. Canonical hashes, history/profile semantics and response fields remain unchanged. Reconstruction success and materialized health stay separate; no repair. Six rollback-isolated live corruption/healthy cases plus real stdio replay verify the change. Execution evidence follows under docs/remediation.
 
 ## 1. Coherent Change Set Summary
 

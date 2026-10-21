@@ -162,6 +162,8 @@ Read/search string arguments return invalid_argument with safely serialized deta
 - **Materialized-State Health**:
   - `materialized_state_checks` reports four booleans: `content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, and `version_matches`.
   - `materialized_state_matches` is `True` if and only if all four component checks are `True`.
+  - DEV-DB-001 contract correction:content_matches compares raw stored target.current_content directly with the reconstructed canonical buffer; do not normalize storage before this check. stored_hash_matches compares stored current_hash with reconstructed_hash; recomputed_hash_matches retains canonical_sha256(target.current_content) == reconstructed_hash; version_matches compares stored and reconstructed versions.
+  - A reconstructed history can return status=success with materialized_state_matches=false. Replay reports storage divergence without repairing or rewriting target/history. CRLF or bare CR corruption fails content_matches even when canonical hashes still agree.
 
 The lock-then-read outcome-recovery guarantee is supported and verified at PostgreSQL READ COMMITTED. A caller choosing stronger isolation may receive serialization/deadlock errors and owns any whole-transaction retry. The service never retries or commits an outer transaction or masks infrastructure errors. Concurrent tests must prove actual lock blocking and committed visibility using independent connections, not sequential calls or sleeps alone.
 
