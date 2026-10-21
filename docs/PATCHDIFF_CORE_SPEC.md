@@ -81,6 +81,8 @@ before_hash = canonical hash at validation time
 after_hash = null
 ```
 
+A conflicting reuse of an existing request key is a separately audited context_invalid rejection at PRECONDITION_GUARD. It adds a NULL-key attempt carrying the submitted fingerprint and bounded submitted-key/original-log diagnostics; it never changes target state or accepted ledger. Exact outcome recovery adds no row. All separately admitted repeated conflicts remain immutable rows. State inside a caller-owned transaction stays provisional until that owner commits or rolls back.
+
 ## Structural Purity & Format Validation
 
 ### Typed Transaction (`patchdiff-tx/1`) Rules

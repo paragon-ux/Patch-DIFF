@@ -1,0 +1,46 @@
+{
+  "source_sha": "3a7ddb02000fd7a3caba7462cb9bdf61ea1bbe85",
+  "mode": "manual outside pytest; actual stdio child and independent PostgreSQL sessions",
+  "stdio": {
+    "target_file_id": "4797ea16-beee-43c4-af91-8f31d51be1a4",
+    "calls": 6,
+    "attempts": 3,
+    "null_key_conflicts": 2,
+    "ledger_rows": 1,
+    "target_version": 1,
+    "replay_healthy": true,
+    "original_log_id": "8d3ba4ba-ff68-480d-ba53-4ea4a24ef910",
+    "conflict_log_ids": [
+      "4d0b260f-4921-48f1-b1ec-85097378d481",
+      "21cffa7a-590d-4286-a276-a52dda2629e4"
+    ]
+  },
+  "concurrency": [
+    {
+      "target_file_id": "7ecb7f3a-4210-4956-a8ba-09818c1599b6",
+      "second": "identical",
+      "isolation": "read committed",
+      "owner_pid": 46934,
+      "waiter_pid": 46936,
+      "observed_blockers": [
+        46934
+      ],
+      "first_finish": "commit",
+      "second_deduplicated": true,
+      "version": 1
+    },
+    {
+      "target_file_id": "e574c9da-1a55-4978-8c02-001c75989c8f",
+      "second": "conflicting",
+      "isolation": "read committed",
+      "owner_pid": 46936,
+      "waiter_pid": 46937,
+      "observed_blockers": [
+        46936
+      ],
+      "first_finish": "commit",
+      "second_deduplicated": false,
+      "version": 1
+    }
+  ]
+}

@@ -165,6 +165,12 @@ An encoding-invalid proposal uses existing pdcp_content TEXT for an ASCII-escape
 
 The diagnostic marks this representation and safely identifies offending paths. Existing non-evidence rows retain lookup-only legacy fingerprint recovery for representable original records, even where today's Unicode boundary would reject that input. No old row/fingerprint is rewritten and no fresh invalid proposal is admitted. Domain-separated invalid-input fingerprints cover the complete evidence; safe original keys recover the original rejection. Invalid keys are retained only in evidence with client_request_id=NULL. Normal valid-input hashes/fingerprints and accepted-only ledger behavior are unchanged. Rejected evidence is excluded from accepted-history replay.
 
+#### Conflicting-key audit policy
+
+An admitted fingerprint conflict uses client_request_id=NULL so the original target/key unique row stays authoritative. Its request_fingerprint is the newly submitted fingerprint, not the original row's fingerprint. Repeated conflicts remain separate immutable audit rows, even when their submitted fingerprints are identical. Diagnostics link the original log and show the submitted key with a256-character preview/truncation flag; the original keyed row retains the complete key. The returned response still identifies the submitted key and returns the newly persisted rejection's log ID.
+
+No target/version/accepted-ledger change is made. Exact outcome recovery remains the no-new-attempt exception. Rate/admission controls are separate operational work and are not implemented by dropping, capping or mutating audit rows here.
+
 ### `append_only_manifest_ledger`
 Append-only ledger of accepted changes only. Rejections never write to this table.
 
@@ -213,7 +219,7 @@ Append-only snapshots for initial uploads and SAVE checkpoints.
 
 For both `patchdiff_submit_edits` and `patchdiff_submit_pdcp`, execution proceeds inside a single database transaction:
 1. `SELECT * FROM cloud_target_files WHERE target_file_id = :id FOR UPDATE;`
-2. Check `client_request_id`: if already recorded for this target with the identical `request_fingerprint`, return the reconstructed terminal result (`deduplicated: true`) without re-applying. If recorded with a different fingerprint, reject with `CONTEXT_INVALID`.
+2. Check `client_request_id`: if already recorded for this target with the identical `request_fingerprint`, return the reconstructed terminal result (`deduplicated: true`) without re-applying. If recorded with a different fingerprint, reject with CONTEXT_INVALID and append a separate NULL-key rejected attempt under the same target lock. Retain the submitted fingerprint on that attempt, with existing_pdcp_log_id and bounded submitted-key diagnostic evidence. The original keyed row/fingerprint is never overwritten; repeated conflicts create distinct rows.
 3. Verify optimistic guards (`expected_target_version`, `expected_current_hash`).
 4. Validate format and sequential in-memory applicability; compute `change_facts`.
 5. Post-simulation commit guard: verify target version and hash have not diverged.

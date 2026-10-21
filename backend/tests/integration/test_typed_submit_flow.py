@@ -425,6 +425,12 @@ def test_client_request_id_idempotency_lost_response_recovery_and_conflict_rejec
     assert conflict["failure_reason"] == "context_invalid"
     assert conflict["deduplicated"] is False
     assert conflict["diagnostic"]["existing_pdcp_log_id"] == first["pdcp_log_id"]
+    assert conflict["pdcp_log_id"] is not None
+    assert conflict["diagnostic"]["submitted_client_request_id"] == "req-001"
+    with SessionLocal() as session:
+        audit = session.get(AppendOnlyPdcpLogs, uuid.UUID(conflict["pdcp_log_id"]))
+        assert audit.client_request_id is None
+        assert audit.request_fingerprint is not None
 
     # 7. patchdiff_get_pdcp_log filters by client_request_id
     by_req_id = tools.patchdiff_get_pdcp_log(target_file_id=target_id, client_request_id="req-001")

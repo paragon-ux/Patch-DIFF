@@ -12,6 +12,10 @@ New runtime 0.2.2 enforces all supplied selectors on singleton matches through t
 
 The pre-coding decision is [the invalid-input evidence contract](remediation/DEV-RUN-002-decision.md). It selects a small reversible ASCII JSON envelope in existing rejected-attempt TEXT fields with safe JSONB markers, target_encoding_invalid / PROTOCOL_VALIDATION and deterministic invalid-only request identity. Valid serialization/hashes/fingerprints and all historical decoding are preserved. Read/search text receives safe invalid_argument responses without edit-attempt rows. No profile, migration, protocol operation or no-log exception is introduced. Implementation,683-test live suite, manual real stdio/direct-DB exercise and independent recheck pass at893301e. See remediation/DEV-RUN-002-review.md; remote publication/CI remains to be recorded.
 
+## Current remediation: DEV-SVC-001 (verified at3a7ddb0)
+
+Fingerprint conflicts will use the existing locked rejection helper to append distinct NULL-key attempts with the submitted fingerprint and bounded key/original-log diagnostics. The original keyed outcome stays immutable and recoverable. V01/V06/V07/V09 proof belongs here: actual synchronized duplicate/conflict sessions, READ COMMITTED visibility, outer commit/rollback/lock lifetime, and complete recovered facts after later edits. No rate limiter, profile bump, engine fork or blanket database catch is introduced. Implementation and independent verification are in progress, not closure.
+
 ## 1. Coherent Change Set Summary
 
 PatchDIFF is modernized into a guarded transaction service with a typed primary input (`patchdiff_submit_edits` / `patchdiff-tx/1`), authoritative target read/search tools (`patchdiff_read_target`, `patchdiff_find_occurrences`), request idempotency (`client_request_id`), stage-accurate validity reporting (`ValidationStage`), explicit replay profile dispatch (`protocol_version` + `runtime_version`), and component-level materialized-state verification (`materialized_state_checks`), while preserving frozen PDCP v0.2.3 compatibility and deterministic replay of all historical logs.

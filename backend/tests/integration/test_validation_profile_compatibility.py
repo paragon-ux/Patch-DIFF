@@ -58,7 +58,13 @@ def test_pre_fix_request_ids_recover_recorded_outcomes_only(monkeypatch, first_s
         conflict = pdcp_service.submit_edits(session, **{**args, "intent": "Different payload"})
         assert conflict.failure_reason is FailureReason.CONTEXT_INVALID
         logs = session.scalars(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id)).all()
-        assert len(logs) == 1 and logs[0].client_request_id == legacy_key
+        assert len(logs) == 2
+        keyed = [log for log in logs if log.client_request_id == legacy_key]
+        conflicts = [log for log in logs if log.client_request_id is None]
+        assert len(keyed) == len(conflicts) == 1
+        assert keyed[0].pdcp_log_id == original.pdcp_log_id
+        assert conflicts[0].pdcp_log_id == conflict.pdcp_log_id
+        assert conflicts[0].diagnostic_json["submitted_client_request_id"] == legacy_key
     another = create_target("alpha")
     with SessionLocal() as session:
         new_invalid = pdcp_service.submit_edits(session, **{**args, "target_file_id": another})
