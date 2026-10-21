@@ -281,4 +281,3 @@ The verification summary faithfully distinguishes worker-focused testing, parent
 The adapter, both new test files, and manual helper match the reviewed f19c97f committed material after normal Git CRLF normalization; the manual record's raw working-file hashes for the adapter/helper also match current bytes. No product/test/helper edit was found in the evidence-only delta.
 
 Category delta: DOC, SCRIPT and TEST evidence reconciled; ARCH, SKILL, MCP, RUN, SVC, DB and DEP source conclusions unchanged. P1: none identified within reviewed scope. P2: none identified within reviewed scope. P3: none identified within reviewed scope. Gap: the evidence-only commit hash does not exist at this review's preparation time; remote CI and fixed native-host deployment remain unclaimed. Verdict: no findings within the reviewed evidence-only delta.
-

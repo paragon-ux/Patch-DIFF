@@ -52,4 +52,3 @@ Each of the four independently queried SQL targets contained exactly the intende
 All results above are local, source-pinned execution; no new CI pass is inferred. The installed native MCP registration still points at the original playground checkout with PYTHONIOENCODING=utf-8 and the reproduction database. Fixed-code verification explicitly launched this repository's adapter in separate processes; it is not described as a fixed native-host deployment.
 
 No PRs have been merged, no protected branch changed, and no original databases dropped. The existing PR #9 was independently checked as OPEN at b5caa40 on docs/devin-request-identity, providing the correct current stacking base for a follow-up review branch. Any publication/CI metadata is recorded separately when available; Goal F’s consolidated-main prerequisites remain unchanged.
-
