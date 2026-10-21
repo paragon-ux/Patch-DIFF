@@ -130,17 +130,20 @@ def test_history_page_boundaries_and_display_order(monkeypatch, handler, count):
         expected.reverse()
         sequence_key = "ledger_sequence"
     assert [entry[sequence_key] for entry in result["entries"]] == expected
+    if handler is tools.patchdiff_get_pdcp_log:
+        assert all("pdcp_content" not in entry for entry in result["entries"])
     assert result["has_more"] is (count > 3)
     assert result["next_sequence"] == (min(expected) if count > 3 else None)
     assert session.queries[0]._limit_clause.value == 4
 
 
 @pytest.mark.parametrize("handler", HISTORY)
-@pytest.mark.parametrize("limit,count", [(None, 50), (7, 7), (200, 200), (201, 200), (10000, 200)])
+@pytest.mark.parametrize("limit,count", [("omitted", 50), (None, 50), (7, 7), (200, 200), (201, 200), (10000, 200)])
 def test_history_defaults_and_caps(monkeypatch, handler, limit, count):
     session = FakeSession([row(sequence) for sequence in range(250, 0, -1)])
     monkeypatch.setattr(tools, "SessionLocal", lambda: session)
-    result = handler(target_file_id=str(TARGET), limit=limit)
+    kwargs = {} if limit == "omitted" else {"limit": limit}
+    result = handler(target_file_id=str(TARGET), **kwargs)
     assert len(result["entries"]) == count
     assert result["has_more"]
     assert result["next_sequence"] == 251 - count
