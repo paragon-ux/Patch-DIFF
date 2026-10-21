@@ -1,0 +1,84 @@
+{
+  "classification": "Post-workflow independent read-only SQL and YAML parsing; not native workflow calls.",
+  "source_head": "b5caa40bd41848420c4323d22ab648847cdc6745",
+  "source_tracked_tree_unchanged": true,
+  "database": "patchdiff_codex_reproduction_20261021",
+  "postgres_version": "PostgreSQL 16.3 on x86_64-pc-linux-musl, compiled by gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, 64-bit",
+  "isolation": "read committed",
+  "main_targets": {
+    "T1": {
+      "target_file_id": "d1db49b2-88c2-4809-95a3-dd91e7b5f742",
+      "exact_content": true,
+      "version": 4,
+      "sha256": "6808df87c34d863313e1201d13f6ee1740863b3c600299bb4f2f28cf1e2445b6",
+      "logs": {
+        "accepted": 4,
+        "rejected": 1
+      },
+      "ledger_rows": 4
+    },
+    "T2": {
+      "target_file_id": "70243aba-dc77-4c29-be97-5d3e1b121cd7",
+      "exact_content": true,
+      "version": 3,
+      "sha256": "aaec7eeed3c4c770bab64040932a2231bf58fdaa937776d014c2d58eecdec0d6",
+      "logs": {
+        "accepted": 3
+      },
+      "ledger_rows": 19
+    },
+    "T3": {
+      "target_file_id": "620f5653-b379-4871-8485-3b88c6b3ec87",
+      "exact_content": true,
+      "version": 1,
+      "sha256": "e15081947a78cdcffe2989a3b8fa19b529f2984d49ec6ab990941e2bd9947bdc",
+      "logs": {
+        "accepted": 1
+      },
+      "ledger_rows": 2
+    },
+    "T4": {
+      "target_file_id": "a6eca964-05c3-44ce-bb6d-3f6db4a9e52e",
+      "exact_content": true,
+      "version": 1,
+      "sha256": "1a8fae3c594cad519cf97c3be401fdd43563b9e66821e24394c0f80080f65a1a",
+      "logs": {
+        "accepted": 1
+      },
+      "ledger_rows": 1
+    },
+    "T5": {
+      "target_file_id": "ce39e26f-34ea-4bcf-9ba7-b7964e22213e",
+      "exact_content": true,
+      "version": 2,
+      "sha256": "d9a4c6676a62cb3b8ca0b8459ab341837cdba8543316c8574b454ccc24d4c690",
+      "logs": {
+        "accepted": 2,
+        "rejected": 1
+      },
+      "ledger_rows": 2
+    }
+  },
+  "W8_lineage_verified": true,
+  "G02_wrong_text_independently_verified_in_SQL": true,
+  "frontmatter": [
+    {
+      "file": ".agents\\skills\\patchdiff-core-runtime\\SKILL.md",
+      "original_valid": false,
+      "error": "mapping values are not allowed here\n  in \"<unicode string>\", line 3, column 89:\n     ... rministic PatchDIFF core runtime: typed and .pdcp parsing, proto ... \n                                         ^",
+      "quoted_description_valid": true
+    },
+    {
+      "file": ".agents\\skills\\patchdiff-mcp-orchestration\\SKILL.md",
+      "original_valid": true
+    },
+    {
+      "file": ".agents\\skills\\patchdiff-persistence-replay-save\\SKILL.md",
+      "original_valid": true
+    },
+    {
+      "file": ".agents\\skills\\patchdiff-testing-review\\SKILL.md",
+      "original_valid": true
+    }
+  ]
+}

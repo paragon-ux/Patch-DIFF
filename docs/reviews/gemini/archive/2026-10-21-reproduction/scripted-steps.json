@@ -1,0 +1,49 @@
+[
+  {
+    "workflow": "W6_SCRIPTED",
+    "proposal": {
+      "target_file_id": "d1db49b2-88c2-4809-95a3-dd91e7b5f742",
+      "expected_target_version": 1,
+      "intent": "Scripted interference: bump app version to 1.0.5",
+      "edits": [
+        {
+          "match": "version: 1.0.4",
+          "replace": "version: 1.0.5"
+        }
+      ],
+      "client_request_id": "codex-w6-interference-20261021"
+    },
+    "result": {
+      "id": 2,
+      "jsonrpc": "2.0",
+      "result": {
+        "content": [
+          {
+            "text": "{\"after_hash\": \"64f457025ca2609a4a27abdb48c7f91c8f32006971d07e24a828e778c445ec05\", \"before_hash\": \"525fbb4a792bf8b3e418afb1172c40e631ef75d50e3a806dd75ae4386311aeba\", \"client_request_id\": \"codex-w6-interference-20261021\", \"deduplicated\": false, \"evidence\": {\"changes\": [{\"change_id\": \"chg_001\", \"change_index\": 1, \"matched_chars\": 14, \"matched_sha256\": \"58742147f0ec8f58fd0a0bf84309bf8aa24c404bf5fbbd345f8fd8db1614ab0b\", \"replacement_chars\": 14, \"replacement_sha256\": \"c222437c3d1004a011944a44c056ffd76356f6949dd1e8a4d6b6487cf343b11b\", \"span_end\": 331, \"span_start\": 317}]}, \"manifest_entries_added\": 1, \"pdcp_log_id\": \"a8c36383-cf75-41a9-8bc9-b2e42bf9510c\", \"status\": \"accepted\", \"target_file_id\": \"d1db49b2-88c2-4809-95a3-dd91e7b5f742\", \"validity\": {\"protocol_valid\": true, \"semantic\": \"not_evaluated\", \"task_correct\": \"not_evaluated\", \"transaction_valid\": true}, \"version\": 2, \"warnings\": []}",
+            "type": "text"
+          }
+        ],
+        "isError": false
+      }
+    },
+    "seconds": 1.8876466751098633
+  },
+  {
+    "workflow": "W7_SCRIPTED",
+    "proposal": {
+      "target_file_id": "ce39e26f-34ea-4bcf-9ba7-b7964e22213e",
+      "expected_target_version": 0,
+      "intent": "Update greeting to world",
+      "edits": [
+        {
+          "match": "hello",
+          "replace": "world"
+        }
+      ],
+      "client_request_id": "codex-w7-lost-response-20261021"
+    },
+    "response_deliberately_discarded": true,
+    "response_utf8_bytes": 1061,
+    "seconds": 2.4484879970550537
+  }
+]
