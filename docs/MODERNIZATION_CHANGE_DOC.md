@@ -4,6 +4,10 @@ Status: **Modernization/remediation PRs and Goal G are merged into main at 2ee7c
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
+## Consolidated Goal F Pass A
+
+F01 is the reviewed foundation. F03/F05/F06/F07 decisions and normative contract amendments are recorded before production changes in docs/usability/PASS-A-decision.md. F02/F04 remain deferred. Implementation is complete through the shared pipeline. Focused verification passes 386 tests in 31.30 seconds; a final 50-test pure diagnostic/operations run passes in 5.39 seconds and includes five additional boundary cases, for 391 distinct focused cases. New Pass A coverage is 103 cases (50 pure, 53 live PostgreSQL/stdio). Database patchdiff_goal_f_f01_20261021 remains separate from root manual verification. Existing Unicode phase-inspection mocks exercise the undecorated persistence-input boundary; real public tests verify response enrichment. One consolidated source-pinned full verification/manual/review cycle follows. No per-feature PR or old-profile/identity rewrite.
+
 ## Goal F / F01 implementation record
 
 F01 contracts now distinguish immutable original `diagnostic.failure_context` from fresh response-only `current_context`, with explicit unavailable states, bounded code-point prefixes, actual serialized JSON byte caps and canonical/intermediate buffer identity. The decision and accepted authority are under docs/usability. Implementation is present in the shared applier, rejection persistence/recovery path and MCP serializer. The pure result retains only a bounded `FailureBufferContext`; the service preserves complete canonical observed identity and measures compact ASCII-escaped JSON while reserving combined wrapper overhead. Newly rejected rows retain original context; recovery never rewrites or retrofits diagnostics. Accepted payloads remain unchanged.

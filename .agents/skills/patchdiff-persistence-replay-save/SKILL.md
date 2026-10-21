@@ -57,7 +57,7 @@ $env:PYTHONPATH = "backend"
 Every submission (accepted or rejected) creates an append-only row:
 - `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
 - `target_file_id`: foreign key to `cloud_target_files`.
-- `protocol_version`: `'patchdiff-tx/1'` or `'0.2.3'`.
+- `protocol_version`: `'patchdiff-tx/1'`, `'patchdiff-tx/2'` or `'0.2.3'`.
 - `runtime_version`: `'patchdiff-mvp-0.2.2'` (or historical `'patchdiff-mvp-0.1.0'`).
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
@@ -130,4 +130,8 @@ A successful reconstruction can report materialized_state_matches=false. CRLF/ba
 
 ## F01 rejection context
 
-Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
+Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most 256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
+
+## Pass A additions
+
+Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.

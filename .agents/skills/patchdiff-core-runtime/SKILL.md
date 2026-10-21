@@ -9,11 +9,11 @@ description: "Use when implementing or reviewing the deterministic PatchDIFF cor
 
 The PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`) is pure and deterministic.
 
-It receives declarative transactions (`patchdiff-tx/1` typed records or `0.2.3` legacy `.pdcp` text) and validates them against canonical target state.
+It receives declarative transactions (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations or `0.2.3` legacy `.pdcp` text) and validates them against canonical target state.
 
 The core runtime may:
 
-- parse `patchdiff-tx/1` and `0.2.3` transaction formats
+- parse `patchdiff-tx/1`, `patchdiff-tx/2` and `0.2.3` transaction formats
 - validate protocol structure and transaction applicability
 - enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.2`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, and legacy `region_hint`)
@@ -37,17 +37,18 @@ Every transaction, however produced, is untrusted until validated by the determi
 
 ## Transaction Input Formats
 
-PatchDIFF supports two declarative transaction input formats:
+PatchDIFF supports three declarative transaction input formats:
 
 1. **Typed transaction (`patchdiff-tx/1`, primary)**:
    - Structured JSON: `target_file_id`, required guard (`expected_target_version` and/or `expected_current_hash`), top-level `intent`, ordered `edits[]`.
    - Each edit contains required `match` and `replace`, plus optional advisory `change_id`, `rationale`, `risk`, and disambiguation fields (`occurrence_index`, `anchor_before`, `anchor_after`).
    - Parsed by `backend/app/pdcp/typed.py`. Delimiter-collision-free; minimal mandatory prose overhead.
-2. **Legacy `.pdcp` (v0.2.3, frozen)**:
+2. **Guarded operations (`patchdiff-tx/2`)**: explicit ordered match/span records via patchdiff_submit_operations; mandatory guard, exact expected_text, sequential canonical code-point spans and explicit empty-span insertion on immutable 0.3.0.
+3. **Legacy `.pdcp` (v0.2.3, frozen)**:
    - Declarative plain text with `PDCP 0.2.3` header, 7 required manifest fields per block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters.
    - Parsed by `backend/app/pdcp/parser.py`. Retained for backward compatibility and historical replay.
 
-Neither format is executable code. Both lower into `ParsedPDCP` and execute through the shared `apply_pdcp_transaction` applier.
+None of these formats is executable code. All lower into `ParsedPDCP` and execute through the shared `apply_pdcp_transaction` applier.
 
 ## Line Endings & Canonical Target Text
 
@@ -139,4 +140,8 @@ The transaction is the smallest atomic unit:
 
 ## F01 rejection context
 
-Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
+Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most 256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
+
+## Pass A additions
+
+Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.

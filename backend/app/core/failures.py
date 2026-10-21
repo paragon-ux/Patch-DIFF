@@ -13,6 +13,8 @@ class FailureReason(StrEnum):
     MANIFEST_MISSING = "manifest_missing"
     MANIFEST_INVALID = "manifest_invalid"
     BLOCK_MALFORMED = "block_malformed"
+    SPAN_OUT_OF_BOUNDS = "span_out_of_bounds"
+    SPAN_EXPECTED_TEXT_MISMATCH = "span_expected_text_mismatch"
     MATCH_ABSENT = "match_absent"
     MATCH_AMBIGUOUS = "match_ambiguous"
     DISAMBIGUATION_INVALID = "disambiguation_invalid"
@@ -36,6 +38,8 @@ PDCP_REJECTION_REASONS: frozenset[FailureReason] = frozenset(
         FailureReason.MANIFEST_MISSING,
         FailureReason.MANIFEST_INVALID,
         FailureReason.BLOCK_MALFORMED,
+        FailureReason.SPAN_OUT_OF_BOUNDS,
+        FailureReason.SPAN_EXPECTED_TEXT_MISMATCH,
         FailureReason.MATCH_ABSENT,
         FailureReason.MATCH_AMBIGUOUS,
         FailureReason.DISAMBIGUATION_INVALID,

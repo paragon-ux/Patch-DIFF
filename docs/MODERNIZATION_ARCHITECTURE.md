@@ -4,6 +4,15 @@ Revision 2, 2026-10-20. Baseline: commit `0c75c4054b5da01eb56c53ce5579c74014270f
 
 The as-built record, contract matrix, documentation reconciliation table, and verification evidence are in [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
+## Goal F Pass A contract
+
+The normative [Pass A decision](usability/PASS-A-decision.md) defines F03/F05/F06/F07 fields, bounds, omission states, ownership and compatibility before implementation. `include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
+
+New applicability ambiguity/selector failures retain at most five exact candidates (20 code points each side,64 match preview;8192 compact ASCII-escaped JSON bytes including wrapper), stage/prior-change/observed identity and explicit truncation; no cursor or selection. Absent/sequential failures retain at most 64 code points of immutable query evidence (1024 wrapper bytes). Response-only near misses compare only the original at-most-256-point failure prefix after actual successful service-owned commit/lock release; caller-owned transactions omit with caller_transaction. Work is at most 1,000,000 Levenshtein cells, windows query length±1, distance threshold min(4,max(1,length//4)), at most three candidates ranked distance/start/end,16-point context each side and8192 wrapper bytes. Exhaustion/oversize/historical inputs have explicit omission; unexpected post-commit errors propagate without claiming rollback. Original diagnostics stay immutable on recovery. New enrichment fields combined are at most18432 compact ASCII-escaped JSON bytes; this excludes preexisting arbitrary evidence.
+
+`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities; worked discovery examples remain Pass B.
+
+
 ## 0. Reading guide and evidence limits
 
 - **Design thesis** = `docs/PatchDIFF-Concept-Paper-5.md` (the paper, "P1"). Historical protocol/implementation freezes = `docs/PatchDIFF-Protocol-Spec-v0.2.3.md` and `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`. These historical documents are preserved untouched as historical design artifacts.
@@ -81,7 +90,7 @@ flowchart LR
 | Decision | Summary |
 | --- | --- |
 | **A1: Server Role & Host-Owned Retry** | PatchDIFF is a deterministic transaction service with authoritative read/search tools (`patchdiff_read_target`, `patchdiff_find_occurrences`). Planning and retry loops belong to the host. `patchdiff_build_prompt_context` is retained as a labelled convenience (`context_truncated`); `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, and `patchdiff_request_regeneration` are deprecated compatibility wrappers. |
-| **A2: Typed Input Primary; PDCP v0.2.3 Frozen Legacy** | `patchdiff_submit_edits` accepts structured `edits[]` and persists canonical JSON records with `protocol_version = "patchdiff-tx/1"`. `patchdiff_submit_pdcp` accepts `.pdcp` v0.2.3 (`protocol_version = "0.2.3"`). Both lower into `ParsedPDCP` and execute through `apply_pdcp_transaction`. |
+| **A2: Typed Input Primary; PDCP v0.2.3 Frozen Legacy** | `patchdiff_submit_edits` accepts structured `edits[]` and persists canonical JSON records with `protocol_version = "patchdiff-tx/1"`. `patchdiff_submit_pdcp` accepts `.pdcp` v0.2.3 (`protocol_version = "0.2.3"`). Guarded operations add `patchdiff_submit_operations` / `patchdiff-tx/2` with explicit match/span edits. All three lower into `ParsedPDCP` and execute through `apply_pdcp_transaction`. |
 | **A3: Asserted vs. Derived Metadata** | Typed submissions require top-level `intent` and allow optional per-edit `change_id`, `rationale`, `risk`. The runtime computes `derived_json` (`span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`) for **both** typed (`origin='typed'`) and PDCP (`origin='pdcp_manifest'`) accepted ledger entries. |
 | **A4: Managed Postgres Target Authority** | Canonical target state lives in Postgres (`cloud_target_files`) guarded by row-level locks (`SELECT ... FOR UPDATE` with `execution_options(populate_existing=True)`). Evaluates state guards against freshly loaded database state after acquiring the lock. Rejects pending direct in-memory mutations on the target before autoflush/refresh. The service does not commit caller-owned outer transactions. |
 | **A5: SAVE Checkpointing & Bounded History** | `patchdiff_save` creates a `save_checkpoint` snapshot and rotates the active editing cycle. Both `patchdiff_get_pdcp_log` and `patchdiff_get_manifest_ledger` provide bounded pagination (default 50, maximum 200, exclusive `before_sequence` over `log_sequence` / `ledger_sequence`, returning `has_more` and `next_sequence`). Omitted limit selects bounded default 50. |
@@ -113,7 +122,7 @@ F01 rejection context: newly recorded rejections persist immutable `diagnostic.f
   4. `COMMIT_GUARD`: Post-simulation re-check of `target.version` and `target.current_hash` (`TARGET_DIVERGED`). Reports `protocol_valid: true, transaction_valid: true`.
   5. `ACCEPTED`: Transaction committed. Reports `protocol_valid: true, transaction_valid: true`.
 - **Format-Specific Diagnostics**:
-  - Durably recorded rejection diagnostics include `"format"` (`"patchdiff-tx/1"` or `"0.2.3"`), `"retryable"`, `"requires_new_submission": true`, and `"validation_stage"`. Unlinked precondition rejections (malformed/missing target or pending local direct modifications, with `pdcp_log_id: null`) retain their existing minimal diagnostic fields plus explicit unavailable failure context; their public validity fields still report the reached precondition stage.
+  - Durably recorded rejection diagnostics include `"format"` (`"patchdiff-tx/1"`, `"patchdiff-tx/2"` or `"0.2.3"`), `"retryable"`, `"requires_new_submission": true`, and `"validation_stage"`. Unlinked precondition rejections (malformed/missing target or pending local direct modifications, with `pdcp_log_id: null`) retain their existing minimal diagnostic fields plus explicit unavailable failure context; their public validity fields still report the reached precondition stage.
   - Typed (`patchdiff-tx/1`) rejections never include PDCP-only keys (`requires_new_pdcp`, `missing_fields`, `invalid_fields`, `unknown_fields`, `allowed_manifest_fields`, `required_manifest_fields`, `manifest_line_format`). On `MANIFEST_INVALID` / `MANIFEST_MISSING`, typed rejections report `allowed_edit_fields`, `required_edit_fields`, and `valid_risk_values`.
   - Legacy PDCP (`0.2.3`) rejections include `"requires_new_pdcp": true` alongside `"requires_new_submission": true` and the PDCP manifest field lists.
 - **Lineage & UUID Safety**:
@@ -144,7 +153,7 @@ Read/search string arguments return invalid_argument with safely serialized deta
   - Because all application mutation paths serialize through `select_target_for_update`, this establishes a point-in-time observation boundary relative to participating writers without phantom divergence.
   - Caller transaction ownership is preserved: in a caller-owned transaction, the row lock remains held until that transaction ends.
 - **Explicit Profile Dispatch**:
-  - `protocol_version`: `"0.2.3"` (parsed via `parse_pdcp` + `validate_pdcp`) or `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
+  - `protocol_version`: `"0.2.3"` (parsed via `parse_pdcp` + `validate_pdcp`) or `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). `"patchdiff-tx/2"` dispatches `decode_operations_record` + `to_parsed_operations` and requires a span-capable recorded profile. Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
   - Runtime profiles are immutable execution settings, with separate overlap and singleton-selector flags:
 
     | Runtime | Overlapping matches | Enforce singleton selectors | Typed change IDs |
@@ -152,9 +161,10 @@ Read/search string arguments return invalid_argument with safely serialized deta
     | patchdiff-mvp-0.1.0 | false | false | Historical grammar |
     | patchdiff-mvp-0.2.0 | true | false | Historical grammar |
     | patchdiff-mvp-0.2.1 | true | false | Strict grammar |
-    | patchdiff-mvp-0.2.2 (current) | true | true | Strict grammar |
+    | patchdiff-mvp-0.2.2 (tx/1 and legacy submissions) | true | true | Strict grammar; match only |
+    | patchdiff-mvp-0.3.0 (tx/2 operations) | true | true | Strict grammar; explicit match/span |
 
-    The sole new release profile is 0.2.2, for DEV-RUN-001. Submission and replay explicitly resolve both settings. Unknown or missing versions fail with UnsupportedRuntimeVersionError / REPLAY_PROTOCOL_INVALID. Never redefine a profile after it writes durable history.
+    Profile0.2.2 preserves DEV-RUN-001 semantics; Pass A adds immutable 0.3.0 for explicit guarded spans only. No replace_all in 0.3.0. Submission and replay explicitly resolve both settings. Unknown or missing versions fail with UnsupportedRuntimeVersionError / REPLAY_PROTOCOL_INVALID. Never redefine a profile after it writes durable history.
 - **Typed decoder compatibility (DB-003)**: Current submissions record runtime version patchdiff-mvp-0.2.2 and use strict full-string ID validation. Recorded patchdiff-mvp-0.2.0 keeps overlapping matches and its original permissive change-ID grammar during replay only; supported 0.1.0 history also retains its old ID decoding and non-overlapping matching. Unknown runtime profiles fail explicitly. Legacy ID text is preserved byte-for-byte, never trimmed, and historical logs are not rewritten.
 - **Persisted request-key compatibility (SVC-003)**: Under the target lock, exact existing string keys are looked up before enforcing new-key syntax. Only an already-persisted key can recover its recorded outcome or receive a fingerprint-conflict response. Fresh invalid keys reject; recovery does not normalize a legacy newline key.
 - **Integrity Checks per Replay Step**:

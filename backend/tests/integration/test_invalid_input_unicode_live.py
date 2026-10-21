@@ -117,7 +117,7 @@ def test_invalid_rejection_respects_caller_owned_transaction(finish):
 def terminal_outcome(result):
     """Compare the recorded outcome, excluding intentionally refreshed target state."""
     values = asdict(result)
-    for name in ("deduplicated", "current_hash", "current_version", "current_context"):
+    for name in ("deduplicated", "current_hash", "current_version", "current_context", "near_misses", "correlation_id"):
         values.pop(name)
     return values
 

@@ -29,7 +29,7 @@ Read project artifacts in this order:
 4. `docs/MCP_TOOLS.md` (MCP tool schemas and request/response contracts)
 5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic runtime, validation stages, replay profiles)
 6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001` + `0002`)
-7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1` typed record and frozen PDCP v0.2.3 format)
+7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations and frozen PDCP v0.2.3 format)
 8. `docs/MCP_FIRST_MVP.md` (system boundaries and workflows)
 9. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop and usage guide)
 10. `docs/TEST_MATRIX.md` & `docs/CODEX_BUILD_PLAN.md`
@@ -38,15 +38,16 @@ Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-
 
 If ambiguity remains, preserve PatchDIFF’s locked invariants and choose the simplest deterministic behavior.
 
-## Transaction Input Formats (`patchdiff-tx/1` Primary, `.pdcp` v0.2.3 Frozen Legacy)
+## Transaction Input Formats (`patchdiff-tx/1` Edits, `patchdiff-tx/2` Operations, Frozen Legacy `.pdcp`)
 
-PatchDIFF supports two declarative, non-executable transaction input formats that lower into the same `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
+PatchDIFF supports three declarative, non-executable transaction input formats that lower into the same `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 
-1. **Typed transaction (`patchdiff_submit_edits` / `protocol_version = "patchdiff-tx/1"`, preferred)**:
+1. **Guarded operations (`patchdiff_submit_operations` / `patchdiff-tx/2`)**: ordered explicit match/span operations with intent and mandatory hash/version guard; sequential code-point spans require exact expected_text. Zero-length insertion is explicit span behavior, never empty MATCH. Shared applier and immutable 0.3.0 profile; tx/1 and legacy histories/profiles remain unchanged. No replace_all operation in 0.3.0.
+2. **Typed transaction (`patchdiff_submit_edits` / `protocol_version = "patchdiff-tx/1"`, preferred)**:
    - Structured JSON arguments (`target_file_id`, required `expected_target_version` and/or `expected_current_hash`, required transaction `intent`, ordered `edits[]` with `{match, replace, change_id?, rationale?, risk?, occurrence_index?, anchor_before?, anchor_after?}`, optional `client_request_id`, `parent_pdcp_log_id`, `attempt`).
    - Eliminates delimiter-collision failures and reduces mandatory prose overhead to top-level `intent`.
    - Persisted in `append_only_pdcp_logs.pdcp_content` as deterministic canonical JSON (`patchdiff-tx/1`).
-2. **Legacy PDCP file (`patchdiff_submit_pdcp` / `protocol_version = "0.2.3"`, frozen legacy/import)**:
+3. **Legacy PDCP file (`patchdiff_submit_pdcp` / `protocol_version = "0.2.3"`, frozen legacy/import)**:
    - Raw `.pdcp` text with `PDCP 0.2.3` header, 7 required `# MANIFEST` fields per change block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters.
    - Retained for backward compatibility and replay of historical logs.
 
@@ -68,10 +69,10 @@ PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`) is pure and de
 
 It may:
 
-- parse and validate `.pdcp` (`0.2.3`) and typed (`patchdiff-tx/1`) transactions
+- parse and validate `.pdcp` (`0.2.3`), typed edits (`patchdiff-tx/1`) and guarded operations (`patchdiff-tx/2`)
 - enumerate all exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.2`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, or legacy `region_hint` in `0.2.3`)
-- simulate sequential `MATCH/REPLACE` operations in memory and compute `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests)
+- simulate sequential exact `MATCH/REPLACE` and guarded explicit span operations in memory and compute `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests)
 - reject invalid transactions without target mutation
 - classify stage-aware validity (`ValidationStage` -> `protocol_valid`, `transaction_valid`, `task_correct: "not_evaluated"`, `semantic: "not_evaluated"`)
 - support deterministic replay across recorded `(protocol_version, runtime_version)` profiles
@@ -94,7 +95,7 @@ The PatchDIFF MCP service provides:
 
 - **Target initialization & retrieval**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
 - **Authoritative bounded reads & exact search**: `patchdiff_read_target` (`start`, `length`, `next_start`), `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`)
-- **Guarded atomic transaction submission**: `patchdiff_submit_edits` (primary typed input) and `patchdiff_submit_pdcp` (legacy `.pdcp`), both supporting `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage
+- **Guarded atomic transaction submission**: `patchdiff_submit_edits` (typed matches), `patchdiff_submit_operations` (guarded match/span operations) and `patchdiff_submit_pdcp` (legacy `.pdcp`), both supporting `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage
 - **Checkpointing, replay, and bounded history**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
 - **Convenience / deprecated compatibility wrappers**: `patchdiff_build_prompt_context` (convenience bounded prefix), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 
@@ -109,13 +110,17 @@ The PatchDIFF MCP service provides:
 6. Host checkpoints cycles with patchdiff_save, verifies integrity with patchdiff_replay, and exports via patchdiff_export_target.
 ```
 
+## Pass A response diagnostics and ownership
+
+See docs/usability/PASS-A-decision.md and current architecture/tool/core contracts for F03/F05/F06/F07. Submission correlation is opt-in UUID invocation metadata, never request identity. Exact candidates are bounded immutable failure evidence; near misses are bounded response-only comparisons after successful service-owned commit/lock release, explicitly omitted for caller-owned transactions. No fuzzy application or automatic choice is permitted.
+
 ## Non-Negotiable Invariants
 
 PatchDIFF must always preserve:
 
 ```text
 canonical UTF-8 target text (LF normalized)
-+ declarative non-executable transactions (patchdiff-tx/1 and PDCP 0.2.3)
++ declarative non-executable transactions (patchdiff-tx/1, patchdiff-tx/2 and PDCP 0.2.3)
 + exact deterministic MATCH (all exact occurrences counted)
 + immediate sequential in-memory REPLACE simulation
 + per-target atomic Postgres commit under SELECT ... FOR UPDATE

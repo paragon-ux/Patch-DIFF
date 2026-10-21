@@ -65,3 +65,15 @@ def available_context(
                 high = end - 1
         context.update(text=buffer.text[:low], end=low, truncated=low < buffer.total_chars)
     return context
+
+
+def context_identity(context: dict) -> dict:
+    return {key: context.get(key) for key in ("buffer_stage", "prior_changes", "observed_target_version", "observed_target_hash")}
+
+
+def bound_candidates(key: str, value: dict) -> dict:
+    while _json_bytes({key: value}) > 8192 and value["candidates"]:
+        value["candidates"].pop()
+        value["truncated"] = True
+    value["returned_count"] = len(value["candidates"])
+    return value

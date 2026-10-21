@@ -1,5 +1,9 @@
 # MCP_FIRST_MVP.md
 
+## Guarded operations and diagnostics (Pass A)
+
+`patchdiff_submit_operations` adds mandatory-guard `patchdiff-tx/2` explicit sequential match/span operations on frozen profile 0.3.0 through the same locked submit/applier/ledger/replay path. Old typed/legacy records and identities remain unchanged. MCP_TOOLS and usability/PASS-A-decision.md define exact span expected text/insertion, optional response correlation, bounded immutable exact candidates and response-only near misses after service-owned lock release (caller-owned transactions explicitly omit). No fuzzy application, replace_all, optional typed guards or normalized request identity is added.
+
 ## Purpose
 
 PatchDIFF is an MCP-first, server-side deterministic document transaction service.

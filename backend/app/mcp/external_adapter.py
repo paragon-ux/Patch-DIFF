@@ -16,6 +16,8 @@ from typing import Any, TextIO, get_args, get_origin, get_type_hints
 from app.mcp import tools as _registered_tools  # noqa: F401 - imports register tool handlers
 from app.mcp.server import registry
 from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
+from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
+from app.core.versions import OPERATIONS_RUNTIME_VERSION
 
 
 PROTOCOL_VERSION = "2024-11-05"
@@ -28,6 +30,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_initialize_target": "Initialize a canonical PatchDIFF target.",
     "patchdiff_build_prompt_context": "Convenience: build prompt context (bounded target PREFIX, not retrieval; see context_truncated). Prefer patchdiff_read_target / patchdiff_find_occurrences.",
     "patchdiff_submit_pdcp": "Submit untrusted legacy .pdcp (v0.2.3) content through deterministic validation and commit services.",
+    "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. Uses immutable runtime0.3.0; no replace_all.",
     "patchdiff_submit_edits": "Submit a typed edit transaction (exact match/replace strings as fields). Requires expected_target_version and/or expected_current_hash. Supports optional client_request_id idempotency. Same validation, atomic commit and logging as .pdcp.",
     "patchdiff_read_target": "Authoritative bounded read of canonical target text by code-point offset, with version, hash, and next_start continuation.",
     "patchdiff_find_occurrences": "List exact occurrences of a string (overlapping counted) with offsets, bounded context, 1-based occurrence_index, and start_occurrence/max_results pagination.",
@@ -148,6 +151,8 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                 "minItems": 1,
                 "items": copy.deepcopy(TYPED_EDIT_JSON_SCHEMA),
             }
+        elif name == "patchdiff_submit_operations" and parameter_name == "operations":
+            properties[parameter_name] = {"type": "array", "minItems": 1, "items": copy.deepcopy(OPERATION_JSON_SCHEMA)}
         else:
             properties[parameter_name] = _schema_for_annotation(type_hints.get(parameter_name, parameter.annotation))
         if parameter.default is inspect.Parameter.empty:
@@ -182,7 +187,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["client_request_id"]["description"] = "Exact stored request key; historical syntax is accepted."
     if name == "patchdiff_get_manifest_ledger":
         properties["include_previous_cycles"]["default"] = False
-    if name == "patchdiff_submit_edits":
+    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations"}:
         properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {
         "type": "object",
@@ -191,7 +196,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     }
     if required:
         schema["required"] = required
-    if name == "patchdiff_submit_edits":
+    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations"}:
         schema["anyOf"] = [
             {
                 "required": ["expected_target_version"],
@@ -202,6 +207,13 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                 "properties": {"expected_current_hash": {"type": "string"}},
             },
         ]
+    if "include_correlation_id" in properties:
+        properties["include_correlation_id"].update({"default": False, "description": "Opt in to a fresh response-only UUID invocation ID; never a retry key."})
+    if name == "patchdiff_submit_operations":
+        schema["x-patchdiff-capabilities"] = {
+            "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
+            "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
+        }
     return schema
 
 

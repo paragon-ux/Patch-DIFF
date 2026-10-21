@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from functools import wraps
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any
@@ -17,8 +18,9 @@ from app.core.hashing import canonical_sha256
 from app.core.input_text import invalid_text_paths, is_persistable_text, safe_input_text
 from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
 from app.core.validity import ValidationStage, validity_levels
-from app.core.versions import RUNTIME_VERSION, resolve_runtime_profile
+from app.core.versions import OPERATIONS_RUNTIME_VERSION, RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
+from app.pdcp.operations import (OPERATIONS_PROTOCOL_VERSION, build_operations_record, parse_operations_record, to_parsed_operations)
 from app.pdcp.models import (
     REQUIRED_MANIFEST_FIELDS,
     SUPPORTED_MANIFEST_FIELDS,
@@ -39,7 +41,8 @@ from app.pdcp.typed import (
     to_parsed_transaction,
     validate_client_request_id,
 )
-from app.services.rejection_context import available_context, unavailable_context
+from app.services.rejection_context import available_context, unavailable_context, bound_candidates, context_identity
+from app.services.near_miss_service import near_misses
 from app.storage.models import (
     AppendOnlyManifestLedger,
     AppendOnlyPdcpLogs,
@@ -106,8 +109,30 @@ class SubmitPDCPResult:
     deduplicated: bool = False
     client_request_id: str | None = None
     current_context: dict | None = None
+    near_misses: dict | None = None
+    correlation_id: str | None = None
 
 
+
+def _submission_response(submit):
+    @wraps(submit)
+    def call(session: Session, *, include_correlation_id=False, **kwargs):
+        if not isinstance(include_correlation_id, bool):
+            return replace(_invalid_target_uuid_result(kwargs.get("target_file_id")), status="invalid_argument",
+                           failure_detail="include_correlation_id must be a boolean.", diagnostic=None, current_context=None)
+        result = submit(session, **kwargs)
+        # _submit's owned transaction has successfully exited (committed) before comparison.
+        if result.status == "rejected" and result.failure_reason in {
+            FailureReason.MATCH_ABSENT, FailureReason.SEQUENTIAL_MATCH_INVALID,
+        }:
+            result = replace(result, near_misses=near_misses(result.diagnostic or {}, caller_owned=session.in_transaction()))
+        if include_correlation_id:
+            result = replace(result, correlation_id=str(uuid.uuid4()))
+        return result
+    return call
+
+
+@_submission_response
 def submit_pdcp(
     session: Session,
     *,
@@ -120,6 +145,7 @@ def submit_pdcp(
     regeneration_attempt: int | None = None,
     regeneration_source: str | None = None,
     client_request_id: str | None = None,
+    include_correlation_id: bool = False,
     _before_final_guard=None,
 ) -> SubmitPDCPResult:
     """Submit a legacy PDCP v0.2.3 transaction through the deterministic runtime and Postgres commit."""
@@ -162,6 +188,7 @@ def submit_pdcp(
     )
 
 
+@_submission_response
 def submit_edits(
     session: Session,
     *,
@@ -174,6 +201,7 @@ def submit_edits(
     parent_pdcp_log_id: uuid.UUID | str | None = None,
     attempt: int | None = None,
     client_request_id: str | None = None,
+    include_correlation_id: bool = False,
     _before_final_guard=None,
 ) -> SubmitPDCPResult:
     """Submit a typed ``patchdiff-tx/1`` transaction.
@@ -218,6 +246,32 @@ def submit_edits(
         client_request_id=client_request_id,
         _before_final_guard=_before_final_guard,
     )
+
+
+
+@_submission_response
+def submit_operations(
+    session: Session, *, target_file_id: uuid.UUID | str, intent: Any, operations: Any,
+    expected_target_version: int | None = None, expected_current_hash: str | None = None,
+    submission_source: str = "model_response", parent_pdcp_log_id: uuid.UUID | str | None = None,
+    attempt: int | None = None, client_request_id: str | None = None,
+    include_correlation_id: bool = False, _before_final_guard=None,
+) -> SubmitPDCPResult:
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return _invalid_target_uuid_result(target_file_id)
+    record = build_operations_record(target_file_id=str(target_uuid), intent=intent, operations=operations,
+                                     expected_target_version=expected_target_version, expected_current_hash=expected_current_hash)
+    def decode(target):
+        typed = parse_operations_record(record)
+        return to_parsed_operations(typed, target_type=target.target_type), typed
+    return _submit(session, target_uuid=target_uuid, submitted_target_id=target_file_id,
+                   record_content=canonical_record_json(record), raw_record=record, decode=decode,
+                   protocol_version=OPERATIONS_PROTOCOL_VERSION, guard_required=True,
+                   expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+                   submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
+                   regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
+                   client_request_id=client_request_id, _before_final_guard=_before_final_guard)
 
 
 def _submit(
@@ -606,12 +660,13 @@ def _submit(
         stage = ValidationStage.TRANSACTION_APPLICABILITY
         try:
             parsed, typed = decode(target)
-            profile = resolve_runtime_profile(RUNTIME_VERSION)
+            profile = resolve_runtime_profile(_runtime_version(protocol_version))
             core_result = apply_pdcp_transaction(
                 target.current_content,
                 parsed,
                 overlapping_matches=profile.overlapping_matches,
                 enforce_singleton_selectors=profile.enforce_singleton_selectors,
+                allow_span_operations=profile.span_operations,
             )
             if isinstance(core_result, RejectedCoreResult):
                 core_result = _enrich_diagnostic(
@@ -836,7 +891,7 @@ def _persist_acceptance(
         regeneration_source=regeneration_source,
         submission_source=submission_source,
         protocol_version=protocol_version,
-        runtime_version=RUNTIME_VERSION,
+        runtime_version=_runtime_version(protocol_version),
         pdcp_content=pdcp_content,
         pdcp_content_hash=pdcp_content_hash,
         status="accepted",
@@ -952,6 +1007,9 @@ def _persist_rejection(
         observed_target_version=before_version,
         observed_target_hash=before_hash,
     )
+    if "exact_candidates" in diagnostic:
+        candidates = {**diagnostic["exact_candidates"], **context_identity(diagnostic["failure_context"])}
+        diagnostic["exact_candidates"] = bound_candidates("exact_candidates", candidates)
     if not version_valid and expected_target_version is not None:
         diagnostic["raw_expected_target_version"] = expected_target_version
     if not hash_valid and expected_current_hash is not None:
@@ -968,7 +1026,7 @@ def _persist_rejection(
         regeneration_source=regeneration_source,
         submission_source=submission_source,
         protocol_version=protocol_version,
-        runtime_version=RUNTIME_VERSION,
+        runtime_version=_runtime_version(protocol_version),
         pdcp_content=pdcp_content,
         pdcp_content_hash=pdcp_content_hash,
         status="rejected",
@@ -1068,6 +1126,10 @@ def _reconstruct_deduplicated_result(
     )
 
 
+def _runtime_version(protocol_version: str) -> str:
+    return OPERATIONS_RUNTIME_VERSION if protocol_version == OPERATIONS_PROTOCOL_VERSION else RUNTIME_VERSION
+
+
 def _target_context(target: CloudTargetFiles) -> dict:
     return available_context(
         FailureBufferContext.capture(target.current_content),
@@ -1132,7 +1194,7 @@ def _core_rejection(
     stage: ValidationStage = ValidationStage.PROTOCOL_VALIDATION,
     diagnostic_extra: dict[str, Any] | None = None,
 ) -> RejectedCoreResult:
-    is_typed = protocol_version == TYPED_PROTOCOL_VERSION
+    is_typed = protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION)
     diagnostic: dict[str, Any] = {
         "format": protocol_version,
         "retryable": reason
@@ -1151,7 +1213,12 @@ def _core_rejection(
         diagnostic["requires_new_pdcp"] = True
 
     if reason in {FailureReason.MANIFEST_INVALID, FailureReason.MANIFEST_MISSING}:
-        if is_typed:
+        if protocol_version == OPERATIONS_PROTOCOL_VERSION:
+            diagnostic.update({"allowed_operations": ["match", "span"],
+                               "required_span_fields": ["op", "start", "end", "expected_text", "replace"],
+                               "required_match_fields": ["op", "match", "replace"],
+                               "valid_risk_values": sorted(VALID_RISK_VALUES)})
+        elif is_typed:
             diagnostic.update(
                 {
                     "allowed_edit_fields": list(ALLOWED_TYPED_EDIT_FIELDS),
@@ -1189,7 +1256,7 @@ def _enrich_diagnostic(
     diag["format"] = protocol_version
     diag["validation_stage"] = stage.value
     diag["requires_new_submission"] = True
-    if protocol_version == TYPED_PROTOCOL_VERSION:
+    if protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION):
         diag.pop("requires_new_pdcp", None)
     else:
         diag["requires_new_pdcp"] = True

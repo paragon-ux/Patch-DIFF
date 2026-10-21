@@ -73,6 +73,9 @@ class PDCPChange:
     manifest: PDCPManifest
     match_payload: str
     replace_payload: str
+    operation: str = "match"
+    span_start: int | None = None
+    span_end: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

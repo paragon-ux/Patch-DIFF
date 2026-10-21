@@ -13,6 +13,15 @@ Unavailable objects have `available: false`, `unavailable_reason: "invalid_targe
 
 Exact keyed recovery returns the original stored diagnostic unchanged and separately captures fresh current context; older rows lacking failure context stay unchanged. Accepted responses gain no context field. Context capture does not commit caller-owned transactions or release locks, and their observed state can remain provisional until caller commit. Use authoritative reads/search and a new linked proposal for correction.
 
+## Goal F Pass A contract
+
+The normative [Pass A decision](usability/PASS-A-decision.md) defines F03/F05/F06/F07 fields, bounds, omission states, ownership and compatibility before implementation. `include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
+
+New applicability ambiguity/selector failures retain at most five exact candidates (20 code points each side,64 match preview;8192 compact ASCII-escaped JSON bytes including wrapper), stage/prior-change/observed identity and explicit truncation; no cursor or selection. Absent/sequential failures retain at most 64 code points of immutable query evidence (1024 wrapper bytes). Response-only near misses compare only the original at-most-256-point failure prefix after actual successful service-owned commit/lock release; caller-owned transactions omit with caller_transaction. Work is at most 1,000,000 Levenshtein cells, windows query length±1, distance threshold min(4,max(1,length//4)), at most three candidates ranked distance/start/end,16-point context each side and8192 wrapper bytes. Exhaustion/oversize/historical inputs have explicit omission; unexpected post-commit errors propagate without claiming rollback. Original diagnostics stay immutable on recovery. New enrichment fields combined are at most18432 compact ASCII-escaped JSON bytes; this excludes preexisting arbitrary evidence.
+
+`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities; worked discovery examples remain Pass B.
+
+
 ## Purpose
 
 This document defines the complete MCP tool surface for PatchDIFF.
@@ -24,7 +33,7 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
 ## MCP Tool Surface Overview
 
-The 14 registered MCP tools are organized into five functional groups:
+The 17 registered MCP tools are organized into five functional groups:
 
 | Group | Tool Name | Role & Modernized Status |
 | --- | --- | --- |
@@ -35,6 +44,7 @@ The 14 registered MCP tools are organized into five functional groups:
 | **2. Authoritative Reads & Search** | `patchdiff_read_target` | Authoritative bounded read of target slices by code-point offset with `next_start` continuation. |
 | | `patchdiff_find_occurrences` | Enumerate exact occurrences (overlapping counted) with bounded context and pagination. |
 | **3. Transaction Submission** | `patchdiff_submit_edits` | **Primary typed input** (`patchdiff-tx/1`). Structured `edits[]`, required guards, `client_request_id` idempotency. |
+| | `patchdiff_submit_operations` | Guarded `patchdiff-tx/2` ordered match/span operations with required exact expected text on spans; profile 0.3.0. |
 | | `patchdiff_submit_pdcp` | **Frozen legacy input** (`0.2.3`). Raw `.pdcp` text with 7 required manifest fields. |
 | **4. Checkpoint, Replay & Audit** | `patchdiff_save` | Snapshot current target and rotate editing cycle without target mutation. |
 | | `patchdiff_replay` | Deterministically reconstruct target from initial snapshot + accepted logs, reporting component checks. |
@@ -46,6 +56,17 @@ The 14 registered MCP tools are organized into five functional groups:
 | | `patchdiff_request_regeneration` | **Deprecated** compatibility wrapper. |
 
 ---
+
+## Guarded operations and response options
+
+`patchdiff_submit_operations(target_file_id, intent, operations, expected_target_version=null, expected_current_hash=null, source="model_response", parent_pdcp_log_id=null, attempt=null, client_request_id=null, include_correlation_id=false)` uses the same guard, lineage, audited rejection, acceptance, ledger and recovery response contract as typed edits. At leastone guard is required and every supplied guard is checked. Missing/invalid guard syntax follows the existing PROTOCOL_VALIDATION path; stale valid guards reject at PRECONDITION_GUARD.
+
+Each operation is one of:
+
+- Match: `{op:"match",match,replace,change_id?,rationale?,risk?,occurrence_index?,anchor_before?,anchor_after?}` with unchanged exact-match selector rules.
+- Span: `{op:"span",start,end,expected_text,replace,change_id?,rationale?,risk?}`. Unknown fields and selectors reject. Coordinates are sequential canonical code points; start/end are non-bool integers 0..2^63-1, end>=start. Explicit insertion uses start=end and empty expected_text. Expected/replacement newlines canonicalize before application. Span bounds or expected-text mismatch reject the entire transaction without partial facts or ledger rows.
+
+All submission tools accept the optional boolean response flag. UUID correlation is invocation-only, including on dedup; false/omitted preserves correlation omission. Invalid types return invalid_argument before admission with no attempt. Exact diagnostic candidates name all exact occurrences, not candidates certified to satisfy failed selectors. Near misses are response-only suggestions within original bounded context and do not change the verdict. See Pass A bounds above. Discovery's x-patchdiff-capabilities names the tx/2 format, immutable profile, allowed operation names, sequential-code-point coordinates and insertion support. No new executable discovery examples are claimed in this pass.
 
 ## 1. Target Lifecycle Tools
 

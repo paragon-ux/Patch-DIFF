@@ -1,5 +1,14 @@
 # DATA_MODEL.md
 
+## Goal F Pass A contract
+
+The normative [Pass A decision](usability/PASS-A-decision.md) defines F03/F05/F06/F07 fields, bounds, omission states, ownership and compatibility before implementation. `include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
+
+New applicability ambiguity/selector failures retain at most five exact candidates (20 code points each side,64 match preview;8192 compact ASCII-escaped JSON bytes including wrapper), stage/prior-change/observed identity and explicit truncation; no cursor or selection. Absent/sequential failures retain at most 64 code points of immutable query evidence (1024 wrapper bytes). Response-only near misses compare only the original at-most-256-point failure prefix after actual successful service-owned commit/lock release; caller-owned transactions omit with caller_transaction. Work is at most 1,000,000 Levenshtein cells, windows query length±1, distance threshold min(4,max(1,length//4)), at most three candidates ranked distance/start/end,16-point context each side and8192 wrapper bytes. Exhaustion/oversize/historical inputs have explicit omission; unexpected post-commit errors propagate without claiming rollback. Original diagnostics stay immutable on recovery. New enrichment fields combined are at most18432 compact ASCII-escaped JSON bytes; this excludes preexisting arbitrary evidence.
+
+`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities; worked discovery examples remain Pass B.
+
+
 ## Scope
 
 This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema` and `20261020_0002_typed_ledger`.
@@ -107,7 +116,7 @@ Mutable record of the most recent submission for a target (display/session state
 | `pdcp_file_id` | UUID | PK | Row identifier |
 | `target_file_id` | UUID | FK -> `cloud_target_files.target_file_id` UNIQUE NOT NULL | One row per target |
 | `editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Submission cycle |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2` or `0.2.3` |
 | `pdcp_content` | TEXT | NOT NULL | Raw text or canonical JSON |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `pending_validation`, `accepted`, `rejected`, `superseded` |
@@ -132,7 +141,7 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `regeneration_attempt` | INTEGER | NULLABLE | 1-based retry attempt |
 | `regeneration_source` | TEXT | NULLABLE | Host or policy label |
 | `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2` or `0.2.3` |
 | `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.2`) |
 | `pdcp_content` | TEXT | NOT NULL | Canonical JSON or raw PDCP for ordinary input; reversible ASCII JSON evidence for rejected invalid text |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |

@@ -16,6 +16,7 @@ from app.core.input_text import safe_input_text
 from app.core.result import AcceptedCoreResult
 from app.core.versions import UnsupportedRuntimeVersionError, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
+from app.pdcp.operations import OPERATIONS_PROTOCOL_VERSION, decode_operations_record, to_parsed_operations
 from app.pdcp.models import SUPPORTED_PROTOCOL_VERSION, ParsedPDCP
 from app.pdcp.parser import PDCPParseError, parse_pdcp
 from app.pdcp.protocol_validator import ProtocolValidationError, validate_pdcp
@@ -183,6 +184,7 @@ def replay_target(
                 parsed,
                 overlapping_matches=profile.overlapping_matches,
                 enforce_singleton_selectors=profile.enforce_singleton_selectors,
+                allow_span_operations=profile.span_operations,
             )
             if not isinstance(result, AcceptedCoreResult):
                 return _failed(
@@ -253,6 +255,11 @@ def _decode_logged_transaction(log: AppendOnlyPdcpLogs, target: CloudTargetFiles
                 "Logged PDCP target_file_id does not match the replayed target.",
             )
         return parsed
+    if log.protocol_version == OPERATIONS_PROTOCOL_VERSION:
+        typed = decode_operations_record(log.pdcp_content, runtime_version=log.runtime_version)
+        if typed.target_file_id != str(target.target_file_id):
+            raise ProtocolValidationError(FailureReason.CONTEXT_INVALID, "Logged operations target does not match replay target.")
+        return to_parsed_operations(typed, target_type=target.target_type)
     if log.protocol_version == TYPED_PROTOCOL_VERSION:
         typed = decode_record(log.pdcp_content, runtime_version=log.runtime_version)
         if typed.target_file_id != str(target.target_file_id):

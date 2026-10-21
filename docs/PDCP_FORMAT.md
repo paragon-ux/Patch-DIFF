@@ -4,9 +4,10 @@
 
 This document defines the transaction formats supported by PatchDIFF:
 1. **`patchdiff-tx/1` (Primary Typed Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content`. Delimiter-collision free, with reduced mandatory prose overhead.
-2. **`.pdcp` v0.2.3 (Frozen Legacy Text Format)**: The declarative text format with `PDCP 0.2.3` header, 7 required manifest fields per change, and `MATCH/REPLACE` delimiters, retained for backward compatibility and historical replay.
+2. **`patchdiff-tx/2` (Guarded Operations)**: canonical JSON with required intent and guard plus ordered `operations` carrying explicit `op:match` or `op:span`. Span records require start/end/expected_text/replace, use sequential canonical code-point coordinates and allow empty-span insertion. See MCP_TOOLS and usability/PASS-A-decision.md for complete fields and immutable 0.3.0 profile.
+3. **`.pdcp` v0.2.3 (Frozen Legacy Text Format)**: The declarative text format with `PDCP 0.2.3` header, 7 required manifest fields per change, and `MATCH/REPLACE` delimiters, retained for backward compatibility and historical replay.
 
-Neither format is executable code. Both lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
+None of these formats is executable code. All lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
 
 Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
