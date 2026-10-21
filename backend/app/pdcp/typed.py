@@ -19,6 +19,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from app.core.failures import FailureReason
+from app.core.input_text import invalid_text_paths
 from app.core.versions import (
     LEGACY_RUNTIME_VERSION, PREVIOUS_RUNTIME_VERSION, RUNTIME_VERSION,
     resolve_overlapping_matches,
@@ -193,6 +194,8 @@ def decode_record(text: str, *, runtime_version: str = RUNTIME_VERSION) -> Typed
 def parse_typed_record(record: Any) -> TypedTransaction:
     """Validate an untrusted record and return the typed transaction."""
 
+    if invalid_text_paths(record):
+        raise _error(FailureReason.TARGET_ENCODING_INVALID, "Input strings must be UTF-8 without NUL.")
     return _parse_typed_record(record, legacy_change_ids=False)
 
 

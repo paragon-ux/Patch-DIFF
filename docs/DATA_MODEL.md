@@ -134,7 +134,7 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
 | `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1` or `0.2.3` |
 | `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.2`) |
-| `pdcp_content` | TEXT | NOT NULL | Canonical JSON (`patchdiff-tx/1`) or raw `.pdcp` |
+| `pdcp_content` | TEXT | NOT NULL | Canonical JSON or raw PDCP for ordinary input; reversible ASCII JSON evidence for rejected invalid text |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `accepted` or `rejected` |
 | `failure_reason` | TEXT | NULLABLE | Canonical failure label on rejection |
@@ -158,6 +158,12 @@ Indexes:
 - `INDEX (parent_pdcp_log_id)`
 - `INDEX (status, failure_reason)`
 - Partial unique index: `uq_pdcp_logs_target_client_request_id ON append_only_pdcp_logs(target_file_id, client_request_id) WHERE client_request_id IS NOT NULL`
+
+#### Rejected invalid-text evidence
+
+An encoding-invalid proposal uses existing pdcp_content TEXT for an ASCII-escaped JSON envelope: evidence_format is patchdiff-invalid-input/1; inputs retain the original submitted record and metadata. The stored characters are ASCII and safe for PostgreSQL, while JSON decoding can recover the offending code points for inspection outside database JSONB. Do not insert decoded unpaired surrogates or NUL into TEXT/JSONB.
+
+The diagnostic marks this representation and safely identifies offending paths. Existing non-evidence rows retain lookup-only legacy fingerprint recovery for representable original records, even where today's Unicode boundary would reject that input. No old row/fingerprint is rewritten and no fresh invalid proposal is admitted. Domain-separated invalid-input fingerprints cover the complete evidence; safe original keys recover the original rejection. Invalid keys are retained only in evidence with client_request_id=NULL. Normal valid-input hashes/fingerprints and accepted-only ledger behavior are unchanged. Rejected evidence is excluded from accepted-history replay.
 
 ### `append_only_manifest_ledger`
 Append-only ledger of accepted changes only. Rejections never write to this table.

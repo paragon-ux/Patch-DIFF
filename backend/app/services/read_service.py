@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.canonicalization import canonicalize_text
 from app.pdcp.matcher import find_exact_occurrences
+from app.core.input_text import invalid_text_paths, safe_input_text
 from app.storage.models import CloudTargetFiles
 
 DEFAULT_READ_CHARS = 4_000
@@ -109,11 +110,14 @@ def read_target(
     start: int = 0,
     length: int | None = None,
 ) -> dict[str, Any]:
+    if invalid_text_paths({"target_file_id": target_file_id, "start": start, "length": length}):
+        return {"status": "invalid_argument", "target_file_id": safe_input_text(target_file_id),
+                "failure_detail": "Read inputs must be UTF-8 without NUL."}
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "target_file_id must be a valid UUID.",
         }
     if isinstance(start, bool) or not isinstance(start, int) or start < 0:
@@ -149,11 +153,16 @@ def find_occurrences(
     start_occurrence: int = 1,
     max_results: int = MAX_OCCURRENCES,
 ) -> dict[str, Any]:
+    if invalid_text_paths({"target_file_id": target_file_id, "text": text,
+                           "context_chars": context_chars, "start_occurrence": start_occurrence,
+                           "max_results": max_results}):
+        return {"status": "invalid_argument", "target_file_id": safe_input_text(target_file_id),
+                "failure_detail": "Search inputs must be UTF-8 without NUL."}
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "target_file_id must be a valid UUID.",
         }
     if not isinstance(text, str) or text == "":

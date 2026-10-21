@@ -18,7 +18,9 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ---
 
-## 1. Pure Unit Test Matrix (`backend/tests/unit/`, 403 Tests)
+Test counts are recorded with each exact executed revision in docs/remediation evidence; the matrix below describes coverage rather than a permanent total.
+
+## 1. Pure Unit Test Matrix (`backend/tests/unit/`)
 
 Run with: `pytest backend/tests/unit -q`
 
@@ -30,6 +32,7 @@ Run with: `pytest backend/tests/unit -q`
 | `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.2`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
 | `test_parser.py` | Protocol header parsing; manifest line format; delimiter enforcement (`<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`); delimiter collision rejection (`FailureReason.BLOCK_MALFORMED`). |
 | `test_protocol_validator.py` | 7 required manifest fields (v0.2.3); risk value validation; structural purity (rejection of executable logic outside payloads). |
+| `test_invalid_input_unicode.py` | DEV-RUN-002: all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
 | `test_selector_profiles.py` | DEV-RUN-001: singleton/multiple/overlapping/absent selectors across typed, legacy and sequential buffers; historical profile compatibility. |
 | `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, `anchor_after`, and `region_hint`. |
 | `test_applier.py` | Sequential in-memory simulation; immediate buffer replacement; deletion (`replace=""`); sequential match invalidation; calculation of runtime-derived `change_facts`. |
@@ -40,12 +43,13 @@ Run with: `pytest backend/tests/unit -q`
 
 ---
 
-## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 153 Tests)
+## 2. Postgres Integration Test Matrix (`backend/tests/integration/`)
 
 Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -q`
 
 | Module | Requirements / Capabilities Tested |
 | --- | --- |
+| `test_invalid_input_unicode_live.py` | DEV-RUN-002/V07: actual PostgreSQL persistence/recovery, old accepted/rejected fingerprint compatibility, outer commit/rollback and deprecated wrapper ownership, real stdio readable evidence. |
 | `test_selector_profiles_live.py` | DEV-RUN-001: durable rejection without materialization, all supported historical selector profiles in typed/legacy mixed history, actual stdio rejection and replay. |
 | `test_migrations_reachable.py` | **C5**: Alembic config presence; schema verification for migration `0001` and `0002`; live Postgres column nullability and partial unique index `uq_pdcp_logs_target_client_request_id` verification. |
 | `test_typed_submit_flow.py` | **C1–C6**: Typed accept writes `append_only_pdcp_logs` (`protocol_version="patchdiff-tx/1"`) and `append_only_manifest_ledger` (`origin="typed"`, `derived_json`); format-specific diagnostics (no PDCP manifest leakage on typed rejections); stage-based validity across all 5 stages; safe UUID and parent-lineage error handling; `client_request_id` idempotency, lost-response outcome recovery, ABA sequence recovery, no-op edit recovery, and conflicting reuse rejection; mixed PDCP/typed replay; component-level `materialized_state_checks`; unknown profile rejection; read/search pagination. |

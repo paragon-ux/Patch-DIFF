@@ -56,6 +56,14 @@ Unicode normalization: none
 
 The runtime must not apply NFC, NFD, NFKC, or NFKD normalization.
 
+### Invalid submission text
+
+Before normal record hashing/storage, reject unpaired surrogate code points and NUL in submitted text or nested metadata. This is representability validation, not Unicode normalization or replacement encoding. Valid non-ASCII and supplementary characters remain supported.
+
+For a resolvable target, the service records target_encoding_invalid at PROTOCOL_VALIDATION through the same locked rejection path. Existing TEXT fields hold a reversible ASCII-escaped patchdiff-invalid-input/1 envelope of the original inputs; diagnostic JSONB contains only safe marker/path strings. The envelope is rejected evidence, never an accepted transaction or a new protocol operation. Valid-input canonical_sha256 and recorded history are unchanged. Invalid input has domain-separated request identity, preserving safe-key rejected-outcome recovery.
+
+Read/search string argument errors use invalid_argument and do not create submission attempts. Malformed/unresolvable target identity cannot create a target-linked attempt and must not be echoed unsafely.
+
 ## Hashing
 
 Use SHA-256 over UTF-8 bytes of canonicalized target text.

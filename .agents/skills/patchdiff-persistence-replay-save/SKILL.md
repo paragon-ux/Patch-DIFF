@@ -69,6 +69,8 @@ Every submission (accepted or rejected) creates an append-only row:
 - `pdcp_content`: canonical JSON string for `patchdiff-tx/1`; raw text for `0.2.3`.
 - `pdcp_content_hash`: SHA-256 of `pdcp_content`.
 
+For rejected invalid Unicode, pdcp_content contains a deterministic ASCII-escaped patchdiff-invalid-input/1 evidence envelope of the original input, not an accepted transaction. JSONB holds safe marker/path strings only. A safe request key recovers its original rejection with a domain-separated invalid-evidence fingerprint; unencodable keys remain NULL on the row and are preserved in evidence. Never write decoded surrogate/NUL text to PostgreSQL or change valid-input fingerprints. Caller-owned commit/rollback and target locks retain their usual semantics.
+
 ## Accepted-Only Manifest Ledger (`append_only_manifest_ledger`)
 
 Only accepted transactions record rows in the manifest ledger:

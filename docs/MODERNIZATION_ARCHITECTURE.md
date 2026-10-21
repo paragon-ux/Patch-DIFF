@@ -100,7 +100,7 @@ flowchart LR
     - Required: `match` (non-empty `string`), `replace` (`string`, empty string `""` deletes the matched span).
     - Optional: `change_id` (`string | null`; defaults to `chg_001`, `chg_002`, ... by 1-based index when omitted or `null`; validated against `^[A-Za-z0-9_.:-]{1,64}$` and per-transaction uniqueness), `rationale` (`string | null`, non-blank if provided), `risk` (`"low" | "medium" | "high" | null`), `occurrence_index` (`integer >= 1 | null`), `anchor_before` (`string | null`, non-empty if provided), `anchor_after` (`string | null`, non-empty if provided).
     - `region_hint` is **not** part of `patchdiff-tx/1` and is rejected as an unknown edit field (`FailureReason.MANIFEST_INVALID`); it remains supported on legacy PDCP v0.2.3.
-- **Canonical Persisted Record**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over normalized LF strings.
+- **Canonical Persisted Record (ordinary input; invalid-text evidence exception below)**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over normalized LF strings.
 
 #### C2. Validation Stage Model, Failure Mapping, and Format-Specific Diagnostics
 
@@ -121,6 +121,18 @@ flowchart LR
 - **Safe Persistence Representation**:
   - Malformed or out-of-range typed metadata (`expected_target_version`, `expected_current_hash`, `attempt`) are set to `NULL` in the constrained DB columns before flushing.
   - Raw unvalidated input values are preserved in `diagnostic_json` (`raw_expected_target_version`, `raw_expected_current_hash`, `raw_attempt`) and in the canonical request record.
+
+#### Invalid Unicode input and rejected-attempt evidence (DEV-RUN-002)
+
+Edit submissions and metadata must be representable as UTF-8/PostgreSQL text before normal hashing and binding. Unpaired surrogate code points and NUL are rejected, never repaired. For a known target, the shared locked submit path persists target_encoding_invalid at PROTOCOL_VALIDATION with no target/version/accepted-ledger mutation. Exact safe-key outcome recovery remains before state-guard checks; a conflicting existing key follows the fingerprint-conflict contract.
+
+The smallest safe representation uses existing fields: pdcp_content contains deterministic ASCII-escaped JSON with evidence_format=patchdiff-invalid-input/1 and the complete original inputs. Decoding this TEXT envelope reversibly recovers the invalid strings. PostgreSQL JSONB receives only safe marker/path/preview strings, never the decoded surrogate/NUL. The rejected envelope is evidence, not an accepted transaction format, and is never applied or replayed as accepted history. No schema migration, new runtime profile, or no-log exception is introduced.
+
+Valid input uses unchanged canonical serialization, hashing and fingerprints. Invalid-input fingerprints have an explicit evidence domain plus the safe evidence hash; otherwise-valid keys recover the original rejection without another row. Invalid/unencodable keys are not queried or stored as keys: their rejected row uses NULL and retains the submitted key in safe evidence. Any unpersistable metadata is represented in evidence rather than written raw to constrained TEXT/JSONB columns.
+
+Previously persisted non-evidence outcomes keep recovery compatibility: under the target lock, compare the original representable record and legacy fingerprint for that existing key before rejecting a new-input encoding violation. This lookup-only fallback can recover an old accepted/rejected escaped-NUL record or invalid-parent rejection; it does not admit a fresh invalid proposal, replace the keyed row, or rewrite historical fingerprints. The explicit invalid-evidence identity remains the rule for new invalid outcomes.
+
+Read/search string arguments return invalid_argument with safely serialized details and no edit-attempt row. Domain errors remain distinct from malformed JSON-RPC envelopes. Database/infrastructure errors are not converted to validation rejections.
 
 #### C3. Replay Contract, Runtime Profiles, and Materialized-State Verification
 

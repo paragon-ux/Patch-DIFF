@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from app.core.canonicalization import TextInput, canonicalize_text
 from app.core.failures import FailureReason
+from app.core.input_text import invalid_text_paths
 from app.pdcp.models import (
     REQUIRED_MANIFEST_FIELDS,
     SUPPORTED_MANIFEST_FIELDS,
@@ -35,6 +36,8 @@ class PDCPParseError(Exception):
 
 def parse_pdcp(content: TextInput) -> ParsedPDCP:
     text = canonicalize_text(content)
+    if invalid_text_paths(text):
+        raise _error(FailureReason.TARGET_ENCODING_INVALID, "Input strings must be UTF-8 without NUL.")
     lines = text.split("\n")
     structural_lines: list[str] = []
 
