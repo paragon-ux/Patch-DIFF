@@ -218,7 +218,7 @@ def replay_target(
         current_canonical = canonicalize_text(target.current_content)
         current_recomputed_hash = canonical_sha256(current_canonical)
         checks = {
-            "content_matches": current_canonical == buffer,
+            "content_matches": target.current_content == buffer,
             "stored_hash_matches": target.current_hash == reconstructed_hash,
             "recomputed_hash_matches": current_recomputed_hash == reconstructed_hash,
             "version_matches": target.version == expected_version,
