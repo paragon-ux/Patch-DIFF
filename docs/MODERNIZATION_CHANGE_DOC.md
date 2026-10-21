@@ -166,4 +166,3 @@ Inspected final material-code CI run 39501529225, job 118899951720, executed gen
 | --- | --- | --- | --- |
 | DB-003 | P1 | Closed | 41a8380; explicit historical/current decoding and exact-base live mixed replay |
 | SVC-003 | P2 | Closed | 41a8380; exact existing-key recovery with unchanged fingerprints, accepted/rejected old outcomes and invalid fresh-key rejection |
-
