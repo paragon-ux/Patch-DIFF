@@ -98,7 +98,7 @@ Lists exact occurrences of `text` (overlapping spans counted) with bounded conte
 - **Arguments**:
   - `target_file_id` (`string`, required).
   - `text` (`string`, required): exact string to locate.
-  - `context_chars` (`integer >= 0`, default `40`): context window before and after each match.
+  - `context_chars` (non-bool integer >=0, default40): context window before/after each match, clamped to400. Negative, boolean, null, string and float values return invalid_argument.
   - `start_occurrence` (`integer >= 1`, default `1`): 1-based occurrence index to start from.
   - `max_results` (`integer >= 1`, default `200`): maximum occurrences to return.
 - **Returns**:
@@ -258,20 +258,20 @@ Replays accepted logs against the initial snapshot, dispatching on `(protocol_ve
 Returns a bounded, newest-first page of append-only attempts (accepted and rejected).
 - **Arguments**:
   - `target_file_id` (`string`, required).
-  - `limit` (`integer`, 1..200, default `50`).
-  - `before_sequence` (`integer >= 1 | null`, optional): pagination continuation token.
+  - `limit` (positive non-bool integer or null, default50): omitted/null selects50; values above200 clamp to200.
+  - `before_sequence` (`integer >= 1 | null`, optional): exclusive positive non-bool integer continuation token.
   - `status` (`"accepted" | "rejected" | null`, optional).
   - `content_hash` (`string | null`, optional): filter by `pdcp_content_hash`.
-  - `client_request_id` (`string | null`, optional): filter by request idempotency ID.
+  - `client_request_id` (`string | null`, optional): exact safe-string lookup, including already-persisted legacy IDs; this filter does not impose new-submission key syntax.
   - `include_content` (`boolean`, default `false`).
-- **Returns**: `entries[]` containing sequence, hashes, versions, failure reason/detail, `client_request_id`, `request_fingerprint`, `diagnostic`, and timestamps.
+- **Returns**: `entries[]` containing sequence, hashes, versions, failure reason/detail, `client_request_id`, `request_fingerprint`, `diagnostic`, and timestamps. Also returns has_more and next_sequence. Fetch limit+1 after all filters; next_sequence is the smallest returned log_sequence when another page exists, otherwise null. Empty/not-found/invalid responses have entries=[], has_more=false, next_sequence=null. Unknown targets return not_found; invalid argument types return invalid_argument.
 
 ### `patchdiff_get_manifest_ledger`
 Returns bounded, oldest-first accepted manifest ledger entries within the newest page.
 - **Arguments**:
   - `target_file_id` (`string`, required): target UUID.
   - `include_previous_cycles` (`boolean`, optional, default `false`): include entries from closed editing cycles.
-  - `limit` (`integer | null`, optional): page size clamped to `1..200` (default `50`). Omitted or null selects `50`.
+  - `limit` (positive non-bool integer or null, optional): default50, cap200. Omitted/null selects50; zero/negative/boolean/float/string values return invalid_argument.
   - `before_sequence` (`integer >= 1 | null`, optional): exclusive upper bound on `ledger_sequence` for paging backward.
 - **Returns**:
   ```json
@@ -302,6 +302,7 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
     "next_sequence": null
   }
   ```
+- **Ordering and cursor example**: For sequences1..10 with limit3, attempts return [10,9,8], ledger [8,9,10], both next_sequence=8. A ledger call with before_sequence=8 returns [5,6,7]. Both cursors are exclusive; ledger reverses only the selected newest page for display. Newer inserted rows are excluded from continuation below a previous cursor. Both history tools return the same empty continuation fields; include flags must be boolean.
 - **Caller Note**: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal. Callers migrating from the legacy unbounded behavior must page via `before_sequence`.
 
 ---

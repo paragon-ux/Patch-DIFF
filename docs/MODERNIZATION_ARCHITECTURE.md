@@ -196,17 +196,19 @@ The lock-then-read outcome-recovery guarantee is supported and verified at Postg
   - Defaults `length` to `DEFAULT_READ_CHARS = 4000` when omitted or `None`; clamps `length` to `MAX_READ_CHARS = 8000`.
   - Returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `start`, `end`, `text`, `total_chars`, `truncated`, and `next_start` (`end` when `truncated` is `True`, else `None`).
 - `patchdiff_find_occurrences(target_file_id, text, context_chars=40, start_occurrence=1, max_results=200)`:
-  - Validates `target_file_id` (UUID), non-empty `text`, `context_chars >= 0`, `start_occurrence >= 1`, `max_results >= 1`.
+  - Validates `target_file_id` (UUID), non-empty `text`, `context_chars` as a non-bool integer >=0 (default40, clamped to400), `start_occurrence >= 1`, `max_results >= 1`.
   - Enumerates all exact occurrences (overlapping counted) over canonical content; returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `occurrence_count`, `returned_count`, `start_occurrence`, `occurrences` (each `{occurrence_index, start, end, before, after}`), `truncated`, and `next_occurrence_index` (`slice_end + 1` when `truncated` is `True`, else `None`).
 - `patchdiff_get_pdcp_log(target_file_id, limit=50, before_sequence=None, status=None, content_hash=None, client_request_id=None, include_content=False)`:
-  - Validates `target_file_id` (UUID) and `before_sequence >= 1`; clamps `limit` to `1..200` (default `50`).
+  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects50; values above200 clamp to200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
   - Returns newest-first `entries` including `pdcp_log_id`, `log_sequence`, `status`, `failure_reason`, `failure_detail`, `failed_change_id`, `before_hash`, `after_hash`, `before_version`, `after_version`, `pdcp_content_hash`, `protocol_version`, `runtime_version`, `submission_source`, `parent_pdcp_log_id`, `regeneration_attempt`, `regeneration_source`, `client_request_id`, `request_fingerprint`, `diagnostic`, `created_at`, and optional `pdcp_content`.
+  - Fetch limit+1 after target/status/content-hash/exact-request-key/exclusive-cursor filters, trim to limit and expose has_more and next_sequence (smallest returned sequence only when more rows exist; otherwise null). status is accepted/rejected/null, hash/key filters are safe strings or null, and include_content is boolean. History key filters retain exact safe legacy strings rather than imposing new-submission key syntax.
 - `patchdiff_get_manifest_ledger(target_file_id, include_previous_cycles=False, limit=50, before_sequence=None)`:
-  - Validates `target_file_id` (UUID) and `before_sequence >= 1`; clamps `limit` to `1..200` (default `50`).
+  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects50; values above200 clamp to200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
   - Filters `AppendOnlyManifestLedger.ledger_sequence < before_sequence` when `before_sequence` is supplied.
   - Queries newest eligible entries up to `limit + 1` to compute `has_more = len(rows) > limit`, trims to `limit`, and presents oldest-first.
   - Returns `entries` (including `ledger_sequence`), `has_more: bool`, and `next_sequence: int | None` (the smallest `ledger_sequence` in the returned page when `has_more` is `True`, else `None`).
   - Caller note: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal.
+  - include_previous_cycles must be boolean. Attempts remain newest-first; ledger selects the newest eligible page then renders it oldest-first. With sequences1..10 and limit3, attempts=[10,9,8], ledger=[8,9,10], both next_sequence=8; ledger before_sequence=8 gives [5,6,7]. Newer inserts do not enter a traversal continuing below its exclusive cursor.
 
 ## 5. Documentation Architecture and Precedence (Section 10)
 

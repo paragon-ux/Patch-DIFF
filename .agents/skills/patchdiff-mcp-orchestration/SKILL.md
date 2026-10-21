@@ -100,3 +100,7 @@ Do not let MCP orchestration:
 - treat model output as trusted
 - silently repair malformed edits or guess ambiguous matches
 - merge concurrent edits or perform partial commits
+
+## Bounded search and history
+
+Validate context_chars as a non-bool integer >=0, default40 and cap400. Both history tools use positive non-bool integer limits (null/omitted50,cap200) and exclusive positive integer cursors. Attempts fetch limit+1 after filters and render descending; ledger selects newest eligible rows then renders its page ascending. Return entries/has_more/next_sequence on every response; cursor is the smallest returned sequence only when more rows remain. Keep safe exact historical request-key filters, not new-submission syntax. Include flags are boolean; no generic handler errors for invalid argument types.

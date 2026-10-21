@@ -20,6 +20,10 @@ Fingerprint conflicts use the existing locked rejection helper to append distinc
 
 Contract-first9de0a64 changes raw materialized-content comparison before implementation. Canonical hashes, history/profile semantics and response fields remain unchanged. Reconstruction success and materialized health stay separate; no repair. Six rollback-isolated live corruption/healthy cases plus real stdio replay verify the change. Execution evidence follows under docs/remediation.
 
+## Current remediation: DEV-MCP-001/002
+
+Search context uses non-bool integer validation with cap400. Attempt history gains filtered limit+1 continuation; both history tools share explicit positive integer argument/error semantics, default50/cap200 and safe exact legacy-key lookup. Existing attempt descending and ledger page ascending display orders are preserved and documented. Service matrices plus actual PostgreSQL traversal and real stdio verify the API. Execution evidence follows under docs/remediation/.
+
 ## 1. Coherent Change Set Summary
 
 PatchDIFF is modernized into a guarded transaction service with a typed primary input (`patchdiff_submit_edits` / `patchdiff-tx/1`), authoritative target read/search tools (`patchdiff_read_target`, `patchdiff_find_occurrences`), request idempotency (`client_request_id`), stage-accurate validity reporting (`ValidationStage`), explicit replay profile dispatch (`protocol_version` + `runtime_version`), and component-level materialized-state verification (`materialized_state_checks`), while preserving frozen PDCP v0.2.3 compatibility and deterministic replay of all historical logs.
