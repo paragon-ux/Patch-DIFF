@@ -1,0 +1,16 @@
+{
+  "pr": "https://github.com/paragon-ux/Patch-DIFF/pull/4",
+  "head_sha": "2df23ed2e42a09f3bc77d6bad8a1d732bfbef6a4",
+  "base_sha": "b33faaf332e269019747772602afff34f9829e5c",
+  "run_id": 39542822860,
+  "event": "pull_request",
+  "checkout_log": "HEAD is now at 3ee9105 Merge 2df23ed2e42a09f3bc77d6bad8a1d732bfbef6a4 into b33faaf332e269019747772602afff34f9829e5c",
+  "conclusion": "success",
+  "unit_passed": 403,
+  "integration_passed": 153,
+  "offline_verdict_equivalence": "OK",
+  "job": 119034202326,
+  "push_run": 39542791302,
+  "push_conclusion": "success",
+  "evidence": "Actual Actions checkout and test log lines inspected; head SHA distinguished from generated merge. PR remains OPEN; no merge performed."
+}

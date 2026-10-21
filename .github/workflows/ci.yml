@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.3-alpine
+        env:
+          POSTGRES_DB: patchdiff
+          POSTGRES_USER: patchdiff
+          POSTGRES_PASSWORD: patchdiff
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U patchdiff -d patchdiff"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PATCHDIFF_DATABASE_URL: postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff
+      PYTHONPATH: .:backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned dependencies
+        run: |
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+      - name: Migrate (upgrade, downgrade one step, upgrade again)
+        run: |
+          alembic -c backend/app/migrations/alembic.ini upgrade head
+          alembic -c backend/app/migrations/alembic.ini downgrade -1
+          alembic -c backend/app/migrations/alembic.ini upgrade head
+      - name: Unit tests
+        run: pytest backend/tests/unit
+      - name: Postgres integration tests
+        run: pytest backend/tests/integration
+      - name: Offline evaluation
+        run: python evaluation/offline_eval.py

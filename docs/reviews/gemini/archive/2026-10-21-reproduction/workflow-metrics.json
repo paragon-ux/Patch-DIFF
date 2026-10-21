@@ -1,0 +1,227 @@
+[
+  {
+    "workflow": "W1",
+    "native_calls": 3,
+    "by_tool": {
+      "find_occurrences": 1,
+      "submit_edits": 1,
+      "read_target": 1
+    },
+    "reads_before_first_submit": 1,
+    "rejections": [],
+    "argument_json_bytes": 434,
+    "result_json_bytes": 3896,
+    "summed_call_ms": 7428,
+    "observed_elapsed_ms": 19901,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W2",
+    "native_calls": 5,
+    "by_tool": {
+      "find_occurrences": 3,
+      "read_target": 1,
+      "submit_edits": 1
+    },
+    "reads_before_first_submit": 2,
+    "rejections": [],
+    "argument_json_bytes": 1642,
+    "result_json_bytes": 19369,
+    "summed_call_ms": 10589,
+    "observed_elapsed_ms": 24587,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W3",
+    "native_calls": 3,
+    "by_tool": {
+      "read_target": 2,
+      "submit_edits": 1
+    },
+    "reads_before_first_submit": 1,
+    "rejections": [],
+    "argument_json_bytes": 711,
+    "result_json_bytes": 4373,
+    "summed_call_ms": 14504,
+    "observed_elapsed_ms": 34177,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W4",
+    "native_calls": 3,
+    "by_tool": {
+      "read_target": 2,
+      "submit_edits": 1
+    },
+    "reads_before_first_submit": 1,
+    "rejections": [],
+    "argument_json_bytes": 657,
+    "result_json_bytes": 4006,
+    "summed_call_ms": 7065,
+    "observed_elapsed_ms": 15093,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W5",
+    "native_calls": 3,
+    "by_tool": {
+      "find_occurrences": 2,
+      "submit_edits": 1
+    },
+    "reads_before_first_submit": 1,
+    "rejections": [],
+    "argument_json_bytes": 682,
+    "result_json_bytes": 2438,
+    "summed_call_ms": 8409,
+    "observed_elapsed_ms": 27781,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W6",
+    "native_calls": 5,
+    "by_tool": {
+      "read_target": 3,
+      "submit_edits": 2
+    },
+    "reads_before_first_submit": 1,
+    "rejections": [
+      {
+        "failure_reason": "target_version_mismatch",
+        "validation_stage": "precondition_guard"
+      }
+    ],
+    "argument_json_bytes": 825,
+    "result_json_bytes": 6605,
+    "summed_call_ms": 12021,
+    "observed_elapsed_ms": 49556,
+    "recovery_calls_through_acceptance": 2,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W7",
+    "native_calls": 2,
+    "by_tool": {
+      "submit_edits": 1,
+      "read_target": 1
+    },
+    "reads_before_first_submit": 0,
+    "rejections": [],
+    "argument_json_bytes": 301,
+    "result_json_bytes": 1370,
+    "summed_call_ms": 4662,
+    "observed_elapsed_ms": 4678,
+    "recovery_calls_through_acceptance": 1,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W8",
+    "native_calls": 3,
+    "by_tool": {
+      "submit_edits": 2,
+      "read_target": 1
+    },
+    "reads_before_first_submit": 0,
+    "rejections": [
+      {
+        "failure_reason": "match_absent",
+        "validation_stage": "transaction_applicability"
+      }
+    ],
+    "argument_json_bytes": 610,
+    "result_json_bytes": 2302,
+    "summed_call_ms": 7615,
+    "observed_elapsed_ms": 7646,
+    "recovery_calls_through_acceptance": 1,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W9",
+    "native_calls": 5,
+    "by_tool": {
+      "get_manifest_ledger": 4,
+      "get_pdcp_log": 1
+    },
+    "reads_before_first_submit": null,
+    "rejections": [],
+    "argument_json_bytes": 420,
+    "result_json_bytes": 17210,
+    "summed_call_ms": 12307,
+    "observed_elapsed_ms": 24989,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W10",
+    "native_calls": 3,
+    "by_tool": {
+      "save": 1,
+      "replay": 1,
+      "export_target": 1
+    },
+    "reads_before_first_submit": null,
+    "rejections": [],
+    "argument_json_bytes": 262,
+    "result_json_bytes": 22618,
+    "summed_call_ms": 9093,
+    "observed_elapsed_ms": 9119,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W11",
+    "native_calls": 3,
+    "by_tool": {
+      "find_occurrences": 1,
+      "submit_pdcp": 1,
+      "read_target": 1
+    },
+    "reads_before_first_submit": 1,
+    "rejections": [],
+    "argument_json_bytes": 770,
+    "result_json_bytes": 3155,
+    "summed_call_ms": 10013,
+    "observed_elapsed_ms": 10042,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W12",
+    "native_calls": 5,
+    "by_tool": {
+      "find_occurrences": 1,
+      "read_target": 2,
+      "submit_edits": 1,
+      "export_target": 1
+    },
+    "reads_before_first_submit": 3,
+    "rejections": [],
+    "argument_json_bytes": 1788,
+    "result_json_bytes": 26214,
+    "summed_call_ms": 14170,
+    "observed_elapsed_ms": 50822,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  },
+  {
+    "workflow": "W12B",
+    "native_calls": 3,
+    "by_tool": {
+      "read_target": 1,
+      "submit_edits": 1,
+      "export_target": 1
+    },
+    "reads_before_first_submit": 1,
+    "rejections": [],
+    "argument_json_bytes": 3451,
+    "result_json_bytes": 5062,
+    "summed_call_ms": 7679,
+    "observed_elapsed_ms": 7717,
+    "recovery_calls_through_acceptance": 0,
+    "documentation_lookups_during_workflow": 0
+  }
+]

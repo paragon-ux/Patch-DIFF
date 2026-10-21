@@ -16,7 +16,7 @@ from app.storage.repositories import select_target_for_update
 @dataclass(frozen=True, slots=True)
 class SaveResult:
     status: str
-    target_file_id: uuid.UUID
+    target_file_id: uuid.UUID | str
     snapshot_id: uuid.UUID | None
     closed_editing_cycle_id: uuid.UUID | None
     new_editing_cycle_id: uuid.UUID | None
@@ -33,10 +33,38 @@ def save_target(
     expected_current_hash: str | None = None,
     _after_snapshot=None,
 ) -> SaveResult:
-    target_uuid = _coerce_uuid(target_file_id)
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return SaveResult(
+            status="rejected",
+            target_file_id=str(target_file_id),
+            snapshot_id=None,
+            closed_editing_cycle_id=None,
+            new_editing_cycle_id=None,
+            current_hash=None,
+            version=None,
+            failure_reason=FailureReason.CONTEXT_INVALID,
+            failure_detail="target_file_id is not a valid UUID.",
+        )
 
     with _transaction(session):
-        target = session.execute(select_target_for_update(target_uuid)).scalar_one_or_none()
+        key = session.identity_key(CloudTargetFiles, target_uuid)
+        existing = session.identity_map.get(key)
+        if existing is not None and (existing in session.dirty or session.is_modified(existing)):
+            return SaveResult(
+                status="rejected",
+                target_file_id=target_uuid,
+                snapshot_id=None,
+                closed_editing_cycle_id=None,
+                new_editing_cycle_id=None,
+                current_hash=getattr(existing, "current_hash", None),
+                version=getattr(existing, "version", None),
+                failure_reason=FailureReason.CONTEXT_INVALID,
+                failure_detail="Pending local direct modifications on target are not permitted.",
+            )
+
+        with session.no_autoflush:
+            target = session.execute(select_target_for_update(target_uuid)).scalar_one_or_none()
         if target is None:
             return SaveResult(
                 status="rejected",
@@ -124,8 +152,13 @@ def save_target(
         )
 
 
-def _coerce_uuid(value: uuid.UUID | str) -> uuid.UUID:
-    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
 
 
 class _transaction:

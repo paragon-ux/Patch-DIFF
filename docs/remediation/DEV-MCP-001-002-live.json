@@ -1,0 +1,67 @@
+{
+  "source_sha": "3b122dfa3d22e9e5d62c381131292417506d9bd0",
+  "mode": "manual outsidepytest actual PostgreSQL and real stdio",
+  "target_file_id": "128afcf1-bdcb-4436-9676-ea9e3132b20f",
+  "traversals": [
+    {
+      "tool": "patchdiff_get_pdcp_log",
+      "pages": [
+        [
+          4308,
+          4307,
+          4306
+        ],
+        [
+          4305,
+          4304,
+          4303
+        ],
+        [
+          4302,
+          4301,
+          4300
+        ],
+        [
+          4299
+        ]
+      ],
+      "no_duplicates_or_skips": true,
+      "newer_insert_excluded": true
+    },
+    {
+      "tool": "patchdiff_get_manifest_ledger",
+      "pages": [
+        [
+          5386,
+          5387,
+          5388
+        ],
+        [
+          5383,
+          5384,
+          5385
+        ],
+        [
+          5380,
+          5381,
+          5382
+        ],
+        [
+          5379
+        ]
+      ],
+      "no_duplicates_or_skips": true,
+      "newer_insert_excluded": true
+    }
+  ],
+  "filtered_status_pages": 2,
+  "hash_filter_more": true,
+  "exact_key_single": true,
+  "stdio_calls": 6,
+  "stdio_two_pages_each_tool": true,
+  "zero_context": true,
+  "boolean_context_invalid": true,
+  "attempts": 13,
+  "ledger": 11,
+  "version": 11
+}

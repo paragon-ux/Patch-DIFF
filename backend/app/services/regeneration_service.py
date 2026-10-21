@@ -1,12 +1,21 @@
-"""Regeneration context and prompt orchestration services."""
+"""Regeneration context and prompt orchestration services.
+
+DEPRECATED (see docs/MODERNIZATION_ARCHITECTURE.md, decision A1). Hosts own retry
+decisions and prompt wording: they should re-read the target with
+``read_target`` / ``find_occurrences`` and resubmit through ``submit_edits`` with a
+``parent_pdcp_log_id``. These functions remain only as a compatibility wrapper for
+existing clients.
+"""
 
 from __future__ import annotations
 
 import uuid
+from contextlib import nullcontext
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.input_text import invalid_text_paths, safe_input_text
 from app.services.pdcp_service import submit_pdcp
 from app.services.prompt_context_service import build_prompt_context, pdcp_rules_text
 from app.storage.models import AppendOnlyPdcpLogs, CloudTargetFiles
@@ -18,9 +27,19 @@ def build_regeneration_context(
     pdcp_log_id: uuid.UUID | str,
     user_request: str | None = None,
 ) -> dict[str, Any]:
-    log = session.get(AppendOnlyPdcpLogs, _coerce_uuid(pdcp_log_id))
+    if invalid_text_paths({"pdcp_log_id": pdcp_log_id, "user_request": user_request}):
+        return {"status": "invalid_argument", "pdcp_log_id": safe_input_text(pdcp_log_id),
+                "failure_detail": "Read inputs must be UTF-8 without NUL."}
+    log_uuid = _try_coerce_uuid(pdcp_log_id)
+    if log_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "pdcp_log_id": safe_input_text(pdcp_log_id),
+            "failure_detail": "pdcp_log_id is not a valid UUID.",
+        }
+    log = session.get(AppendOnlyPdcpLogs, log_uuid)
     if log is None:
-        return {"status": "not_found", "pdcp_log_id": str(pdcp_log_id)}
+        return {"status": "not_found", "pdcp_log_id": safe_input_text(pdcp_log_id)}
     target = session.get(CloudTargetFiles, log.target_file_id)
     if target is None:
         return {"status": "not_found", "target_file_id": str(log.target_file_id)}
@@ -51,6 +70,8 @@ def build_regeneration_context(
 
 
 def build_regeneration_prompt(context: dict[str, Any]) -> dict[str, Any]:
+    if context.get("status") == "invalid_argument":
+        return context
     prompt = "\n".join(
         [
             "PatchDIFF regeneration request.",
@@ -85,33 +106,45 @@ def request_regeneration(
     regenerated_pdcp_content: str | None = None,
     regeneration_attempt: int = 1,
     regeneration_source: str = "mcp_host",
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
 ) -> dict[str, Any]:
-    context = build_regeneration_context(session, pdcp_log_id=pdcp_log_id, user_request=user_request)
-    prompt = build_regeneration_prompt(context)
-    if regenerated_pdcp_content is None:
-        return {"status": "context_ready", "regeneration_context": context, "regeneration_prompt": prompt}
+    # Own only a transaction started here, before context reads can autobegin.
+    with nullcontext() if session.in_transaction() else session.begin():
+        context = build_regeneration_context(session, pdcp_log_id=pdcp_log_id, user_request=user_request)
+        if context.get("status") != "ready":
+            # Unknown parent log or target: report it instead of dereferencing a missing row.
+            return context
+        prompt = build_regeneration_prompt(context)
+        if regenerated_pdcp_content is None:
+            return {"status": "context_ready", "regeneration_context": context, "regeneration_prompt": prompt}
 
-    log = session.get(AppendOnlyPdcpLogs, _coerce_uuid(pdcp_log_id))
-    parent_log_id = log.pdcp_log_id
-    target_file_id = log.target_file_id
-    if session.in_transaction():
-        session.commit()
-    result = submit_pdcp(
-        session,
-        target_file_id=target_file_id,
-        pdcp_content=regenerated_pdcp_content,
-        submission_source="regeneration",
-        parent_pdcp_log_id=parent_log_id,
-        regeneration_attempt=regeneration_attempt,
-        regeneration_source=regeneration_source,
-    )
-    return {
-        "status": result.status,
-        "new_pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
-        "parent_pdcp_log_id": str(parent_log_id),
-        "result": result,
-    }
+        log = session.get(AppendOnlyPdcpLogs, _try_coerce_uuid(pdcp_log_id))
+        parent_log_id = log.pdcp_log_id
+        target_file_id = log.target_file_id
+        result = submit_pdcp(
+            session,
+            target_file_id=target_file_id,
+            pdcp_content=regenerated_pdcp_content,
+            expected_target_version=expected_target_version,
+            expected_current_hash=expected_current_hash,
+            submission_source="regeneration",
+            parent_pdcp_log_id=parent_log_id,
+            regeneration_attempt=regeneration_attempt,
+            regeneration_source=regeneration_source,
+        )
+        return {
+            "status": result.status,
+            "new_pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
+            "parent_pdcp_log_id": str(parent_log_id),
+            "result": result,
+        }
 
 
-def _coerce_uuid(value: uuid.UUID | str) -> uuid.UUID:
-    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None

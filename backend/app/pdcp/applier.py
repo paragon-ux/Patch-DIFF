@@ -14,8 +14,16 @@ from app.pdcp.models import ParsedPDCP
 def apply_pdcp_transaction(
     target_text: str,
     parsed: ParsedPDCP,
+    *,
+    overlapping_matches: bool = True,
+    enforce_singleton_selectors: bool = True,
 ) -> AcceptedCoreResult | RejectedCoreResult:
-    """Apply a parsed+validated PDCP transaction to an in-memory buffer."""
+    """Apply a parsed+validated transaction to an in-memory buffer.
+
+    ``overlapping_matches=False`` selects the legacy MATCH enumeration of runtime
+    ``patchdiff-mvp-0.1.0``. Disabling singleton selector enforcement retains
+    the ignored-selector behavior of recorded profiles through 0.2.1.
+    """
 
     original = canonicalize_text(target_text)
     current = original
@@ -28,6 +36,7 @@ def apply_pdcp_transaction(
             before_hash,
         )
 
+    change_facts: list[dict] = []
     for change in parsed.changes:
         change_id = change.manifest.change_id
         if change.match_payload == "":
@@ -48,19 +57,43 @@ def apply_pdcp_transaction(
             )
 
         try:
-            span = resolve_match_span(current, change.match_payload, change.manifest.disambiguation)
+            span = resolve_match_span(
+                current,
+                change.match_payload,
+                change.manifest.disambiguation,
+                overlapping=overlapping_matches,
+                enforce_singleton_selectors=enforce_singleton_selectors,
+            )
         except MatchResolutionError as exc:
             reason = exc.failure_reason
             if (
                 reason is FailureReason.MATCH_ABSENT
                 and change.change_index > 1
-                and find_exact_occurrences(original, change.match_payload)
+                and find_exact_occurrences(original, change.match_payload, overlapping=overlapping_matches)
             ):
                 reason = FailureReason.SEQUENTIAL_MATCH_INVALID
-            return _rejected(reason, exc.failure_detail, before_hash, change_id)
+            extra: dict = {}
+            if reason in {FailureReason.MATCH_AMBIGUOUS, FailureReason.DISAMBIGUATION_INVALID}:
+                extra["occurrence_count"] = len(
+                    find_exact_occurrences(current, change.match_payload, overlapping=overlapping_matches)
+                )
+            return _rejected(reason, exc.failure_detail, before_hash, change_id, extra)
 
         replacement = canonicalize_text(change.replace_payload)
+        matched = current[span.start : span.end]
         current = current[: span.start] + replacement + current[span.end :]
+        change_facts.append(
+            {
+                "change_id": change_id,
+                "change_index": change.change_index,
+                "span_start": span.start,
+                "span_end": span.end,
+                "matched_chars": len(matched),
+                "replacement_chars": len(replacement),
+                "matched_sha256": canonical_sha256(matched),
+                "replacement_sha256": canonical_sha256(replacement),
+            }
+        )
 
     return AcceptedCoreResult(
         before_hash=before_hash,
@@ -68,6 +101,7 @@ def apply_pdcp_transaction(
         target_content=current,
         change_count=len(parsed.changes),
         manifest_entries=tuple(change.manifest for change in parsed.changes),
+        change_facts=tuple(change_facts),
     )
 
 
@@ -76,21 +110,26 @@ def _rejected(
     detail: str,
     before_hash: str,
     failed_change_id: str | None = None,
+    extra_diagnostic: dict | None = None,
 ) -> RejectedCoreResult:
+    diagnostic = {
+        "retryable": reason
+        in {
+            FailureReason.MATCH_ABSENT,
+            FailureReason.MATCH_AMBIGUOUS,
+            FailureReason.DISAMBIGUATION_INVALID,
+            FailureReason.SEQUENTIAL_MATCH_INVALID,
+            FailureReason.TARGET_HASH_MISMATCH,
+        },
+        "requires_new_submission": True,
+        "requires_new_pdcp": True,
+    }
+    if extra_diagnostic:
+        diagnostic.update(extra_diagnostic)
     return RejectedCoreResult(
         failure_reason=reason,
         failure_detail=detail,
         before_hash=before_hash,
         failed_change_id=failed_change_id,
-        diagnostic={
-            "retryable": reason
-            in {
-                FailureReason.MATCH_ABSENT,
-                FailureReason.MATCH_AMBIGUOUS,
-                FailureReason.DISAMBIGUATION_INVALID,
-                FailureReason.SEQUENTIAL_MATCH_INVALID,
-                FailureReason.TARGET_HASH_MISMATCH,
-            },
-            "requires_new_pdcp": True,
-        },
+        diagnostic=diagnostic,
     )

@@ -1,0 +1,23 @@
+{
+  "workstream": "DEV-DB-001",
+  "contract_first_sha": "9de0a64",
+  "source_sha": "cd1b91f19054ac7dc31bf5e2416f2e9f3547394e",
+  "full_suite": {
+    "command": ".venv/Scripts/python.exe -m pytest -q -o addopts='' --disable-warnings",
+    "passed": 719,
+    "unit": 504,
+    "integration": 215,
+    "duration_seconds": 41.87,
+    "warnings": 9,
+    "stdout": "DEV-DB-001-pytest.txt",
+    "database": "actual PostgreSQL",
+    "includes": "real stdio and isolated populated migrations"
+  },
+  "focused_live_passed": 14,
+  "offline_evaluation": "OK",
+  "manual_evidence": "DEV-DB-001-live.json",
+  "new_runtime_profiles": 0,
+  "schema_migrations": 0,
+  "new_response_fields": 0,
+  "protected_review_files_unchanged": 12
+}

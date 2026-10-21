@@ -2,431 +2,172 @@
 
 ## Project
 
-PatchDIFF MVP is an MCP-first, server-side document editing system.
+PatchDIFF is an MCP-first, server-side deterministic document transaction service.
 
-PatchDIFF server receives document-upload and edit-request events over MCP, manages canonical target state in Postgres, constructs prompt context for the chatbot/model, receives declarative PDCP transaction files, validates them deterministically, applies accepted edits atomically, logs accepted and rejected attempts, and supports SAVE/export/replay.
+PatchDIFF server receives document-upload, read/search, and edit-submission requests over MCP, manages canonical target state in Postgres, validates untrusted edit transactions deterministically, applies accepted edits atomically per target, logs all accepted and rejected attempts in an append-only log with retry lineage and request idempotency, records accepted changes in an append-only manifest ledger with runtime-derived span/hash facts, and supports SAVE checkpointing, export, and deterministic replay.
 
 Core architecture:
 
 ```text
-PatchDIFF server = orchestration + deterministic runtime
-MCP = transport/interface
-Chatbot/model = PDCP generator
+PatchDIFF server = deterministic transaction runtime + authoritative read/commit service
+MCP = transport/interface (stdio JSON-RPC / internal registry)
+Host / Chatbot / Model = planning, context selection, proposal generator, retry owner
 Postgres = canonical working substrate
 ```
 
-The user interacts with the chatbot, not with a PatchDIFF frontend.
+The user interacts with the host/chatbot, not with a standalone PatchDIFF frontend.
 
-PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, merge system, or full-document regeneration workflow.
+PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow.
 
-## Source Of Truth
+## Source Of Truth & Precedence
 
 Read project artifacts in this order:
 
-1. `AGENTS.md`
-2. `docs/MCP_FIRST_MVP.md`
-3. `docs/PATCHDIFF_CORE_SPEC.md`
-4. `docs/MCP_TOOLS.md`
-5. `docs/DATA_MODEL.md`
-6. `docs/PDCP_FORMAT.md`
-7. `docs/TEST_MATRIX.md`
-8. `docs/CODEX_BUILD_PLAN.md`
+1. `AGENTS.md` (locked invariants)
+2. `docs/MODERNIZATION_ARCHITECTURE.md` (architecture decisions A1–A8 and contracts C1–C6)
+3. `docs/MODERNIZATION_CHANGE_DOC.md` (as-built record, reconciliation table, verification evidence)
+4. `docs/MCP_TOOLS.md` (MCP tool schemas and request/response contracts)
+5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic runtime, validation stages, replay profiles)
+6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001` + `0002`)
+7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1` typed record and frozen PDCP v0.2.3 format)
+8. `docs/MCP_FIRST_MVP.md` (system boundaries and workflows)
+9. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop and usage guide)
+10. `docs/TEST_MATRIX.md` & `docs/CODEX_BUILD_PLAN.md`
 
-If files conflict, follow `MCP_FIRST_MVP.md`.
-
-If deterministic runtime behavior is unclear, follow `PATCHDIFF_CORE_SPEC.md`.
-
-If MCP tool behavior is unclear, follow `MCP_TOOLS.md`.
+Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/`, `docs/Archive/`) are preserved untouched for historical context.
 
 If ambiguity remains, preserve PatchDIFF’s locked invariants and choose the simplest deterministic behavior.
 
-## PDCP File Boundary
+## Transaction Input Formats (`patchdiff-tx/1` Primary, `.pdcp` v0.2.3 Frozen Legacy)
 
-PDCP files use the `.pdcp` extension.
+PatchDIFF supports two declarative, non-executable transaction input formats that lower into the same `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 
-PDCP is a declarative PatchDIFF transaction format, not Python, JavaScript, C, JSON, YAML, or any target language.
-
-The trusted runtime may be implemented in Python, for example as `changeOperator.py`.
-
-The PDCP file itself must never be executable.
+1. **Typed transaction (`patchdiff_submit_edits` / `protocol_version = "patchdiff-tx/1"`, preferred)**:
+   - Structured JSON arguments (`target_file_id`, required `expected_target_version` and/or `expected_current_hash`, required transaction `intent`, ordered `edits[]` with `{match, replace, change_id?, rationale?, risk?, occurrence_index?, anchor_before?, anchor_after?}`, optional `client_request_id`, `parent_pdcp_log_id`, `attempt`).
+   - Eliminates delimiter-collision failures and reduces mandatory prose overhead to top-level `intent`.
+   - Persisted in `append_only_pdcp_logs.pdcp_content` as deterministic canonical JSON (`patchdiff-tx/1`).
+2. **Legacy PDCP file (`patchdiff_submit_pdcp` / `protocol_version = "0.2.3"`, frozen legacy/import)**:
+   - Raw `.pdcp` text with `PDCP 0.2.3` header, 7 required `# MANIFEST` fields per change block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters.
+   - Retained for backward compatibility and replay of historical logs.
 
 Keep this boundary:
 
 ```text
-.pdcp file = declarative transaction artifact
-.py file = trusted runtime implementation
-target file = Markdown/Python/YAML/JSON/prose/etc.
+patchdiff-tx/1 or .pdcp = declarative, non-executable transaction artifact
+backend/app/*.py = trusted deterministic runtime and service implementation
+target file = Markdown / Python / YAML / JSON / prose / etc.
 ```
 
-Do not treat PDCP as Python just because the runtime is written in Python.
+Neither `patchdiff-tx/1` nor `.pdcp` is executable code.
 
-Do not use Python-style target declarations as the primary PDCP header.
-
-Use protocol-native PDCP headers defined in `PDCP_FORMAT.md`.
-
+Submitted edit-string values and nested metadata must be valid UTF-8/PostgreSQL text before normal hashing/storage. Known-target invalid text is durably rejected through the shared locked path using reversible ASCII-escaped evidence in existing TEXT fields and safe JSONB markers. Never silently repair it or store decoded surrogate/NUL text. Valid hashes and historical fingerprints remain unchanged.
 
 ## Core Runtime Boundary
 
-PatchDIFF core runtime is deterministic.
+PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`) is pure and deterministic.
 
 It may:
 
-- parse `.pdcp` files
-- validate protocol structure
-- validate transaction applicability
-- apply accepted transactions atomically
+- parse and validate `.pdcp` (`0.2.3`) and typed (`patchdiff-tx/1`) transactions
+- enumerate all exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.2`)
+- resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, or legacy `region_hint` in `0.2.3`)
+- simulate sequential `MATCH/REPLACE` operations in memory and compute `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests)
 - reject invalid transactions without target mutation
-- log accepted and rejected attempts
-- return structured rejection diagnostics
-- support SAVE and deterministic replay
+- classify stage-aware validity (`ValidationStage` -> `protocol_valid`, `transaction_valid`, `task_correct: "not_evaluated"`, `semantic: "not_evaluated"`)
+- support deterministic replay across recorded `(protocol_version, runtime_version)` profiles
 
 It must not:
 
-- call an LLM
-- call an MCP tool
-- construct prompts
-- choose a model
-- hold model credentials
-- run an agent loop
-- silently repair submitted PDCP
-- perform fuzzy matching
-- perform semantic matching
-- perform automatic merge
-- partially commit a failed transaction
+- call an LLM or hold model credentials
+- call an MCP tool or depend on FastAPI / SQLAlchemy / Postgres
+- construct prompts or run an agent loop
+- silently repair submitted transactions
+- perform fuzzy, semantic, or AST matching
+- perform automatic merge or partial commits
 - execute model-generated code
 
-Every PDCP, however produced, is untrusted until validated by PatchDIFF core.
+## MCP Service & Host Boundary
 
-## MCP Orchestration Boundary
+The host/agent owns planning, context gathering, proposal generation, and retry decisions.
 
-MCP orchestration is in scope for the MVP.
+The PatchDIFF MCP service provides:
 
-The PatchDIFF server may:
+- **Target initialization & retrieval**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
+- **Authoritative bounded reads & exact search**: `patchdiff_read_target` (`start`, `length`, `next_start`), `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`)
+- **Guarded atomic transaction submission**: `patchdiff_submit_edits` (primary typed input) and `patchdiff_submit_pdcp` (legacy `.pdcp`), both supporting `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage
+- **Checkpointing, replay, and bounded history**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
+- **Convenience / deprecated compatibility wrappers**: `patchdiff_build_prompt_context` (convenience bounded prefix), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 
-- receive document-upload events over MCP
-- initialize a canonical target from uploaded content
-- build prompt context for the chatbot/model
-- route prompt context through MCP
-- receive model-emitted `.pdcp` content
-- store the submitted PDCP as the current pending transaction
-- submit PDCP content to the deterministic core runtime
-- receive accepted/rejected results
-- construct regeneration prompts after rejection
-- request regenerated PDCP through MCP orchestration
-- submit regenerated PDCP as a new attempt
-- export or return the current target through MCP
-
-The MCP orchestration layer may interact with stochastic systems.
-
-The deterministic core runtime must remain separate from MCP orchestration.
-
-A regenerated PDCP is never applied directly by the MCP layer. It must be submitted through the same validation path and validated from scratch.
-
-## User Interaction Model
-
-The MVP user surface is the chatbot session.
-
-The expected flow is:
+## Expected Modernized Host Workflow
 
 ```text
-User uploads document in chat.
-PatchDIFF server receives upload event over MCP.
-PatchDIFF initializes canonical cloud target.
-User requests an edit in chat.
-PatchDIFF constructs prompt context.
-Chatbot/model emits declarative .pdcp transaction.
-PatchDIFF validates the PDCP deterministically.
-PatchDIFF applies accepted edits atomically.
-PatchDIFF requests regeneration on rejection when appropriate.
-PatchDIFF returns status and exports target when requested.
+1. User uploads or initializes document -> patchdiff_initialize_target.
+2. Host reads relevant slices or searches occurrences -> patchdiff_read_target / patchdiff_find_occurrences.
+3. Host/model submits guarded edits -> patchdiff_submit_edits (with expected_target_version/expected_current_hash and optional client_request_id).
+4. PatchDIFF validates deterministically and commits atomically (or logs rejection with format-specific diagnostics and stage validity).
+5. On rejection, host inspects diagnostics, re-reads via patchdiff_read_target / patchdiff_find_occurrences, and resubmits with parent_pdcp_log_id.
+6. Host checkpoints cycles with patchdiff_save, verifies integrity with patchdiff_replay, and exports via patchdiff_export_target.
 ```
 
-Do not build a frontend as the primary MVP interface.
+## Non-Negotiable Invariants
 
-A debug console, audit viewer, or replay inspector may be added later, but is not the MVP user surface.
+PatchDIFF must always preserve:
 
-## Non-Negotiable Boundaries
+```text
+canonical UTF-8 target text (LF normalized)
++ declarative non-executable transactions (patchdiff-tx/1 and PDCP 0.2.3)
++ exact deterministic MATCH (all exact occurrences counted)
++ immediate sequential in-memory REPLACE simulation
++ per-target atomic Postgres commit under SELECT ... FOR UPDATE
++ append-only attempt log (accepted and rejected, with lineage and client_request_id idempotency)
++ accepted-only manifest ledger (with origin and runtime-derived span/hash facts)
++ stage-accurate validity reporting and format-specific diagnostics
++ SAVE checkpointing and editing-cycle rotation
++ deterministic replay dispatching on (protocol_version, runtime_version) with component-level materialized_state_checks
+```
 
-Do not introduce into the deterministic core runtime:
-
-- fuzzy matching
-- semantic matching
-- AST parsing
-- language-specific rewrite behavior
-- token-coordinate editing
-- line-number editing as authority
-- automatic repair
-- automatic merge
-- partial commits
-- model-generated executable protocol logic
-- hidden mutation outside selected `MATCH` spans
-- full-document regeneration as the commit mechanism
-- deletion of append-only history
-- SQLite as the MVP persistence backend
-- semantic validation as core transaction validity
-
-Do not introduce into PDCP files:
-
-- executable recursion functions
-- generated `applyPDCP` functions
-- imports
-- loops
-- conditionals
-- runtime logic
-- tool calls
-- shell commands
-- network calls
-- filesystem calls
-
-PDCP is declarative.
-
-PatchDIFF trusted runtime applies exact `MATCH/REPLACE` transactions.
-
-## MVP Boundary
-
-The MCP-first MVP includes:
-
-- MCP server interface
-- upload-event handling
-- target initialization from uploaded document content
-- prompt-context construction
-- model PDCP response handling
-- `.pdcp` parsing
-- protocol validation
-- transaction validation
-- exact `MATCH/REPLACE` application
-- atomic Postgres commit
-- accepted/rejected PDCP logging
-- accepted-only manifest ledger
-- structured rejection diagnostics
-- regeneration orchestration through MCP
-- regenerated PDCP validation from scratch
-- target retrieval/export
-- SAVE snapshot and editing-cycle advancement
-- deterministic replay
-
-The MVP excludes:
-
-- standalone frontend as primary interface
-- rich document editor
-- chat UI implementation
-- restore-to-version
-- multi-writer merge
-- CRDT or OT collaboration
-- semantic validation
-- code execution from PDCP
-- production auth
-- billing
-- delimiter escaping
-- length-prefixed payloads
-- rich or binary document support
-
-Project-level adapters may be built later, but they must preserve the core runtime boundary.
-
-## Backend Requirements
-
-The MVP backend is cloud-shaped from day one.
+## Backend Requirements & Runtime Layers
 
 Use:
 
 - FastAPI
-- Postgres
-- SQLAlchemy or SQLModel
-- Alembic migrations
+- Postgres (`postgres:16.3-alpine` via Docker Compose)
+- SQLAlchemy 2.x
+- Alembic migrations (`20260510_0001` and `20261020_0002`)
 - pytest
-- Docker Compose
-- MCP server tooling appropriate for the selected Python stack
+- Stdio MCP JSON-RPC adapter (`backend/app/mcp/external_adapter.py`)
 
-Postgres is the MVP persistence backend.
+Keep runtime layers separate:
 
-SQLite is not the MVP persistence backend. SQLite may be used only for isolated experiments or pure runtime tests that do not exercise persistence, locking, migrations, SAVE, or replay.
-
-Docker Compose must provide deterministic local Postgres.
-
-The PatchDIFF runtime core must remain storage-abstracted. Parser, canonicalizer, matcher, disambiguator, applier, and replay logic must not depend directly on SQL, FastAPI, Postgres, Docker, MCP transport, or a specific deployment provider.
-
-## Runtime Layers
-
-Keep these layers separate:
-
-1. MCP orchestration layer
-2. Service layer
-3. PDCP parser
-4. Protocol validator
-5. Transaction validator
-6. Transaction applier
-7. Append-only persistence layer
-
-The MCP layer handles transport and orchestration.
-
-The service layer coordinates workflows.
-
-The parser extracts PDCP structure.
-
-The protocol validator checks structural validity.
-
-The transaction validator checks applicability against the current canonical target.
-
-The applier simulates replacements in memory and commits only after all changes succeed.
-
-The persistence layer stores targets, logs, ledgers, snapshots, and editing cycles atomically.
-
-Do not collapse these layers in a way that makes replay, testing, or validation unclear.
-
-## Canonical Runtime Contract
-
-PatchDIFF MVP is successful only if it preserves:
-
-```text
-canonical UTF-8 target text
-+ declarative .pdcp transaction files
-+ exact deterministic MATCH
-+ immediate sequential REPLACE
-+ atomic Postgres commit
-+ append-only PDCP log
-+ accepted-only manifest ledger
-+ structured rejection diagnostics
-+ MCP orchestration outside deterministic core
-+ SAVE checkpointing
-+ deterministic replay
-```
-
-Do not trade away determinism for convenience.
-
-Do not trade away exactness for helpfulness.
-
-Do not trade away atomicity for partial success.
+1. MCP transport & tool layer (`backend/app/mcp/`)
+2. Service layer (`backend/app/services/`)
+3. Typed & PDCP parsers/validators (`backend/app/pdcp/`)
+4. Deterministic matcher, disambiguator, and applier (`backend/app/pdcp/`, `backend/app/core/`)
+5. Postgres persistence layer (`backend/app/storage/`, `backend/app/migrations/`)
 
 ## Testing Rule
 
-Do not claim completion unless relevant tests pass.
+Do not claim completion unless relevant tests pass against live Postgres:
 
-Use pure runtime unit tests for:
+- Pure runtime unit tests (`backend/tests/unit/`)
+- Postgres integration tests (`backend/tests/integration/`), including live Alembic `upgrade -> downgrade -> upgrade` and real stdio MCP subprocess E2E workflow
+- Offline payload and verdict equivalence evaluation (`evaluation/offline_eval.py`)
 
-- PDCP header parsing
-- manifest parsing
-- canonicalization
-- hashing
-- exact matching
-- disambiguation
-- sequential in-memory application
-- failure classification
-- rejection diagnostic mapping
+## PR Review Standard
 
-Use Postgres integration tests for:
+All PR reviews must follow [PR Review Standard v1.1.0](docs/PR_REVIEW_STANDARD.md). Record the base and head SHAs, map every changed file to a primary category, and give each required category its own coverage statement, separate P1/P2/P3 finding lists, verification gaps, and verdict. Empty reviewed buckets must say so; unreviewed buckets must say not assessed.
 
-- atomic commit
-- row-level locking
-- target version/hash guards
-- `target_diverged`
-- append-only PDCP logs
-- accepted-only manifest ledger
-- rejected PDCP logging
-- SAVE editing-cycle behavior
-- snapshots
-- deterministic replay from persisted logs
-- Alembic migration validity
+Trace architecture and contracts before recommending runtime changes. Keep source inspection, local execution, and CI evidence separate. Passing tests or a prior approval cannot replace category review. Do not recommend approval with unreviewed material categories or unresolved blocking findings.
 
-Use MCP contract tests for:
+Store review reports in `docs/reviews/`. Close findings only with a fix commit, relevant evidence, and reviewer recheck. The concise implementation completion report in the testing skill does not replace the required PR review.
 
-- upload event initializes target
-- prompt context is constructed from target metadata, manifest ledger, and relevant spans
-- model PDCP response is stored as pending current PDCP
-- accepted PDCP returns success status
-- rejected PDCP returns diagnostics
-- regeneration prompt is constructed after rejection
-- regenerated PDCP is submitted as a new attempt
-- export returns current canonical target
-
-Do not rely on SQLite to prove persistence correctness.
-
-## Code Organization
-
-Before adding a helper, search for existing implementations.
-
-Do not duplicate logic for:
-
-- canonicalization
-- SHA-256 hashing
-- failure reason labels
-- PDCP header parsing
-- manifest parsing
-- `MATCH` occurrence detection
-- disambiguation resolution
-- transaction application
-- replay application
-- SAVE cycle handling
-- MCP tool response shapes
-
-Prefer one shared implementation used by runtime and tests.
-
-If runtime and replay behavior differ, treat that as a bug unless a controlling artifact explicitly says otherwise.
-
-## Final Response Style
-
-When reporting work, be concise.
-
-Prefer:
-
-```text
-Implemented X.
-
-Changed:
-- path/to/file.py
-- tests/test_file.py
-
-Verified:
-- pytest ...
-
-Notes:
-- ...
-```
-
-List tests run.
-
-List tests not run.
-
-Do not paste large files unless requested.
-
-Do not claim completion without verification.
+Changes to the review format require a versioned change to `docs/PR_REVIEW_STANDARD.md`; reviewers must not silently omit categories or weaken evidence requirements.
 
 ## Skills
 
-This repo uses MCP-first PatchDIFF skill files to keep implementation guidance focused and avoid loading stale architecture assumptions.
+Use the workspace skills in `.agents/skills/`:
 
-Use only the MCP-first skills listed here.
-
-Do not use older PatchDIFF skills unless the user explicitly asks for archival comparison.
-
-Required skills:
-
-- `skills/patchdiff-core-runtime.md`
-  - Use for deterministic core runtime work.
-  - Covers `.pdcp` parsing, protocol validation, canonicalization, hashing, exact `MATCH/REPLACE`, disambiguation, sequential mutation, atomic application, and failure labels.
-
-- `skills/patchdiff-mcp-orchestration.md`
-  - Use for MCP-first server orchestration work.
-  - Covers upload events, target initialization, prompt-context construction, model PDCP response handling, rejection diagnostics, regeneration orchestration, and export.
-
-- `skills/patchdiff-persistence-replay-save.md`
-  - Use for persistence, SAVE, and replay work.
-  - Covers Postgres, Docker Compose, Alembic migrations, append-only logs, row-level locking, editing cycles, snapshots, SAVE, and deterministic replay.
-
-- `skills/patchdiff-testing-review.md`
-  - Use for tests, reviews, and completion checks.
-  - Covers core runtime tests, Postgres integration tests, MCP contract tests, regeneration-flow tests, protocol-drift review, and code-quality checks.
-
-When a task touches multiple areas, read all relevant skills before editing.
-
-Examples:
-
-```text
-PDCP parser change -> patchdiff-core-runtime.md
-MCP upload flow -> patchdiff-mcp-orchestration.md
-SAVE or replay -> patchdiff-persistence-replay-save.md
-Review or test planning -> patchdiff-testing-review.md
-```
-
-If a skill conflicts with MCP_FIRST_MVP.md, PATCHDIFF_CORE_SPEC.md, or MCP_TOOLS.md, follow the build docs first.
-
-The skill files are implementation aids, not the source of truth.
+- `.agents/skills/patchdiff-core-runtime/SKILL.md`: Deterministic core runtime (`patchdiff-tx/1` and `.pdcp` v0.2.3 parsing, protocol validation, overlapping match enumeration, disambiguation, sequential application, `ValidationStage`, and `change_facts`).
+- `.agents/skills/patchdiff-mcp-orchestration/SKILL.md`: MCP tool surface, stdio JSON-RPC adapter, `TYPED_EDIT_JSON_SCHEMA`, authoritative reads/search, host-owned retry, and deprecated wrapper maintenance.
+- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001` and `0002`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
+- `.agents/skills/patchdiff-testing-review/SKILL.md`: Unit, live Postgres integration, stdio subprocess E2E testing, and documentation consistency review.

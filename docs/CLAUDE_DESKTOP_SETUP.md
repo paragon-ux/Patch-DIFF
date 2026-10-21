@@ -14,16 +14,27 @@ Postgres Docker container on localhost:5432
 
 Do not connect Claude Desktop to `http://127.0.0.1:8000` for this setup. The FastAPI server is useful for health checks and future HTTP API work, but the current Claude Desktop MCP path is the stdio adapter.
 
+### UTF-8 transport
+
+The adapter entry point configures stdin/stdout as strict UTF-8, including Windows pipes and environments with a different PYTHONIOENCODING value. Hosts must send UTF-8 JSON-RPC bytes. ASCII Unicode escapes remain supported; malformed UTF-8 wire bytes are not silently repaired. Escaped invalid edit strings still follow the audited domain-validation contract.
+
+When running an older revision without the G02 fix, add `"PYTHONIOENCODING": "utf-8"` to the MCP server environment. Without it, literal Unicode requests can be accepted with incorrectly decoded text; this was reproduced as input corruption rather than a stdout crash. The workaround remains compatible with fixed revisions.
+
+Restart or refresh the server through the host after command/environment changes, then verify the connection. Claude Desktop restart steps appear below; other hosts have their own refresh lifecycle.
+
 ## 1. Start Postgres And Run Migrations
 
 From the Patch-DIFF repo root:
 
 ```powershell
 docker compose up -d postgres
+$env:PYTHONPATH = "backend"
 .\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
 ```
 
-You do not need to run `uvicorn` for the existing Claude Desktop MCP tools. Claude Desktop launches `app.mcp.external_adapter` itself.
+You do not need to run `uvicorn` for the Claude Desktop MCP tools. Claude Desktop launches `app.mcp.external_adapter` directly.
+
+Ensure migrations `20260510_0001` and `20261020_0002` are applied so the typed transaction ledger columns and request idempotency index exist.
 
 ## 2. Smoke Test The Adapter
 
@@ -92,13 +103,11 @@ Replace paths if your repo lives somewhere else:
 }
 ```
 
-The `"type": "stdio"` field is included to make the transport explicit. If an older Claude Desktop build rejects that field, remove only `"type": "stdio"` and keep `command`, `args`, and `env`.
+The `"type": "stdio"` field makes the transport explicit. If an older Claude Desktop build rejects that field, remove only `"type": "stdio"` and keep `command`, `args`, and `env`.
 
 ## 5. Restart Claude Desktop
 
-Fully quit Claude Desktop, then reopen it.
-
-On Windows, make sure Claude Desktop is not just minimized to the tray. Quit it completely before reopening.
+Fully quit Claude Desktop, then reopen it. On Windows, make sure Claude Desktop is not just minimized to the tray. Quit it completely before reopening.
 
 ## 6. Verify Tools In Claude Desktop
 
@@ -108,20 +117,15 @@ Open a new chat and check the MCP/connectors UI:
 + button near the message box, labeled "+" -> Connectors
 ```
 
-You should see `patchdiff` and tools such as:
+You should see `patchdiff` and the full modernized tool surface:
 
-```text
-patchdiff_handle_upload
-patchdiff_initialize_target
-patchdiff_build_prompt_context
-patchdiff_submit_pdcp
-patchdiff_get_target
-patchdiff_export_target
-patchdiff_save
-patchdiff_replay
-```
+- **Target lifecycle**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
+- **Authoritative reads & exact search**: `patchdiff_read_target`, `patchdiff_find_occurrences`
+- **Guarded edit submission**: `patchdiff_submit_edits` (primary typed transaction format, `patchdiff-tx/1`), `patchdiff_submit_pdcp` (legacy `.pdcp` format)
+- **Checkpoints, replay & audit**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
+- **Context preview & legacy wrappers**: `patchdiff_build_prompt_context` (bounded prefix preview), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 
-If the server fails to start, check Claude Desktop's Developer settings and MCP logs.
+For guidance on how the host/model interacts with these tools (reading before proposing, supplying guards, handling rejections with retry lineage, and client request idempotency), see [HOST_INTEGRATION_GUIDE.md](HOST_INTEGRATION_GUIDE.md).
 
 ## Important Gotcha
 
@@ -148,25 +152,3 @@ The safer Claude Desktop config is:
 ```
 
 That avoids the common failure where Claude Desktop launches global Python but PatchDIFF dependencies only exist in the virtual environment.
-
-## Bottom Line
-
-Use the stdio config, not `localhost:8000`:
-
-```json
-{
-  "mcpServers": {
-    "patchdiff": {
-      "type": "stdio",
-      "command": "C:\\ABSOLUTE\\PATH\\TO\\Patch-DIFF\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "app.mcp.external_adapter"],
-      "env": {
-        "PYTHONPATH": "C:\\ABSOLUTE\\PATH\\TO\\Patch-DIFF\\backend",
-        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff"
-      }
-    }
-  }
-}
-```
-
-Postgres must be running, migrations must be applied, and Claude Desktop will launch the adapter process itself.

@@ -1,354 +1,129 @@
 ---
 name: patchdiff-persistence-replay-save
-description: Use when implementing or reviewing Postgres persistence, Docker Compose development, Alembic migrations, append-only logs, commit guards, editing cycles, SAVE, snapshots, and deterministic replay.
+description: Use when implementing, reviewing, or testing Postgres persistence, Docker Compose setup, Alembic migrations, append-only logs, row-locking concurrency guards, editing cycles, SAVE snapshots, and profile-dispatched deterministic replay.
 ---
 
-# PatchDIFF Persistence, Replay, And SAVE Skill
+# PatchDIFF Persistence, Replay, and SAVE Skill
 
-## Storage Backend
+## Persistence Architecture
 
-The MVP uses Postgres.
+Postgres is PatchDIFF's single source of truth for managed target content, transaction attempts, manifest history, and snapshots.
 
-Do not use SQLite as the MVP persistence backend.
-
-SQLite may be used only for isolated pure runtime experiments that do not exercise persistence, locking, migrations, SAVE, or replay.
-
-Local development must use Docker Compose with a pinned Postgres version.
-
-Persistence must preserve cloud-equivalent semantics:
-
-- atomic commit
-- row-level locking
-- target version/hash guards
-- append-only PDCP log
-- accepted-only manifest ledger
-- append-only snapshots
-- deterministic replay
-- editing-cycle support for SAVE
-
-## Required Tables
-
-Required Postgres tables:
-
-- `users`
-- `projects`
-- `project_memberships`
-- `cloud_target_files`
-- `current_pdcp_files`
-- `append_only_pdcp_logs`
-- `append_only_manifest_ledger`
-- `target_snapshots`
-- `editing_cycles`
-
-Use PDCP terminology.
-
-Avoid “program file” terminology unless explicitly aliasing it to declarative PDCP transaction files.
-
-## cloud_target_files
-
-Stores current canonical target state.
-
-Required fields include:
-
-- `target_file_id`
-- `project_id`
-- `filename`
-- `content_type`
-- `current_content`
-- `current_hash`
-- `version`
-- `active_editing_cycle_id`
-- `created_at`
-- `updated_at`
-
-The target row is the authoritative current state.
-
-## current_pdcp_files
-
-Stores active-session pending/display PDCP state.
-
-Required fields include:
-
-- `pdcp_file_id`
-- `target_file_id`
-- `content`
-- `status`
-- `created_at`
-- `updated_at`
-
-This table is not authoritative protocol history.
-
-It may be overwritten.
-
-Replay must never depend on `current_pdcp_files`.
-
-## append_only_pdcp_logs
-
-Stores accepted and rejected PDCP attempts.
-
-Required fields include:
-
-- `pdcp_log_id`
-- `target_file_id`
-- `editing_cycle_id`
-- `pdcp_content`
-- `protocol_version`
-- `runtime_version`
-- `status`
-- `failure_reason`
-- `failure_detail`
-- `failed_change_id`
-- `before_hash`
-- `after_hash`
-- `created_at`
-
-Optional regeneration-linkage fields:
-
-- `parent_pdcp_log_id`
-- `regeneration_attempt`
-- `regeneration_source`
-
-This table is append-only.
-
-Rejected attempts must remain visible.
-
-Accepted attempts must not erase rejected attempts.
-
-## append_only_manifest_ledger
-
-Stores accepted semantic manifest entries only.
-
-Required fields include:
-
-- `manifest_entry_id`
-- `target_file_id`
-- `editing_cycle_id`
-- `pdcp_log_id`
-- `change_id`
-- `intent`
-- `input_state`
-- `output_state`
-- `affected_region`
-- `user_visible_change`
-- `risk`
-- `created_at`
-
-This table is append-only.
-
-Only accepted PDCP transactions append manifest ledger entries.
-
-Rejected PDCP manifests must not be appended to the accepted manifest ledger.
-
-## target_snapshots
-
-Stores initial snapshots and SAVE checkpoints.
-
-Required fields include:
-
-- `snapshot_id`
-- `target_file_id`
-- `editing_cycle_id`
-- `content_hash`
-- `content`
-- `version`
-- `reason`
-- `created_at`
-
-This table is append-only.
-
-Snapshots may accelerate replay later, but the accepted PDCP log remains the authoritative operational history.
-
-## editing_cycles
-
-Stores active and closed editing cycles.
-
-Required fields include:
-
-- `editing_cycle_id`
-- `target_file_id`
-- `status`
-- `started_at`
-- `closed_at`
-- `save_snapshot_id`
-
-Allowed status values:
-
-- `active`
-- `closed`
-
-Each target must have exactly one active editing cycle.
-
-## Atomic Accepted Commit
-
-Accepted PDCP commit must be one Postgres transaction.
-
-Required accepted flow:
+Target mutations require row-level locking:
 
 ```text
-BEGIN
-lock target row FOR UPDATE
-verify expected version/hash
-simulate PDCP in memory
-update target content/hash/version
-insert accepted PDCP log
-insert accepted manifest ledger entries
-COMMIT
+Incoming submit
+  -> BEGIN TRANSACTION
+  -> SELECT ... FROM cloud_target_files WHERE target_file_id = :id FOR UPDATE
+  -> Check client_request_id idempotency in append_only_pdcp_logs
+  -> Check version / hash concurrency guards
+  -> Apply transaction deterministically in memory
+  -> If accepted:
+       UPDATE cloud_target_files (current_content, current_version, current_hash)
+       INSERT INTO append_only_pdcp_logs (status='accepted')
+       INSERT INTO append_only_manifest_ledger (with origin and derived_json)
+     If rejected:
+       INSERT INTO append_only_pdcp_logs (status='rejected', failure_reason)
+  -> COMMIT
 ```
 
-No committed target state may exist without a corresponding accepted PDCP log entry.
+Target mutation is strictly atomic: all edits succeed or none do. Rejected attempts are durably logged.
 
-No accepted manifest ledger entry may exist without a corresponding accepted PDCP log entry.
+## Database Migrations
 
-## Rejected Transaction Persistence
+Schema migrations are managed by Alembic in `backend/app/migrations/`:
 
-Rejected PDCP flow:
+1. `20260510_0001_initial_schema.py`:
+   - `cloud_target_files` (managed targets)
+   - `append_only_pdcp_logs`
+   - `append_only_manifest_ledger`
+   - `editing_cycles`
+   - `target_snapshots`
+2. `20261020_0002_typed_ledger.py`:
+   - Adds `client_request_id` TEXT NULL (1–128 printable ASCII characters without whitespace) and `request_fingerprint` (VARCHAR(64)) to `append_only_pdcp_logs`.
+   - Adds partial unique index `uq_pdcp_logs_target_client_request_id` where `client_request_id IS NOT NULL`.
+   - Makes `manifest_ledger` legacy prose columns nullable (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`).
+   - Adds `origin` TEXT NOT NULL (default `'pdcp_manifest'`) and `derived_json` JSONB NULL to `append_only_manifest_ledger`.
+   - Guarded downgrade: refuses to downgrade to `0001` if typed ledger rows exist (`origin = 'typed'`).
 
-```text
-BEGIN
-lock target row if target exists
-insert rejected PDCP log if possible
-do not update target
-do not insert manifest ledger entries
-COMMIT
+Migrations must always run cleanly on live Postgres:
+```powershell
+$env:PYTHONPATH = "backend"
+.\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
 ```
 
-Every rejected PDCP should record:
+## Append-Only Attempt Log (`append_only_pdcp_logs`)
 
-- `status = rejected`
-- `failure_reason`
-- `failure_detail`
-- `failed_change_id` when applicable
-- `before_hash`
-- `after_hash = null`
+Every submission (accepted or rejected) creates an append-only row:
+- `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
+- `target_file_id`: foreign key to `cloud_target_files`.
+- `protocol_version`: `'patchdiff-tx/1'` or `'0.2.3'`.
+- `runtime_version`: `'patchdiff-mvp-0.2.2'` (or historical `'patchdiff-mvp-0.1.0'`).
+- `status`: `'accepted'` or `'rejected'`.
+- `failure_reason`: canonical failure string if rejected; `None` if accepted.
+- `client_request_id`: client-supplied TEXT key for idempotency (1–128 printable ASCII characters without whitespace; `req-001` is valid, a UUID is optional).
+- `request_fingerprint`: SHA-256 hash of submission parameters.
+- `parent_pdcp_log_id`: link to predecessor log in retry lineage.
+- `before_version`, `after_version`: target version progression.
+- `before_hash`, `after_hash`: target SHA-256 progression.
+- `pdcp_content`: canonical JSON string for `patchdiff-tx/1`; raw text for `0.2.3`.
+- `pdcp_content_hash`: SHA-256 of `pdcp_content`.
 
-Rejected PDCPs must not mutate the target.
+For rejected invalid Unicode, pdcp_content contains a deterministic ASCII-escaped patchdiff-invalid-input/1 evidence envelope of the original input, not an accepted transaction. JSONB holds safe marker/path strings only. A safe request key recovers its original rejection with a domain-separated invalid-evidence fingerprint; unencodable keys remain NULL on the row and are preserved in evidence. Never write decoded surrogate/NUL text to PostgreSQL or change valid-input fingerprints. Caller-owned commit/rollback and target locks retain their usual semantics.
 
-Rejected manifests must not be appended to the accepted manifest ledger.
+Conflicting request fingerprints append independent NULL-key rejection rows carrying the submitted fingerprint and safe original-log/submitted-key diagnostics. Original keyed rows remain authoritative. Repeated conflicts are never collapsed/capped/updated/deleted. Supported concurrent recovery is tested at READ COMMITTED using actual blocked independent sessions; stronger-isolation retries belong to the owner. Caller-owned transactions remain provisional until commit and must retain locks through that boundary.
 
-## Row-Level Locking
+## Accepted-Only Manifest Ledger (`append_only_manifest_ledger`)
 
-Use Postgres row-level locking for same-target isolation.
+Only accepted transactions record rows in the manifest ledger:
+- `ledger_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
+- `origin`: `'typed'` for `patchdiff_submit_edits`, `'pdcp_manifest'` for `patchdiff_submit_pdcp` (TEXT).
+- `derived_json`: JSONB object containing exact runtime facts computed by the applier:
+  - `span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`.
+- For typed rows, legacy prose fields (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`) are `NULL` except that supplied advisory `risk` is retained.
 
-Recommended lock behavior:
+## SAVE Checkpoints & Editing Cycles
 
-```sql
-SELECT *
-FROM cloud_target_files
-WHERE target_file_id = :target_file_id
-FOR UPDATE;
+- `patchdiff_save` creates a snapshot row in `target_snapshots` and advances the active cycle in `editing_cycles`.
+- SAVE does **not** mutate target text, change target version, change target hash, or alter manifest history.
+- SAVE does not compact host context; context compaction is host-managed.
+
+## Deterministic Replay Algorithm
+
+Replay reconstructs target state strictly from initial target content plus accepted transaction history:
+
+```mermaid
+flowchart TD
+    A[Start Replay] --> B[Fetch target & initial snapshot]
+    B --> C{Initial snapshot hash matches?}
+    C -- No --> F1[Return replay_hash_mismatch]
+    C -- Yes --> D[Initialize replay buffer = snapshot content]
+    D --> E[Fetch accepted logs in log_sequence order]
+    E --> G{Has next log?}
+    G -- No --> H[Replay complete: verify final buffer against target]
+    G -- Yes --> I[Dispatch parser on protocol_version]
+    I --> J[Check log.pdcp_content_hash]
+    J -- Mismatch --> F2[Return replay_hash_mismatch]
+    J -- Match --> K[Resolve overlapping matches via runtime_version]
+    K --> L[Simulate transaction on replay buffer]
+    L --> M{Computed hash == log.after_hash?}
+    M -- No --> F3[Return replay_hash_mismatch]
+    M -- Yes --> G
+    H --> N[Report status='success', materialized_state_matches, checks]
 ```
 
-Do not allow two commits to the same target to interleave.
+### Component-Level Materialized State Checks
+The replay result provides detailed boolean verification:
+- `content_matches`: raw stored current_content equals the reconstructed canonical replay buffer; never normalize stored text before comparing.
+- `stored_hash_matches`: logged `after_hash` of final log matches current database `current_hash`.
+- `recomputed_hash_matches`: canonical_sha256 of stored current_content equals the reconstructed hash (separate from stored_hash_matches).
+- `version_matches`: final log `after_version` matches current database `current_version`.
+- `materialized_state_matches`: `true` only when all four component checks pass.
 
-Different targets should be able to commit concurrently.
+Replay uses the exact `(protocol_version, runtime_version)` recorded on each log row via `SUPPORTED_RUNTIME_PROFILES` in `backend/app/core/versions.py`. Legacy logs recorded with `patchdiff-mvp-0.1.0` replay with non-overlapping match enumeration; modern logs recorded with `patchdiff-mvp-0.2.2` replay with overlapping enumeration.
 
-## Commit Guard
+Current typed submissions record patchdiff-mvp-0.2.2. Replay explicitly retains patchdiff-mvp-0.2.1 overlapping matches with ignored singleton selectors, patchdiff-mvp-0.2.0 overlapping-match and original change-ID decoding behavior, plus the 0.1.0 non-overlapping profile. Strict new-key syntax does not prevent exact recovery of already-persisted request IDs; unknown/new invalid IDs still reject. Do not trim historical IDs or rewrite accepted history.
 
-Submit requests should include at least one of:
+The current 0.2.2 profile enforces every supplied selector even for one occurrence. All older supported profiles retain ignored singleton selectors. Resolve both profile settings in submission and replay; never repurpose a recorded profile.
 
-- `expected_target_version`
-- `expected_current_hash`
-
-Inside the database transaction, verify that the stored target still matches the version or hash used during validation.
-
-Failure behavior:
-
-```text
-request expected_target_version mismatch -> target_version_mismatch
-request expected_current_hash mismatch -> target_hash_mismatch
-stored target changes between validation and commit -> target_diverged
-```
-
-## Append-Only Rules
-
-The following are append-only:
-
-- PDCP log
-- manifest ledger
-- target snapshots
-- editing cycles
-
-Corrections must be represented by new transactions, new attempts, or new cycles, not by mutating history.
-
-Do not delete manifest ledger rows during SAVE.
-
-Do not delete PDCP log rows during SAVE.
-
-Do not make replay depend on mutable display state.
-
-## SAVE Semantics
-
-SAVE is checkpoint and active-context compaction.
-
-SAVE does not mean “write target changes.” Accepted PDCP transactions already update the target.
-
-SAVE must:
-
-- snapshot current target
-- preserve PDCP log
-- preserve manifest ledger history
-- close the current editing cycle
-- create a new active editing cycle
-- make future default manifest-ledger reads return only the new active cycle
-- optionally export current target through MCP
-
-SAVE must not delete append-only history.
-
-## SAVE Failure
-
-If SAVE fails:
-
-- target remains canonical
-- current editing cycle remains active
-- manifest ledger remains intact
-- PDCP log remains intact
-- no new active cycle is created
-
-Never clear active context before snapshot success.
-
-## Replay Inputs
-
-Replay reconstructs target state from:
-
-```text
-initial canonical target
-+ ordered accepted PDCP log entries
-```
-
-Replay must not depend on:
-
-- `current_pdcp_file`
-- manifest ledger
-- snapshots
-- current materialized target
-
-Snapshots may accelerate replay, but they are not authoritative protocol history.
-
-## Replay Algorithm
-
-```text
-1. Load initial canonical target content.
-2. For each accepted PDCP log entry in order:
-   a. parse PDCP using its protocol_version
-   b. protocol-validate PDCP
-   c. apply transaction deterministically against replay buffer
-   d. compute hash
-   e. compare computed hash to logged after_hash
-3. If all hashes match, output reconstructed target.
-```
-
-If computed hash differs from logged `after_hash`, return `replay_hash_mismatch`.
-
-Runtime application and replay must share the same parser, canonicalizer, matcher, disambiguator, and applier behavior.
-
-If runtime and replay behavior differ, treat that as a bug.
-
-## Docker Compose And Migrations
-
-The project should include Docker Compose for deterministic local Postgres.
-
-Alembic migrations should define the schema.
-
-Integration tests should run against Postgres, not SQLite.
-
-Do not claim persistence correctness from SQLite tests.
+A successful reconstruction can report materialized_state_matches=false. CRLF/bare-CR storage corruption must fail content_matches even with matching canonical hashes; replay never repairs storage.

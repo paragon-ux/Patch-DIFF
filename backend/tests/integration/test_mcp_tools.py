@@ -22,6 +22,10 @@ def test_required_tool_names_are_registered() -> None:
         "patchdiff_replay",
         "patchdiff_get_pdcp_log",
         "patchdiff_get_manifest_ledger",
+        # Added by the modernization (docs/MODERNIZATION_ARCHITECTURE.md A1/A2).
+        "patchdiff_submit_edits",
+        "patchdiff_read_target",
+        "patchdiff_find_occurrences",
     }
 
 

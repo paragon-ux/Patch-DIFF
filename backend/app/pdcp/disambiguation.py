@@ -24,18 +24,25 @@ def resolve_match_span(
     target_text: str,
     match_text: str,
     disambiguation: Mapping[str, str] | None = None,
+    *,
+    overlapping: bool = True,
+    enforce_singleton_selectors: bool = True,
 ) -> MatchSpan:
     """Resolve a MATCH payload to exactly one target span or reject canonically."""
 
     target = canonicalize_text(target_text)
-    occurrences = find_exact_occurrences(target, match_text)
+    occurrences = find_exact_occurrences(target, match_text, overlapping=overlapping)
 
     if not occurrences:
         raise MatchResolutionError(FailureReason.MATCH_ABSENT, "MATCH text was not found.")
-    if len(occurrences) == 1:
+    disambiguation = disambiguation or {}
+    if len(occurrences) == 1 and (
+        not enforce_singleton_selectors
+        or not SELECTING_DISAMBIGUATION_FIELDS.intersection(disambiguation)
+    ):
+        # Old profiles ignored even contradictory selectors on singleton matches.
         return occurrences[0]
 
-    disambiguation = disambiguation or {}
     if not SELECTING_DISAMBIGUATION_FIELDS.intersection(disambiguation):
         if disambiguation:
             raise MatchResolutionError(

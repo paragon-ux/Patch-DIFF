@@ -1,0 +1,85 @@
+{
+  "revision": "68b9c54009bf10a325a8a7cb543cccce41da275c",
+  "utc": "2026-10-20T21:25:57.166439+00:00",
+  "mode": "manual stdio subprocess + independent live Postgres inspection, outside pytest",
+  "observations": [
+    {
+      "case": "missing guard",
+      "status": "rejected",
+      "failure_reason": "context_missing",
+      "pdcp_log_id": "516cda32-6c81-4cad-b074-16c9990dc81e"
+    },
+    {
+      "case": "null guards",
+      "status": "rejected",
+      "failure_reason": "context_missing",
+      "pdcp_log_id": "b722159f-ac91-4213-9485-2c0801f91398"
+    },
+    {
+      "case": "newline hash",
+      "status": "rejected",
+      "failure_reason": "context_invalid",
+      "pdcp_log_id": "7cd85e73-98c4-4229-9245-f92e22697cb1"
+    },
+    {
+      "case": "oversized version",
+      "status": "rejected",
+      "failure_reason": "context_invalid",
+      "pdcp_log_id": "c78a613d-2b6c-4c31-bf50-718e2729d2a6"
+    },
+    {
+      "case": "blank intent",
+      "status": "rejected",
+      "failure_reason": "manifest_missing",
+      "pdcp_log_id": "43d783f1-10a5-4fdf-89fc-2e86a3447a09"
+    },
+    {
+      "case": "blank rationale",
+      "status": "rejected",
+      "failure_reason": "manifest_invalid",
+      "pdcp_log_id": "cde29d57-b4c1-4392-8d4a-c1bc4f083c12"
+    },
+    {
+      "case": "newline change ID",
+      "status": "rejected",
+      "failure_reason": "manifest_invalid",
+      "pdcp_log_id": "1d71d676-93fc-46f9-8d88-d73470dec234"
+    },
+    {
+      "case": "boolean attempt",
+      "status": "rejected",
+      "failure_reason": "context_invalid",
+      "pdcp_log_id": "20c12baa-ca0d-4a65-a150-9d5982f6b149"
+    },
+    {
+      "case": "unhashable risk",
+      "status": "rejected",
+      "failure_reason": "manifest_invalid",
+      "pdcp_log_id": "ea841040-c7a8-400d-9b11-376d928e8ffc"
+    },
+    {
+      "case": "legacy newline hash",
+      "status": "rejected",
+      "pdcp_log_id": "1ea0a6e0-6a68-4369-95c8-131da78400b6"
+    }
+  ],
+  "target_file_id": "299b4989-dc86-4548-94a1-4f8f0ed4961e",
+  "database_version": "PostgreSQL 16.3 on x86_64-pc-linux-musl, compiled by gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, 64-bit",
+  "after_rejections": {
+    "content": "alpha",
+    "version": 0,
+    "durable_rejected_logs": 10,
+    "ledger_rows": 0,
+    "newline_raw_evidence_preserved": true
+  },
+  "after_restart_and_retries": {
+    "content": "gamma",
+    "version": 2,
+    "accepted_logs": 2,
+    "rejected_logs": 10,
+    "ledger_rows": 2,
+    "original_outcome_recovered_after_restart_and_later_commit": true,
+    "replay_materialized_state_matches": true
+  },
+  "result": "PASS"
+}

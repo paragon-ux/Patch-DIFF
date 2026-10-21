@@ -16,6 +16,7 @@ from app.pdcp.models import (
     VALID_RISK_VALUES,
 )
 from app.pdcp.parser import MATCH_DELIMITER, REPLACE_DELIMITER, SEPARATOR_DELIMITER
+from app.core.input_text import invalid_text_paths, safe_input_text
 from app.storage.models import AppendOnlyManifestLedger, CloudTargetFiles
 
 
@@ -91,9 +92,19 @@ def build_prompt_context(
     user_request: str,
     context_policy: str = "relevant_spans",
 ) -> dict[str, Any]:
-    target = session.get(CloudTargetFiles, _coerce_uuid(target_file_id))
+    if invalid_text_paths({"user_request": user_request, "context_policy": context_policy}):
+        return {"status": "invalid_argument", "target_file_id": safe_input_text(target_file_id),
+                "failure_detail": "Read inputs must be UTF-8 without NUL."}
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": safe_input_text(target_file_id),
+            "failure_detail": "target_file_id is not a valid UUID.",
+        }
+    target = session.get(CloudTargetFiles, target_uuid)
     if target is None:
-        return {"status": "not_found", "target_file_id": str(target_file_id)}
+        return {"status": "not_found", "target_file_id": safe_input_text(target_file_id)}
 
     return {
         "target_file_id": str(target.target_file_id),
@@ -104,6 +115,8 @@ def build_prompt_context(
         "manifest_summary": _active_manifest_summary(session, target),
         "target_context": _target_context(target.current_content, context_policy),
         "context_policy": context_policy,
+        "target_chars": len(target.current_content),
+        "context_truncated": len(_target_context(target.current_content, context_policy)) < len(target.current_content),
         "pdcp_rules": pdcp_rules_text(
             target_file_id=target.target_file_id,
             target_type=target.target_type,
@@ -127,10 +140,13 @@ def _active_manifest_summary(session: Session, target: CloudTargetFiles) -> list
         {
             "change_id": row.change_id,
             "intent": row.intent,
+            "input_state": row.input_state,
             "output_state": row.output_state,
             "affected_region": row.affected_region,
             "user_visible_change": row.user_visible_change,
             "risk": row.risk,
+            "origin": row.origin,
+            "derived": row.derived_json,
         }
         for row in rows
     ]
@@ -139,13 +155,19 @@ def _active_manifest_summary(session: Session, target: CloudTargetFiles) -> list
 def _target_context(content: str, context_policy: str) -> str:
     if context_policy == "full":
         return content
-    # MVP relevant-span policy is deterministic and conservative: provide a bounded
-    # prefix until richer retrieval is introduced.
+    # Convenience preview only: a bounded PREFIX, not relevance retrieval. Hosts that
+    # need specific regions should use read_target / find_occurrences (authoritative
+    # reads). `context_truncated` in build_prompt_context reports when this applies.
     return content[:4000]
 
 
-def _coerce_uuid(value: uuid.UUID | str) -> uuid.UUID:
-    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
 
 
 def _minimal_pdcp_example(

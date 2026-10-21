@@ -6,6 +6,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
+from app.core.validity import ValidationStage
 from app.services.pdcp_service import submit_pdcp
 from app.services.target_service import initialize_target
 from app.storage.db import SessionLocal
@@ -276,3 +277,148 @@ def test_different_targets_are_independent_under_row_lock() -> None:
     finally:
         session1.close()
         session2.close()
+
+
+def test_submit_rejects_pending_local_direct_modifications() -> None:
+    target_id = create_target("old")
+    with SessionLocal() as session:
+        target = session.get(CloudTargetFiles, target_id)
+        assert target is not None
+        target.current_content = "unauthorized local mutation"
+        result = submit_pdcp(
+            session,
+            target_file_id=target_id,
+            pdcp_content=pdcp_for(target_id, ("old", "new")),
+            expected_target_version=0,
+        )
+        assert result.status == "rejected"
+        assert result.failure_reason is FailureReason.CONTEXT_INVALID
+        assert result.validation_stage is ValidationStage.PRECONDITION_GUARD
+        assert result.failure_detail == "Pending local direct modifications on target are not permitted."
+
+
+def test_submit_retained_stale_target_reloaded_and_rejected_after_concurrent_commit() -> None:
+    target_id = create_target("v0_initial")
+    session1 = SessionLocal()
+    session2 = SessionLocal()
+    try:
+        # Session 1 pre-loads target at version 0
+        target_s1 = session1.get(CloudTargetFiles, target_id)
+        assert target_s1 is not None
+        assert target_s1.version == 0
+
+        # Session 2 concurrently updates target to version 1 and commits
+        res2 = submit_pdcp(
+            session2,
+            target_file_id=target_id,
+            pdcp_content=pdcp_for(target_id, ("v0_initial", "v1_committed")),
+            expected_target_version=0,
+        )
+        assert res2.status == "accepted"
+        assert res2.after_version == 1
+
+        # Session 1 now submits expecting version 0
+        # select_target_for_update with populate_existing=True refreshes target_s1 to version 1
+        res1 = submit_pdcp(
+            session1,
+            target_file_id=target_id,
+            pdcp_content=pdcp_for(target_id, ("v0_initial", "v1_stale_overwrite")),
+            expected_target_version=0,
+        )
+        assert res1.status == "rejected"
+        assert res1.failure_reason in (FailureReason.TARGET_VERSION_MISMATCH, FailureReason.TARGET_DIVERGED)
+        assert target_s1.version == 1
+        assert target_s1.current_content == "v1_committed"
+    finally:
+        session1.close()
+        session2.close()
+
+
+def test_submit_preserves_caller_owned_transaction() -> None:
+    target_id = create_target("alpha")
+    with SessionLocal() as session:
+        with session.begin():
+            assert session.in_transaction()
+            result = submit_pdcp(
+                session,
+                target_file_id=target_id,
+                pdcp_content=pdcp_for(target_id, ("alpha", "beta")),
+                expected_target_version=0,
+            )
+            assert result.status == "accepted"
+            # Session must remain in transaction (service did not commit caller's transaction)
+            assert session.in_transaction()
+
+
+def test_run_002_distinguish_protocol_hash_validation_from_target_hash_applicability() -> None:
+    target_id = create_target("hello world")
+    target_uuid = uuid.UUID(str(target_id))
+
+    with SessionLocal() as session:
+        # Case 1: Conflicting header and manifest target_hash within the PDCP document
+        # This is a protocol validation error (PROTOCOL_VALIDATION stage)
+        header_hash = "0" * 64
+        manifest_hash = "1" * 64
+        conflicting_pdcp = f"""PDCP 0.2.3
+target_file_id: {target_uuid}
+target_type: text/plain
+target_hash: {header_hash}
+
+# MANIFEST
+# change_id: chg_001
+# intent: update
+# input_state: exists
+# output_state: new
+# affected_region: all
+# user_visible_change: yes
+# risk: low
+# target_hash: {manifest_hash}
+
+<<<<<<< MATCH
+hello
+=======
+hi
+>>>>>>> REPLACE"""
+
+        res_proto = submit_pdcp(
+            session,
+            target_file_id=target_id,
+            pdcp_content=conflicting_pdcp,
+        )
+        assert res_proto.status == "rejected"
+        assert res_proto.failure_reason is FailureReason.TARGET_HASH_MISMATCH
+        assert res_proto.validation_stage is ValidationStage.PROTOCOL_VALIDATION
+
+        # Case 2: Document is protocol-valid, but header target_hash does not match DB target state
+        # This is a transaction applicability error (TRANSACTION_APPLICABILITY stage)
+        mismatch_hash = "f" * 64
+        valid_doc_pdcp = f"""PDCP 0.2.3
+target_file_id: {target_uuid}
+target_type: text/plain
+target_hash: {mismatch_hash}
+
+# MANIFEST
+# change_id: chg_001
+# intent: update
+# input_state: exists
+# output_state: new
+# affected_region: all
+# user_visible_change: yes
+# risk: low
+
+<<<<<<< MATCH
+hello
+=======
+hi
+>>>>>>> REPLACE"""
+
+        res_app = submit_pdcp(
+            session,
+            target_file_id=target_id,
+            pdcp_content=valid_doc_pdcp,
+        )
+        assert res_app.status == "rejected"
+        assert res_app.failure_reason is FailureReason.TARGET_HASH_MISMATCH
+        assert res_app.validation_stage is ValidationStage.TRANSACTION_APPLICABILITY
+
+

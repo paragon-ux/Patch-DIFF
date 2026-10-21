@@ -1,0 +1,35 @@
+{
+  "workstream": "DEV-RUN-002 and connected V07 wrapper ownership",
+  "source_sha": "893301ec13ca7ae3415aa26698677686581c6d15",
+  "full_suite": {
+    "command": ".venv/Scripts/python.exe -m pytest -q -o addopts='' --disable-warnings",
+    "passed": 683,
+    "unit": 500,
+    "integration": 183,
+    "duration_seconds": 28.55,
+    "warnings": 9,
+    "stdout": "DEV-RUN-002-pytest.txt",
+    "database": "actual PostgreSQL",
+    "includes": "real stdio and isolated populated migrations"
+  },
+  "offline_evaluation": "OK: expected named delimiter difference, shared-applier verdict equivalence",
+  "manual_evidence": "DEV-RUN-002-live.json",
+  "review_corrections": [
+    "preserve historical escaped-NUL decoding",
+    "lookup-only recovery of original accepted/rejected fingerprints, including invalid parent strings",
+    "caller-owned wrapper transaction",
+    "iterative depth500 scanner",
+    "truncation marker covers shortened path previews"
+  ],
+  "new_runtime_profiles_in_this_workstream": 0,
+  "schema_migrations": 0,
+  "protected_review_files_unchanged": 12,
+  "not_complete": "stacked PR publication and remote CI pending",
+  "independent_review": {
+    "material_sha": "893301ec13ca7ae3415aa26698677686581c6d15",
+    "pure_passed": 97,
+    "direct_database_readback": true,
+    "record": "DEV-RUN-002-review.md",
+    "verdict": "fixed within reviewed scope"
+  }
+}
