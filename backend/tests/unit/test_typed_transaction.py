@@ -317,7 +317,7 @@ def test_run_001_unhashable_risk_raises_protocol_validation_error() -> None:
         assert exc_info.value.failure_reason is FailureReason.MANIFEST_INVALID
 
 
-def test_mcp_001_colon_in_change_id_and_nullable_schema() -> None:
+def test_mcp_002_colon_in_change_id_and_nullable_schema() -> None:
     # Colon is valid in change_id
     tx = parse_typed_record(record([{"match": "a", "replace": "b", "change_id": "part:01"}]))
     assert tx.edits[0].change_id == "part:01"
@@ -337,25 +337,30 @@ def test_mcp_001_colon_in_change_id_and_nullable_schema() -> None:
     assert exc2.value.failure_reason is FailureReason.MANIFEST_INVALID
 
 
-def test_mcp_002_schema_requires_guard() -> None:
-    from app.mcp.external_adapter import ExternalMCPAdapter, _input_schema_for
+def test_mcp_001_schema_requires_non_null_guard() -> None:
+    from jsonschema import Draft202012Validator
+    from app.mcp.external_adapter import ExternalMCPAdapter
 
-    schema = _input_schema_for("patchdiff_submit_edits")
-    assert "anyOf" in schema
-    assert schema["anyOf"] == [
-        {"required": ["expected_target_version"]},
-        {"required": ["expected_current_hash"]},
-    ]
+    schema = next(t["inputSchema"] for t in ExternalMCPAdapter().list_tools() if t["name"] == "patchdiff_submit_edits")
+    validator = Draft202012Validator(schema)
+    args = {"target_file_id": TARGET_ID, "intent": "Edit", "edits": [{"match": "a", "replace": "b"}]}
+    assert not validator.is_valid(args)
+    assert not validator.is_valid({**args, "expected_target_version": None})
+    assert not validator.is_valid({**args, "expected_target_version": None, "expected_current_hash": None})
+    assert validator.is_valid({**args, "expected_target_version": 0})
+    assert validator.is_valid({**args, "expected_current_hash": "a" * 64})
+    assert validator.is_valid({**args, "expected_target_version": 0, "expected_current_hash": "a" * 64})
 
-    adapter = ExternalMCPAdapter()
-    res = adapter.call_tool(
-        "patchdiff_submit_edits",
-        {
-            "target_file_id": str(uuid.uuid4()),
-            "intent": "edit without guard",
-            "edits": [{"match": "a", "replace": "b"}],
-        },
-    )
-    assert res.get("isError") is True
-    assert "At least one of expected_target_version or expected_current_hash is required" in res["content"][0]["text"]
 
+@pytest.mark.parametrize("runtime_version", ["patchdiff-mvp-0.1.0", "patchdiff-mvp-0.2.0"])
+def test_historical_decoding_retains_full_accepted_change_id(runtime_version):
+    raw = canonical_record_json(record([{"match": "a", "replace": "b", "change_id": "legacy\n"}]))
+    assert decode_record(raw, runtime_version=runtime_version).edits[0].change_id == "legacy\n"
+    with pytest.raises(ProtocolValidationError):
+        decode_record(raw)
+
+
+def test_unknown_decoding_profile_rejects():
+    from app.core.versions import UnsupportedRuntimeVersionError
+    with pytest.raises(UnsupportedRuntimeVersionError):
+        decode_record(canonical_record_json(record([{"match": "a", "replace": "b"}])), runtime_version="unknown")

@@ -20,7 +20,7 @@ from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "patchdiff-mvp"
-SERVER_VERSION = "0.2.0"
+SERVER_VERSION = "0.2.1"
 EXPECTED_TOOL_NAMES = registry.names()
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
@@ -60,13 +60,6 @@ class ExternalMCPAdapter:
         if name not in registry.names():
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
-        if name == "patchdiff_submit_edits":
-            has_ver = "expected_target_version" in args and args["expected_target_version"] is not None
-            has_hash = "expected_current_hash" in args and args["expected_current_hash"] is not None
-            if not has_ver and not has_hash:
-                return _tool_error(
-                    "Invalid arguments for patchdiff_submit_edits: At least one of expected_target_version or expected_current_hash is required."
-                )
         try:
             payload = registry.call(name, **args)
         except TypeError as exc:
@@ -157,6 +150,18 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             properties[parameter_name] = _schema_for_annotation(type_hints.get(parameter_name, parameter.annotation))
         if parameter.default is inspect.Parameter.empty:
             required.append(parameter_name)
+    # Advertise structural domains; the service still validates and audits requests.
+    for field, constraints in {
+        "expected_target_version": {"minimum": 0, "maximum": 2**63 - 1},
+        "expected_current_hash": {"pattern": r"^[0-9a-f]{64}(?![\s\S])"},
+        "attempt": {"minimum": 1, "maximum": 2**31 - 1},
+        "regeneration_attempt": {"minimum": 1, "maximum": 2**31 - 1},
+        "client_request_id": {"pattern": r"^[\x21-\x7e]{1,128}(?![\s\S])"},
+    }.items():
+        if field in properties:
+            properties[field].update(constraints)
+    if name == "patchdiff_submit_edits":
+        properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {
         "type": "object",
         "properties": properties,
@@ -166,8 +171,14 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         schema["required"] = required
     if name == "patchdiff_submit_edits":
         schema["anyOf"] = [
-            {"required": ["expected_target_version"]},
-            {"required": ["expected_current_hash"]},
+            {
+                "required": ["expected_target_version"],
+                "properties": {"expected_target_version": {"type": "integer"}},
+            },
+            {
+                "required": ["expected_current_hash"],
+                "properties": {"expected_current_hash": {"type": "string"}},
+            },
         ]
     return schema
 

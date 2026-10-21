@@ -252,7 +252,7 @@ def _decode_logged_transaction(log: AppendOnlyPdcpLogs, target: CloudTargetFiles
             )
         return parsed
     if log.protocol_version == TYPED_PROTOCOL_VERSION:
-        typed = decode_record(log.pdcp_content)
+        typed = decode_record(log.pdcp_content, runtime_version=log.runtime_version)
         if typed.target_file_id != str(target.target_file_id):
             raise ProtocolValidationError(
                 FailureReason.CONTEXT_INVALID,

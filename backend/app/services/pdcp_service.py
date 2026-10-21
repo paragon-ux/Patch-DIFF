@@ -67,7 +67,7 @@ def sanitize_expected_target_version(val: Any) -> tuple[int | None, bool]:
 def sanitize_expected_current_hash(val: Any) -> tuple[str | None, bool]:
     if val is None:
         return None, True
-    if isinstance(val, str) and bool(_HEX_64_RE.match(val)):
+    if isinstance(val, str) and bool(_HEX_64_RE.fullmatch(val)):
         return val, True
     return None, False
 
@@ -277,9 +277,24 @@ def _submit(
         before_version = target.version
         before_content = target.current_content
 
-        # Validate client_request_id syntax before lookup.
+        # Existing keys keep exact outcome recovery across stricter validation versions.
+        # Only already-persisted keys bypass new-key syntax checks, under the target lock.
+        existing_log = (
+            session.scalar(
+                select(AppendOnlyPdcpLogs).where(
+                    AppendOnlyPdcpLogs.target_file_id == target.target_file_id,
+                    AppendOnlyPdcpLogs.client_request_id == client_request_id,
+                )
+            )
+            if isinstance(client_request_id, str)
+            else None
+        )
         try:
-            validated_req_id = validate_client_request_id(client_request_id)
+            validated_req_id = (
+                existing_log.client_request_id
+                if existing_log is not None
+                else validate_client_request_id(client_request_id)
+            )
         except ProtocolValidationError as exc:
             current_pdcp = _upsert_current_pdcp(
                 session,
@@ -341,12 +356,6 @@ def _submit(
         # retried request whose first response was lost recovers its recorded terminal
         # outcome instead of failing on a now-advanced target version/hash.
         if validated_req_id is not None:
-            existing_log = session.scalar(
-                select(AppendOnlyPdcpLogs).where(
-                    AppendOnlyPdcpLogs.target_file_id == target.target_file_id,
-                    AppendOnlyPdcpLogs.client_request_id == validated_req_id,
-                )
-            )
             if existing_log is not None:
                 if existing_log.request_fingerprint == fingerprint:
                     return _reconstruct_deduplicated_result(session, target, existing_log)

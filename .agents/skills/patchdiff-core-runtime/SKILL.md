@@ -15,7 +15,7 @@ The core runtime may:
 
 - parse `patchdiff-tx/1` and `0.2.3` transaction formats
 - validate protocol structure and transaction applicability
-- enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.0`)
+- enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.1`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, and legacy `region_hint`)
 - simulate sequential `MATCH/REPLACE` operations in memory
 - compute runtime-derived `change_facts` (`span_start`, `span_end`, char lengths, SHA-256 digests)
@@ -59,11 +59,11 @@ Exact string matching operates on character code-points, case-sensitive and whit
 
 ## Match Enumeration & Overlapping Spans
 
-In `patchdiff-mvp-0.2.0`, string searching enumerates **all exact occurrences**, including overlapping matches:
+In `patchdiff-mvp-0.2.1`, string searching enumerates **all exact occurrences**, including overlapping matches:
 
 ```python
 # app/pdcp/matcher.py
-def find_all_occurrences(text: str, pattern: str, overlapping: bool = True) -> list[int]:
+def find_exact_occurrences(target_text: str, match_text: str, *, overlapping: bool = True) -> tuple[MatchSpan, ...]:
     ...
 ```
 
@@ -76,10 +76,10 @@ If pattern occurs multiple times and disambiguation is missing or fails: return 
 
 When a `MATCH` pattern occurs multiple times in the current buffer, explicit disambiguation is required:
 
-1. `occurrence_index` (0-based integer index among all matches, matching `patchdiff_find_occurrences`).
+1. `occurrence_index` (1-based integer index among all matches, matching `patchdiff_find_occurrences`).
 2. `anchor_before` (literal substring occurring anywhere preceding the intended match in the buffer).
 3. `anchor_after` (literal substring occurring anywhere following the intended match in the buffer).
-4. Legacy `region_hint` (line range hint in `0.2.3`).
+4. Legacy `region_hint` is advisory-only in `0.2.3`; it never selects a candidate. Typed edits do not accept it.
 
 Anchors are not required to be strictly adjacent to the match; they match as substrings anywhere within the preceding or following buffer text. If the disambiguator does not isolate exactly one occurrence, reject with `disambiguation_invalid`.
 
@@ -113,20 +113,19 @@ These facts are returned in `change_facts` and persisted in `append_only_manifes
 
 ## Stage-Aware Validity Reporting
 
-Validation failures are categorized by the 5 exact stages of `ValidationStage` (Contract C2):
-- `PRECONDITION_GUARD`: missing or unknown target, missing version/hash guards, invalid `expected_target_version`, `expected_current_hash`, or `attempt`.
-- `PROTOCOL_VALIDATION`: protocol decode errors, invalid JSON-RPC or JSON schema payloads, missing required fields (`target_file_id`, `intent`, `edits`, `match`, `replace`), invalid risk value, or malformed delimiters in legacy PDCP.
-- `TRANSACTION_APPLICABILITY`: `target_version_mismatch`, `target_hash_mismatch`, `target_diverged` against authoritative live target state, and internal sequential simulation applicability errors (`match_absent`, `match_ambiguous`, `disambiguation_invalid`, `sequential_match_invalid`).
-- `COMMIT_GUARD`: concurrency conflicts detected during commit (e.g., conflicting update under row lock or target locked).
-- `ACCEPTED`: all edits validated and applied atomically; transaction committed to Postgres.
+Use the actual `ValidationStage` reached (C2), not a failure-code guess. Known-target malformed attempts are durably rejected; missing/malformed target identity cannot create a target-linked attempt.
 
-The core runtime reports four validity levels (`validity_levels` in `backend/app/core/validity.py`):
-- `protocol_valid`: boolean (`True` once `PROTOCOL_VALIDATION` succeeds)
-- `transaction_valid`: boolean (`True` only when `ACCEPTED`)
-- `task_correct`: always `"not_evaluated"` (evaluated by host test runners/linters)
-- `semantic`: always `"not_evaluated"` (evaluated by host/user review)
+| Stage | Meaning on rejection | `protocol_valid` | `transaction_valid` |
+| --- | --- | --- | --- |
+| `PRECONDITION_GUARD` | Missing/unknown target, missing required guard, invalid or stale version/hash metadata before decode | `null` | `null` |
+| `PROTOCOL_VALIDATION` | Structural decode/validation, invalid attempt metadata or lineage | `false` | `null` |
+| `TRANSACTION_APPLICABILITY` | Structurally valid proposal cannot apply: absent/ambiguous/sequential match or a legacy header hash that disagrees with the live target after protocol validation | `true` | `false` |
+| `COMMIT_GUARD` | Simulation succeeded but final target-integrity guard fails | `true` | `true` |
+| `ACCEPTED` | Transaction accepted | `true` | `true` |
 
-Acceptance means protocol-valid and transaction-valid. It never claims task correctness.
+`null` means the phase was not reached, not false. Header/manifest hash inconsistency remains a protocol failure; a pre-parse hash guard mismatch remains a precondition failure. Parent lineage or attempt validation can reject before the transaction body is decoded; their stage is `PROTOCOL_VALIDATION`.
+
+`task_correct` and `semantic` always report `"not_evaluated"`. A true transaction-valid result at a failed commit guard proves simulation, not a committed update or task correctness.
 
 ## Atomic Commit Result
 

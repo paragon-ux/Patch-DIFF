@@ -11,7 +11,7 @@ $env:PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Covers pure core unit tests (`backend/tests/unit/`, 174 tests) and live Postgres + real stdio MCP subprocess integration tests (`backend/tests/integration/`, 101 tests): typed vs. PDCP equivalence, delimiter collision, overlapping-match enumeration, explicit replay profile dispatch (`0.2.3` vs `patchdiff-tx/1`, `patchdiff-mvp-0.1.0` vs `patchdiff-mvp-0.2.0`), component-level `materialized_state_checks`, `client_request_id` idempotency and lost-response outcome recovery, stage-aware `validity`, and full stdio MCP workflow.
+Covers pure core unit tests (`backend/tests/unit/`, 181 tests) and live Postgres + real stdio MCP subprocess integration tests (`backend/tests/integration/`, 138 tests): typed vs. PDCP equivalence, delimiter collision, overlapping-match enumeration, explicit replay profile dispatch (`0.2.3` vs `patchdiff-tx/1`, `patchdiff-mvp-0.1.0` vs `patchdiff-mvp-0.2.1`), component-level `materialized_state_checks`, `client_request_id` idempotency and lost-response outcome recovery, stage-aware `validity`, and full stdio MCP workflow.
 
 ## 2. Offline Payload & Verdict Accounting (VERIFIED)
 

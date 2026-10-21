@@ -19,6 +19,10 @@ from types import MappingProxyType
 from typing import Any, Mapping
 
 from app.core.failures import FailureReason
+from app.core.versions import (
+    LEGACY_RUNTIME_VERSION, PREVIOUS_RUNTIME_VERSION, RUNTIME_VERSION,
+    resolve_overlapping_matches,
+)
 from app.pdcp.models import (
     VALID_RISK_VALUES,
     PDCPChange,
@@ -73,12 +77,13 @@ TYPED_EDIT_JSON_SCHEMA: dict[str, Any] = {
         },
         "change_id": {
             "type": ["string", "null"],
-            "pattern": r"^[A-Za-z0-9_.:-]{1,64}$",
+            "pattern": r"^[A-Za-z0-9_.:-]{1,64}(?![\s\S])",
             "description": "Optional unique identifier within the transaction (defaults to chg_001, ...).",
         },
         "rationale": {
             "type": ["string", "null"],
             "minLength": 1,
+            "pattern": r"\S",
             "description": "Optional advisory rationale for this individual edit.",
         },
         "risk": {
@@ -131,7 +136,7 @@ def validate_client_request_id(client_request_id: Any) -> str | None:
 
     if client_request_id is None:
         return None
-    if not isinstance(client_request_id, str) or not _CLIENT_REQUEST_ID_RE.match(client_request_id):
+    if not isinstance(client_request_id, str) or not _CLIENT_REQUEST_ID_RE.fullmatch(client_request_id):
         raise _error(
             FailureReason.CONTEXT_INVALID,
             "client_request_id must be 1..128 printable ASCII characters without whitespace.",
@@ -171,18 +176,27 @@ def canonical_record_json(record: Mapping[str, Any]) -> str:
     )
 
 
-def decode_record(text: str) -> TypedTransaction:
-    """Decode a persisted record (replay path). Applies the same validation as submit."""
+def decode_record(text: str, *, runtime_version: str = RUNTIME_VERSION) -> TypedTransaction:
+    """Decode recorded history under its explicit runtime validation profile."""
+
+    resolve_overlapping_matches(runtime_version)  # Reject unknown profiles before decoding.
 
     try:
         record = json.loads(text)
     except json.JSONDecodeError as exc:
         raise _error(FailureReason.CONTEXT_INVALID, f"Typed record is not valid JSON: {exc.msg}.") from exc
-    return parse_typed_record(record)
+    return _parse_typed_record(
+        record, legacy_change_ids=runtime_version in {LEGACY_RUNTIME_VERSION, PREVIOUS_RUNTIME_VERSION},
+    )
 
 
 def parse_typed_record(record: Any) -> TypedTransaction:
     """Validate an untrusted record and return the typed transaction."""
+
+    return _parse_typed_record(record, legacy_change_ids=False)
+
+
+def _parse_typed_record(record: Any, *, legacy_change_ids: bool) -> TypedTransaction:
 
     if not isinstance(record, Mapping):
         raise _error(FailureReason.CONTEXT_INVALID, "Typed transaction must be an object.")
@@ -210,7 +224,7 @@ def parse_typed_record(record: Any) -> TypedTransaction:
         raise _error(FailureReason.CONTEXT_INVALID, "expected_target_version must be a non-negative integer.")
 
     expected_hash = record.get("expected_current_hash")
-    if expected_hash is not None and (not isinstance(expected_hash, str) or not _SHA256_RE.match(expected_hash)):
+    if expected_hash is not None and (not isinstance(expected_hash, str) or not _SHA256_RE.fullmatch(expected_hash)):
         raise _error(FailureReason.CONTEXT_INVALID, "expected_current_hash must be lowercase SHA-256 hex.")
 
     intent = record.get("intent")
@@ -228,7 +242,7 @@ def parse_typed_record(record: Any) -> TypedTransaction:
     edits: list[TypedEdit] = []
     seen_ids: set[str] = set()
     for index, raw in enumerate(raw_edits, start=1):
-        edit = _parse_edit(raw, index)
+        edit = _parse_edit(raw, index, legacy_change_ids=legacy_change_ids)
         if edit.change_id in seen_ids:
             raise _error(FailureReason.MANIFEST_INVALID, "Duplicate change_id.", edit.change_id)
         seen_ids.add(edit.change_id)
@@ -281,14 +295,16 @@ def to_parsed_transaction(transaction: TypedTransaction, *, target_type: str) ->
     )
 
 
-def _parse_edit(raw: Any, index: int) -> TypedEdit:
+def _parse_edit(raw: Any, index: int, *, legacy_change_ids: bool) -> TypedEdit:
     default_id = f"chg_{index:03d}"
     if not isinstance(raw, Mapping):
         raise _error(FailureReason.MANIFEST_INVALID, "Each edit must be an object.", default_id)
 
     raw_id = raw.get("change_id")
     change_id = default_id if raw_id is None else raw_id
-    if not isinstance(change_id, str) or not _CHANGE_ID_RE.match(change_id):
+    # Historical profiles preserve accepted IDs byte-for-byte; new proposals are strict.
+    match_id = _CHANGE_ID_RE.match if legacy_change_ids else _CHANGE_ID_RE.fullmatch
+    if not isinstance(change_id, str) or not match_id(change_id):
         raise _error(FailureReason.MANIFEST_INVALID, "change_id must match [A-Za-z0-9_.:-]{1,64}.", default_id)
 
     unknown = set(raw) - _EDIT_KEYS

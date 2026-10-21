@@ -259,6 +259,34 @@ def test_real_stdio_subprocess_mcp_full_modernized_workflow() -> None:
         target_id = uploaded["target_file_id"]
         assert uploaded["version"] == 0
 
+        # Exercise malformed submissions in the real child process on a separate target.
+        from jsonschema import Draft202012Validator
+        probe = call_tool("patchdiff_initialize_target", {
+            "filename": "stdio-boundaries.txt", "content": "alpha", "content_type": "text/plain",
+        })
+        probe_id = probe["target_file_id"]
+        schema = tools_by_name["patchdiff_submit_edits"]["inputSchema"]
+        base_args = {"target_file_id": probe_id, "intent": "Update", "edits": [{"match": "alpha", "replace": "beta"}]}
+        for args in (
+            base_args,
+            {**base_args, "expected_current_hash": "a" * 64 + "\n"},
+            {**base_args, "expected_target_version": 0, "edits": [{"match": "alpha", "replace": "beta", "change_id": "section:1\n"}]},
+        ):
+            assert not Draft202012Validator(schema).is_valid(args)
+            assert call_tool("patchdiff_submit_edits", args)["status"] == "rejected"
+        legacy_rejected = call_tool("patchdiff_submit_pdcp", {
+            "target_file_id": probe_id, "pdcp_content": pdcp_for(probe_id, ("alpha", "beta")),
+            "expected_current_hash": "a" * 64 + "\n",
+        })
+        assert legacy_rejected["failure_reason"] == "context_invalid"
+        history = call_tool("patchdiff_get_pdcp_log", {"target_file_id": probe_id})
+        assert len(history["entries"]) == 4
+        assert all(row["status"] == "rejected" for row in history["entries"])
+        assert call_tool("patchdiff_get_manifest_ledger", {"target_file_id": probe_id})["entries"] == []
+        unchanged = call_tool("patchdiff_get_target", {"target_file_id": probe_id})
+        assert unchanged["current_content"] == "alpha" and unchanged["version"] == 0
+        assert call_tool("patchdiff_submit_edits", {**base_args, "expected_target_version": 0, "client_request_id": "req-001"})["status"] == "accepted"
+
         # 3. authoritative read / occurrence inspection
         read_res = call_tool("patchdiff_read_target", {"target_file_id": target_id, "start": 0, "length": 100})
         assert read_res["status"] == "ok"

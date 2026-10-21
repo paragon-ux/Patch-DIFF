@@ -28,7 +28,7 @@ PatchDIFF provides 16 tools across five functional areas:
 
 1. **Target Lifecycle**:
    - `patchdiff_handle_upload`: register uploaded file content as a target.
-   - `patchdiff_initialize_target`: create or overwrite a managed document.
+   - `patchdiff_initialize_target`: create a new managed document with a fresh target ID.
    - `patchdiff_get_target`: inspect current version, hash, length, and metadata.
    - `patchdiff_export_target`: retrieve current full text for saving/export.
 2. **Authoritative Reads & Exact Search**:
@@ -69,11 +69,11 @@ sequenceDiagram
 
 ## Request Idempotency & Lost Responses
 
-Hosts should provide `client_request_id` (a UUIDv4 string) with `patchdiff_submit_edits` and `patchdiff_submit_pdcp`.
+Hosts should provide `client_request_id` (1–128 printable ASCII characters without whitespace; a UUID is optional) with `patchdiff_submit_edits` and `patchdiff_submit_pdcp`.
 
 - When a request is received, the server checks `uq_pdcp_logs_target_client_request_id` under per-target row lock.
 - If an existing log with that `client_request_id` matches the request fingerprint, the cached response is returned immediately with `deduplicated: true`.
-- If a duplicate `client_request_id` has conflicting arguments, it is rejected with `client_request_id_conflict`.
+- If a duplicate `client_request_id` has conflicting arguments, it is rejected with `failure_reason: "context_invalid"` and `diagnostic.existing_pdcp_log_id`.
 - If a client call times out, repeating the exact call with the same `client_request_id` safely succeeds even if the first attempt committed and advanced the target version.
 
 ## Stdio Adapter Details
@@ -82,7 +82,7 @@ The stdio adapter (`backend/app/mcp/external_adapter.py`):
 - Communicates via newline-delimited JSON-RPC over `stdin` and `stdout`.
 - Advertises the full schema of all tools in `tools/list`, including `TYPED_EDIT_JSON_SCHEMA` for `patchdiff_submit_edits`.
 - Validates JSON-RPC `params`: if `params` is provided and is not a JSON object, it returns error `-32602` (`Invalid params: params must be an object`).
-- Pass-through execution: delegates tool execution to `registry.call(...)` and returns standard JSON-RPC response or `-32603` internal error.
+- Pass-through execution: delegates tool execution to `registry.call(...)` and wraps domain payloads as tool results; handler failures return tool results with `isError: true`. JSON-RPC envelope errors use their own RPC error responses.
 
 ## Forbidden MCP Orchestration Behavior
 
