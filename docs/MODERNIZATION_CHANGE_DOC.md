@@ -1,12 +1,16 @@
 # PatchDIFF Modernization Change Document
 
-Status: **DEV-RUN-001 selector/profile remediation implemented and live-verified; independent recheck complete for this workstream; publication/CI pending. Earlier 2026-10-20 closure and 319-test records below describe their pinned revisions, not closure of the new Devin findings. Current execution is recorded under docs/remediation/; the remaining required workstreams are still open.**
+Status: **DEV-RUN-001 implemented, independently rechecked and published as PR #4 with green live CI. DEV-RUN-002 invalid-text implementation passes683 tests; manual live verification and final independent recheck pass at893301e; publication/CI pending; other required workstreams remain open. Earlier 2026-10-20 closure and 319-test records below describe their pinned revisions, not closure of the new Devin findings. Current execution is recorded under docs/remediation/; the remaining required workstreams are still open.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
 ## Current remediation: DEV-RUN-001
 
 New runtime 0.2.2 enforces all supplied selectors on singleton matches through the shared applier and locked submit path. Historical profiles preserve ignored-singleton semantics with a separate profile setting; overlap behavior and historical ID decoding are unchanged. The active core contract, architecture/profile table, MCP/PDCP fields, host typed/legacy examples and skills are reconciled. Verification and independent recheck are recorded in [the remediation workflow](remediation/WORKFLOW.md). No current whole-PR approval or completion of the other five defects is claimed.
+
+## Current remediation: DEV-RUN-002 (in progress)
+
+The pre-coding decision is [the invalid-input evidence contract](remediation/DEV-RUN-002-decision.md). It selects a small reversible ASCII JSON envelope in existing rejected-attempt TEXT fields with safe JSONB markers, target_encoding_invalid / PROTOCOL_VALIDATION and deterministic invalid-only request identity. Valid serialization/hashes/fingerprints and all historical decoding are preserved. Read/search text receives safe invalid_argument responses without edit-attempt rows. No profile, migration, protocol operation or no-log exception is introduced. Implementation,683-test live suite, manual real stdio/direct-DB exercise and independent recheck pass at893301e. See remediation/DEV-RUN-002-review.md; remote publication/CI remains to be recorded.
 
 ## 1. Coherent Change Set Summary
 

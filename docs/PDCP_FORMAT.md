@@ -65,6 +65,9 @@ Submitted over MCP via `patchdiff_submit_edits`:
 - `additionalProperties: false`: Unknown fields (such as `region_hint`) reject with `FailureReason.MANIFEST_INVALID`.
 
 ### Canonical Persisted Record
+
+Known-target invalid Unicode is rejected before normal hashing/storage. Its log uses a reversible ASCII-escaped patchdiff-invalid-input/1 evidence envelope in the same TEXT column, with a diagnostic marker; that rejected envelope is not this transaction format and must not be applied or decoded as accepted history. Valid record serialization below is unchanged.
+
 Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`. Normalized via `json.dumps(record, ensure_ascii=False, separators=(",", ":"), sort_keys=True)`.
 
 ---

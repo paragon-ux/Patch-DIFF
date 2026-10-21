@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.validity import validity_levels
 from app.mcp.server import registry
 from app.services.export_service import export_target, get_target
@@ -254,14 +255,19 @@ def patchdiff_get_pdcp_log(
     if target_uuid is None:
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "target_file_id is not a valid UUID.",
             "entries": [],
         }
+    if invalid_text_paths({"limit": limit, "before_sequence": before_sequence, "status": status,
+                           "content_hash": content_hash, "client_request_id": client_request_id,
+                           "include_content": include_content}):
+        return {"status": "invalid_argument", "target_file_id": str(target_uuid),
+                "failure_detail": "History inputs must be UTF-8 without NUL.", "entries": []}
     if before_sequence is not None and before_sequence < 1:
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "before_sequence must be >= 1.",
             "entries": [],
         }
@@ -327,18 +333,23 @@ def patchdiff_get_manifest_ledger(
     if target_uuid is None:
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "target_file_id is not a valid UUID.",
             "entries": [],
             "has_more": False,
             "next_sequence": None,
         }
+    if invalid_text_paths({"include_previous_cycles": include_previous_cycles,
+                           "limit": limit, "before_sequence": before_sequence}):
+        return {"status": "invalid_argument", "target_file_id": str(target_uuid),
+                "failure_detail": "History inputs must be UTF-8 without NUL.", "entries": [],
+                "has_more": False, "next_sequence": None}
     if before_sequence is not None and (
         isinstance(before_sequence, bool) or not isinstance(before_sequence, int) or before_sequence < 1
     ):
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "before_sequence must be >= 1.",
             "entries": [],
             "has_more": False,
@@ -347,7 +358,7 @@ def patchdiff_get_manifest_ledger(
     if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "limit must be a positive integer.",
             "entries": [],
             "has_more": False,
@@ -361,7 +372,7 @@ def patchdiff_get_manifest_ledger(
         if target is None:
             return {
                 "status": "not_found",
-                "target_file_id": str(target_file_id),
+                "target_file_id": safe_input_text(target_file_id),
                 "entries": [],
                 "has_more": False,
                 "next_sequence": None,

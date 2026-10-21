@@ -60,6 +60,8 @@ target file = Markdown / Python / YAML / JSON / prose / etc.
 
 Neither `patchdiff-tx/1` nor `.pdcp` is executable code.
 
+Submitted edit-string values and nested metadata must be valid UTF-8/PostgreSQL text before normal hashing/storage. Known-target invalid text is durably rejected through the shared locked path using reversible ASCII-escaped evidence in existing TEXT fields and safe JSONB markers. Never silently repair it or store decoded surrogate/NUL text. Valid hashes and historical fingerprints remain unchanged.
+
 ## Core Runtime Boundary
 
 PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`) is pure and deterministic.

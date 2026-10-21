@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.canonicalization import canonicalize_text
 from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
+from app.core.input_text import safe_input_text
 from app.core.result import AcceptedCoreResult
 from app.core.versions import UnsupportedRuntimeVersionError, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
@@ -51,7 +52,7 @@ def replay_target(
     if target_uuid is None:
         return ReplayResult(
             status="failed",
-            target_file_id=str(target_file_id),
+            target_file_id=safe_input_text(target_file_id),
             reconstructed_content=None,
             reconstructed_hash=None,
             current_hash=None,

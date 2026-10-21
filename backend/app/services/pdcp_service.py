@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
+from app.core.input_text import invalid_text_paths, is_persistable_text, safe_input_text
 from app.core.result import AcceptedCoreResult, RejectedCoreResult
 from app.core.validity import ValidationStage, validity_levels
 from app.core.versions import RUNTIME_VERSION, resolve_runtime_profile
@@ -143,6 +144,7 @@ def submit_pdcp(
     return _submit(
         session,
         target_uuid=target_uuid,
+        submitted_target_id=target_file_id,
         record_content=pdcp_content,
         decode=decode,
         protocol_version=SUPPORTED_PROTOCOL_VERSION,
@@ -199,7 +201,9 @@ def submit_edits(
     return _submit(
         session,
         target_uuid=target_uuid,
+        submitted_target_id=target_file_id,
         record_content=record_content,
+        raw_record=record,
         decode=decode,
         protocol_version=TYPED_PROTOCOL_VERSION,
         guard_required=True,
@@ -218,7 +222,9 @@ def _submit(
     session: Session,
     *,
     target_uuid: uuid.UUID,
+    submitted_target_id: Any = None,
     record_content: str,
+    raw_record: Any = None,
     decode: Callable[[CloudTargetFiles], tuple[ParsedPDCP, TypedTransaction | None]],
     protocol_version: str,
     guard_required: bool,
@@ -233,7 +239,47 @@ def _submit(
 ) -> SubmitPDCPResult:
     """Shared locked validate/apply/commit path for every submission format."""
 
+    original_inputs = {
+        "target_file_id": submitted_target_id,
+        "record": raw_record if raw_record is not None else record_content,
+        "expected_target_version": expected_target_version,
+        "expected_current_hash": expected_current_hash,
+        "submission_source": submission_source,
+        "parent_pdcp_log_id": parent_pdcp_log_id,
+        "regeneration_attempt": regeneration_attempt,
+        "regeneration_source": regeneration_source,
+        "client_request_id": client_request_id,
+    }
+    encoding_paths = invalid_text_paths(original_inputs)
+    encoding_diagnostic = {}
     pdcp_content = record_content
+    if encoding_paths:
+        pdcp_content = json.dumps(
+            {"evidence_format": "patchdiff-invalid-input/1", "inputs": original_inputs},
+            ensure_ascii=True, sort_keys=True, separators=(",", ":"), default=str,
+        )
+        encoding_diagnostic = {
+            "evidence_format": "patchdiff-invalid-input/1",
+            "invalid_input_paths": [path[:256] for path in encoding_paths[:20]],
+            "invalid_input_paths_truncated": len(encoding_paths) > 20 or any(
+                len(path) > 256 for path in encoding_paths[:20]
+            ),
+        }
+        # Original values remain reversible in TEXT evidence, never unsafe JSONB/columns.
+        if invalid_text_paths(expected_target_version):
+            expected_target_version = None
+        if invalid_text_paths(expected_current_hash):
+            expected_current_hash = None
+        if invalid_text_paths(regeneration_attempt):
+            regeneration_attempt = None
+        if invalid_text_paths(parent_pdcp_log_id):
+            parent_pdcp_log_id = None
+        if invalid_text_paths(regeneration_source):
+            regeneration_source = None
+        if invalid_text_paths(submission_source):
+            submission_source = "invalid_input"
+        if invalid_text_paths(client_request_id):
+            client_request_id = None
     pdcp_content_hash = canonical_sha256(pdcp_content)
 
     with _transaction(session):
@@ -286,7 +332,7 @@ def _submit(
                     AppendOnlyPdcpLogs.client_request_id == client_request_id,
                 )
             )
-            if isinstance(client_request_id, str)
+            if isinstance(client_request_id, str) and is_persistable_text(client_request_id)
             else None
         )
         try:
@@ -309,11 +355,12 @@ def _submit(
                 regeneration_source=regeneration_source,
             )
             rejection = _core_rejection(
-                exc.failure_reason,
-                exc.failure_detail,
+                FailureReason.TARGET_ENCODING_INVALID if encoding_paths else exc.failure_reason,
+                "Input strings must be UTF-8 without NUL." if encoding_paths else exc.failure_detail,
                 before_hash,
                 protocol_version=protocol_version,
                 stage=ValidationStage.PROTOCOL_VALIDATION,
+                diagnostic_extra=encoding_diagnostic,
             )
             return _persist_rejection(
                 session,
@@ -347,6 +394,7 @@ def _submit(
                 expected_target_version=expected_target_version,
                 expected_current_hash=expected_current_hash,
                 parent_pdcp_log_id=str(parent_uuid) if parent_uuid else (str(parent_pdcp_log_id) if parent_pdcp_log_id else None),
+                identity_domain="patchdiff-invalid-input/1" if encoding_paths else None,
             )
             if validated_req_id is not None
             else None
@@ -357,7 +405,31 @@ def _submit(
         # outcome instead of failing on a now-advanced target version/hash.
         if validated_req_id is not None:
             if existing_log is not None:
-                if existing_log.request_fingerprint == fingerprint:
+                matches_recorded = existing_log.request_fingerprint == fingerprint
+                if (
+                    encoding_paths
+                    and not (existing_log.diagnostic_json or {}).get("evidence_format")
+                    and is_persistable_text(record_content)
+                ):
+                    # Existing rows may include escaped NUL or an invalid parent UUID.
+                    historical_parent = original_inputs["parent_pdcp_log_id"]
+                    historical_parent_uuid, _ = _resolve_parent_log(
+                        session, target.target_file_id, historical_parent
+                    )
+                    historical_fingerprint = _compute_request_fingerprint(
+                        protocol_version=protocol_version,
+                        target_file_id=str(target.target_file_id),
+                        pdcp_content_hash=canonical_sha256(record_content),
+                        expected_target_version=original_inputs["expected_target_version"],
+                        expected_current_hash=original_inputs["expected_current_hash"],
+                        parent_pdcp_log_id=str(historical_parent_uuid) if historical_parent_uuid else (
+                            str(historical_parent) if historical_parent else None
+                        ),
+                    )
+                    matches_recorded = matches_recorded or (
+                        existing_log.request_fingerprint == historical_fingerprint
+                    )
+                if matches_recorded:
                     return _reconstruct_deduplicated_result(session, target, existing_log)
                 # Same client_request_id reused with a different proposal on the same target:
                 # reject explicitly without overwriting the original log row or mutating state.
@@ -399,6 +471,28 @@ def _submit(
             regeneration_attempt=regeneration_attempt,
             regeneration_source=regeneration_source,
         )
+
+        if encoding_paths:
+            rejection = _core_rejection(
+                FailureReason.TARGET_ENCODING_INVALID,
+                "Input strings must be UTF-8 without NUL.",
+                before_hash,
+                protocol_version=protocol_version,
+                stage=ValidationStage.PROTOCOL_VALIDATION,
+                diagnostic_extra=encoding_diagnostic,
+            )
+            return _persist_rejection(
+                session, target=target, current_pdcp=current_pdcp,
+                pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
+                expected_target_version=expected_target_version,
+                expected_current_hash=expected_current_hash,
+                submission_source=submission_source, parent_pdcp_log_id=parent_uuid,
+                regeneration_attempt=regeneration_attempt, regeneration_source=regeneration_source,
+                protocol_version=protocol_version, parsed=None, rejection=rejection,
+                before_hash=before_hash, before_version=before_version,
+                stage=ValidationStage.PROTOCOL_VALIDATION,
+                client_request_id=validated_req_id, request_fingerprint=fingerprint,
+            )
 
         if parent_error is not None:
             rejection = _core_rejection(
@@ -1086,6 +1180,7 @@ def _compute_request_fingerprint(
     expected_target_version: int | None,
     expected_current_hash: str | None,
     parent_pdcp_log_id: str | None,
+    identity_domain: str | None = None,
 ) -> str:
     envelope = {
         "protocol_version": protocol_version,
@@ -1095,6 +1190,8 @@ def _compute_request_fingerprint(
         "expected_current_hash": expected_current_hash,
         "parent_pdcp_log_id": parent_pdcp_log_id,
     }
+    if identity_domain is not None:
+        envelope["identity_domain"] = identity_domain
     return canonical_sha256(json.dumps(envelope, sort_keys=True, separators=(",", ":")))
 
 
@@ -1132,7 +1229,7 @@ def _try_coerce_uuid(value: uuid.UUID | str | None) -> uuid.UUID | None:
 def _invalid_target_uuid_result(target_file_id: Any) -> SubmitPDCPResult:
     return SubmitPDCPResult(
         status="rejected",
-        target_file_id=str(target_file_id),
+        target_file_id=safe_input_text(target_file_id),
         pdcp_log_id=None,
         before_hash=None,
         after_hash=None,

@@ -57,6 +57,8 @@ Incoming CRLF (`\r\n`) and CR (`\r`) must be normalized to LF before processing.
 
 Exact string matching operates on character code-points, case-sensitive and whitespace-sensitive.
 
+Invalid submission strings, including nested metadata, must reject before normal hashing/storage if they contain unpaired surrogates or NUL. The service stores reversible ASCII-escaped rejection evidence; pure validation helpers must not depend on SQLAlchemy or transport. Valid Unicode and valid-input canonical hashes remain unchanged.
+
 ## Match Enumeration & Overlapping Spans
 
 In `patchdiff-mvp-0.2.2`, string searching enumerates **all exact occurrences**, including overlapping matches:

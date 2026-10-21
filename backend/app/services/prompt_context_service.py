@@ -16,6 +16,7 @@ from app.pdcp.models import (
     VALID_RISK_VALUES,
 )
 from app.pdcp.parser import MATCH_DELIMITER, REPLACE_DELIMITER, SEPARATOR_DELIMITER
+from app.core.input_text import invalid_text_paths, safe_input_text
 from app.storage.models import AppendOnlyManifestLedger, CloudTargetFiles
 
 
@@ -91,16 +92,19 @@ def build_prompt_context(
     user_request: str,
     context_policy: str = "relevant_spans",
 ) -> dict[str, Any]:
+    if invalid_text_paths({"user_request": user_request, "context_policy": context_policy}):
+        return {"status": "invalid_argument", "target_file_id": safe_input_text(target_file_id),
+                "failure_detail": "Read inputs must be UTF-8 without NUL."}
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         return {
             "status": "invalid_argument",
-            "target_file_id": str(target_file_id),
+            "target_file_id": safe_input_text(target_file_id),
             "failure_detail": "target_file_id is not a valid UUID.",
         }
     target = session.get(CloudTargetFiles, target_uuid)
     if target is None:
-        return {"status": "not_found", "target_file_id": str(target_file_id)}
+        return {"status": "not_found", "target_file_id": safe_input_text(target_file_id)}
 
     return {
         "target_file_id": str(target.target_file_id),
