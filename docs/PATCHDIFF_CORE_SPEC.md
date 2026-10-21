@@ -102,7 +102,7 @@ Matching is:
 - evaluated over the progressively updated in-memory buffer.
 - non-fuzzy: no semantic, AST, token, or automatic-repair matching.
 
-### Overlapping-Match Enumeration (`patchdiff-mvp-0.2.1`)
+### Overlapping-Match Enumeration (`patchdiff-mvp-0.2.2`)
 All exact occurrences of `MATCH` across the buffer are enumerated, including overlapping occurrences (advancing the search index by 1 code point rather than `len(match)`). For example, matching `"aa"` in `"aaa"` yields 2 occurrences (spans `0..2` and `1..3`) and rejects with `FailureReason.MATCH_AMBIGUOUS` unless explicitly disambiguated.
 
 ### Legacy Non-Overlapping Replay Mode (`patchdiff-mvp-0.1.0`)
@@ -110,15 +110,17 @@ Historical logs accepted under runtime `patchdiff-mvp-0.1.0` (which advanced the
 
 ## Disambiguation
 
-When multiple exact occurrences exist, disambiguation must resolve the candidates to exactly one span:
+In current runtime 0.2.2, supplied selecting fields are conjunctive constraints for every match count, including a singleton. With multiple occurrences, selecting fields must resolve exactly one span:
 1. `occurrence_index`: 1-based index over the global list of exact occurrences in left-to-right order.
 2. `anchor_before`: exact substring that must appear before the candidate span.
 3. `anchor_after`: exact substring that must appear after the candidate span.
 4. `region_hint`: legacy advisory field supported on `.pdcp` v0.2.3 only (does not select by itself; rejected on typed path).
 
 If 0 occurrences match: reject with `FailureReason.MATCH_ABSENT`.
-If multiple occurrences exist and are not resolved to exactly one: reject with `FailureReason.MATCH_AMBIGUOUS`.
-If disambiguation parameters fail to resolve to a valid span: reject with `FailureReason.DISAMBIGUATION_INVALID`.
+If multiple occurrences exist with no selecting fields: reject with FailureReason.MATCH_AMBIGUOUS. Advisory legacy region_hint cannot select an occurrence. A singleton with no selecting fields succeeds.
+If supplied selecting constraints fail to leave exactly one span, including an out-of-range singleton index or excluding anchor: reject with FailureReason.DISAMBIGUATION_INVALID. Anchors may occur anywhere strictly before/after the selected span; adjacency is not required.
+
+Historical 0.1.0, 0.2.0 and 0.2.1 logs retain the ignored-singleton-selector behavior. Profile 0.2.2 changes that setting only; overlap enumeration and historical change-ID grammars retain their existing behavior. Unknown/missing profiles fail closed.
 
 ## Sequential In-Memory Simulation & Derived Facts
 

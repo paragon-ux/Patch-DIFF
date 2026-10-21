@@ -48,7 +48,7 @@ Remediated the incomplete prototype left by Claude Sonnet, aligned PatchDIFF wit
    - Robust UUID and lineage validation: malformed `target_file_id` returns `CONTEXT_INVALID`; missing target returns `TARGET_NOT_FOUND`; invalid parent log ID logs a `CONTEXT_INVALID` rejection on the target with `parent_pdcp_log_id = null`.
 4. **C3 (Matcher Overlap Fix, Explicit Profile Dispatch & Component Checks)**:
    - Fixed `matcher.py` to count all exact matches including overlaps (`overlapping=True`).
-   - Implemented `SUPPORTED_RUNTIME_PROFILES` with explicit dispatch for `"patchdiff-mvp-0.2.1"` (current) and `"patchdiff-mvp-0.1.0"` (legacy non-overlapping replay).
+   - Implemented `SUPPORTED_RUNTIME_PROFILES` with explicit dispatch for `"patchdiff-mvp-0.2.2"` (current) and historical profiles `"patchdiff-mvp-0.2.1"` / `"patchdiff-mvp-0.2.0"` (overlapping, singleton selectors ignored) and `"patchdiff-mvp-0.1.0"` (legacy non-overlapping replay).
    - `patchdiff_replay` validates initial snapshot hash, contiguous version chains, before/after hashes, and reports component-level `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`).
 5. **C4 (Request Idempotency & Lost-Response Recovery)**:
    - Migration `20261020_0002` added `client_request_id`, `request_fingerprint`, and partial unique index `uq_pdcp_logs_target_client_request_id`.

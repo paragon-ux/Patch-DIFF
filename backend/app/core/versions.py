@@ -1,25 +1,27 @@
-"""Runtime version identifiers and explicit replay-compatibility profiles.
-
-Single home for runtime-version compatibility so the submit service and replay
-cannot disagree about how a persisted transaction must be re-applied.
-"""
+"""Runtime identifiers and immutable replay execution profiles."""
 
 from __future__ import annotations
 
-RUNTIME_VERSION = "patchdiff-mvp-0.2.1"
-PREVIOUS_RUNTIME_VERSION = "patchdiff-mvp-0.2.0"
+from dataclasses import dataclass
 
-# Logs written by this runtime enumerated MATCH candidates by skipping overlapping
-# spans. Accepted history written under it must replay identically.
+RUNTIME_VERSION = "patchdiff-mvp-0.2.2"
+PRE_SELECTOR_RUNTIME_VERSION = "patchdiff-mvp-0.2.1"
+PREVIOUS_RUNTIME_VERSION = "patchdiff-mvp-0.2.0"
 LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"
 
-# Explicit allowlist of runtime execution profiles -> overlapping_matches flag.
-# Unknown runtime versions must fail replay explicitly rather than silently
-# inheriting current matching semantics.
-SUPPORTED_RUNTIME_PROFILES: dict[str, bool] = {
-    LEGACY_RUNTIME_VERSION: False,
-    PREVIOUS_RUNTIME_VERSION: True,
-    RUNTIME_VERSION: True,
+
+@dataclass(frozen=True, slots=True)
+class RuntimeProfile:
+    overlapping_matches: bool
+    enforce_singleton_selectors: bool
+
+
+# Recorded profiles never inherit new execution semantics.
+SUPPORTED_RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
+    LEGACY_RUNTIME_VERSION: RuntimeProfile(False, False),
+    PREVIOUS_RUNTIME_VERSION: RuntimeProfile(True, False),
+    PRE_SELECTOR_RUNTIME_VERSION: RuntimeProfile(True, False),
+    RUNTIME_VERSION: RuntimeProfile(True, True),
 }
 
 
@@ -27,13 +29,8 @@ class UnsupportedRuntimeVersionError(ValueError):
     """Raised when a persisted log records an unknown runtime_version."""
 
 
-def resolve_overlapping_matches(runtime_version: str | None) -> bool:
-    """Resolve the exact MATCH enumeration profile for a persisted runtime_version.
-
-    Raises ``UnsupportedRuntimeVersionError`` for unknown or missing versions so
-    replay fails safely instead of guessing future semantics.
-    """
-
+def resolve_runtime_profile(runtime_version: str | None) -> RuntimeProfile:
+    """Resolve recorded execution semantics, refusing unknown/missing versions."""
     if runtime_version not in SUPPORTED_RUNTIME_PROFILES:
         raise UnsupportedRuntimeVersionError(
             f"Unsupported logged runtime_version: {runtime_version!r}."
@@ -41,7 +38,11 @@ def resolve_overlapping_matches(runtime_version: str | None) -> bool:
     return SUPPORTED_RUNTIME_PROFILES[runtime_version]
 
 
-def uses_overlapping_matches(runtime_version: str | None) -> bool:
-    """Return whether a supported runtime_version counts overlapping exact spans."""
+def resolve_overlapping_matches(runtime_version: str | None) -> bool:
+    """Retained convenience API for callers needing only match enumeration."""
+    return resolve_runtime_profile(runtime_version).overlapping_matches
 
+
+def uses_overlapping_matches(runtime_version: str | None) -> bool:
+    """Return whether a supported runtime counts overlapping exact spans."""
     return resolve_overlapping_matches(runtime_version)

@@ -133,7 +133,7 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `regeneration_source` | TEXT | NULLABLE | Host or policy label |
 | `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
 | `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1` or `0.2.3` |
-| `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.1`) |
+| `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.2`) |
 | `pdcp_content` | TEXT | NOT NULL | Canonical JSON (`patchdiff-tx/1`) or raw `.pdcp` |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `accepted` or `rejected` |

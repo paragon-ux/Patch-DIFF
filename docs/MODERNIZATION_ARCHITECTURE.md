@@ -131,8 +131,17 @@ flowchart LR
   - Caller transaction ownership is preserved: in a caller-owned transaction, the row lock remains held until that transaction ends.
 - **Explicit Profile Dispatch**:
   - `protocol_version`: `"0.2.3"` (parsed via `parse_pdcp` + `validate_pdcp`) or `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
-  - Runtime profiles: SUPPORTED_RUNTIME_PROFILES explicitly maps patchdiff-mvp-0.1.0 to non-overlapping matching, and both patchdiff-mvp-0.2.0 and patchdiff-mvp-0.2.1 to overlapping matching. Unknown or missing versions fail with UnsupportedRuntimeVersionError / REPLAY_PROTOCOL_INVALID.
-- **Typed decoder compatibility (DB-003)**: Current submissions record runtime version patchdiff-mvp-0.2.1 and use strict full-string ID validation. Recorded patchdiff-mvp-0.2.0 keeps overlapping matches and its original permissive change-ID grammar during replay only; supported 0.1.0 history also retains its old ID decoding and non-overlapping matching. Unknown runtime profiles fail explicitly. Legacy ID text is preserved byte-for-byte, never trimmed, and historical logs are not rewritten.
+  - Runtime profiles are immutable execution settings, with separate overlap and singleton-selector flags:
+
+    | Runtime | Overlapping matches | Enforce singleton selectors | Typed change IDs |
+    | --- | --- | --- | --- |
+    | patchdiff-mvp-0.1.0 | false | false | Historical grammar |
+    | patchdiff-mvp-0.2.0 | true | false | Historical grammar |
+    | patchdiff-mvp-0.2.1 | true | false | Strict grammar |
+    | patchdiff-mvp-0.2.2 (current) | true | true | Strict grammar |
+
+    The sole new release profile is 0.2.2, for DEV-RUN-001. Submission and replay explicitly resolve both settings. Unknown or missing versions fail with UnsupportedRuntimeVersionError / REPLAY_PROTOCOL_INVALID. Never redefine a profile after it writes durable history.
+- **Typed decoder compatibility (DB-003)**: Current submissions record runtime version patchdiff-mvp-0.2.2 and use strict full-string ID validation. Recorded patchdiff-mvp-0.2.0 keeps overlapping matches and its original permissive change-ID grammar during replay only; supported 0.1.0 history also retains its old ID decoding and non-overlapping matching. Unknown runtime profiles fail explicitly. Legacy ID text is preserved byte-for-byte, never trimmed, and historical logs are not rewritten.
 - **Persisted request-key compatibility (SVC-003)**: Under the target lock, exact existing string keys are looked up before enforcing new-key syntax. Only an already-persisted key can recover its recorded outcome or receive a fingerprint-conflict response. Fresh invalid keys reject; recovery does not normalize a legacy newline key.
 - **Integrity Checks per Replay Step**:
   1. Initial snapshot exists, belongs to `target.target_file_id`, and `canonical_sha256(canonicalize_text(initial_snapshot.content)) == initial_snapshot.content_hash`.

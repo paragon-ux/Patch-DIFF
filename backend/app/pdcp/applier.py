@@ -16,11 +16,13 @@ def apply_pdcp_transaction(
     parsed: ParsedPDCP,
     *,
     overlapping_matches: bool = True,
+    enforce_singleton_selectors: bool = True,
 ) -> AcceptedCoreResult | RejectedCoreResult:
     """Apply a parsed+validated transaction to an in-memory buffer.
 
     ``overlapping_matches=False`` selects the legacy MATCH enumeration of runtime
-    ``patchdiff-mvp-0.1.0`` and is used only to replay history written under it.
+    ``patchdiff-mvp-0.1.0``. Disabling singleton selector enforcement retains
+    the ignored-selector behavior of recorded profiles through 0.2.1.
     """
 
     original = canonicalize_text(target_text)
@@ -60,6 +62,7 @@ def apply_pdcp_transaction(
                 change.match_payload,
                 change.manifest.disambiguation,
                 overlapping=overlapping_matches,
+                enforce_singleton_selectors=enforce_singleton_selectors,
             )
         except MatchResolutionError as exc:
             reason = exc.failure_reason

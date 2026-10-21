@@ -1,8 +1,12 @@
 # PatchDIFF Modernization Change Document
 
-Status: **remaining review corrections implemented; 319 tests pass against live Postgres, including stdio and isolated populated migrations (2026-10-20). Final closure review complete; see section 6 for reviewer attribution and evidence.**
+Status: **DEV-RUN-001 selector/profile remediation in verification. Earlier 2026-10-20 closure and 319-test records below describe their pinned revisions, not closure of the new Devin findings. Current execution is recorded under docs/remediation/; the remaining required workstreams are still open.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
+
+## Current remediation: DEV-RUN-001
+
+New runtime 0.2.2 enforces all supplied selectors on singleton matches through the shared applier and locked submit path. Historical profiles preserve ignored-singleton semantics with a separate profile setting; overlap behavior and historical ID decoding are unchanged. The active core contract, architecture/profile table, MCP/PDCP fields, host typed/legacy examples and skills are reconciled. Verification and independent recheck are recorded in [the remediation workflow](remediation/WORKFLOW.md). No current whole-PR approval or completion of the other five defects is claimed.
 
 ## 1. Coherent Change Set Summary
 
@@ -13,7 +17,7 @@ PatchDIFF is modernized into a guarded transaction service with a typed primary 
 | 1 | Typed transaction input & schema | A2, A3, A6, **C1** | `patchdiff_submit_edits` accepts `intent`, `edits[]`, required guard (`expected_target_version` and/or `expected_current_hash`), optional `client_request_id`, `parent_pdcp_log_id`, `attempt`. Full item JSON Schema (`TYPED_EDIT_JSON_SCHEMA`) advertised in MCP `tools/list`. Persisted as canonical JSON with `protocol_version = "patchdiff-tx/1"`. |
 | 2 | Stage-based validity & format-specific diagnostics | A7, **C2** | `ValidationStage` (`PRECONDITION_GUARD`, `PROTOCOL_VALIDATION`, `TRANSACTION_APPLICABILITY`, `COMMIT_GUARD`, `ACCEPTED`) drives `validity_levels(...)`. Typed rejections report `format: "patchdiff-tx/1"`, `requires_new_submission: true`, and `allowed_edit_fields` / `required_edit_fields` without leaking PDCP manifest keys. |
 | 3 | Safe UUID & parent-lineage handling | **C2** | Malformed `target_file_id` returns `CONTEXT_INVALID`; nonexistent `target_file_id` returns `TARGET_NOT_FOUND`. Malformed, missing, or cross-target `parent_pdcp_log_id` logs a `CONTEXT_INVALID` rejection on the target with `parent_pdcp_log_id = null`. |
-| 4 | Matcher overlap fix & explicit replay profiles | A2, **C3** | `find_exact_occurrences` counts all exact spans (`overlapping=True`). `SUPPORTED_RUNTIME_PROFILES` maps 0.1.0 to non-overlapping matching and both 0.2.0/0.2.1 to overlapping matching, with versioned typed decoding; unknown runtime/protocol versions fail replay with `REPLAY_PROTOCOL_INVALID`. |
+| 4 | Matcher overlap fix & explicit replay profiles | A2, **C3** | `find_exact_occurrences` counts all exact spans (`overlapping=True`). `SUPPORTED_RUNTIME_PROFILES` maps 0.1.0 to non-overlapping matching and 0.2.0/0.2.1 to overlapping matching with ignored singleton selectors, and new 0.2.2 to overlapping matching with enforced singleton constraints, with versioned typed decoding; unknown runtime/protocol versions fail replay with `REPLAY_PROTOCOL_INVALID`. |
 | 5 | Replay integrity & materialized-state checks | **C3** | `replay_target` verifies initial snapshot ownership & hash, per-log target ownership, version contiguity, `before_hash`, `pdcp_content_hash`, and `after_hash`, and reports `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`). |
 | 6 | Request idempotency & lost-response recovery | A6, **C4** | `client_request_id` + `request_fingerprint` on `append_only_pdcp_logs` (`uq_pdcp_logs_target_client_request_id`). Duplicate requests recover the recorded terminal outcome (`deduplicated: true`) prior to stale-guard checks; conflicting reuse with a different payload rejects with `CONTEXT_INVALID`. |
 | 7 | Ledger schema & derived facts | A3, **C5** | Migration `20261020_0002` adds `origin` (`'pdcp_manifest'` or `'typed'`) and `derived_json` to `append_only_manifest_ledger`, relaxes legacy prose columns to nullable, and populates `derived_json` on both PDCP and typed acceptances. |
@@ -25,7 +29,7 @@ PatchDIFF is modernized into a guarded transaction service with a typed primary 
 
 | File | Role |
 | --- | --- |
-| `backend/app/core/versions.py` | `RUNTIME_VERSION = "patchdiff-mvp-0.2.1"`, `LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"`, `SUPPORTED_RUNTIME_PROFILES`, `UnsupportedRuntimeVersionError`, `resolve_overlapping_matches`. |
+| `backend/app/core/versions.py` | `RUNTIME_VERSION = "patchdiff-mvp-0.2.2"`, `LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"`, `SUPPORTED_RUNTIME_PROFILES`, `UnsupportedRuntimeVersionError`, `resolve_runtime_profile / resolve_overlapping_matches`. |
 | `backend/app/core/validity.py` | `ValidationStage` enum and stage-aware `validity_levels(status, failure_reason, stage=...)`. |
 | `backend/app/core/result.py` | `AcceptedCoreResult.change_facts`. |
 | `backend/app/pdcp/matcher.py` | `find_exact_occurrences(target_text, match_text, *, overlapping=True)`. |

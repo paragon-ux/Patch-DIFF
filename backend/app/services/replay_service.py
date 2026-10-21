@@ -13,7 +13,7 @@ from app.core.canonicalization import canonicalize_text
 from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
 from app.core.result import AcceptedCoreResult
-from app.core.versions import UnsupportedRuntimeVersionError, resolve_overlapping_matches
+from app.core.versions import UnsupportedRuntimeVersionError, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
 from app.pdcp.models import SUPPORTED_PROTOCOL_VERSION, ParsedPDCP
 from app.pdcp.parser import PDCPParseError, parse_pdcp
@@ -137,7 +137,7 @@ def replay_target(
                 )
 
             try:
-                overlapping_matches = resolve_overlapping_matches(log.runtime_version)
+                profile = resolve_runtime_profile(log.runtime_version)
             except UnsupportedRuntimeVersionError as exc:
                 return _failed(
                     target,
@@ -180,7 +180,8 @@ def replay_target(
             result = apply_pdcp_transaction(
                 buffer,
                 parsed,
-                overlapping_matches=overlapping_matches,
+                overlapping_matches=profile.overlapping_matches,
+                enforce_singleton_selectors=profile.enforce_singleton_selectors,
             )
             if not isinstance(result, AcceptedCoreResult):
                 return _failed(

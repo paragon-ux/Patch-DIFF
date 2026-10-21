@@ -61,6 +61,7 @@ Submitted over MCP via `patchdiff_submit_edits`:
 - `occurrence_index` (`integer >= 1 | null`, optional): 1-based index over exact matches.
 - `anchor_before` (`string | null`, optional): Exact substring that must precede candidate span.
 - `anchor_after` (`string | null`, optional): Exact substring that must succeed candidate span.
+- Selectors are constraints even when there is only one match. An index beyond the occurrence count or an excluding anchor rejects; combined selectors must all hold. Anchors need not be adjacent.
 - `additionalProperties: false`: Unknown fields (such as `region_hint`) reject with `FailureReason.MANIFEST_INVALID`.
 
 ### Canonical Persisted Record
@@ -127,7 +128,7 @@ The applier `apply_pdcp_transaction(target_content, parsed)`:
 1. Normalizes target content and payloads to LF.
 2. Checks header preconditions (if present).
 3. Simulates each change sequentially against the buffer:
-   - Locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.1`).
+   - Locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.2`).
    - Resolves disambiguation to exactly one span.
    - Slices buffer and splices `replace` immediately.
    - Computes `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests).
