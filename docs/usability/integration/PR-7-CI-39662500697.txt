@@ -1,0 +1,627 @@
+test	Set up job	﻿2026-10-21T19:32:18.8905030Z Current runner version: '2.338.0'
+test	Set up job	2026-10-21T19:32:18.8943975Z ##[group]Runner Image Provisioner
+test	Set up job	2026-10-21T19:32:18.8945383Z Hosted Compute Agent
+test	Set up job	2026-10-21T19:32:18.8946510Z Version: 20261015.610
+test	Set up job	2026-10-21T19:32:18.8947532Z Commit: 267fdb4e8bbec4ab5ea31367f3a00d5c480c7656
+test	Set up job	2026-10-21T19:32:18.8948918Z Build Date: 2026-10-14T17:06:54Z
+test	Set up job	2026-10-21T19:32:18.8950089Z Worker ID: {64aef36c-c932-49fb-9ebc-e651e0de3cf6}
+test	Set up job	2026-10-21T19:32:18.8951247Z Region: eastus
+test	Set up job	2026-10-21T19:32:18.8952324Z Cloud: Azure
+test	Set up job	2026-10-21T19:32:18.8953621Z ##[endgroup]
+test	Set up job	2026-10-21T19:32:18.8956169Z ##[group]Operating System
+test	Set up job	2026-10-21T19:32:18.8957305Z Ubuntu
+test	Set up job	2026-10-21T19:32:18.8958245Z 24.04.5
+test	Set up job	2026-10-21T19:32:18.8959158Z LTS
+test	Set up job	2026-10-21T19:32:18.8960029Z ##[endgroup]
+test	Set up job	2026-10-21T19:32:18.8961069Z ##[group]Runner Image
+test	Set up job	2026-10-21T19:32:18.8962082Z Image: ubuntu-24.04
+test	Set up job	2026-10-21T19:32:18.8963352Z Version: 20261018.339.1
+test	Set up job	2026-10-21T19:32:18.8965340Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261018.339/images/ubuntu/Ubuntu2404-Readme.md
+test	Set up job	2026-10-21T19:32:18.8968714Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261018.339
+test	Set up job	2026-10-21T19:32:18.8970428Z ##[endgroup]
+test	Set up job	2026-10-21T19:32:18.8972629Z ##[group]GITHUB_TOKEN Permissions
+test	Set up job	2026-10-21T19:32:18.8976040Z Contents: read
+test	Set up job	2026-10-21T19:32:18.8977258Z Metadata: read
+test	Set up job	2026-10-21T19:32:18.8978215Z Packages: read
+test	Set up job	2026-10-21T19:32:18.8979072Z ##[endgroup]
+test	Set up job	2026-10-21T19:32:18.8982378Z Secret source: Actions
+test	Set up job	2026-10-21T19:32:18.8984293Z Cache mode: write
+test	Set up job	2026-10-21T19:32:18.8985943Z Prepare workflow directory
+test	Set up job	2026-10-21T19:32:18.9650087Z Prepare all required actions
+test	Set up job	2026-10-21T19:32:18.9724539Z Getting action download info
+test	Set up job	2026-10-21T19:32:19.1587407Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+test	Set up job	2026-10-21T19:32:19.2777773Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+test	Set up job	2026-10-21T19:32:19.4857580Z Complete job name: test
+test	Initialize containers	﻿2026-10-21T19:32:19.5424838Z ##[group]Checking docker version
+test	Initialize containers	2026-10-21T19:32:19.5438338Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+test	Initialize containers	2026-10-21T19:32:19.6399681Z '1.48'
+test	Initialize containers	2026-10-21T19:32:19.6421618Z Docker daemon API version: '1.48'
+test	Initialize containers	2026-10-21T19:32:19.6422534Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+test	Initialize containers	2026-10-21T19:32:19.6628156Z '1.48'
+test	Initialize containers	2026-10-21T19:32:19.6646197Z Docker client API version: '1.48'
+test	Initialize containers	2026-10-21T19:32:19.6653781Z ##[endgroup]
+test	Initialize containers	2026-10-21T19:32:19.6657732Z ##[group]Clean up resources from previous jobs
+test	Initialize containers	2026-10-21T19:32:19.6663271Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=d9f2db"
+test	Initialize containers	2026-10-21T19:32:19.6849211Z ##[command]/usr/bin/docker network prune --force --filter "label=d9f2db"
+test	Initialize containers	2026-10-21T19:32:19.7021316Z ##[endgroup]
+test	Initialize containers	2026-10-21T19:32:19.7021928Z ##[group]Create local container network
+test	Initialize containers	2026-10-21T19:32:19.7033475Z ##[command]/usr/bin/docker network create --label d9f2db github_network_489dc1528d514173bba172d3054978b5
+test	Initialize containers	2026-10-21T19:32:19.7605803Z 3827528ed47b2e5b3e8a7664385cefbfa05e03714cd7c6a9798c68e4af5cb86b
+test	Initialize containers	2026-10-21T19:32:19.7631195Z ##[endgroup]
+test	Initialize containers	2026-10-21T19:32:19.7656782Z ##[group]Starting postgres service container
+test	Initialize containers	2026-10-21T19:32:19.7678462Z ##[command]/usr/bin/docker pull postgres:16.3-alpine
+test	Initialize containers	2026-10-21T19:32:20.0349459Z 16.3-alpine: Pulling from library/postgres
+test	Initialize containers	2026-10-21T19:32:20.1263320Z c6a83fedfae6: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1264532Z 4f325da6b465: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1265114Z 3b9c004462cc: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1265958Z b79435b3f24e: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1266980Z 826bb0ac1004: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1267895Z 877cab0f2b20: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1268477Z 8dc019278051: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1269008Z 8b290b70c03c: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1269542Z 5349cd158aa9: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1270068Z d45300484531: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1270586Z b40d58adb5bb: Pulling fs layer
+test	Initialize containers	2026-10-21T19:32:20.1271483Z 8dc019278051: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1271940Z b79435b3f24e: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1272387Z 826bb0ac1004: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1273127Z 877cab0f2b20: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1273637Z 8b290b70c03c: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1274078Z d45300484531: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1274526Z b40d58adb5bb: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1274973Z 5349cd158aa9: Waiting
+test	Initialize containers	2026-10-21T19:32:20.1546919Z 4f325da6b465: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.1548000Z 4f325da6b465: Download complete
+test	Initialize containers	2026-10-21T19:32:20.1656045Z 3b9c004462cc: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.1657443Z 3b9c004462cc: Download complete
+test	Initialize containers	2026-10-21T19:32:20.1710584Z c6a83fedfae6: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.1713369Z c6a83fedfae6: Download complete
+test	Initialize containers	2026-10-21T19:32:20.1847255Z b79435b3f24e: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.1849564Z b79435b3f24e: Download complete
+test	Initialize containers	2026-10-21T19:32:20.1896569Z 826bb0ac1004: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.1898126Z 826bb0ac1004: Download complete
+test	Initialize containers	2026-10-21T19:32:20.2137068Z 8b290b70c03c: Download complete
+test	Initialize containers	2026-10-21T19:32:20.2154416Z 8dc019278051: Download complete
+test	Initialize containers	2026-10-21T19:32:20.2397352Z 5349cd158aa9: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.2399261Z 5349cd158aa9: Download complete
+test	Initialize containers	2026-10-21T19:32:20.2440955Z d45300484531: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.2442205Z d45300484531: Download complete
+test	Initialize containers	2026-10-21T19:32:20.2667525Z b40d58adb5bb: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.2669561Z b40d58adb5bb: Download complete
+test	Initialize containers	2026-10-21T19:32:20.3160410Z c6a83fedfae6: Pull complete
+test	Initialize containers	2026-10-21T19:32:20.4272414Z 4f325da6b465: Pull complete
+test	Initialize containers	2026-10-21T19:32:20.4791530Z 3b9c004462cc: Pull complete
+test	Initialize containers	2026-10-21T19:32:20.5336825Z b79435b3f24e: Pull complete
+test	Initialize containers	2026-10-21T19:32:20.5470133Z 826bb0ac1004: Pull complete
+test	Initialize containers	2026-10-21T19:32:20.5810773Z 877cab0f2b20: Verifying Checksum
+test	Initialize containers	2026-10-21T19:32:20.5812517Z 877cab0f2b20: Download complete
+test	Initialize containers	2026-10-21T19:32:22.6718041Z 877cab0f2b20: Pull complete
+test	Initialize containers	2026-10-21T19:32:22.6889610Z 8dc019278051: Pull complete
+test	Initialize containers	2026-10-21T19:32:22.7010665Z 8b290b70c03c: Pull complete
+test	Initialize containers	2026-10-21T19:32:22.7108791Z 5349cd158aa9: Pull complete
+test	Initialize containers	2026-10-21T19:32:22.7219367Z d45300484531: Pull complete
+test	Initialize containers	2026-10-21T19:32:22.7321874Z b40d58adb5bb: Pull complete
+test	Initialize containers	2026-10-21T19:32:22.7373201Z Digest: sha256:36ed71227ae36305d26382657c0b96cbaf298427b3f1eaeb10d77a6dea3eec41
+test	Initialize containers	2026-10-21T19:32:22.7381721Z Status: Downloaded newer image for postgres:16.3-alpine
+test	Initialize containers	2026-10-21T19:32:22.7391570Z docker.io/library/postgres:16.3-alpine
+test	Initialize containers	2026-10-21T19:32:22.7459817Z ##[command]/usr/bin/docker create --name 05a79c556a5c4fbf96e7056fc67a52a7_postgres163alpine_66b8ca --label d9f2db --network github_network_489dc1528d514173bba172d3054978b5 --network-alias postgres -p 5432:5432 --health-cmd "pg_isready -U patchdiff -d patchdiff" --health-interval 5s --health-timeout 5s --health-retries 10 -e "POSTGRES_DB=patchdiff" -e "POSTGRES_USER=patchdiff" -e "POSTGRES_PASSWORD=patchdiff" -e GITHUB_ACTIONS=true -e CI=true postgres:16.3-alpine
+test	Initialize containers	2026-10-21T19:32:22.7757625Z 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Initialize containers	2026-10-21T19:32:22.7789232Z ##[command]/usr/bin/docker start 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Initialize containers	2026-10-21T19:32:23.0351351Z 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Initialize containers	2026-10-21T19:32:23.0382008Z ##[command]/usr/bin/docker ps --all --filter id=10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+test	Initialize containers	2026-10-21T19:32:23.0572292Z 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4 Up Less than a second (health: starting)
+test	Initialize containers	2026-10-21T19:32:23.0606137Z ##[command]/usr/bin/docker port 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Initialize containers	2026-10-21T19:32:23.0793843Z 5432/tcp -> 0.0.0.0:5432
+test	Initialize containers	2026-10-21T19:32:23.0794590Z 5432/tcp -> [::]:5432
+test	Initialize containers	2026-10-21T19:32:23.0861053Z ##[endgroup]
+test	Initialize containers	2026-10-21T19:32:23.0873770Z ##[group]Waiting for all services to be ready
+test	Initialize containers	2026-10-21T19:32:23.0892246Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Initialize containers	2026-10-21T19:32:23.1065778Z starting
+test	Initialize containers	2026-10-21T19:32:23.1097813Z postgres service is starting, waiting 2 seconds before checking again.
+test	Initialize containers	2026-10-21T19:32:25.1097770Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Initialize containers	2026-10-21T19:32:25.1254023Z starting
+test	Initialize containers	2026-10-21T19:32:25.1272201Z postgres service is starting, waiting 4 seconds before checking again.
+test	Initialize containers	2026-10-21T19:32:29.4806271Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Initialize containers	2026-10-21T19:32:29.4956910Z healthy
+test	Initialize containers	2026-10-21T19:32:29.4978954Z postgres service is healthy.
+test	Initialize containers	2026-10-21T19:32:29.4979701Z ##[endgroup]
+test	Run actions/checkout@v4	﻿2026-10-21T19:32:29.5376852Z ##[group]Run actions/checkout@v4
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5377518Z with:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5377773Z   repository: paragon-ux/Patch-DIFF
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5380519Z   token: ***
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5380734Z   ssh-strict: true
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5380943Z   ssh-user: git
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5381149Z   persist-credentials: true
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5381384Z   clean: true
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5381594Z   sparse-checkout-cone-mode: true
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5381847Z   fetch-depth: 1
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5382044Z   fetch-tags: false
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5382255Z   show-progress: true
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5382457Z   lfs: false
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5382658Z   submodules: false
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5383094Z   set-safe-directory: true
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5383343Z   allow-unsafe-pr-checkout: false
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5383828Z env:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5384406Z   PATCHDIFF_DATABASE_URL: ***localhost:5432/patchdiff
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5384725Z   PYTHONPATH: .:backend
+test	Run actions/checkout@v4	2026-10-21T19:32:29.5384941Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6442607Z Syncing repository: paragon-ux/Patch-DIFF
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6445399Z ##[group]Getting Git version info
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6446135Z Working directory is '/home/runner/work/Patch-DIFF/Patch-DIFF'
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6447131Z [command]/usr/bin/git version
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6528022Z git version 2.55.0
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6568477Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6576390Z Temporarily overriding HOME='/home/runner/work/_temp/28541c08-d76d-488b-bcaf-bcadebb71064' before making global git config changes
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6580864Z Adding repository directory to the temporary git global config as a safe directory
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6597895Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Patch-DIFF/Patch-DIFF
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6646764Z Deleting the contents of '/home/runner/work/Patch-DIFF/Patch-DIFF'
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6657719Z ##[group]Initializing the repository
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6663888Z [command]/usr/bin/git init /home/runner/work/Patch-DIFF/Patch-DIFF
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6793113Z hint: Using 'master' as the name for the initial branch. This default branch name
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6794604Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6795757Z hint: to use in all of your new repositories, which will suppress this warning,
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6796942Z hint: call:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6797380Z hint:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6797986Z hint: 	git config --global init.defaultBranch <name>
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6798785Z hint:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6799466Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6800414Z hint: 'development'. The just-created branch can be renamed via this command:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6801076Z hint:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6801312Z hint: 	git branch -m <name>
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6801575Z hint:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6801931Z hint: Disable this message with "git config set advice.defaultBranchName false"
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6802549Z Initialized empty Git repository in /home/runner/work/Patch-DIFF/Patch-DIFF/.git/
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6815579Z [command]/usr/bin/git remote add origin https://github.com/paragon-ux/Patch-DIFF
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6913459Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6914146Z ##[group]Disabling automatic garbage collection
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6918129Z [command]/usr/bin/git config --local gc.auto 0
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6959699Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6960349Z ##[group]Setting up auth
+test	Run actions/checkout@v4	2026-10-21T19:32:29.6967901Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+test	Run actions/checkout@v4	2026-10-21T19:32:29.7016891Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+test	Run actions/checkout@v4	2026-10-21T19:32:29.7442709Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+test	Run actions/checkout@v4	2026-10-21T19:32:29.7495705Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+test	Run actions/checkout@v4	2026-10-21T19:32:29.7759416Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+test	Run actions/checkout@v4	2026-10-21T19:32:29.7812637Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+test	Run actions/checkout@v4	2026-10-21T19:32:29.8070866Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+test	Run actions/checkout@v4	2026-10-21T19:32:29.8125732Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:29.8126260Z ##[group]Fetching the repository
+test	Run actions/checkout@v4	2026-10-21T19:32:29.8136830Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9c4ff2d7b156460e51c74f2ed8f83c3e9879801b:refs/remotes/pull/7/merge
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0769841Z From https://github.com/paragon-ux/Patch-DIFF
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0774820Z  * [new ref]         9c4ff2d7b156460e51c74f2ed8f83c3e9879801b -> pull/7/merge
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0776942Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0777773Z ##[group]Determining the checkout info
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0780450Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0788189Z [command]/usr/bin/git sparse-checkout disable
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0876958Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0926555Z ##[group]Checking out the ref
+test	Run actions/checkout@v4	2026-10-21T19:32:30.0931714Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/7/merge
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1103558Z Note: switching to 'refs/remotes/pull/7/merge'.
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1103938Z 
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1104181Z You are in 'detached HEAD' state. You can look around, make experimental
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1104693Z changes and commit them, and you can discard any commits you make in this
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1105186Z state without impacting any branches by switching back to a branch.
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1105487Z 
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1105681Z If you want to create a new branch to retain commits you create, you may
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1106208Z do so (now or later) by using -c with the switch command. Example:
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1106513Z 
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1106627Z   git switch -c <new-branch-name>
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1106828Z 
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1106936Z Or undo this operation with:
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1107124Z 
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1107224Z   git switch -
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1107384Z 
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1107623Z Turn off this advice by setting config variable advice.detachedHead to false
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1107968Z 
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1108357Z HEAD is now at 9c4ff2d Merge b041ca6336af2ae8aab07508cc4d49f227e6840c into 0d574240858ee6cc68f207476cad4ac03dc2f5c3
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1116211Z ##[endgroup]
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1181789Z [command]/usr/bin/git log -1 --format=%H
+test	Run actions/checkout@v4	2026-10-21T19:32:30.1224579Z 9c4ff2d7b156460e51c74f2ed8f83c3e9879801b
+test	Run actions/setup-python@v5	﻿2026-10-21T19:32:30.1500426Z ##[group]Run actions/setup-python@v5
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1500764Z with:
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1500980Z   python-version: 3.11
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1501217Z   check-latest: false
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1504060Z   token: ***
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1504528Z   update-environment: true
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1504783Z   allow-prereleases: false
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1505042Z   freethreaded: false
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1505249Z env:
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1505709Z   PATCHDIFF_DATABASE_URL: ***localhost:5432/patchdiff
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1506027Z   PYTHONPATH: .:backend
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.1506243Z ##[endgroup]
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.2923311Z ##[group]Installed versions
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.3029740Z (node:2703) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.3052673Z (Use `node --trace-deprecation ...` to show where the warning was created)
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.3053539Z Successfully set up CPython (3.11.17)
+test	Run actions/setup-python@v5	2026-10-21T19:32:30.3054175Z ##[endgroup]
+test	Install pinned dependencies	﻿2026-10-21T19:32:30.3285712Z ##[group]Run pip install -r requirements.lock
+test	Install pinned dependencies	2026-10-21T19:32:30.3286202Z ^[[36;1mpip install -r requirements.lock^[[0m
+test	Install pinned dependencies	2026-10-21T19:32:30.3286524Z ^[[36;1mpip install --no-deps -e .^[[0m
+test	Install pinned dependencies	2026-10-21T19:32:30.3424909Z shell: /usr/bin/bash -e {0}
+test	Install pinned dependencies	2026-10-21T19:32:30.3425281Z env:
+test	Install pinned dependencies	2026-10-21T19:32:30.3426048Z   PATCHDIFF_DATABASE_URL: ***localhost:5432/patchdiff
+test	Install pinned dependencies	2026-10-21T19:32:30.3426578Z   PYTHONPATH: .:backend
+test	Install pinned dependencies	2026-10-21T19:32:30.3426884Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Install pinned dependencies	2026-10-21T19:32:30.3427364Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib/pkgconfig
+test	Install pinned dependencies	2026-10-21T19:32:30.3427794Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Install pinned dependencies	2026-10-21T19:32:30.3428178Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Install pinned dependencies	2026-10-21T19:32:30.3428563Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Install pinned dependencies	2026-10-21T19:32:30.3428950Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib
+test	Install pinned dependencies	2026-10-21T19:32:30.3429284Z ##[endgroup]
+test	Install pinned dependencies	2026-10-21T19:32:31.4228180Z Collecting alembic==1.18.4 (from -r requirements.lock (line 1))
+test	Install pinned dependencies	2026-10-21T19:32:31.4994477Z   Downloading alembic-1.18.4-py3-none-any.whl.metadata (7.2 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.5361607Z Collecting annotated-doc==0.0.4 (from -r requirements.lock (line 2))
+test	Install pinned dependencies	2026-10-21T19:32:31.5463895Z   Downloading annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.5831635Z Collecting annotated-types==0.7.0 (from -r requirements.lock (line 3))
+test	Install pinned dependencies	2026-10-21T19:32:31.5932588Z   Downloading annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.6430258Z Collecting anyio==4.13.0 (from -r requirements.lock (line 4))
+test	Install pinned dependencies	2026-10-21T19:32:31.6556322Z   Downloading anyio-4.13.0-py3-none-any.whl.metadata (4.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.6951151Z Collecting attrs==26.1.0 (from -r requirements.lock (line 5))
+test	Install pinned dependencies	2026-10-21T19:32:31.7050089Z   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.7609483Z Collecting certifi==2026.4.22 (from -r requirements.lock (line 6))
+test	Install pinned dependencies	2026-10-21T19:32:31.7709230Z   Downloading certifi-2026.4.22-py3-none-any.whl.metadata (2.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.8160562Z Collecting click==8.4.0 (from -r requirements.lock (line 7))
+test	Install pinned dependencies	2026-10-21T19:32:31.8264987Z   Downloading click-8.4.0-py3-none-any.whl.metadata (2.6 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.8661577Z Collecting colorama==0.4.6 (from -r requirements.lock (line 8))
+test	Install pinned dependencies	2026-10-21T19:32:31.8768441Z   Downloading colorama-0.4.6-py2.py3-none-any.whl.metadata (17 kB)
+test	Install pinned dependencies	2026-10-21T19:32:31.9707253Z Collecting fastapi==0.136.1 (from -r requirements.lock (line 9))
+test	Install pinned dependencies	2026-10-21T19:32:31.9810321Z   Downloading fastapi-0.136.1-py3-none-any.whl.metadata (28 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.1768943Z Collecting greenlet==3.5.0 (from -r requirements.lock (line 10))
+test	Install pinned dependencies	2026-10-21T19:32:32.1884556Z   Downloading greenlet-3.5.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.7 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.2247943Z Collecting h11==0.16.0 (from -r requirements.lock (line 11))
+test	Install pinned dependencies	2026-10-21T19:32:32.2351466Z   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.2750665Z Collecting httpcore==1.0.9 (from -r requirements.lock (line 12))
+test	Install pinned dependencies	2026-10-21T19:32:32.2849868Z   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.3451604Z Collecting httptools==0.7.1 (from -r requirements.lock (line 13))
+test	Install pinned dependencies	2026-10-21T19:32:32.3552542Z   Downloading httptools-0.7.1-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (3.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.4027403Z Collecting httpx==0.28.1 (from -r requirements.lock (line 14))
+test	Install pinned dependencies	2026-10-21T19:32:32.4134750Z   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.4531243Z Collecting idna==3.15 (from -r requirements.lock (line 15))
+test	Install pinned dependencies	2026-10-21T19:32:32.4644275Z   Downloading idna-3.15-py3-none-any.whl.metadata (7.7 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.5025495Z Collecting iniconfig==2.3.0 (from -r requirements.lock (line 16))
+test	Install pinned dependencies	2026-10-21T19:32:32.5126237Z   Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.5500437Z Collecting jsonschema-specifications==2025.9.1 (from -r requirements.lock (line 17))
+test	Install pinned dependencies	2026-10-21T19:32:32.5600451Z   Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.6027876Z Collecting jsonschema==4.26.0 (from -r requirements.lock (line 18))
+test	Install pinned dependencies	2026-10-21T19:32:32.6127573Z   Downloading jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.6534693Z Collecting Mako==1.3.12 (from -r requirements.lock (line 19))
+test	Install pinned dependencies	2026-10-21T19:32:32.6633603Z   Downloading mako-1.3.12-py3-none-any.whl.metadata (2.9 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.7452427Z Collecting MarkupSafe==3.0.3 (from -r requirements.lock (line 20))
+test	Install pinned dependencies	2026-10-21T19:32:32.7554208Z   Downloading markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.7944135Z Collecting packaging==26.2 (from -r requirements.lock (line 21))
+test	Install pinned dependencies	2026-10-21T19:32:32.8048114Z   Downloading packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:32.8415959Z Collecting pluggy==1.6.0 (from -r requirements.lock (line 22))
+test	Install pinned dependencies	2026-10-21T19:32:32.8513116Z   Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+test	Install pinned dependencies	2026-10-21T19:32:33.0389101Z Collecting psycopg-binary==3.3.4 (from -r requirements.lock (line 23))
+test	Install pinned dependencies	2026-10-21T19:32:33.0494597Z   Downloading psycopg_binary-3.3.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.7 kB)
+test	Install pinned dependencies	2026-10-21T19:32:33.0896303Z Collecting psycopg==3.3.4 (from -r requirements.lock (line 24))
+test	Install pinned dependencies	2026-10-21T19:32:33.1000640Z   Downloading psycopg-3.3.4-py3-none-any.whl.metadata (4.3 kB)
+test	Install pinned dependencies	2026-10-21T19:32:33.2227470Z Collecting pydantic==2.13.4 (from -r requirements.lock (line 25))
+test	Install pinned dependencies	2026-10-21T19:32:33.2335445Z   Downloading pydantic-2.13.4-py3-none-any.whl.metadata (109 kB)
+test	Install pinned dependencies	2026-10-21T19:32:33.9201745Z Collecting pydantic_core==2.46.4 (from -r requirements.lock (line 26))
+test	Install pinned dependencies	2026-10-21T19:32:33.9301608Z   Downloading pydantic_core-2.46.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+test	Install pinned dependencies	2026-10-21T19:32:33.9939009Z Collecting Pygments==2.20.0 (from -r requirements.lock (line 27))
+test	Install pinned dependencies	2026-10-21T19:32:34.0041089Z   Downloading pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.0527300Z Collecting pytest==8.4.2 (from -r requirements.lock (line 28))
+test	Install pinned dependencies	2026-10-21T19:32:34.0676418Z   Downloading pytest-8.4.2-py3-none-any.whl.metadata (7.7 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.1072708Z Collecting python-dotenv==1.2.2 (from -r requirements.lock (line 29))
+test	Install pinned dependencies	2026-10-21T19:32:34.1175051Z   Downloading python_dotenv-1.2.2-py3-none-any.whl.metadata (27 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.1783233Z Collecting PyYAML==6.0.3 (from -r requirements.lock (line 30))
+test	Install pinned dependencies	2026-10-21T19:32:34.1885015Z   Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.2315077Z Collecting referencing==0.37.0 (from -r requirements.lock (line 31))
+test	Install pinned dependencies	2026-10-21T19:32:34.2415126Z   Downloading referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.5068156Z Collecting rpds-py==2026.9.1 (from -r requirements.lock (line 32))
+test	Install pinned dependencies	2026-10-21T19:32:34.5170777Z   Downloading rpds_py-2026.9.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.8485772Z Collecting SQLAlchemy==2.0.49 (from -r requirements.lock (line 33))
+test	Install pinned dependencies	2026-10-21T19:32:34.8594246Z   Downloading sqlalchemy-2.0.49-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.9104080Z Collecting starlette==1.0.0 (from -r requirements.lock (line 34))
+test	Install pinned dependencies	2026-10-21T19:32:34.9201518Z   Downloading starlette-1.0.0-py3-none-any.whl.metadata (6.3 kB)
+test	Install pinned dependencies	2026-10-21T19:32:34.9561566Z Collecting typing-inspection==0.4.2 (from -r requirements.lock (line 35))
+test	Install pinned dependencies	2026-10-21T19:32:34.9660001Z   Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.0054295Z Collecting typing_extensions==4.15.0 (from -r requirements.lock (line 36))
+test	Install pinned dependencies	2026-10-21T19:32:35.0161699Z   Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.0538123Z Collecting tzdata==2026.2 (from -r requirements.lock (line 37))
+test	Install pinned dependencies	2026-10-21T19:32:35.0652025Z   Downloading tzdata-2026.2-py2.py3-none-any.whl.metadata (1.4 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.1106830Z Collecting uvicorn==0.47.0 (from -r requirements.lock (line 38))
+test	Install pinned dependencies	2026-10-21T19:32:35.1253474Z   Downloading uvicorn-0.47.0-py3-none-any.whl.metadata (6.7 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.2230443Z Collecting watchfiles==1.2.0 (from -r requirements.lock (line 39))
+test	Install pinned dependencies	2026-10-21T19:32:35.2331791Z   Downloading watchfiles-1.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.4197601Z Collecting websockets==16.0 (from -r requirements.lock (line 40))
+test	Install pinned dependencies	2026-10-21T19:32:35.4300157Z   Downloading websockets-16.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.8 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.4823146Z Downloading alembic-1.18.4-py3-none-any.whl (263 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5024406Z Downloading annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5143035Z Downloading annotated_types-0.7.0-py3-none-any.whl (13 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5270830Z Downloading anyio-4.13.0-py3-none-any.whl (114 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5397745Z Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5520414Z Downloading certifi-2026.4.22-py3-none-any.whl (135 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5645170Z Downloading click-8.4.0-py3-none-any.whl (116 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5764083Z Downloading colorama-0.4.6-py2.py3-none-any.whl (25 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.5883148Z Downloading fastapi-0.136.1-py3-none-any.whl (117 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.6010900Z Downloading greenlet-3.5.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (615 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.6144254Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 615.2/615.2 kB 35.2 MB/s  0:00:00
+test	Install pinned dependencies	2026-10-21T19:32:35.6248431Z Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.6503278Z Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.6630908Z Downloading httptools-0.7.1-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (456 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.6772467Z Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.6891776Z Downloading idna-3.15-py3-none-any.whl (72 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7023946Z Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7142423Z Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7270530Z Downloading jsonschema-4.26.0-py3-none-any.whl (90 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7396853Z Downloading mako-1.3.12-py3-none-any.whl (78 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7515307Z Downloading markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7631478Z Downloading packaging-26.2-py3-none-any.whl (100 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7748419Z Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.7868691Z Downloading psycopg_binary-3.3.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.2 MB)
+test	Install pinned dependencies	2026-10-21T19:32:35.8135975Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 203.7 MB/s  0:00:00
+test	Install pinned dependencies	2026-10-21T19:32:35.8243773Z Downloading psycopg-3.3.4-py3-none-any.whl (213 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.8366037Z Downloading pydantic-2.13.4-py3-none-any.whl (472 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.8509524Z Downloading pydantic_core-2.46.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+test	Install pinned dependencies	2026-10-21T19:32:35.8598128Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 289.1 MB/s  0:00:00
+test	Install pinned dependencies	2026-10-21T19:32:35.8698730Z Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
+test	Install pinned dependencies	2026-10-21T19:32:35.8764231Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 231.1 MB/s  0:00:00
+test	Install pinned dependencies	2026-10-21T19:32:35.8862133Z Downloading pytest-8.4.2-py3-none-any.whl (365 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.8986046Z Downloading python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.9101264Z Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.9160119Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 806.6/806.6 kB 175.9 MB/s  0:00:00
+test	Install pinned dependencies	2026-10-21T19:32:35.9256705Z Downloading referencing-0.37.0-py3-none-any.whl (26 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.9376740Z Downloading rpds_py-2026.9.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (375 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.9504570Z Downloading sqlalchemy-2.0.49-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (3.3 MB)
+test	Install pinned dependencies	2026-10-21T19:32:35.9618198Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.3/3.3 MB 341.3 MB/s  0:00:00
+test	Install pinned dependencies	2026-10-21T19:32:35.9718944Z Downloading starlette-1.0.0-py3-none-any.whl (72 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.9837433Z Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+test	Install pinned dependencies	2026-10-21T19:32:35.9955321Z Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+test	Install pinned dependencies	2026-10-21T19:32:36.0072280Z Downloading tzdata-2026.2-py2.py3-none-any.whl (349 kB)
+test	Install pinned dependencies	2026-10-21T19:32:36.0195582Z Downloading uvicorn-0.47.0-py3-none-any.whl (71 kB)
+test	Install pinned dependencies	2026-10-21T19:32:36.0312573Z Downloading watchfiles-1.2.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (456 kB)
+test	Install pinned dependencies	2026-10-21T19:32:36.0451517Z Downloading websockets-16.0-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (184 kB)
+test	Install pinned dependencies	2026-10-21T19:32:36.2303076Z Installing collected packages: websockets, tzdata, typing_extensions, rpds-py, PyYAML, python-dotenv, Pygments, psycopg-binary, pluggy, packaging, MarkupSafe, iniconfig, idna, httptools, h11, greenlet, colorama, click, certifi, attrs, annotated-types, annotated-doc, uvicorn, typing-inspection, SQLAlchemy, referencing, pytest, pydantic_core, psycopg, Mako, httpcore, anyio, watchfiles, starlette, pydantic, jsonschema-specifications, httpx, alembic, jsonschema, fastapi
+test	Install pinned dependencies	2026-10-21T19:32:40.1441710Z 
+test	Install pinned dependencies	2026-10-21T19:32:40.1465848Z Successfully installed Mako-1.3.12 MarkupSafe-3.0.3 PyYAML-6.0.3 Pygments-2.20.0 SQLAlchemy-2.0.49 alembic-1.18.4 annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.13.0 attrs-26.1.0 certifi-2026.4.22 click-8.4.0 colorama-0.4.6 fastapi-0.136.1 greenlet-3.5.0 h11-0.16.0 httpcore-1.0.9 httptools-0.7.1 httpx-0.28.1 idna-3.15 iniconfig-2.3.0 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 packaging-26.2 pluggy-1.6.0 psycopg-3.3.4 psycopg-binary-3.3.4 pydantic-2.13.4 pydantic_core-2.46.4 pytest-8.4.2 python-dotenv-1.2.2 referencing-0.37.0 rpds-py-2026.9.1 starlette-1.0.0 typing-inspection-0.4.2 typing_extensions-4.15.0 tzdata-2026.2 uvicorn-0.47.0 watchfiles-1.2.0 websockets-16.0
+test	Install pinned dependencies	2026-10-21T19:32:40.1472433Z 
+test	Install pinned dependencies	2026-10-21T19:32:40.1473016Z [notice] A new release of pip is available: 26.2.1 -> 26.2.2
+test	Install pinned dependencies	2026-10-21T19:32:40.1473685Z [notice] To update, run: pip install --upgrade pip
+test	Install pinned dependencies	2026-10-21T19:32:40.6913514Z Obtaining file:///home/runner/work/Patch-DIFF/Patch-DIFF
+test	Install pinned dependencies	2026-10-21T19:32:40.6931034Z   Installing build dependencies: started
+test	Install pinned dependencies	2026-10-21T19:32:41.5504106Z   Installing build dependencies: finished with status 'done'
+test	Install pinned dependencies	2026-10-21T19:32:41.5510680Z   Checking if build backend supports build_editable: started
+test	Install pinned dependencies	2026-10-21T19:32:41.9152491Z   Checking if build backend supports build_editable: finished with status 'done'
+test	Install pinned dependencies	2026-10-21T19:32:41.9162449Z   Getting requirements to build editable: started
+test	Install pinned dependencies	2026-10-21T19:32:42.2398035Z   Getting requirements to build editable: finished with status 'done'
+test	Install pinned dependencies	2026-10-21T19:32:42.2407494Z   Preparing editable metadata (pyproject.toml): started
+test	Install pinned dependencies	2026-10-21T19:32:42.4348970Z   Preparing editable metadata (pyproject.toml): finished with status 'done'
+test	Install pinned dependencies	2026-10-21T19:32:42.4377568Z Building wheels for collected packages: patchdiff-mvp
+test	Install pinned dependencies	2026-10-21T19:32:42.4385740Z   Building editable for patchdiff-mvp (pyproject.toml): started
+test	Install pinned dependencies	2026-10-21T19:32:42.6565211Z   Building editable for patchdiff-mvp (pyproject.toml): finished with status 'done'
+test	Install pinned dependencies	2026-10-21T19:32:42.6571153Z   Created wheel for patchdiff-mvp: filename=patchdiff_mvp-0.1.0-0.editable-py3-none-any.whl size=1452 sha256=f5f0ffe36f7dd95cdbb41a5b6ff8dcce71a953d990074296617f2cd40882ff38
+test	Install pinned dependencies	2026-10-21T19:32:42.6573685Z   Stored in directory: /tmp/pip-ephem-wheel-cache-pv1u39p1/wheels/50/d0/76/4c8d79e305ed35c310d3af10dff904a6fe7603b83e4c4e7784
+test	Install pinned dependencies	2026-10-21T19:32:42.6593306Z Successfully built patchdiff-mvp
+test	Install pinned dependencies	2026-10-21T19:32:42.6718281Z Installing collected packages: patchdiff-mvp
+test	Install pinned dependencies	2026-10-21T19:32:42.6794965Z Successfully installed patchdiff-mvp-0.1.0
+test	Install pinned dependencies	2026-10-21T19:32:42.6804596Z 
+test	Install pinned dependencies	2026-10-21T19:32:42.6805062Z [notice] A new release of pip is available: 26.2.1 -> 26.2.2
+test	Install pinned dependencies	2026-10-21T19:32:42.6805580Z [notice] To update, run: pip install --upgrade pip
+test	Migrate (upgrade, downgrade one step, upgrade again)	﻿2026-10-21T19:32:42.7563368Z ##[group]Run alembic -c backend/app/migrations/alembic.ini upgrade head
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7563991Z ^[[36;1malembic -c backend/app/migrations/alembic.ini upgrade head^[[0m
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7564464Z ^[[36;1malembic -c backend/app/migrations/alembic.ini downgrade -1^[[0m
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7564918Z ^[[36;1malembic -c backend/app/migrations/alembic.ini upgrade head^[[0m
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7620588Z shell: /usr/bin/bash -e {0}
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7620882Z env:
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7621581Z   PATCHDIFF_DATABASE_URL: ***localhost:5432/patchdiff
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7621945Z   PYTHONPATH: .:backend
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7622269Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7623074Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib/pkgconfig
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7623570Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7623993Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7624429Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7624940Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:42.7625327Z ##[endgroup]
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:43.3073420Z INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:43.3074485Z INFO  [alembic.runtime.migration] Will assume transactional DDL.
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:43.3282219Z INFO  [alembic.runtime.migration] Running upgrade  -> 20260510_0001, initial PatchDIFF MVP schema
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:43.4426228Z INFO  [alembic.runtime.migration] Running upgrade 20260510_0001 -> 20261020_0002, typed transaction ledger and request deduplication support
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:44.0544057Z INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:44.0544785Z INFO  [alembic.runtime.migration] Will assume transactional DDL.
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:44.0646240Z INFO  [alembic.runtime.migration] Running downgrade 20261020_0002 -> 20260510_0001, typed transaction ledger and request deduplication support
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:44.6490561Z INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:44.6491470Z INFO  [alembic.runtime.migration] Will assume transactional DDL.
+test	Migrate (upgrade, downgrade one step, upgrade again)	2026-10-21T19:32:44.6589558Z INFO  [alembic.runtime.migration] Running upgrade 20260510_0001 -> 20261020_0002, typed transaction ledger and request deduplication support
+test	Unit tests	﻿2026-10-21T19:32:44.7912025Z ##[group]Run pytest backend/tests/unit
+test	Unit tests	2026-10-21T19:32:44.7912397Z ^[[36;1mpytest backend/tests/unit^[[0m
+test	Unit tests	2026-10-21T19:32:44.7966614Z shell: /usr/bin/bash -e {0}
+test	Unit tests	2026-10-21T19:32:44.7966938Z env:
+test	Unit tests	2026-10-21T19:32:44.7967725Z   PATCHDIFF_DATABASE_URL: ***localhost:5432/patchdiff
+test	Unit tests	2026-10-21T19:32:44.7968358Z   PYTHONPATH: .:backend
+test	Unit tests	2026-10-21T19:32:44.7968706Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Unit tests	2026-10-21T19:32:44.7969216Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib/pkgconfig
+test	Unit tests	2026-10-21T19:32:44.7969731Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Unit tests	2026-10-21T19:32:44.7970182Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Unit tests	2026-10-21T19:32:44.7970631Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Unit tests	2026-10-21T19:32:44.7971084Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib
+test	Unit tests	2026-10-21T19:32:44.7971465Z ##[endgroup]
+test	Unit tests	2026-10-21T19:32:46.5088638Z ........................................................................ [ 14%]
+test	Unit tests	2026-10-21T19:32:46.6123182Z ........................................................................ [ 28%]
+test	Unit tests	2026-10-21T19:32:46.6646490Z ........................................................................ [ 42%]
+test	Unit tests	2026-10-21T19:32:46.7305520Z ........................................................................ [ 57%]
+test	Unit tests	2026-10-21T19:32:46.7951078Z ........................................................................ [ 71%]
+test	Unit tests	2026-10-21T19:32:47.8697310Z ........................................................................ [ 85%]
+test	Unit tests	2026-10-21T19:32:48.2897839Z ........................................................................ [100%]
+test	Unit tests	2026-10-21T19:32:48.2898874Z =============================== warnings summary ===============================
+test	Unit tests	2026-10-21T19:32:48.2900225Z backend/tests/unit/test_migration_0002_offline.py::test_single_head_is_the_typed_ledger_revision
+test	Unit tests	2026-10-21T19:32:48.2901960Z backend/tests/unit/test_migration_0002_offline.py::test_upgrade_sql_renders_typed_ledger_and_request_idempotency_columns
+test	Unit tests	2026-10-21T19:32:48.2903711Z backend/tests/unit/test_migration_0002_offline.py::test_downgrade_refuses_to_destroy_typed_rows
+test	Unit tests	2026-10-21T19:32:48.2905810Z   /opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/alembic/config.py:612: DeprecationWarning: No path_separator found in configuration; falling back to legacy splitting on spaces, commas, and colons for prepend_sys_path.  Consider adding path_separator=os to Alembic config.
+test	Unit tests	2026-10-21T19:32:48.2907592Z     util.warn_deprecated(
+test	Unit tests	2026-10-21T19:32:48.2907817Z 
+test	Unit tests	2026-10-21T19:32:48.2908153Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+test	Unit tests	2026-10-21T19:32:48.2908723Z 504 passed, 3 warnings in 2.09s
+test	Postgres integration tests	﻿2026-10-21T19:32:48.6142730Z ##[group]Run pytest backend/tests/integration
+test	Postgres integration tests	2026-10-21T19:32:48.6143628Z ^[[36;1mpytest backend/tests/integration^[[0m
+test	Postgres integration tests	2026-10-21T19:32:48.6198581Z shell: /usr/bin/bash -e {0}
+test	Postgres integration tests	2026-10-21T19:32:48.6198903Z env:
+test	Postgres integration tests	2026-10-21T19:32:48.6199594Z   PATCHDIFF_DATABASE_URL: ***localhost:5432/patchdiff
+test	Postgres integration tests	2026-10-21T19:32:48.6199984Z   PYTHONPATH: .:backend
+test	Postgres integration tests	2026-10-21T19:32:48.6200304Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Postgres integration tests	2026-10-21T19:32:48.6200776Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib/pkgconfig
+test	Postgres integration tests	2026-10-21T19:32:48.6201272Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Postgres integration tests	2026-10-21T19:32:48.6201704Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Postgres integration tests	2026-10-21T19:32:48.6202146Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Postgres integration tests	2026-10-21T19:32:48.6202565Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib
+test	Postgres integration tests	2026-10-21T19:32:48.6203252Z ##[endgroup]
+test	Postgres integration tests	2026-10-21T19:32:54.1704474Z ........................................................................ [ 33%]
+test	Postgres integration tests	2026-10-21T19:32:56.8325843Z ........................................................................ [ 66%]
+test	Postgres integration tests	2026-10-21T19:32:59.7624032Z .......................................................................  [100%]
+test	Postgres integration tests	2026-10-21T19:32:59.7624813Z =============================== warnings summary ===============================
+test	Postgres integration tests	2026-10-21T19:32:59.7625867Z backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+test	Postgres integration tests	2026-10-21T19:32:59.7627262Z backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+test	Postgres integration tests	2026-10-21T19:32:59.7629145Z backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+test	Postgres integration tests	2026-10-21T19:32:59.7630487Z backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+test	Postgres integration tests	2026-10-21T19:32:59.7631953Z backend/tests/integration/test_migrations_reachable.py::test_live_migration_refuses_downgrade_when_typed_rows_exist
+test	Postgres integration tests	2026-10-21T19:32:59.7633456Z backend/tests/integration/test_migrations_reachable.py::test_live_migration_refuses_downgrade_when_typed_rows_exist
+test	Postgres integration tests	2026-10-21T19:32:59.7635651Z   /opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/alembic/config.py:612: DeprecationWarning: No path_separator found in configuration; falling back to legacy splitting on spaces, commas, and colons for prepend_sys_path.  Consider adding path_separator=os to Alembic config.
+test	Postgres integration tests	2026-10-21T19:32:59.7637460Z     util.warn_deprecated(
+test	Postgres integration tests	2026-10-21T19:32:59.7637683Z 
+test	Postgres integration tests	2026-10-21T19:32:59.7637994Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+test	Postgres integration tests	2026-10-21T19:32:59.7638585Z 215 passed, 6 warnings in 9.87s
+test	Offline evaluation	﻿2026-10-21T19:33:00.1214119Z ##[group]Run python evaluation/offline_eval.py
+test	Offline evaluation	2026-10-21T19:33:00.1214784Z ^[[36;1mpython evaluation/offline_eval.py^[[0m
+test	Offline evaluation	2026-10-21T19:33:00.1281452Z shell: /usr/bin/bash -e {0}
+test	Offline evaluation	2026-10-21T19:33:00.1281740Z env:
+test	Offline evaluation	2026-10-21T19:33:00.1282588Z   PATCHDIFF_DATABASE_URL: ***localhost:5432/patchdiff
+test	Offline evaluation	2026-10-21T19:33:00.1283140Z   PYTHONPATH: .:backend
+test	Offline evaluation	2026-10-21T19:33:00.1283439Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Offline evaluation	2026-10-21T19:33:00.1283886Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib/pkgconfig
+test	Offline evaluation	2026-10-21T19:33:00.1284332Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Offline evaluation	2026-10-21T19:33:00.1284708Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Offline evaluation	2026-10-21T19:33:00.1285087Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+test	Offline evaluation	2026-10-21T19:33:00.1285490Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib
+test	Offline evaluation	2026-10-21T19:33:00.1285815Z ##[endgroup]
+test	Offline evaluation	2026-10-21T19:33:00.1860936Z === 1. Persisted Record UTF-8 Bytes (append_only_pdcp_logs.pdcp_content) ===
+test	Offline evaluation	2026-10-21T19:33:00.1862171Z scenario                         pdcp B  typed_match B  typed_min B  match/pdcp  min/pdcp  verdict (pdcp / matched / minimal)
+test	Offline evaluation	2026-10-21T19:33:00.1863530Z -----------------------------------------------------------------------------------------------------------------------------
+test	Offline evaluation	2026-10-21T19:33:00.1864541Z 1 tiny edit                         331            382          206        1.15      0.62  accepted / accepted / accepted
+test	Offline evaluation	2026-10-21T19:33:00.1865392Z 5 small edits                      1287           1194          314        0.93      0.24  accepted / accepted / accepted
+test	Offline evaluation	2026-10-21T19:33:00.1866250Z 1 edit, 2 KB span                  4543           4672         4496        1.03      0.99  accepted / accepted / accepted
+test	Offline evaluation	2026-10-21T19:33:00.1867182Z quotes+backslashes+unicode          345            403          227        1.17      0.66  accepted / accepted / accepted
+test	Offline evaluation	2026-10-21T19:33:00.1868349Z payload has a delimiter line        339            393          217        1.16      0.64  rejected:block_malformed / accepted / accepted [PDCP delimiter collision]
+test	Offline evaluation	2026-10-21T19:33:00.1869150Z 
+test	Offline evaluation	2026-10-21T19:33:00.1869420Z === 2. MCP Tool Request Payload UTF-8 Bytes (wire arguments JSON) ===
+test	Offline evaluation	2026-10-21T19:33:00.1870136Z scenario                        submit_pdcp B  edits_match B  edits_min B  match/pdcp  min/pdcp
+test	Offline evaluation	2026-10-21T19:33:00.1870907Z -----------------------------------------------------------------------------------------------
+test	Offline evaluation	2026-10-21T19:33:00.1871610Z 1 tiny edit                               451            327          151        0.73      0.33
+test	Offline evaluation	2026-10-21T19:33:00.1872246Z 5 small edits                            1467           1139          259        0.78      0.18
+test	Offline evaluation	2026-10-21T19:33:00.1873796Z 1 edit, 2 KB span                        4741           4617         4441        0.97      0.94
+test	Offline evaluation	2026-10-21T19:33:00.1874636Z quotes+backslashes+unicode                472            348          172        0.74      0.36
+test	Offline evaluation	2026-10-21T19:33:00.1875509Z payload has a delimiter line              462            338          162        0.73      0.35
+test	Offline evaluation	2026-10-21T19:33:00.1876041Z 
+test	Offline evaluation	2026-10-21T19:33:00.1876199Z Accounting separation:
+test	Offline evaluation	2026-10-21T19:33:00.1876892Z   - pdcp vs typed_match isolates serialization/framing difference with matched advisory prose.
+test	Offline evaluation	2026-10-21T19:33:00.1878026Z   - typed_match vs typed_min isolates byte savings from dropping mandatory prose manifest fields.
+test	Offline evaluation	2026-10-21T19:33:00.1879142Z   - Persisted record bytes include schema_version='patchdiff-tx/1' and canonical edit defaults.
+test	Offline evaluation	2026-10-21T19:33:00.1880135Z   - MCP request payload bytes measure the JSON arguments sent over tools/call.
+test	Offline evaluation	2026-10-21T19:33:00.1881056Z Bytes only. Not tokens, not model validity, not task success. Live-model study: NOT RUN.
+test	Offline evaluation	2026-10-21T19:33:00.1881730Z Verdict equivalence on the shared applier: OK
+test	Post Run actions/setup-python@v5	﻿2026-10-21T19:33:00.2046941Z Post job cleanup.
+test	Post Run actions/setup-python@v5	2026-10-21T19:33:00.3343107Z (node:2958) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+test	Post Run actions/setup-python@v5	2026-10-21T19:33:00.3344476Z (Use `node --trace-deprecation ...` to show where the warning was created)
+test	Post Run actions/checkout@v4	﻿2026-10-21T19:33:00.3649506Z Post job cleanup.
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.4632122Z [command]/usr/bin/git version
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.4686991Z git version 2.55.0
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.4735650Z Temporarily overriding HOME='/home/runner/work/_temp/db1e8f72-826e-4f5b-ac47-60f8991e11c1' before making global git config changes
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.4736734Z Adding repository directory to the temporary git global config as a safe directory
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.4743265Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Patch-DIFF/Patch-DIFF
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.4795055Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.4839226Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.5139060Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.5175356Z http.https://github.com/.extraheader
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.5189675Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.5238431Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.5546338Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+test	Post Run actions/checkout@v4	2026-10-21T19:33:00.5602456Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+test	Stop containers	﻿2026-10-21T19:33:00.6046173Z Print service container logs: 05a79c556a5c4fbf96e7056fc67a52a7_postgres163alpine_66b8ca
+test	Stop containers	2026-10-21T19:33:00.6050681Z ##[command]/usr/bin/docker logs --details 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Stop containers	2026-10-21T19:33:00.6218492Z  The files belonging to this database system will be owned by user "postgres".
+test	Stop containers	2026-10-21T19:33:00.6219298Z  This user must also own the server process.
+test	Stop containers	2026-10-21T19:33:00.6219756Z  
+test	Stop containers	2026-10-21T19:33:00.6220262Z  The database cluster will be initialized with locale "en_US.utf8".
+test	Stop containers	2026-10-21T19:33:00.6221068Z  The default database encoding has accordingly been set to "UTF8".
+test	Stop containers	2026-10-21T19:33:00.6221566Z  The default text search configuration will be set to "english".
+test	Stop containers	2026-10-21T19:33:00.6222133Z  
+test	Stop containers	2026-10-21T19:33:00.6224494Z  sh: locale: not found
+test	Stop containers	2026-10-21T19:33:00.6225082Z  2026-10-21 19:32:23.509 UTC [35] WARNING:  no usable system locales were found
+test	Stop containers	2026-10-21T19:33:00.6226298Z  initdb: warning: enabling "trust" authentication for local connections
+test	Stop containers	2026-10-21T19:33:00.6227556Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+test	Stop containers	2026-10-21T19:33:00.6228769Z  2026-10-21 19:32:24.320 UTC [1] LOG:  starting PostgreSQL 16.3 on x86_64-pc-linux-musl, compiled by gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, 64-bit
+test	Stop containers	2026-10-21T19:33:00.6229528Z  2026-10-21 19:32:24.320 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+test	Stop containers	2026-10-21T19:33:00.6230030Z  2026-10-21 19:32:24.320 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+test	Stop containers	2026-10-21T19:33:00.6230575Z  2026-10-21 19:32:24.321 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+test	Stop containers	2026-10-21T19:33:00.6231143Z  2026-10-21 19:32:24.324 UTC [57] LOG:  database system was shut down at 2026-10-21 19:32:24 UTC
+test	Stop containers	2026-10-21T19:33:00.6231705Z  2026-10-21 19:32:24.328 UTC [1] LOG:  database system is ready to accept connections
+test	Stop containers	2026-10-21T19:33:00.6232244Z  2026-10-21 19:32:55.446 UTC [101] ERROR:  Cannot downgrade 20261020_0002: typed ledger rows exist
+test	Stop containers	2026-10-21T19:33:00.6233091Z  2026-10-21 19:32:55.446 UTC [101] CONTEXT:  PL/pgSQL function inline_code_block line 4 at RAISE
+test	Stop containers	2026-10-21T19:33:00.6233567Z  2026-10-21 19:32:55.446 UTC [101] STATEMENT:  
+test	Stop containers	2026-10-21T19:33:00.6233852Z  	        DO $$
+test	Stop containers	2026-10-21T19:33:00.6234043Z  	        BEGIN
+test	Stop containers	2026-10-21T19:33:00.6234426Z  	            IF EXISTS (SELECT 1 FROM append_only_manifest_ledger WHERE origin <> 'pdcp_manifest') THEN
+test	Stop containers	2026-10-21T19:33:00.6235015Z  	                RAISE EXCEPTION 'Cannot downgrade 20261020_0002: typed ledger rows exist';
+test	Stop containers	2026-10-21T19:33:00.6235408Z  	            END IF;
+test	Stop containers	2026-10-21T19:33:00.6235608Z  	        END $$;
+test	Stop containers	2026-10-21T19:33:00.6235793Z  	        
+test	Stop containers	2026-10-21T19:33:00.6236089Z  2026-10-21 19:32:55.918 UTC [101] ERROR:  canceling statement due to lock timeout
+test	Stop containers	2026-10-21T19:33:00.6236636Z  2026-10-21 19:32:55.918 UTC [101] CONTEXT:  while locking tuple (3,32) in relation "cloud_target_files"
+test	Stop containers	2026-10-21T19:33:00.6238594Z  2026-10-21 19:32:55.918 UTC [101] STATEMENT:  SELECT cloud_target_files.target_file_id, cloud_target_files.project_id, cloud_target_files.filename, cloud_target_files.target_type, cloud_target_files.current_content, cloud_target_files.current_hash, cloud_target_files.version, cloud_target_files.active_editing_cycle_id, cloud_target_files.latest_accepted_pdcp_log_id, cloud_target_files.initial_snapshot_id, cloud_target_files.created_by_user_id, cloud_target_files.updated_at, cloud_target_files.created_at 
+test	Stop containers	2026-10-21T19:33:00.6240428Z  	FROM cloud_target_files 
+test	Stop containers	2026-10-21T19:33:00.6240735Z  	WHERE cloud_target_files.target_file_id = $1::UUID FOR UPDATE
+test	Stop containers	2026-10-21T19:33:00.6241189Z  2026-10-21 19:32:56.473 UTC [101] ERROR:  canceling statement due to lock timeout
+test	Stop containers	2026-10-21T19:33:00.6241743Z  2026-10-21 19:32:56.473 UTC [101] CONTEXT:  while locking tuple (4,5) in relation "cloud_target_files"
+test	Stop containers	2026-10-21T19:33:00.6244692Z  2026-10-21 19:32:56.473 UTC [101] STATEMENT:  SELECT cloud_target_files.target_file_id, cloud_target_files.project_id, cloud_target_files.filename, cloud_target_files.target_type, cloud_target_files.current_content, cloud_target_files.current_hash, cloud_target_files.version, cloud_target_files.active_editing_cycle_id, cloud_target_files.latest_accepted_pdcp_log_id, cloud_target_files.initial_snapshot_id, cloud_target_files.created_by_user_id, cloud_target_files.updated_at, cloud_target_files.created_at 
+test	Stop containers	2026-10-21T19:33:00.6248253Z  	FROM cloud_target_files 
+test	Stop containers	2026-10-21T19:33:00.6248768Z  	WHERE cloud_target_files.target_file_id = $1::UUID FOR UPDATE
+test	Stop containers	2026-10-21T19:33:00.6249366Z  Data page checksums are disabled.
+test	Stop containers	2026-10-21T19:33:00.6249782Z  
+test	Stop containers	2026-10-21T19:33:00.6250278Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+test	Stop containers	2026-10-21T19:33:00.6250940Z  creating subdirectories ... ok
+test	Stop containers	2026-10-21T19:33:00.6251438Z  selecting dynamic shared memory implementation ... posix
+test	Stop containers	2026-10-21T19:33:00.6251970Z  selecting default max_connections ... 100
+test	Stop containers	2026-10-21T19:33:00.6252639Z  selecting default shared_buffers ... 128MB
+test	Stop containers	2026-10-21T19:33:00.6253296Z  selecting default time zone ... UTC
+test	Stop containers	2026-10-21T19:33:00.6253749Z  creating configuration files ... ok
+test	Stop containers	2026-10-21T19:33:00.6254197Z  running bootstrap script ... ok
+test	Stop containers	2026-10-21T19:33:00.6254665Z  performing post-bootstrap initialization ... ok
+test	Stop containers	2026-10-21T19:33:00.6255145Z  syncing data to disk ... ok
+test	Stop containers	2026-10-21T19:33:00.6255490Z  
+test	Stop containers	2026-10-21T19:33:00.6255855Z  
+test	Stop containers	2026-10-21T19:33:00.6256235Z  Success. You can now start the database server using:
+test	Stop containers	2026-10-21T19:33:00.6256716Z  
+test	Stop containers	2026-10-21T19:33:00.6257065Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+test	Stop containers	2026-10-21T19:33:00.6257598Z  
+test	Stop containers	2026-10-21T19:33:00.6258627Z  waiting for server to start....2026-10-21 19:32:24.048 UTC [41] LOG:  starting PostgreSQL 16.3 on x86_64-pc-linux-musl, compiled by gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, 64-bit
+test	Stop containers	2026-10-21T19:33:00.6260097Z  2026-10-21 19:32:24.049 UTC [41] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+test	Stop containers	2026-10-21T19:33:00.6261071Z  2026-10-21 19:32:24.051 UTC [44] LOG:  database system was shut down at 2026-10-21 19:32:23 UTC
+test	Stop containers	2026-10-21T19:33:00.6261950Z  2026-10-21 19:32:24.056 UTC [41] LOG:  database system is ready to accept connections
+test	Stop containers	2026-10-21T19:33:00.6262552Z   done
+test	Stop containers	2026-10-21T19:33:00.6263080Z  server started
+test	Stop containers	2026-10-21T19:33:00.6263414Z  CREATE DATABASE
+test	Stop containers	2026-10-21T19:33:00.6263737Z  
+test	Stop containers	2026-10-21T19:33:00.6264002Z  
+test	Stop containers	2026-10-21T19:33:00.6264777Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+test	Stop containers	2026-10-21T19:33:00.6265387Z  
+test	Stop containers	2026-10-21T19:33:00.6265763Z  waiting for server to shut down....2026-10-21 19:32:24.199 UTC [41] LOG:  received fast shutdown request
+test	Stop containers	2026-10-21T19:33:00.6266308Z  2026-10-21 19:32:24.199 UTC [41] LOG:  aborting any active transactions
+test	Stop containers	2026-10-21T19:33:00.6266901Z  2026-10-21 19:32:24.202 UTC [41] LOG:  background worker "logical replication launcher" (PID 47) exited with exit code 1
+test	Stop containers	2026-10-21T19:33:00.6267452Z  2026-10-21 19:32:24.204 UTC [42] LOG:  shutting down
+test	Stop containers	2026-10-21T19:33:00.6267871Z  2026-10-21 19:32:24.204 UTC [42] LOG:  checkpoint starting: shutdown immediate
+test	Stop containers	2026-10-21T19:33:00.6268985Z  2026-10-21 19:32:24.221 UTC [42] LOG:  checkpoint complete: wrote 924 buffers (5.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.013 s, sync=0.003 s, total=0.018 s; sync files=301, longest=0.001 s, average=0.001 s; distance=4267 kB, estimate=4267 kB; lsn=0/191AAA8, redo lsn=0/191AAA8
+test	Stop containers	2026-10-21T19:33:00.6270049Z  2026-10-21 19:32:24.229 UTC [41] LOG:  database system is shut down
+test	Stop containers	2026-10-21T19:33:00.6270375Z   done
+test	Stop containers	2026-10-21T19:33:00.6270563Z  server stopped
+test	Stop containers	2026-10-21T19:33:00.6270754Z  
+test	Stop containers	2026-10-21T19:33:00.6270983Z  PostgreSQL init process complete; ready for start up.
+test	Stop containers	2026-10-21T19:33:00.6271282Z  
+test	Stop containers	2026-10-21T19:33:00.6277951Z Stop and remove container: 05a79c556a5c4fbf96e7056fc67a52a7_postgres163alpine_66b8ca
+test	Stop containers	2026-10-21T19:33:00.6284007Z ##[command]/usr/bin/docker rm --force 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Stop containers	2026-10-21T19:33:00.8514278Z 10832e26ca18095b4e37d5f764df1b9406f7d06f9986fcfb4893ca2bbfb80bd4
+test	Stop containers	2026-10-21T19:33:00.8554958Z Remove container network: github_network_489dc1528d514173bba172d3054978b5
+test	Stop containers	2026-10-21T19:33:00.8559782Z ##[command]/usr/bin/docker network rm github_network_489dc1528d514173bba172d3054978b5
+test	Stop containers	2026-10-21T19:33:00.9495528Z github_network_489dc1528d514173bba172d3054978b5
+test	Complete job	﻿2026-10-21T19:33:00.9578076Z Cleaning up orphan processes
+test	Complete job	2026-10-21T19:33:00.9923152Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

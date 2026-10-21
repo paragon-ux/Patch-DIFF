@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
 from app.core.input_text import invalid_text_paths, is_persistable_text, safe_input_text
-from app.core.result import AcceptedCoreResult, RejectedCoreResult
+from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
 from app.core.validity import ValidationStage, validity_levels
 from app.core.versions import RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
@@ -39,6 +39,7 @@ from app.pdcp.typed import (
     to_parsed_transaction,
     validate_client_request_id,
 )
+from app.services.rejection_context import available_context, unavailable_context
 from app.storage.models import (
     AppendOnlyManifestLedger,
     AppendOnlyPdcpLogs,
@@ -104,6 +105,7 @@ class SubmitPDCPResult:
     validation_stage: ValidationStage | None = None
     deduplicated: bool = False
     client_request_id: str | None = None
+    current_context: dict | None = None
 
 
 def submit_pdcp(
@@ -298,6 +300,8 @@ def _submit(
                 current_version=getattr(existing, "version", None),
                 failure_reason=FailureReason.CONTEXT_INVALID,
                 failure_detail="Pending local direct modifications on target are not permitted.",
+                diagnostic={"failure_context": unavailable_context("unlocked_local_state")},
+                current_context=unavailable_context("unlocked_local_state"),
                 validation_stage=ValidationStage.PRECONDITION_GUARD,
             )
 
@@ -316,6 +320,8 @@ def _submit(
                 current_version=None,
                 failure_reason=FailureReason.TARGET_NOT_FOUND,
                 failure_detail="Target file was not found.",
+                diagnostic={"failure_context": unavailable_context("target_not_found")},
+                current_context=unavailable_context("target_not_found"),
                 validation_stage=ValidationStage.PRECONDITION_GUARD,
             )
 
@@ -941,6 +947,11 @@ def _persist_rejection(
     sanitized_attempt, attempt_valid = sanitize_regeneration_attempt(regeneration_attempt)
 
     diagnostic = dict(rejection.diagnostic) if rejection.diagnostic else {}
+    diagnostic["failure_context"] = available_context(
+        rejection.failure_buffer or FailureBufferContext.capture(target.current_content),
+        observed_target_version=before_version,
+        observed_target_hash=before_hash,
+    )
     if not version_valid and expected_target_version is not None:
         diagnostic["raw_expected_target_version"] = expected_target_version
     if not hash_valid and expected_current_hash is not None:
@@ -996,6 +1007,7 @@ def _persist_rejection(
         failed_change_id=rejection.failed_change_id,
         diagnostic=diagnostic,
         validation_stage=stage,
+        current_context=_target_context(target),
         client_request_id=client_request_id,
     )
 
@@ -1050,8 +1062,17 @@ def _reconstruct_deduplicated_result(
         failed_change_id=log.failed_change_id,
         diagnostic=diag,
         validation_stage=stage,
+        current_context=_target_context(target),
         deduplicated=True,
         client_request_id=log.client_request_id,
+    )
+
+
+def _target_context(target: CloudTargetFiles) -> dict:
+    return available_context(
+        FailureBufferContext.capture(target.current_content),
+        observed_target_version=target.version,
+        observed_target_hash=target.current_hash,
     )
 
 
@@ -1172,13 +1193,7 @@ def _enrich_diagnostic(
         diag.pop("requires_new_pdcp", None)
     else:
         diag["requires_new_pdcp"] = True
-    return RejectedCoreResult(
-        failure_reason=rejection.failure_reason,
-        failure_detail=rejection.failure_detail,
-        before_hash=rejection.before_hash,
-        failed_change_id=rejection.failed_change_id,
-        diagnostic=diag,
-    )
+    return replace(rejection, diagnostic=diag)
 
 
 def _compute_request_fingerprint(
@@ -1252,7 +1267,9 @@ def _invalid_target_uuid_result(target_file_id: Any) -> SubmitPDCPResult:
             "retryable": False,
             "requires_new_submission": True,
             "validation_stage": ValidationStage.PRECONDITION_GUARD.value,
+            "failure_context": unavailable_context("invalid_target_id"),
         },
+        current_context=unavailable_context("invalid_target_id"),
         validation_stage=ValidationStage.PRECONDITION_GUARD,
     )
 

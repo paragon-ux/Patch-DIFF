@@ -1,6 +1,6 @@
 ---
 name: patchdiff-persistence-replay-save
-description: Use when implementing, reviewing, or testing Postgres persistence, Docker Compose setup, Alembic migrations, append-only logs, row-locking concurrency guards, editing cycles, SAVE snapshots, and profile-dispatched deterministic replay.
+description: "Use when implementing, reviewing, or testing Postgres persistence, Docker Compose setup, Alembic migrations, append-only logs, row-locking concurrency guards, editing cycles, SAVE snapshots, and profile-dispatched deterministic replay."
 ---
 
 # PatchDIFF Persistence, Replay, and SAVE Skill
@@ -127,3 +127,7 @@ Current typed submissions record patchdiff-mvp-0.2.2. Replay explicitly retains 
 The current 0.2.2 profile enforces every supplied selector even for one occurrence. All older supported profiles retain ignored singleton selectors. Resolve both profile settings in submission and replay; never repurpose a recorded profile.
 
 A successful reconstruction can report materialized_state_matches=false. CRLF/bare-CR storage corruption must fail content_matches even with matching canonical hashes; replay never repairs storage.
+
+## F01 rejection context
+
+Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.

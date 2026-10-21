@@ -1,6 +1,6 @@
 ---
 name: patchdiff-mcp-orchestration
-description: Use when implementing, testing, or reviewing MCP tools, the stdio JSON-RPC adapter, typed transaction schemas, authoritative reads/searches, request idempotency, and host-owned retry orchestration.
+description: "Use when implementing, testing, or reviewing MCP tools, the stdio JSON-RPC adapter, typed transaction schemas, authoritative reads/searches, request idempotency, and host-owned retry orchestration."
 ---
 
 # PatchDIFF MCP Orchestration Skill
@@ -72,7 +72,7 @@ sequenceDiagram
 Hosts should provide `client_request_id` (1–128 printable ASCII characters without whitespace; a UUID is optional) with `patchdiff_submit_edits` and `patchdiff_submit_pdcp`.
 
 - When a request is received, the server checks `uq_pdcp_logs_target_client_request_id` under per-target row lock.
-- If an existing log with that `client_request_id` matches the request fingerprint, the cached response is returned immediately with `deduplicated: true`.
+- If an existing log with that `client_request_id` matches the request fingerprint, the recorded terminal outcome is returned with `deduplicated: true`; rejected responses separately refresh `current_context` under the target lock.
 - If a duplicate `client_request_id` has conflicting arguments, it is rejected with `failure_reason: "context_invalid"` and `diagnostic.existing_pdcp_log_id`.
 - If a client call times out, repeating the exact call with the same `client_request_id` safely succeeds even if the first attempt committed and advanced the target version.
 
@@ -104,3 +104,7 @@ Do not let MCP orchestration:
 ## Bounded search and history
 
 Validate context_chars as a non-bool integer >=0, default40 and cap400. Both history tools use positive non-bool integer limits (null/omitted50,cap200) and exclusive positive integer cursors. Attempts fetch limit+1 after filters and render descending; ledger selects newest eligible rows then renders its page ascending. Return entries/has_more/next_sequence on every response; cursor is the smallest returned sequence only when more rows remain. Keep safe exact historical request-key filters, not new-submission syntax. Include flags are boolean; no generic handler errors for invalid argument types.
+
+## F01 rejection context
+
+Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.

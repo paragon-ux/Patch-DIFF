@@ -1,6 +1,6 @@
 ---
 name: patchdiff-testing-review
-description: Use when adding tests, reviewing implementation, verifying completion, or auditing for PatchDIFF protocol and MCP-first architectural consistency.
+description: "Use when adding tests, reviewing implementation, verifying completion, or auditing for PatchDIFF protocol and MCP-first architectural consistency."
 ---
 
 # PatchDIFF Testing and Review Skill
@@ -90,3 +90,7 @@ Verified:
 - Subprocess E2E: passed
 - Offline eval: passed (verdict equivalence verified)
 ```
+
+## F01 rejection context
+
+Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.

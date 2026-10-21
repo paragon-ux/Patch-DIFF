@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.core.canonicalization import canonicalize_text
 from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
-from app.core.result import AcceptedCoreResult, RejectedCoreResult
+from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
 from app.pdcp.disambiguation import MatchResolutionError, resolve_match_span
 from app.pdcp.matcher import find_exact_occurrences
 from app.pdcp.models import ParsedPDCP
@@ -34,6 +34,7 @@ def apply_pdcp_transaction(
             FailureReason.TARGET_HASH_MISMATCH,
             "PDCP target_hash does not match the current target hash.",
             before_hash,
+            buffer=current,
         )
 
     change_facts: list[dict] = []
@@ -45,6 +46,8 @@ def apply_pdcp_transaction(
                 "MATCH payload must not be empty.",
                 before_hash,
                 change_id,
+                buffer=current,
+                prior_changes=len(change_facts),
             )
 
         manifest_target_hash = change.manifest.fields.get("target_hash")
@@ -54,6 +57,8 @@ def apply_pdcp_transaction(
                 "Manifest target_hash does not match the current target hash.",
                 before_hash,
                 change_id,
+                buffer=current,
+                prior_changes=len(change_facts),
             )
 
         try:
@@ -77,7 +82,10 @@ def apply_pdcp_transaction(
                 extra["occurrence_count"] = len(
                     find_exact_occurrences(current, change.match_payload, overlapping=overlapping_matches)
                 )
-            return _rejected(reason, exc.failure_detail, before_hash, change_id, extra)
+            return _rejected(
+                reason, exc.failure_detail, before_hash, change_id, extra,
+                buffer=current, prior_changes=len(change_facts),
+            )
 
         replacement = canonicalize_text(change.replace_payload)
         matched = current[span.start : span.end]
@@ -111,6 +119,9 @@ def _rejected(
     before_hash: str,
     failed_change_id: str | None = None,
     extra_diagnostic: dict | None = None,
+    *,
+    buffer: str,
+    prior_changes: int = 0,
 ) -> RejectedCoreResult:
     diagnostic = {
         "retryable": reason
@@ -132,4 +143,5 @@ def _rejected(
         before_hash=before_hash,
         failed_change_id=failed_change_id,
         diagnostic=diagnostic,
+        failure_buffer=FailureBufferContext.capture(buffer, prior_changes),
     )

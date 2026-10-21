@@ -1,0 +1,15 @@
+{
+  "authorization": "User accepted merging the approved modernization/Goal G stack and beginning accepted Goal F.",
+  "starting_pr1": "b33faaf332e269019747772602afff34f9829e5c",
+  "pr4_merge": "d950d92b912b8e07a4219871019019ca07e67e5f",
+  "steps": [
+    {
+      "pr": 5,
+      "original_reviewed_head": "d8c71fe0dd02666463d443db9b713ea9bd8ffa4e",
+      "refreshed_head": "74431b72658a7768398b1eec5318b9040ae0ae65",
+      "base_sha": "d950d92b912b8e07a4219871019019ca07e67e5f",
+      "reviewed_tree_preserved": true
+    }
+  ],
+  "stopped_with_error": "gh command failed ['run', 'view', '39661605566']: failed to determine base repo: failed to run git: fatal: not a git repository (or any of the parent directories): .git\n\n"
+}

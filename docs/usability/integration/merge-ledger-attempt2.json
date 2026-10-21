@@ -1,0 +1,37 @@
+{
+  "authorization": "User accepted merging the approved modernization/Goal G stack and beginning accepted Goal F.",
+  "starting_pr1": "b33faaf332e269019747772602afff34f9829e5c",
+  "pr4_merge": "d950d92b912b8e07a4219871019019ca07e67e5f",
+  "steps": [
+    {
+      "pr": 5,
+      "original_reviewed_head": "d8c71fe0dd02666463d443db9b713ea9bd8ffa4e",
+      "refreshed_head": "74431b72658a7768398b1eec5318b9040ae0ae65",
+      "base_sha": "d950d92b912b8e07a4219871019019ca07e67e5f",
+      "reviewed_tree_preserved": true,
+      "CI": {
+        "run_id": 39661605566,
+        "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/39661605566",
+        "head_sha": "74431b72658a7768398b1eec5318b9040ae0ae65",
+        "base_sha": "d950d92b912b8e07a4219871019019ca07e67e5f",
+        "executed_merge_sha": "d7b24ad28ab051a93399b7cf90e24dfe05ff7054",
+        "tree_sha": "bd10d8984fd069a018b9ecaf4196d20acb6ee275",
+        "passed_counts": [
+          500,
+          183
+        ],
+        "offline_equivalence": "OK",
+        "log_sha256": "5d834caa41be71a3bf9f0950077cf28335ea2420eec30cf8c6abc9fad7d60d92"
+      },
+      "merge_sha": "1bdae2aa19bd9c6f0ff591c9c29c33f394c019c3"
+    },
+    {
+      "pr": 6,
+      "original_reviewed_head": "fda5adba8c1912e207443ad4cdd964f7c0c5bc60",
+      "refreshed_head": "fda5adba8c1912e207443ad4cdd964f7c0c5bc60",
+      "base_sha": "1bdae2aa19bd9c6f0ff591c9c29c33f394c019c3",
+      "reviewed_tree_preserved": true
+    }
+  ],
+  "stopped_with_error": "Wrong generated-merge parents: {'fda5adba8c1912e207443ad4cdd964f7c0c5bc60', 'd8c71fe0dd02666463d443db9b713ea9bd8ffa4e'}"
+}

@@ -159,6 +159,10 @@ Indexes:
 - `INDEX (status, failure_reason)`
 - Partial unique index: `uq_pdcp_logs_target_client_request_id ON append_only_pdcp_logs(target_file_id, client_request_id) WHERE client_request_id IS NOT NULL`
 
+#### Bounded rejected-buffer evidence (F01)
+
+New rejected attempts store `failure_context` within existing `diagnostic_json`; no column or migration is added. It contains only the bounded original failure prefix, code-point counts, canonical/intermediate stage, prior simulated-change count and transaction-start observed target identity, using the representation and JSON-byte limits in MCP_TOOLS. This evidence is immutable. Exact recovery returns the stored diagnostic unchanged; pre-feature rows remain without failure context. Top-level fresh `current_context` is response-only and is never written into the recovered row. Unknown targets and pending local state have no target-linked durable attempt; their contexts explicitly report unavailable. Qualified audit and caller commit/rollback ownership are unchanged.
+
 #### Request identity: C4 / D01
 
 For ordinary inputs, request_fingerprint hashes a canonical JSON envelope containing protocol_version, canonical target_file_id, pdcp_content_hash, expected_target_version, expected_current_hash and parent_pdcp_log_id. The client_request_id selects the per-target keyed row; it is not itself part of this envelope. Submission source and attempt metadata are not part of ordinary request identity. The separate invalid-input evidence domain described below covers its evidence envelope instead.

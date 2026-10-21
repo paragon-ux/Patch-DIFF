@@ -9,6 +9,17 @@ from app.core.failures import FailureReason
 
 
 @dataclass(frozen=True, slots=True)
+class FailureBufferContext:
+    text: str
+    total_chars: int
+    prior_changes: int
+
+    @classmethod
+    def capture(cls, buffer: str, prior_changes: int = 0) -> FailureBufferContext:
+        return cls(buffer[:256], len(buffer), prior_changes)
+
+
+@dataclass(frozen=True, slots=True)
 class AcceptedCoreResult:
     before_hash: str
     after_hash: str
@@ -30,3 +41,4 @@ class RejectedCoreResult:
     diagnostic: dict[str, Any] | None = None
     status: Literal["rejected"] = "rejected"
     after_hash: None = None
+    failure_buffer: FailureBufferContext | None = None

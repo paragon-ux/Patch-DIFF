@@ -1,5 +1,7 @@
 # PATCHDIFF_CORE_SPEC.md
 
+F01 bounded rejection evidence: the pure applier returns only a prefix of at most 256 code points and its total length/prior simulated-change count for the actual failing buffer, never an unbounded failed buffer. The service adds canonical observed identity and persists `diagnostic.failure_context` once. A later sequential failure is labeled `intermediate_buffer`; it does not imply a partial commit. Service/protocol failures use locked canonical state. Response-only `current_context` is fresh on every rejected call, including exact keyed recovery, while the original diagnostic is immutable and old rows are not retrofitted. MCP_TOOLS defines the complete fields, unavailable states and 4,096/8,192 ASCII-escaped JSON byte budgets. Verdicts, accepted facts, hashes, fingerprints and execution profiles remain unchanged.
+
 ## Purpose
 
 This document defines the deterministic PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`).

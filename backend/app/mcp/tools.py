@@ -513,6 +513,7 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
         "current_hash": result.current_hash,
         "pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
         "diagnostic": result.diagnostic,
+        "current_context": result.current_context,
         "validity": validity_levels("rejected", result.failure_reason, stage=result.validation_stage),
         "deduplicated": result.deduplicated,
         "client_request_id": result.client_request_id,

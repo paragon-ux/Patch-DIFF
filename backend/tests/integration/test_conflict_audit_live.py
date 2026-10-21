@@ -32,7 +32,7 @@ def arguments(target_id, status="accepted"):
 
 def terminal(result):
     result = asdict(result)
-    for key in ("deduplicated", "current_hash", "current_version"):
+    for key in ("deduplicated", "current_hash", "current_version", "current_context"):
         result.pop(key)
     return result
 
@@ -279,6 +279,10 @@ def test_recovery_preserves_complete_terminal_evidence_after_later_edit(kind):
         else:
             assert recovered.diagnostic == original.diagnostic
             assert recovered.failure_reason == original.failure_reason
+            assert recovered.current_context["text"] == "later"
+            assert recovered.current_context["observed_target_version"] == 1
+            assert recovered.current_context["observed_target_hash"] == recovered.current_hash
+            assert recovered.diagnostic["failure_context"]["text"] == "alpha"
 
 
 def test_real_stdio_conflict_audit_and_original_recovery():

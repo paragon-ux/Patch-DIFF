@@ -1,6 +1,6 @@
 ---
 name: patchdiff-core-runtime
-description: Use when implementing or reviewing the deterministic PatchDIFF core runtime: typed and .pdcp parsing, protocol validation, canonicalization, exact MATCH/REPLACE, overlapping match enumeration, disambiguation, sequential application, runtime-derived change facts, and stage-aware validity reporting.
+description: "Use when implementing or reviewing the deterministic PatchDIFF core runtime: typed and .pdcp parsing, protocol validation, canonicalization, exact MATCH/REPLACE, overlapping match enumeration, disambiguation, sequential application, runtime-derived change facts, and stage-aware validity reporting."
 ---
 
 # PatchDIFF Core Runtime Skill
@@ -136,3 +136,7 @@ Use the actual `ValidationStage` reached (C2), not a failure-code guess. Known-t
 The transaction is the smallest atomic unit:
 - If all edits apply successfully: target advances to `new_version`, `new_hash` is computed, and `change_facts` are emitted.
 - If any edit fails: target remains unchanged, failure reason and diagnostic are surfaced, and `after_hash = null`.
+
+## F01 rejection context
+
+Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.

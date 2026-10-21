@@ -102,6 +102,8 @@ flowchart LR
     - `region_hint` is **not** part of `patchdiff-tx/1` and is rejected as an unknown edit field (`FailureReason.MANIFEST_INVALID`); it remains supported on legacy PDCP v0.2.3.
 - **Canonical Persisted Record (ordinary input; invalid-text evidence exception below)**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over the submitted record with raw decoded string values preserved. Canonical JSON normalizes object-key order and serialization, not newlines inside string values; runtime matching separately canonicalizes text. This D01 clarification follows C4 and existing build_record/canonical_record_json behavior; it does not introduce a new normalized-identity alternative.
 
+F01 rejection context: newly recorded rejections persist immutable `diagnostic.failure_context`; rejected submission responses also return separate response-only `current_context` from the refreshed locked canonical target. The full representation and numeric budgets are specified in MCP_TOOLS. Applicability failures capture only a bounded prefix of the actual failing buffer, labeled `canonical_target` or `intermediate_buffer` with `prior_changes`. Observed version/hash always identify transaction-start canonical state, never an uncommitted intermediate hash. Unknown/malformed targets and pending caller-local dirty state return explicit unavailable contexts. Acceptance, exact matching, request identity and replay profiles are unchanged.
+
 #### C2. Validation Stage Model, Failure Mapping, and Format-Specific Diagnostics
 
 - **Validation Stages (`ValidationStage`)**:
@@ -178,6 +180,8 @@ The lock-then-read outcome-recovery guarantee is supported and verified at Postg
 
 DEV-SVC-002 decision: retain existing parent identity. Only a same-target rejected parent that passes lineage resolves to canonical UUID spelling; other supplied parent strings remain raw identity on rejection. Broader syntactic UUID normalization is not adopted; it would need separate historical-fingerprint compatibility. D01 details are in DATA_MODEL and HOST_INTEGRATION_GUIDE.
 
+For rejected exact recovery, the complete stored diagnostic (including original `failure_context`, when present) remains unchanged. Only top-level `current_context` and existing current identity fields reflect the newly locked target. Older rows without failure context are returned without retrofitting evidence. Context is cheap bounded capture inside the existing transaction; caller-owned locks and commit/rollback ownership are preserved.
+
 #### C5. Ledger and Schema Contract (Migration `20261020_0002`)
 
 - `append_only_manifest_ledger`:
@@ -200,6 +204,8 @@ DEV-SVC-002 decision: retain existing parent identity. Only a same-target reject
 - `patchdiff_find_occurrences(target_file_id, text, context_chars=40, start_occurrence=1, max_results=200)`:
   - Validates `target_file_id` (UUID), non-empty `text`, `context_chars` as a non-bool integer >=0 (default40, clamped to400), `start_occurrence >= 1`, `max_results >= 1`.
   - Enumerates all exact occurrences (overlapping counted) over canonical content; returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `occurrence_count`, `returned_count`, `start_occurrence`, `occurrences` (each `{occurrence_index, start, end, before, after}`), `truncated`, and `next_occurrence_index` (`slice_end + 1` when `truncated` is `True`, else `None`).
+- Submission prefix context is diagnostic evidence, not a read/search cursor or a claim to locate an absent match. Fresh context describes the locked transaction view; caller-owned transactions can remain provisional until commit. Original failure context remains available in attempt history; history never adds a fresh target context to old diagnostics.
+
 - `patchdiff_get_pdcp_log(target_file_id, limit=50, before_sequence=None, status=None, content_hash=None, client_request_id=None, include_content=False)`:
   - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects50; values above200 clamp to200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
   - Returns newest-first `entries` including `pdcp_log_id`, `log_sequence`, `status`, `failure_reason`, `failure_detail`, `failed_change_id`, `before_hash`, `after_hash`, `before_version`, `after_version`, `pdcp_content_hash`, `protocol_version`, `runtime_version`, `submission_source`, `parent_pdcp_log_id`, `regeneration_attempt`, `regeneration_source`, `client_request_id`, `request_fingerprint`, `diagnostic`, `created_at`, and optional `pdcp_content`.

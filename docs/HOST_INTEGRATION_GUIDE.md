@@ -141,6 +141,12 @@ PatchDIFF distinguishes request identity from state guards (C4 / D5):
 - `expected_target_version` is monotonic: an old version rejects after another acceptance, without proving which request committed.
 - `expected_current_hash` checks state, not request identity. A no-op edit keeps the hash; an ABA sequence restores it. An unkeyed hash-only retry can therefore apply again.
 
+### Inspect rejection context
+
+`diagnostic.failure_context` describes the original failure; `current_context` separately describes the current locked canonical target. Both are bounded prefixes (at most 256 code points; 4,096 compact ASCII-escaped JSON bytes each, 8,192 combined with wrapper keys), not a guarantee that the failed match lies in the snippet. Read/search for additional context. See MCP_TOOLS for fields and unavailable reasons.
+
+A later sequential failure can name `intermediate_buffer` with `prior_changes > 0`: earlier edits were simulated, not committed. Its observed hash/version still name transaction-start state. Current context always names canonical state. Do not apply intermediate indices to committed content. On exact keyed recovery after later edits, failure context and the entire original diagnostic stay unchanged while current context can differ. Old outcomes may lack failure context. Explicit unavailable state covers malformed/missing targets and pending local ORM modifications; empty text with `available: true` is a real empty target. Caller-owned transaction observations may remain provisional until commit.
+
 ### Preserve the original proposal for recovery (C4 / D01)
 
 Keep the decoded proposal structure and original guards when retrying a lost response. The fingerprint includes the full canonical typed record, including intent, ordered raw edits, selectors and advisory fields, plus the protocol/target/content-hash/guard/parent envelope. Equivalent wire JSON whitespace, object-key order or Unicode escape spelling is harmless. Rewording intent or rationale, changing risk/selectors/guards, reordering edits, replacing an omitted optional edit field with null, or supplying an otherwise default change_id creates a different proposal even if the resulting text would match. Omitted/null top-level guards both become null.
