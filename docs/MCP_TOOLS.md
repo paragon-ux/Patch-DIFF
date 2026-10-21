@@ -2,6 +2,9 @@
 
 Unicode boundary: edit-submission strings and metadata must be valid UTF-8/PostgreSQL text. Known-target invalid text returns an audited target_encoding_invalid / PROTOCOL_VALIDATION rejection. Existing pdcp_content TEXT carries reversible ASCII-escaped patchdiff-invalid-input/1 evidence; JSONB holds only safe diagnostics. Read/search string errors return invalid_argument with no edit-attempt row. Valid inputs and discovery operation shapes are unchanged.
 
+Conflicting-key submissions return context_invalid plus a fresh durable rejection log ID. The rejected row uses a NULL key and submitted fingerprint, with original-log linkage and a bounded submitted-key preview. The response continues to echo the submitted key. Exact recovery of the original request remains deduplicated:true without a new row; repeated conflicts each append an immutable attempt.
+
+
 ## Purpose
 
 This document defines the complete MCP tool surface for PatchDIFF.

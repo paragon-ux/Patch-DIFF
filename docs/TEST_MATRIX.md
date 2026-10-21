@@ -32,6 +32,7 @@ Run with: `pytest backend/tests/unit -q`
 | `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.2`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
 | `test_parser.py` | Protocol header parsing; manifest line format; delimiter enforcement (`<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`); delimiter collision rejection (`FailureReason.BLOCK_MALFORMED`). |
 | `test_protocol_validator.py` | 7 required manifest fields (v0.2.3); risk value validation; structural purity (rejection of executable logic outside payloads). |
+| `test_conflict_audit.py` | DEV-SVC-001: bounded submitted-key diagnostic, NULL persisted key versus response echo, submitted fingerprint policy. |
 | `test_invalid_input_unicode.py` | DEV-RUN-002: all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
 | `test_selector_profiles.py` | DEV-RUN-001: singleton/multiple/overlapping/absent selectors across typed, legacy and sequential buffers; historical profile compatibility. |
 | `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, `anchor_after`, and `region_hint`. |
@@ -49,6 +50,7 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 
 | Module | Requirements / Capabilities Tested |
 | --- | --- |
+| `test_conflict_audit_live.py` | DEV-SVC-001/V01/V06/V07/V09: distinct repeated conflict attempts; controlled real lock waits at READ COMMITTED; commit/rollback visibility; original full terminal recovery after later edits; actual stdio. |
 | `test_invalid_input_unicode_live.py` | DEV-RUN-002/V07: actual PostgreSQL persistence/recovery, old accepted/rejected fingerprint compatibility, outer commit/rollback and deprecated wrapper ownership, real stdio readable evidence. |
 | `test_selector_profiles_live.py` | DEV-RUN-001: durable rejection without materialization, all supported historical selector profiles in typed/legacy mixed history, actual stdio rejection and replay. |
 | `test_migrations_reachable.py` | **C5**: Alembic config presence; schema verification for migration `0001` and `0002`; live Postgres column nullability and partial unique index `uq_pdcp_logs_target_client_request_id` verification. |

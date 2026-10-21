@@ -6,7 +6,7 @@ import json
 import re
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlalchemy import select
@@ -431,33 +431,42 @@ def _submit(
                     )
                 if matches_recorded:
                     return _reconstruct_deduplicated_result(session, target, existing_log)
-                # Same client_request_id reused with a different proposal on the same target:
-                # reject explicitly without overwriting the original log row or mutating state.
+                # Audit this attempt separately; the original keyed outcome stays authoritative.
                 conflict = _core_rejection(
                     FailureReason.CONTEXT_INVALID,
                     "client_request_id was already used for a different proposal on this target.",
                     before_hash,
                     protocol_version=protocol_version,
                     stage=ValidationStage.PRECONDITION_GUARD,
+                    diagnostic_extra={
+                        **encoding_diagnostic,
+                        "existing_pdcp_log_id": str(existing_log.pdcp_log_id),
+                        "submitted_client_request_id": validated_req_id[:256],
+                        "submitted_client_request_id_truncated": len(validated_req_id) > 256,
+                    },
                 )
-                conflict_diag = dict(conflict.diagnostic or {})
-                conflict_diag["existing_pdcp_log_id"] = str(existing_log.pdcp_log_id)
-                return SubmitPDCPResult(
-                    status="rejected",
-                    target_file_id=target.target_file_id,
-                    pdcp_log_id=None,
-                    before_hash=before_hash,
-                    after_hash=None,
-                    before_version=before_version,
-                    after_version=None,
-                    current_hash=target.current_hash,
-                    current_version=target.version,
-                    failure_reason=conflict.failure_reason,
-                    failure_detail=conflict.failure_detail,
-                    diagnostic=conflict_diag,
-                    validation_stage=ValidationStage.PRECONDITION_GUARD,
-                    client_request_id=validated_req_id,
+                current_pdcp = _upsert_current_pdcp(
+                    session, target=target,
+                    pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
+                    status="pending_validation", protocol_version=protocol_version,
+                    submission_source=submission_source, parent_pdcp_log_id=parent_uuid,
+                    regeneration_attempt=regeneration_attempt, regeneration_source=regeneration_source,
                 )
+                result = _persist_rejection(
+                    session, target=target, current_pdcp=current_pdcp,
+                    pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
+                    expected_target_version=expected_target_version,
+                    expected_current_hash=expected_current_hash,
+                    submission_source=submission_source, parent_pdcp_log_id=parent_uuid,
+                    regeneration_attempt=regeneration_attempt, regeneration_source=regeneration_source,
+                    protocol_version=protocol_version, parsed=None, rejection=conflict,
+                    before_hash=before_hash, before_version=before_version,
+                    stage=ValidationStage.PRECONDITION_GUARD,
+                    client_request_id=None, request_fingerprint=fingerprint,
+                )
+                # Response echoes the submitted key, while the new audit row has a NULL key.
+                return replace(result, client_request_id=validated_req_id)
+
 
         current_pdcp = _upsert_current_pdcp(
             session,

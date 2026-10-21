@@ -71,6 +71,8 @@ Every submission (accepted or rejected) creates an append-only row:
 
 For rejected invalid Unicode, pdcp_content contains a deterministic ASCII-escaped patchdiff-invalid-input/1 evidence envelope of the original input, not an accepted transaction. JSONB holds safe marker/path strings only. A safe request key recovers its original rejection with a domain-separated invalid-evidence fingerprint; unencodable keys remain NULL on the row and are preserved in evidence. Never write decoded surrogate/NUL text to PostgreSQL or change valid-input fingerprints. Caller-owned commit/rollback and target locks retain their usual semantics.
 
+Conflicting request fingerprints append independent NULL-key rejection rows carrying the submitted fingerprint and safe original-log/submitted-key diagnostics. Original keyed rows remain authoritative. Repeated conflicts are never collapsed/capped/updated/deleted. Supported concurrent recovery is tested at READ COMMITTED using actual blocked independent sessions; stronger-isolation retries belong to the owner. Caller-owned transactions remain provisional until commit and must retain locks through that boundary.
+
 ## Accepted-Only Manifest Ledger (`append_only_manifest_ledger`)
 
 Only accepted transactions record rows in the manifest ledger:

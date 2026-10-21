@@ -163,13 +163,15 @@ Read/search string arguments return invalid_argument with safely serialized deta
   - `materialized_state_checks` reports four booleans: `content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, and `version_matches`.
   - `materialized_state_matches` is `True` if and only if all four component checks are `True`.
 
+The lock-then-read outcome-recovery guarantee is supported and verified at PostgreSQL READ COMMITTED. A caller choosing stronger isolation may receive serialization/deadlock errors and owns any whole-transaction retry. The service never retries or commits an outer transaction or masks infrastructure errors. Concurrent tests must prove actual lock blocking and committed visibility using independent connections, not sequential calls or sleeps alone.
+
 #### C4. Request Idempotency and Lost-Response Recovery (`client_request_id`)
 
 - `patchdiff_submit_edits` and `patchdiff_submit_pdcp` accept optional `client_request_id` (`^[\x21-\x7E]{1,128}$`).
 - `append_only_pdcp_logs` stores `client_request_id` and `request_fingerprint` (SHA-256 over canonical JSON of `{protocol_version, target_file_id, pdcp_content_hash, expected_target_version, expected_current_hash, parent_pdcp_log_id}`), enforced by partial unique index `uq_pdcp_logs_target_client_request_id ON append_only_pdcp_logs(target_file_id, client_request_id) WHERE client_request_id IS NOT NULL`.
 - Under the target's `FOR UPDATE` lock, **before** evaluating version/hash preconditions:
   - If `(target_file_id, client_request_id)` exists with the **same** `request_fingerprint`, the service returns the recorded terminal outcome (`status: "accepted" | "rejected"`, `deduplicated: true`, original `pdcp_log_id`, `before_hash`, `after_hash`, `version`, `validity`, `evidence` / `diagnostic`) without re-applying the edit or inserting a new log row. This safely handles lost responses even after subsequent edits, no-op edits, or ABA hash transitions.
-  - If `(target_file_id, client_request_id)` exists with a **different** `request_fingerprint`, the service rejects with `FailureReason.CONTEXT_INVALID` (`deduplicated: false`, `diagnostic.existing_pdcp_log_id`) without mutating target state or overwriting the original log row.
+  - If `(target_file_id, client_request_id)` exists with a **different** `request_fingerprint`, the service rejects with `FailureReason.CONTEXT_INVALID` (`deduplicated: false`, `diagnostic.existing_pdcp_log_id`) without mutating target state or overwriting the original log row. The same locked rejection path appends a separate rejected attempt with client_request_id=NULL and request_fingerprint equal to this submitted attempt's fingerprint. It returns the new pdcp_log_id; diagnostics link existing_pdcp_log_id and submitted_client_request_id (preview capped at256 characters with an explicit truncation flag). The original keyed row remains unchanged and recovers its original outcome. Every separately admitted conflict, including repeated identical conflicts, creates a distinct immutable row; no collapse, cap, counter update or deletion.
 - `patchdiff_get_pdcp_log` supports filtering by `client_request_id` and `content_hash`.
 
 #### C5. Ledger and Schema Contract (Migration `20261020_0002`)
