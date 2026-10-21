@@ -20,7 +20,7 @@ from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "patchdiff-mvp"
-SERVER_VERSION = "0.2.1"
+SERVER_VERSION = "0.2.2"
 EXPECTED_TOOL_NAMES = registry.names()
 
 TOOL_DESCRIPTIONS: dict[str, str] = {

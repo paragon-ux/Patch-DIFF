@@ -16,7 +16,7 @@ from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
 from app.core.result import AcceptedCoreResult, RejectedCoreResult
 from app.core.validity import ValidationStage, validity_levels
-from app.core.versions import RUNTIME_VERSION
+from app.core.versions import RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
 from app.pdcp.models import (
     REQUIRED_MANIFEST_FIELDS,
@@ -497,10 +497,12 @@ def _submit(
         stage = ValidationStage.TRANSACTION_APPLICABILITY
         try:
             parsed, typed = decode(target)
+            profile = resolve_runtime_profile(RUNTIME_VERSION)
             core_result = apply_pdcp_transaction(
                 target.current_content,
                 parsed,
-                overlapping_matches=True,
+                overlapping_matches=profile.overlapping_matches,
+                enforce_singleton_selectors=profile.enforce_singleton_selectors,
             )
             if isinstance(core_result, RejectedCoreResult):
                 core_result = _enrich_diagnostic(

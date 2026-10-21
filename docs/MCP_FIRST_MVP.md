@@ -28,7 +28,7 @@ The product surface is the MCP server, not a standalone frontend, web app, or ri
 
 May:
 - decode and validate `patchdiff-tx/1` typed transaction records and `.pdcp` (`0.2.3`) files
-- enumerate all exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.1`)
+- enumerate all exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.2`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, and legacy `region_hint` in `0.2.3`)
 - simulate sequential `MATCH/REPLACE` operations in memory and compute `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests)
 - reject invalid transactions without target mutation

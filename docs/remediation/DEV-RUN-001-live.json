@@ -1,0 +1,17 @@
+{
+  "date_utc": "2026-10-21T04:09:26.258073+00:00",
+  "source_sha": "3d4daec2361c87615e3dc20bc5341a90cc0b75cf",
+  "kind": "manual actual subprocess plus independent PostgreSQL inspection, outside pytest",
+  "target_file_id": "ce71a431-4ace-4ba8-abd9-8e204e279e5d",
+  "server_version": "0.2.2",
+  "isolation": "read committed",
+  "rejected_attempts": 3,
+  "accepted_attempts": 1,
+  "ledger_rows": 1,
+  "version": 1,
+  "content": "goodbye",
+  "host_typed_and_legacy_examples_executed": true,
+  "keyed_recovery_same_log": true,
+  "replay_healthy": true,
+  "all_assertions_passed": true
+}

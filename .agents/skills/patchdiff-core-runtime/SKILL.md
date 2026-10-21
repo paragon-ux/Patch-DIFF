@@ -15,7 +15,7 @@ The core runtime may:
 
 - parse `patchdiff-tx/1` and `0.2.3` transaction formats
 - validate protocol structure and transaction applicability
-- enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.1`)
+- enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.2`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, and legacy `region_hint`)
 - simulate sequential `MATCH/REPLACE` operations in memory
 - compute runtime-derived `change_facts` (`span_start`, `span_end`, char lengths, SHA-256 digests)
@@ -59,7 +59,7 @@ Exact string matching operates on character code-points, case-sensitive and whit
 
 ## Match Enumeration & Overlapping Spans
 
-In `patchdiff-mvp-0.2.1`, string searching enumerates **all exact occurrences**, including overlapping matches:
+In `patchdiff-mvp-0.2.2`, string searching enumerates **all exact occurrences**, including overlapping matches:
 
 ```python
 # app/pdcp/matcher.py
@@ -70,7 +70,7 @@ def find_exact_occurrences(target_text: str, match_text: str, *, overlapping: bo
 For legacy replay under `patchdiff-mvp-0.1.0`, non-overlapping stepping (`index += len(pattern)`) is preserved.
 
 If pattern is not found: return `match_absent`.
-If pattern occurs multiple times and disambiguation is missing or fails: return `match_ambiguous`.
+If multiple occurrences have empty disambiguation: return match_ambiguous. A nonempty advisory-only mapping returns disambiguation_invalid. Supplied selecting constraints that fail return disambiguation_invalid, including for one occurrence under the current profile.
 
 ## Disambiguation
 
@@ -80,6 +80,8 @@ When a `MATCH` pattern occurs multiple times in the current buffer, explicit dis
 2. `anchor_before` (literal substring occurring anywhere preceding the intended match in the buffer).
 3. `anchor_after` (literal substring occurring anywhere following the intended match in the buffer).
 4. Legacy `region_hint` is advisory-only in `0.2.3`; it never selects a candidate. Typed edits do not accept it.
+
+Under 0.2.2 every supplied selector must hold even for one occurrence. A singleton without selecting fields succeeds; legacy region_hint alone remains advisory. Older recorded profiles retain the singleton early return during replay.
 
 Anchors are not required to be strictly adjacent to the match; they match as substrings anywhere within the preceding or following buffer text. If the disambiguator does not isolate exactly one occurrence, reject with `disambiguation_invalid`.
 

@@ -135,7 +135,8 @@ Submits a structured edit proposal (`protocol_version = "patchdiff-tx/1"`). Vali
     - `change_id` (`string | null`, optional): alphanumeric identifier (defaults to `chg_001`, `chg_002`, ...).
     - `rationale` (`string | null`, optional): per-edit explanation.
     - `risk` (`"low" | "medium" | "high" | null`, optional).
-    - `occurrence_index` (`integer >= 1 | null`, optional): 1-based selector when `match` appears multiple times.
+    - `occurrence_index` (`integer >= 1 | null`, optional): 1-based selector over exact occurrences; enforced even when only one match exists.
+    - All supplied selectors must hold together. Excluding singleton selectors reject with disambiguation_invalid; anchors retain anywhere-before/after semantics. This applies to new typed and legacy submissions under runtime 0.2.2; older logs replay under their recorded behavior.
     - `anchor_before` (`string | null`, optional): preceding substring context.
     - `anchor_after` (`string | null`, optional): succeeding substring context.
   - `expected_target_version` (`integer | null`, optional): target version guard.

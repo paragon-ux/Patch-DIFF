@@ -58,7 +58,7 @@ Every submission (accepted or rejected) creates an append-only row:
 - `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
 - `target_file_id`: foreign key to `cloud_target_files`.
 - `protocol_version`: `'patchdiff-tx/1'` or `'0.2.3'`.
-- `runtime_version`: `'patchdiff-mvp-0.2.1'` (or historical `'patchdiff-mvp-0.1.0'`).
+- `runtime_version`: `'patchdiff-mvp-0.2.2'` (or historical `'patchdiff-mvp-0.1.0'`).
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
 - `client_request_id`: client-supplied TEXT key for idempotency (1–128 printable ASCII characters without whitespace; `req-001` is valid, a UUID is optional).
@@ -116,6 +116,8 @@ The replay result provides detailed boolean verification:
 - `version_matches`: final log `after_version` matches current database `current_version`.
 - `materialized_state_matches`: `true` only when all four component checks pass.
 
-Replay uses the exact `(protocol_version, runtime_version)` recorded on each log row via `SUPPORTED_RUNTIME_PROFILES` in `backend/app/core/versions.py`. Legacy logs recorded with `patchdiff-mvp-0.1.0` replay with non-overlapping match enumeration; modern logs recorded with `patchdiff-mvp-0.2.1` replay with overlapping enumeration.
+Replay uses the exact `(protocol_version, runtime_version)` recorded on each log row via `SUPPORTED_RUNTIME_PROFILES` in `backend/app/core/versions.py`. Legacy logs recorded with `patchdiff-mvp-0.1.0` replay with non-overlapping match enumeration; modern logs recorded with `patchdiff-mvp-0.2.2` replay with overlapping enumeration.
 
-Current typed submissions record patchdiff-mvp-0.2.1. Replay explicitly retains patchdiff-mvp-0.2.0 overlapping-match and original change-ID decoding behavior, plus the 0.1.0 non-overlapping profile. Strict new-key syntax does not prevent exact recovery of already-persisted request IDs; unknown/new invalid IDs still reject. Do not trim historical IDs or rewrite accepted history.
+Current typed submissions record patchdiff-mvp-0.2.2. Replay explicitly retains patchdiff-mvp-0.2.1 overlapping matches with ignored singleton selectors, patchdiff-mvp-0.2.0 overlapping-match and original change-ID decoding behavior, plus the 0.1.0 non-overlapping profile. Strict new-key syntax does not prevent exact recovery of already-persisted request IDs; unknown/new invalid IDs still reject. Do not trim historical IDs or rewrite accepted history.
+
+The current 0.2.2 profile enforces every supplied selector even for one occurrence. All older supported profiles retain ignored singleton selectors. Resolve both profile settings in submission and replay; never repurpose a recorded profile.
