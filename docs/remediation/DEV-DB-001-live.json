@@ -1,0 +1,104 @@
+{
+  "source_sha": "cd1b91f19054ac7dc31bf5e2416f2e9f3547394e",
+  "mode": "manual outsidepytest actual PostgreSQL and real stdio",
+  "target_file_id": "90f7b637-931d-4573-964a-42fd58cc010c",
+  "cases": [
+    {
+      "case": "healthy",
+      "checks": {
+        "content_matches": true,
+        "stored_hash_matches": true,
+        "recomputed_hash_matches": true,
+        "version_matches": true
+      },
+      "aggregate": true,
+      "reconstruction": "success",
+      "no_mutation": true,
+      "rollback_restored": true
+    },
+    {
+      "case": "crlf",
+      "checks": {
+        "content_matches": false,
+        "stored_hash_matches": true,
+        "recomputed_hash_matches": true,
+        "version_matches": true
+      },
+      "aggregate": false,
+      "reconstruction": "success",
+      "no_mutation": true,
+      "rollback_restored": true
+    },
+    {
+      "case": "bare_cr",
+      "checks": {
+        "content_matches": false,
+        "stored_hash_matches": true,
+        "recomputed_hash_matches": true,
+        "version_matches": true
+      },
+      "aggregate": false,
+      "reconstruction": "success",
+      "no_mutation": true,
+      "rollback_restored": true
+    },
+    {
+      "case": "unicode",
+      "checks": {
+        "content_matches": false,
+        "stored_hash_matches": true,
+        "recomputed_hash_matches": false,
+        "version_matches": true
+      },
+      "aggregate": false,
+      "reconstruction": "success",
+      "no_mutation": true,
+      "rollback_restored": true
+    },
+    {
+      "case": "hash_only",
+      "checks": {
+        "content_matches": true,
+        "stored_hash_matches": false,
+        "recomputed_hash_matches": true,
+        "version_matches": true
+      },
+      "aggregate": false,
+      "reconstruction": "success",
+      "no_mutation": true,
+      "rollback_restored": true
+    },
+    {
+      "case": "version_only",
+      "checks": {
+        "content_matches": true,
+        "stored_hash_matches": true,
+        "recomputed_hash_matches": true,
+        "version_matches": false
+      },
+      "aggregate": false,
+      "reconstruction": "success",
+      "no_mutation": true,
+      "rollback_restored": true
+    }
+  ],
+  "stdio_replay": {
+    "accepted_transactions_replayed": 1,
+    "current_hash": "ab9b7a24409e006c096ee24a61d4b572ab40bd83b4e5cba9250f0f88c1f588c3",
+    "current_version": 1,
+    "failure_detail": null,
+    "failure_reason": null,
+    "materialized_state_checks": {
+      "content_matches": true,
+      "recomputed_hash_matches": true,
+      "stored_hash_matches": true,
+      "version_matches": true
+    },
+    "materialized_state_matches": true,
+    "pdcp_log_id": null,
+    "reconstructed_hash": "ab9b7a24409e006c096ee24a61d4b572ab40bd83b4e5cba9250f0f88c1f588c3",
+    "reconstructed_version": 1,
+    "status": "success",
+    "target_file_id": "90f7b637-931d-4573-964a-42fd58cc010c"
+  }
+}
