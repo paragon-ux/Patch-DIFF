@@ -1,0 +1,11 @@
+{
+  "passed": 6,
+  "checks": [
+    "stale guard: fresh bounded Unicode context; no target/ledger mutation",
+    "later sequential failure: original intermediate prefix differs from committed prefix; full atomic rollback",
+    "keyed recovery after later acceptance: immutable stored failure, separate fresh state, no new rows",
+    "malformed/missing targets: explicit unavailable contexts; all six table counts unchanged",
+    "empty known target: available empty context, zero spans, no truncation",
+    "SAVE/replay/export: canonical content and all materialized checks preserved"
+  ]
+}
