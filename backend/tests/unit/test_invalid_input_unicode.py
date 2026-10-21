@@ -207,6 +207,7 @@ def test_depth_500_json_is_checked_without_python_recursion(monkeypatch, leaf):
     stored = json.loads(result["pdcp_content"])
     if leaf in BAD:
         assert stored["evidence_format"] == "patchdiff-invalid-input/1"
+        assert result["rejection"].diagnostic["invalid_input_paths_truncated"] is True
         assert result["pdcp_content"].isascii()
         stored = stored["inputs"]["record"]
     recovered = stored["edits"][0]["unknown"]

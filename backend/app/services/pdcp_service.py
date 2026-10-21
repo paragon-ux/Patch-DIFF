@@ -261,7 +261,9 @@ def _submit(
         encoding_diagnostic = {
             "evidence_format": "patchdiff-invalid-input/1",
             "invalid_input_paths": [path[:256] for path in encoding_paths[:20]],
-            "invalid_input_paths_truncated": len(encoding_paths) > 20,
+            "invalid_input_paths_truncated": len(encoding_paths) > 20 or any(
+                len(path) > 256 for path in encoding_paths[:20]
+            ),
         }
         # Original values remain reversible in TEXT evidence, never unsafe JSONB/columns.
         if invalid_text_paths(expected_target_version):
