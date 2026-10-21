@@ -1,0 +1,29 @@
+{
+  "revision": "41a83806519eb556fbef3f8a98803cc79a937347",
+  "utc": "2026-10-20T21:35:40.316413+00:00",
+  "mode": "manual live Postgres session outside pytest; exact base typed parser and key validator, current trusted persistence service",
+  "fixture_source_revision": "60fa01fc92bdeff16929b68f6f0d3c838da3d394",
+  "historical_runtime": "patchdiff-mvp-0.2.0",
+  "current_runtime": "patchdiff-mvp-0.2.1",
+  "target_file_id": "aae327f7-933e-427b-b09c-099cfc2ba95b",
+  "historical_record_unchanged": true,
+  "exact_old_decoder_accepted_newline_change_id": true,
+  "historical_replay_healthy": true,
+  "accepted_legacy_key_recovered_same_log": true,
+  "rejected_legacy_key_recovered_same_log": true,
+  "conflicting_legacy_key_rejected_without_duplicate_log": true,
+  "new_newline_change_id_rejected": true,
+  "mixed_profile_replay_healthy": true,
+  "content": "gamma",
+  "version": 2,
+  "logs": 4,
+  "ledger_rows": 2,
+  "log_profiles": [
+    "patchdiff-mvp-0.2.0",
+    "patchdiff-mvp-0.2.0",
+    "patchdiff-mvp-0.2.1",
+    "patchdiff-mvp-0.2.1"
+  ],
+  "new_invalid_key_on_other_target_rejected": true,
+  "result": "PASS"
+}

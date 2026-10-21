@@ -1,6 +1,6 @@
 # PatchDIFF Modernization Change Document
 
-Status: **remaining review corrections implemented; 319 tests pass against live Postgres, including stdio and isolated populated migrations (2026-10-20). Independent closure review pending.**
+Status: **remaining review corrections implemented; 319 tests pass against live Postgres, including stdio and isolated populated migrations (2026-10-20). Final closure review complete; see section 6 for reviewer attribution and evidence.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
@@ -13,7 +13,7 @@ PatchDIFF is modernized into a guarded transaction service with a typed primary 
 | 1 | Typed transaction input & schema | A2, A3, A6, **C1** | `patchdiff_submit_edits` accepts `intent`, `edits[]`, required guard (`expected_target_version` and/or `expected_current_hash`), optional `client_request_id`, `parent_pdcp_log_id`, `attempt`. Full item JSON Schema (`TYPED_EDIT_JSON_SCHEMA`) advertised in MCP `tools/list`. Persisted as canonical JSON with `protocol_version = "patchdiff-tx/1"`. |
 | 2 | Stage-based validity & format-specific diagnostics | A7, **C2** | `ValidationStage` (`PRECONDITION_GUARD`, `PROTOCOL_VALIDATION`, `TRANSACTION_APPLICABILITY`, `COMMIT_GUARD`, `ACCEPTED`) drives `validity_levels(...)`. Typed rejections report `format: "patchdiff-tx/1"`, `requires_new_submission: true`, and `allowed_edit_fields` / `required_edit_fields` without leaking PDCP manifest keys. |
 | 3 | Safe UUID & parent-lineage handling | **C2** | Malformed `target_file_id` returns `CONTEXT_INVALID`; nonexistent `target_file_id` returns `TARGET_NOT_FOUND`. Malformed, missing, or cross-target `parent_pdcp_log_id` logs a `CONTEXT_INVALID` rejection on the target with `parent_pdcp_log_id = null`. |
-| 4 | Matcher overlap fix & explicit replay profiles | A2, **C3** | `find_exact_occurrences` counts all exact spans (`overlapping=True`). `SUPPORTED_RUNTIME_PROFILES` maps `"patchdiff-mvp-0.1.0" -> False` and `"patchdiff-mvp-0.2.1" -> True`; unknown runtime/protocol versions fail replay with `REPLAY_PROTOCOL_INVALID`. |
+| 4 | Matcher overlap fix & explicit replay profiles | A2, **C3** | `find_exact_occurrences` counts all exact spans (`overlapping=True`). `SUPPORTED_RUNTIME_PROFILES` maps 0.1.0 to non-overlapping matching and both 0.2.0/0.2.1 to overlapping matching, with versioned typed decoding; unknown runtime/protocol versions fail replay with `REPLAY_PROTOCOL_INVALID`. |
 | 5 | Replay integrity & materialized-state checks | **C3** | `replay_target` verifies initial snapshot ownership & hash, per-log target ownership, version contiguity, `before_hash`, `pdcp_content_hash`, and `after_hash`, and reports `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`). |
 | 6 | Request idempotency & lost-response recovery | A6, **C4** | `client_request_id` + `request_fingerprint` on `append_only_pdcp_logs` (`uq_pdcp_logs_target_client_request_id`). Duplicate requests recover the recorded terminal outcome (`deduplicated: true`) prior to stale-guard checks; conflicting reuse with a different payload rejects with `CONTEXT_INVALID`. |
 | 7 | Ledger schema & derived facts | A3, **C5** | Migration `20261020_0002` adds `origin` (`'pdcp_manifest'` or `'typed'`) and `derived_json` to `append_only_manifest_ledger`, relaxes legacy prose columns to nullable, and populates `derived_json` on both PDCP and typed acceptances. |
@@ -129,13 +129,13 @@ The [head-pinned recheck](reviews/PR-1-60fa01f-findings-recheck.md) closed 11 or
 | SVC-001 | P2 | abeb58e; only rejected parents support retry lineage | Closed at prior recheck |
 | SVC-002 | P3 | abeb58e; strict attempt metadata validation | Closed at prior recheck |
 | SCRIPT-001 | P2 | 78b16e6; independent verdict/hash oracle fault-injected | Closed at prior recheck |
-| MCP-001 | P2 | Discovery advertises non-null guard alternatives, nonblank prose, storage integer bounds and exact hash/ID domains. Actual schema validated with a test-only jsonschema validator against live submission and persisted outcomes. Unguarded known-target calls reach durable service rejection. | Implemented; independent recheck pending |
-| MCP-002 | P2 | Full-string change-ID validation rejects trailing newline, preserves colon/null/default/uniqueness behavior; schema and live boundary cases covered. | Implemented; independent recheck pending |
-| RUN-003 | P2 | Strict hash fullmatch before persistence; typed and legacy newline-hash calls reject normally, preserve raw evidence, leave constrained metadata null and retain durable rejection. | Implemented; independent recheck pending |
-| DOC-001 | P2 | Recovery guide distinguishes paged history, unknown outcomes and still-running requests, optional legacy guards, actual conflict payload and printable-ASCII request IDs. | Implemented; independent recheck pending |
-| SKILL-001 | P3 | Exact validity enum/phase table, null unreached stages and true simulation validity at commit failure. | Implemented; independent recheck pending |
-| SKILL-002 | P3 | One-based indices, real matcher signature, advisory region hint, actual ID/storage/sequence names and typed risk behavior. | Implemented; independent recheck pending |
-| TEST-001 (new) | P2 | Unique owned schemas and actual sessions/version zero; populated legacy accepted/rejected history survives upgrade/downgrade/upgrade; typed downgrade refusal preserves rows and revision and remains replayable. | Implemented; independent recheck pending |
+| MCP-001 | P2 | Discovery advertises non-null guard alternatives, nonblank prose, storage integer bounds and exact hash/ID domains. Actual schema validated with a test-only jsonschema validator against live submission and persisted outcomes. Unguarded known-target calls reach durable service rejection. | Closed; final review at code 41a8380 |
+| MCP-002 | P2 | Full-string change-ID validation rejects trailing newline, preserves colon/null/default/uniqueness behavior; schema and live boundary cases covered. | Closed; final review at code 41a8380 |
+| RUN-003 | P2 | Strict hash fullmatch before persistence; typed and legacy newline-hash calls reject normally, preserve raw evidence, leave constrained metadata null and retain durable rejection. | Closed; final review at code 41a8380 |
+| DOC-001 | P2 | Recovery guide distinguishes paged history, unknown outcomes and still-running requests, optional legacy guards, actual conflict payload and printable-ASCII request IDs. | Closed; final review at code 41a8380 |
+| SKILL-001 | P3 | Exact validity enum/phase table, null unreached stages and true simulation validity at commit failure. | Closed; final review at code 41a8380 |
+| SKILL-002 | P3 | One-based indices, real matcher signature, advisory region hint, actual ID/storage/sequence names and typed risk behavior. | Closed; final review at code 41a8380 |
+| TEST-001 (new) | P2 | Unique owned schemas and actual sessions/version zero; populated legacy accepted/rejected history survives upgrade/downgrade/upgrade; typed downgrade refusal preserves rows and revision and remains replayable. | Closed; final review at code 41a8380 |
 
 ### Verification scope
 
@@ -146,7 +146,7 @@ The [head-pinned recheck](reviews/PR-1-60fa01f-findings-recheck.md) closed 11 or
 - Alembic accepts an explicitly supplied connection so migration tests control isolation and transaction scope without downgrading shared data. Ordinary CLI migration setup is unchanged.
 - jsonschema is a test-only direct dependency, pinned with its transitive dependencies in requirements.lock; no production schema-validation dependency or transport rejection layer was added.
 - Separate manual live stdio/Postgres verification at code revision 68b9c54 passed outside pytest: ten invalid submissions produced ten durable rejections with unchanged target/ledger; direct database inspection confirmed raw newline evidence and null constrained hashes. After restarting the server, the original request ID recovered its outcome before and after a later commit; final replay/export matched version 2. Evidence: [PR-3-live-verification.json](reviews/PR-3-live-verification.json).
-- Inspected PR CI run 39500094365 executed merge 6b398bdb3e206643dc40639223e32b71c0df7954 (code head 68b9c54 plus base 60fa01f): 178 unit and 135 integration tests passed, offline evaluation OK. Independent closure review remains pending.
+- Inspected PR CI run 39500094365 executed merge 6b398bdb3e206643dc40639223e32b71c0df7954 (code head 68b9c54 plus base 60fa01f): 178 unit and 135 integration tests passed, offline evaluation OK. The final primary-agent review is linked below.
 
 ### Independent-review compatibility corrections
 
@@ -154,4 +154,16 @@ The reviewer established two further defects in the first correction revision; n
 - DB-003 (P1): stricter current ID parsing must not invalidate previously accepted records. New submissions now record patchdiff-mvp-0.2.1; replay explicitly dispatches original ID decoding for older supported profiles and retains bytes unchanged. Regression coverage exercises historical acceptance, current rejection and mixed-profile replay.
 - SVC-003 (P2): stricter new request-key validation must not prevent exact recovery of already-persisted legacy keys. The locked service performs exact lookup first, retaining fingerprint conflict checks. Both accepted and rejected prior outcomes recover without a new row; new invalid keys on other targets still reject.
 
-These corrections require a renewed live base-code acceptance/replay/recovery check and independent re-review before closure. The earlier 313-test result and manual JSON refer to code revision 68b9c54; they do not certify the compatibility delta.
+Both compatibility findings are closed at 41a8380 after 319 passing tests and renewed manual live verification. The exact base typed parser/validator accepted durable historical fixtures; current code recovered old accepted/rejected outcomes and replayed mixed profiles without rewriting history. A fresh final stdio process advertised server 0.2.1 and durably handled missing/newline guards, accepted/deduplicated a valid edit, and replayed healthy state.
+
+The independent subagent established DB-003 and SVC-003 but exhausted usage before a completed final approval. At the user's request the primary agent took over, reviewed the full final delta and closed the findings with source, regression and live evidence. No unissued subagent approval is claimed.
+
+Final category review: [PR-3-41a8380-final-closure.md](reviews/PR-3-41a8380-final-closure.md). Additional live records: [historical compatibility](reviews/PR-3-replay-compatibility-live.json) and [final stdio](reviews/PR-3-final-stdio-live.json). The original 313-test/manual record at 68b9c54 remains historical evidence for that earlier correction, not proof of its later compatibility fixes.
+
+Inspected final material-code CI run 39501529225, job 118899951720, executed generated merge 6449114b6270684279e81cf2121f8c0092ec9488 combining code 41a83806519eb556fbef3f8a98803cc79a937347 with base 60fa01f: 181 unit and 138 live Postgres integration tests passed; offline evaluation OK.
+
+| Additional finding | Priority | Status | Fix and acceptance |
+| --- | --- | --- | --- |
+| DB-003 | P1 | Closed | 41a8380; explicit historical/current decoding and exact-base live mixed replay |
+| SVC-003 | P2 | Closed | 41a8380; exact existing-key recovery with unchanged fingerprints, accepted/rejected old outcomes and invalid fresh-key rejection |
+

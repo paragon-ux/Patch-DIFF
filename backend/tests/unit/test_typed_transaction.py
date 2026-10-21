@@ -161,15 +161,15 @@ def test_empty_replace_is_deletion_and_allowed() -> None:
 
 
 def test_canonical_record_is_deterministic_and_round_trips() -> None:
-    rec = record([{"replace": "ÃƒÂ©\nb", "match": "a"}], hash_="0" * 64)
+    rec = record([{"replace": "é\nb", "match": "a"}], hash_="0" * 64)
     reordered = {key: rec[key] for key in reversed(list(rec))}
     text = canonical_record_json(rec)
     assert text == canonical_record_json(reordered)
     assert canonical_sha256(text) == canonical_sha256(canonical_record_json(reordered))
     assert json.loads(text)["format"] == TYPED_PROTOCOL_VERSION
-    assert "ÃƒÂ©" in text  # ensure_ascii disabled: payload stays readable and byte-stable
+    assert "é" in text  # ensure_ascii disabled: payload stays readable and byte-stable
     decoded = decode_record(text)
-    assert decoded.edits[0].replace == "ÃƒÂ©\nb"
+    assert decoded.edits[0].replace == "é\nb"
     assert decoded.expected_current_hash == "0" * 64
 
 

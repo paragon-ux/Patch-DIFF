@@ -1,0 +1,16 @@
+{
+  "revision": "41a83806519eb556fbef3f8a98803cc79a937347",
+  "mode": "fresh manual real stdio session and independent database inspection outside pytest",
+  "server": {
+    "name": "patchdiff-mvp",
+    "version": "0.2.1"
+  },
+  "target_file_id": "91e923a0-387d-42dc-ba1c-fad7f902ee64",
+  "newline_hash_rejection_durable": true,
+  "missing_guard_rejection_durable": true,
+  "current_profile_accepted_and_deduplicated": true,
+  "healthy_replay": true,
+  "database_log_rows": 3,
+  "recorded_runtime": "patchdiff-mvp-0.2.1",
+  "result": "PASS"
+}

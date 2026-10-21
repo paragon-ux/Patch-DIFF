@@ -53,7 +53,7 @@ Submitted over MCP via `patchdiff_submit_edits`:
 - `attempt` (`integer 1..2^31-1 | null`, optional): Retry attempt counter.
 
 ### Edit Item Schema (`TYPED_EDIT_JSON_SCHEMA`)
-- `match` (`string`, required nonblank): Exact target text to match.
+- `match` (`string`, required non-empty): Exact target text to match.
 - `replace` (`string`, required): Replacement text. Empty string `""` denotes deletion.
 - `change_id` (`string | null`, optional): A complete 1–64-character identifier containing only ASCII letters, digits, underscore, period, colon or hyphen; trailing newlines reject. Defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate IDs reject with `FailureReason.MANIFEST_INVALID`.
 - `rationale` (`string | null`, optional): Nonblank per-edit explanation when supplied.
