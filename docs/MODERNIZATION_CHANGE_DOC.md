@@ -1,6 +1,6 @@
 # PatchDIFF Modernization Change Document
 
-Status: **DEV-RUN-001/002 and DEV-SVC-001 are implemented, independently rechecked and published as PRs #4/#5/#6 with inspected green CI. DEV-DB-001 is in verification; MCP arguments/paging and identity documentation remain open. Earlier 2026-10-20 closure and319-test records below apply to their pinned revisions. Current evidence is under docs/remediation/. No merge is authorized.**
+Status: **The six required Devin defects are implemented and independently rechecked in stacked PRs #4–#8. Final local product verification passes834 tests, including live PostgreSQL and real stdio; PR#8 generated-merge b0444e2 CI passes613 unit/221 integration tests. DEV-SVC-002 retains current identity by decision; D01 documentation passes independent source/contract review at336f1e5/fb60723 and is ready for the final docs PR. Earlier closure records below remain evidence for their pinned revisions. Current execution is under docs/remediation/. Nothing is merged into PR#1.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
@@ -23,6 +23,10 @@ Contract-first9de0a64 changes raw materialized-content comparison before impleme
 ## Current remediation: DEV-MCP-001/002
 
 Search context uses non-bool integer validation with cap400. Attempt history gains filtered limit+1 continuation; both history tools share explicit positive integer argument/error semantics, default50/cap200 and safe exact legacy-key lookup. Existing attempt descending and ledger page ascending display orders are preserved and documented. Service matrices plus actual PostgreSQL traversal and real stdio verify the API. Execution evidence follows under docs/remediation/.
+
+## Current remediation: DEV-SVC-002 decision and D01
+
+Broader parent UUID normalization is not adopted: eligible rejected parents already canonicalize; changing rejected/ineligible identity needs separate compatibility work. DATA_MODEL and HOST_INTEGRATION_GUIDE now explain full canonical-record identity, wire-versus-record equivalence, intent/guards/selectors/advisory fields, omitted versus null edit fields, typed escaped newline differences and legacy text normalization. C1 wording is reconciled with existing C4/build_record behavior without changing runtime or hashes. The replay review receives only Markdown heading formatting; its original evidence/pin remains unchanged.
 
 ## 1. Coherent Change Set Summary
 

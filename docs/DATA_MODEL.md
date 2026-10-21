@@ -159,6 +159,22 @@ Indexes:
 - `INDEX (status, failure_reason)`
 - Partial unique index: `uq_pdcp_logs_target_client_request_id ON append_only_pdcp_logs(target_file_id, client_request_id) WHERE client_request_id IS NOT NULL`
 
+#### Request identity: C4 / D01
+
+For ordinary inputs, request_fingerprint hashes a canonical JSON envelope containing protocol_version, canonical target_file_id, pdcp_content_hash, expected_target_version, expected_current_hash and parent_pdcp_log_id. The client_request_id selects the per-target keyed row; it is not itself part of this envelope. Submission source and attempt metadata are not part of ordinary request identity. The separate invalid-input evidence domain described below covers its evidence envelope instead.
+
+For typed input, pdcp_content is canonical JSON of the complete submitted record: format, canonical target UUID, both guard fields, intent and the ordered raw edits array. Object keys are sorted and JSON separators are compact; decoded string values and supplied edit fields are preserved. JSON wire whitespace, object-key order and equivalent Unicode escape spelling do not affect identity. This is not a hash of the original JSON-RPC wire bytes, nor a fingerprint of only the resulting edit operation.
+
+Changing intent, rationale, risk, selectors, edit order or a guard changes the record and therefore request identity. LF versus CRLF inside a typed string is represented by different JSON escapes and also changes identity, even when the applier would normalize both to the same matching text. No Unicode normalization is performed. An omitted optional edit field differs from an explicitly null field; an omitted change_id differs from an explicitly supplied runtime-default ID. Top-level omitted/null guards both become null in build_record. Runtime parsing defaults do not rewrite the persisted raw edit array before fingerprinting.
+
+Legacy PDCP uses canonical_sha256 over its complete text, so LF/CRLF/bare-CR line endings normalize for that content hash. Do not extend that legacy equivalence to escaped line endings inside typed JSON values. Valid hashing and all stored fingerprints remain unchanged.
+
+#### Parent identity decision: DEV-SVC-002
+
+Do not adopt broader parent UUID canonicalization in this release. _resolve_parent_log canonicalizes only a UUID that resolves to a rejected attempt on the same target. If the parent is missing, accepted, cross-target or malformed, lineage rejects and the fingerprint retains its supplied string spelling (for a truthy value); no invalid foreign key is stored. Changing case or spelling in such a rejected request can therefore conflict with an existing key. Exact original retries preserve their prior identity and outcome, including the lookup-only historical compatibility path.
+
+Canonicalizing syntactically valid but ineligible UUIDs before lineage would change rejected-request identity and require its own historical fingerprint compatibility strategy. Retaining the current contract is the requested adoption decision, not a claim that broader normalization was implemented. Conditional adoption tests are not applicable; the implementation remains unchanged.
+
 #### Rejected invalid-text evidence
 
 An encoding-invalid proposal uses existing pdcp_content TEXT for an ASCII-escaped JSON envelope: evidence_format is patchdiff-invalid-input/1; inputs retain the original submitted record and metadata. The stored characters are ASCII and safe for PostgreSQL, while JSON decoding can recover the offending code points for inspection outside database JSONB. Do not insert decoded unpaired surrogates or NUL into TEXT/JSONB.

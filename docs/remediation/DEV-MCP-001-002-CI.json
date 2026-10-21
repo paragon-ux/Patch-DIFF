@@ -1,0 +1,13 @@
+{
+  "pr": "https://github.com/paragon-ux/Patch-DIFF/pull/8",
+  "head_sha": "226ab2210be84f53527c1f0edb6acecd4564ec27",
+  "base_sha": "dd5877de5d50ccae19faca12a6fb8463a291ec60",
+  "run_id": 39572642874,
+  "event": "pull_request",
+  "checkout_merge": "b0444e27888ce86407127620974387a1517b280d",
+  "conclusion": "success",
+  "unit_passed": 613,
+  "integration_passed": 221,
+  "offline_verdict_equivalence": "OK",
+  "evidence": "Actual checkout and test log lines inspected. No merge performed."
+}
