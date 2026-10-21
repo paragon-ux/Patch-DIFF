@@ -38,8 +38,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_replay": "Replay accepted logs (dispatching on protocol_version and runtime_version), verify hash/version chain, and report component-level materialized_state_checks.",
     "patchdiff_export_target": "Export the current canonical target content and metadata.",
     "patchdiff_get_target": "Return the current canonical target state.",
-    "patchdiff_get_pdcp_log": "Return a bounded, newest-first page of append-only attempts (accepted and rejected); filter by status, content_hash, or client_request_id.",
-    "patchdiff_get_manifest_ledger": "Return accepted-only manifest ledger entries for a target.",
+    "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
+    "patchdiff_get_manifest_ledger": "Return the newest bounded ledger page displayed oldest-first, with has_more/next_sequence for backward traversal.",
 }
 
 
@@ -160,6 +160,26 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     }.items():
         if field in properties:
             properties[field].update(constraints)
+    if name == "patchdiff_find_occurrences":
+        properties["context_chars"].update({
+            "minimum": 0, "default": 40,
+            "description": "Context on each side in code points; non-negative, capped at 400.",
+        })
+    if name in {"patchdiff_get_pdcp_log", "patchdiff_get_manifest_ledger"}:
+        properties["limit"].update({
+            "minimum": 1, "default": 50,
+            "description": "Omitted/null selects 50 entries; positive integers are capped at 200.",
+        })
+        properties["before_sequence"].update({
+            "minimum": 1, "description": "Exclusive upper sequence bound; use next_sequence.",
+        })
+    if name == "patchdiff_get_pdcp_log":
+        properties["status"]["enum"] = ["accepted", "rejected", None]
+        properties["include_content"]["default"] = False
+        properties["client_request_id"].pop("pattern", None)
+        properties["client_request_id"]["description"] = "Exact stored request key; historical syntax is accepted."
+    if name == "patchdiff_get_manifest_ledger":
+        properties["include_previous_cycles"]["default"] = False
     if name == "patchdiff_submit_edits":
         properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {

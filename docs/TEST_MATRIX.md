@@ -32,6 +32,7 @@ Run with: `pytest backend/tests/unit -q`
 | `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.2`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
 | `test_parser.py` | Protocol header parsing; manifest line format; delimiter enforcement (`<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`); delimiter collision rejection (`FailureReason.BLOCK_MALFORMED`). |
 | `test_protocol_validator.py` | 7 required manifest fields (v0.2.3); risk value validation; structural purity (rejection of executable logic outside payloads). |
+| `test_mcp_arguments_paging.py` | DEV-MCP-001/002: service context type/bounds, discovery/routing, filtered limit+1 continuation, defaults/caps, error shapes and invalid argument types. |
 | `test_conflict_audit.py` | DEV-SVC-001: bounded submitted-key diagnostic, NULL persisted key versus response echo, submitted fingerprint policy. |
 | `test_invalid_input_unicode.py` | DEV-RUN-002: all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
 | `test_selector_profiles.py` | DEV-RUN-001: singleton/multiple/overlapping/absent selectors across typed, legacy and sequential buffers; historical profile compatibility. |
@@ -57,6 +58,7 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 | `test_typed_submit_flow.py` | **C1–C6**: Typed accept writes `append_only_pdcp_logs` (`protocol_version="patchdiff-tx/1"`) and `append_only_manifest_ledger` (`origin="typed"`, `derived_json`); format-specific diagnostics (no PDCP manifest leakage on typed rejections); stage-based validity across all 5 stages; safe UUID and parent-lineage error handling; `client_request_id` idempotency, lost-response outcome recovery, ABA sequence recovery, no-op edit recovery, and conflicting reuse rejection; mixed PDCP/typed replay; component-level `materialized_state_checks`; unknown profile rejection; read/search pagination. |
 | `test_pdcp_submit_flow.py` | Legacy `.pdcp` submission; atomic rollback on applicability failure; optimistic concurrency guards (`expected_target_version`, `expected_current_hash`); row locking independence across targets. |
 | `test_save.py` | `patchdiff_save` creates snapshots and cycle rotation without mutating target content; ledger reads filter to active cycle. |
+| `test_mcp_history_paging_live.py` | DEV-MCP-002: actual PostgreSQL multi-page attempt/ledger traversal, filters/gaps, inserted newer rows, empty/not-found targets and real stdio history. |
 | `test_replay.py` | Reconstructs state from initial upload snapshot + accepted logs; detects tampered logs and broken version chains. |
 | `integration/test_replay_materialized_integrity_live.py` | DEV-DB-001:healthy,CRLF,bareCR,Unicode,hash-only,version-only storage; exact four checks/aggregate; reconstruction success; no target/history mutation; caller rollback and fresh healthy observer. |
 | `test_mcp_tool_contract.py` & `test_mcp_tools.py` | Tool wrappers route exclusively through services; tools do not mutate storage directly. |

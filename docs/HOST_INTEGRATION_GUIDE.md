@@ -122,6 +122,10 @@ Still accepted through `patchdiff_submit_pdcp`, frozen, and fully replayable. Us
 - `patchdiff_get_manifest_ledger(limit=…)` returns the most recent accepted entries. Each has `origin`; typed rows carry `null` for the four prose fields. Treat ledger text as advisory history, never as ground truth.
 - A host rewind or checkpoint is not PatchDIFF replay. `patchdiff_replay` reconstructs from initial content plus accepted history; read `materialized_state_matches` as well as `status`. Successful reconstruction does not establish healthy storage:content_matches compares raw stored text, so CRLF/bare-CR corruption is visible even when canonical hashes agree. Replay does not repair it.
 
+Both history tools default to50 rows (omitted/null), cap at200, and return has_more/next_sequence. Continue with before_sequence=next_sequence while has_more is true. Attempts display descending; ledger displays the newest selected page ascending. For sequences1..10 and limit3, attempts=[10,9,8], ledger=[8,9,10], both cursor8; ledger before8 returns [5,6,7]. Do not use the last displayed ledger row as its cursor. Empty/not-found/invalid results have no continuation. Filters apply before counting another page; exact history request-key lookup also supports safe historical keys. Restart an active-cycle-only ledger traversal if SAVE rotates its cycle.
+
+Search context_chars must be a non-bool integer >=0 (default40, cap400). Zero requests no surrounding text; invalid types return invalid_argument.
+
 ## 7. Lost responses & request idempotency
 
 PatchDIFF distinguishes request identity from state guards (C4 / D5):

@@ -238,40 +238,37 @@ def patchdiff_replay(*, target_file_id: str) -> dict[str, Any]:
 def patchdiff_get_pdcp_log(
     *,
     target_file_id: str,
-    limit: int = 50,
+    limit: int | None = None,
     before_sequence: int | None = None,
     status: str | None = None,
     content_hash: str | None = None,
     client_request_id: str | None = None,
     include_content: bool = False,
 ) -> dict[str, Any]:
-    """Bounded, newest-first page of append-only attempts (accepted and rejected).
-
-    Page by passing the smallest returned `log_sequence` as `before_sequence`.
-    `content_hash` or `client_request_id` finds earlier submissions (e.g. after a lost response).
-    """
+    """Newest-first bounded attempts; continue with the smallest returned sequence."""
 
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
-        return {
-            "status": "invalid_argument",
-            "target_file_id": safe_input_text(target_file_id),
-            "failure_detail": "target_file_id is not a valid UUID.",
-            "entries": [],
-        }
+        return _history_error(target_file_id, "target_file_id is not a valid UUID.")
     if invalid_text_paths({"limit": limit, "before_sequence": before_sequence, "status": status,
                            "content_hash": content_hash, "client_request_id": client_request_id,
                            "include_content": include_content}):
-        return {"status": "invalid_argument", "target_file_id": str(target_uuid),
-                "failure_detail": "History inputs must be UTF-8 without NUL.", "entries": []}
-    if before_sequence is not None and before_sequence < 1:
-        return {
-            "status": "invalid_argument",
-            "target_file_id": safe_input_text(target_file_id),
-            "failure_detail": "before_sequence must be >= 1.",
-            "entries": [],
-        }
+        return _history_error(target_file_id, "History inputs must be UTF-8 without NUL.")
+    if before_sequence is not None and (
+        isinstance(before_sequence, bool) or not isinstance(before_sequence, int) or before_sequence < 1
+    ):
+        return _history_error(target_file_id, "before_sequence must be a positive integer.")
+    if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 1):
+        return _history_error(target_file_id, "limit must be a positive integer.")
+    if status is not None and (not isinstance(status, str) or status not in ("accepted", "rejected")):
+        return _history_error(target_file_id, "status must be accepted, rejected, or null.")
+    for field, value in (("content_hash", content_hash), ("client_request_id", client_request_id)):
+        if value is not None and not isinstance(value, str):
+            return _history_error(target_file_id, f"{field} must be a string or null.")
+    if not isinstance(include_content, bool):
+        return _history_error(target_file_id, "include_content must be a boolean.")
 
+    effective_limit = clamp_limit(limit, default=DEFAULT_HISTORY_LIMIT, maximum=MAX_HISTORY_LIMIT)
     query = select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_uuid)
     if before_sequence is not None:
         query = query.where(AppendOnlyPdcpLogs.log_sequence < before_sequence)
@@ -282,11 +279,16 @@ def patchdiff_get_pdcp_log(
     if client_request_id is not None:
         query = query.where(AppendOnlyPdcpLogs.client_request_id == client_request_id)
     with SessionLocal() as session:
+        if session.get(CloudTargetFiles, target_uuid) is None:
+            return _history_error(target_file_id, status="not_found")
         rows = session.scalars(
-            query.order_by(AppendOnlyPdcpLogs.log_sequence.desc()).limit(clamp_limit(limit))
+            query.order_by(AppendOnlyPdcpLogs.log_sequence.desc()).limit(effective_limit + 1)
         ).all()
+    has_more = len(rows) > effective_limit
+    page_rows = rows[:effective_limit]
+    next_sequence = page_rows[-1].log_sequence if has_more and page_rows else None
     entries = []
-    for row in rows:
+    for row in page_rows:
         entry = {
             "pdcp_log_id": str(row.pdcp_log_id),
             "log_sequence": row.log_sequence,
@@ -313,7 +315,7 @@ def patchdiff_get_pdcp_log(
         if include_content:
             entry["pdcp_content"] = row.pdcp_content
         entries.append(entry)
-    return {"entries": entries}
+    return {"entries": entries, "has_more": has_more, "next_sequence": next_sequence}
 
 
 @registry.register("patchdiff_get_manifest_ledger")
@@ -344,6 +346,8 @@ def patchdiff_get_manifest_ledger(
         return {"status": "invalid_argument", "target_file_id": str(target_uuid),
                 "failure_detail": "History inputs must be UTF-8 without NUL.", "entries": [],
                 "has_more": False, "next_sequence": None}
+    if not isinstance(include_previous_cycles, bool):
+        return _history_error(target_file_id, "include_previous_cycles must be a boolean.")
     if before_sequence is not None and (
         isinstance(before_sequence, bool) or not isinstance(before_sequence, int) or before_sequence < 1
     ):
@@ -513,6 +517,16 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
         "deduplicated": result.deduplicated,
         "client_request_id": result.client_request_id,
     }
+
+
+def _history_error(
+    target_file_id: uuid.UUID | str, failure_detail: str | None = None, *, status: str = "invalid_argument",
+) -> dict[str, Any]:
+    payload = {"status": status, "target_file_id": safe_input_text(target_file_id),
+               "entries": [], "has_more": False, "next_sequence": None}
+    if failure_detail is not None:
+        payload["failure_detail"] = failure_detail
+    return payload
 
 
 def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:

@@ -171,6 +171,12 @@ def find_occurrences(
             "target_file_id": str(target_uuid),
             "failure_detail": "text must be a non-empty string.",
         }
+    if isinstance(context_chars, bool) or not isinstance(context_chars, int) or context_chars < 0:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": str(target_uuid),
+            "failure_detail": "context_chars must be a non-negative integer.",
+        }
     if isinstance(start_occurrence, bool) or not isinstance(start_occurrence, int) or start_occurrence < 1:
         return {
             "status": "invalid_argument",
