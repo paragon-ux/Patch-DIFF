@@ -1,0 +1,28 @@
+{
+  "workstream": "DEV-RUN-001",
+  "full_suite": {
+    "code_revision": "ecd0dfa4573b6f4284e5d102d23ff9dc1310e711",
+    "command": ".venv/Scripts/python.exe -m pytest -q",
+    "passed": 556,
+    "unit_count": 403,
+    "integration_count": 153,
+    "database": "live PostgreSQL",
+    "includes": "real stdio and isolated populated migration tests",
+    "initial_failure": "Duplicate basename test_selector_profiles.py across unit/integration; integration module renamed before passing full rerun"
+  },
+  "offline_evaluation": {
+    "code_revision": "ecd0dfa4573b6f4284e5d102d23ff9dc1310e711",
+    "command": ".venv/Scripts/python.exe evaluation/offline_eval.py",
+    "result": "OK: expected named delimiter difference and shared-applier verdict equivalence"
+  },
+  "metadata_delta": {
+    "revision": "3d4daec2361c87615e3dc20bc5341a90cc0b75cf",
+    "changes": "serverInfo version0.2.2 and advisory-only selector prose",
+    "focused_command": ".venv/Scripts/python.exe -m pytest backend/tests/unit/test_stdio_adapter_subprocess.py -q -o addopts=''",
+    "passed": 5,
+    "manual_live_record": "DEV-RUN-001-live.json"
+  },
+  "protected_review_files_unchanged": 12,
+  "remaining_pr1_findings": "Unicode/conflict audit/replay raw integrity/context validation/history continuation remain separate required workstreams",
+  "merges_performed": 0
+}

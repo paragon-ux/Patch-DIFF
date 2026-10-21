@@ -1,6 +1,6 @@
 # PatchDIFF Modernization Change Document
 
-Status: **DEV-RUN-001 selector/profile remediation in verification. Earlier 2026-10-20 closure and 319-test records below describe their pinned revisions, not closure of the new Devin findings. Current execution is recorded under docs/remediation/; the remaining required workstreams are still open.**
+Status: **DEV-RUN-001 selector/profile remediation implemented and live-verified; independent recheck complete for this workstream; publication/CI pending. Earlier 2026-10-20 closure and 319-test records below describe their pinned revisions, not closure of the new Devin findings. Current execution is recorded under docs/remediation/; the remaining required workstreams are still open.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 

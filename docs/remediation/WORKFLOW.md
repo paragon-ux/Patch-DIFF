@@ -12,7 +12,7 @@ The user explicitly prohibits editing anything under docs/reviews/. New executio
 
 | Stream | Required deliverables | Current state |
 | --- | --- | --- |
-| DEV-RUN-001 | All-match-count selector constraints; one new immutable profile; typed/legacy/sequential matrix; live audit/nonmutation; real stdio; old-profile replay; contracts and independent review; stacked PR | In progress on fix/devin-selectors |
+| DEV-RUN-001 | All-match-count selector constraints; one new immutable profile; typed/legacy/sequential matrix; live audit/nonmutation; real stdio; old-profile replay; contracts and independent review; stacked PR | Implemented on fix/devin-selectors;556 tests and manual live verification pass; independent recheck fixed; PR publication/CI pending |
 | DEV-RUN-002 | Record minimal reversible evidence decision before coding; all user-string Unicode validation; audited known-target rejection, safe storage and deterministic keyed recovery; read/search invalid_argument; caller-owned commit/rollback; pure/live/stdio; independent review and stacked PR | Not started |
 | DEV-SVC-001 | Null-key immutable rejection for every admitted conflict; submitted/existing IDs and bounded diagnostics; null-key fingerprint policy; unchanged original recovery; accepted/rejected/repeated/concurrent/rollback live cases; stdio; contracts, independent review and stacked PR | Not started |
 | DEV-DB-001 | C3/core raw-storage formula first; canonical hashes unchanged; no repair; separate reconstruction and health; rollback-isolated CRLF/CR/Unicode/hash/version/healthy live matrix; stdio replay; independent review and stacked PR | Not started |

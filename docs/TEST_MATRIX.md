@@ -18,7 +18,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ---
 
-## 1. Pure Unit Test Matrix (`backend/tests/unit/`, 181 Tests)
+## 1. Pure Unit Test Matrix (`backend/tests/unit/`, 403 Tests)
 
 Run with: `pytest backend/tests/unit -q`
 
@@ -40,12 +40,13 @@ Run with: `pytest backend/tests/unit -q`
 
 ---
 
-## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 138 Tests)
+## 2. Postgres Integration Test Matrix (`backend/tests/integration/`, 153 Tests)
 
 Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -q`
 
 | Module | Requirements / Capabilities Tested |
 | --- | --- |
+| `test_selector_profiles_live.py` | DEV-RUN-001: durable rejection without materialization, all supported historical selector profiles in typed/legacy mixed history, actual stdio rejection and replay. |
 | `test_migrations_reachable.py` | **C5**: Alembic config presence; schema verification for migration `0001` and `0002`; live Postgres column nullability and partial unique index `uq_pdcp_logs_target_client_request_id` verification. |
 | `test_typed_submit_flow.py` | **C1–C6**: Typed accept writes `append_only_pdcp_logs` (`protocol_version="patchdiff-tx/1"`) and `append_only_manifest_ledger` (`origin="typed"`, `derived_json`); format-specific diagnostics (no PDCP manifest leakage on typed rejections); stage-based validity across all 5 stages; safe UUID and parent-lineage error handling; `client_request_id` idempotency, lost-response outcome recovery, ABA sequence recovery, no-op edit recovery, and conflicting reuse rejection; mixed PDCP/typed replay; component-level `materialized_state_checks`; unknown profile rejection; read/search pagination. |
 | `test_pdcp_submit_flow.py` | Legacy `.pdcp` submission; atomic rollback on applicability failure; optimistic concurrency guards (`expected_target_version`, `expected_current_hash`); row locking independence across targets. |
