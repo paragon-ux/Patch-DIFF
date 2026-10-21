@@ -1,0 +1,78 @@
+{
+  "date": "2026-10-21",
+  "authorization": "User approved accepted plan/Goal G and archival of other Gemini reports.",
+  "original_reports": [
+    {
+      "original_path": "docs\\reviews\\gemini\\DEFECT-001-windows-stdio-utf8.md",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-superseded\\DEFECT-001-windows-stdio-utf8.md",
+      "sha256": "b69d4b6c481e174ad478fff25581d7706c30e3f800298dd7899bc99f68ff50a0"
+    },
+    {
+      "original_path": "docs\\reviews\\gemini\\G-SERIES-FRICTION-INVENTORY.md",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-superseded\\G-SERIES-FRICTION-INVENTORY.md",
+      "sha256": "756850fc570e74de40dfcbc2df8e9b938fe38fd2ba22e579e80930631ccbf111"
+    },
+    {
+      "original_path": "docs\\reviews\\gemini\\GEMINI_FRICTION_AND_DEFECT_DISPOSITION.md",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-superseded\\GEMINI_FRICTION_AND_DEFECT_DISPOSITION.md",
+      "sha256": "0429028009516516dbe2a8254d7e286e96f442120bbb60466310d1a18dab29b4"
+    }
+  ],
+  "reproduction_evidence": [
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\evidence-sha256.json",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\evidence-sha256.json",
+      "sha256": "9b9dd7b7fdb66d1f3afabed358d718a7c01986be6f7876286b8072a5dc80be18"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\independent-verification.json",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\independent-verification.json",
+      "sha256": "e1d0bbd715eecc9a51a4025fdddfdc4d75887139c2379ea807be24ef5d2628e6"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\installation-preflight.json",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\installation-preflight.json",
+      "sha256": "34203ffa24785a56eafc73aa592fffd77d31d12b5b09273e906546d69f8b9568"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\native-events-final.json",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\native-events-final.json",
+      "sha256": "54b1220ea8ace3cc60adab3de227e94db4936eaa9cfa64cc42b4859179ac86ce"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\REPRODUCTION_REPORT.md",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\REPRODUCTION_REPORT.md",
+      "sha256": "c45c78e0bc53a0db8936d7ebda899d2496d1d2fc34f00927cc7887e67d818567"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\scripted-steps.json",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\scripted-steps.json",
+      "sha256": "b683d326c982a14b3de2057c924cf079c4aec837f30484ee951130207bebb42a"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\transport-results.json",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\transport-results.json",
+      "sha256": "35fa73e8dff39ab7eadd2f084fd513ae81687874d503e39a332736ee6b227789"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\transport_probe.py",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\transport_probe.py",
+      "sha256": "5c1e91399d5d3f1f84cb45eefbe52597cbf48026fa5ea8cf34cdbf2a988c468c"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\verify_results.py",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\verify_results.py",
+      "sha256": "d2fe6fe772e068b81eca36cd6850b8a7901093aa1202e7f36fa1e78e2e9648e4"
+    },
+    {
+      "source_path": "C:\\Users\\USER\\OneDrive - Wake Tech Community College\\Documents\\ChatGPT\\Patch-DIFF\\reproduction\\2026-10-21\\workflow-metrics.json",
+      "archive_path": "docs\\reviews\\gemini\\archive\\2026-10-21-reproduction\\workflow-metrics.json",
+      "sha256": "4de21edeb5a0dac9d8627705817399341f15ebb3ec58191cb4075eaa06eda152"
+    }
+  ],
+  "protected_review_hashes_unchanged": true,
+  "devin_template_hashes": {
+    "docs\\reviews\\devin\\DEVIN_CHANGE_PLAN-b33faaf-v2.md": "bf1457ec019bd6475aa50dcb6fb0da0c118bcf196fe1b521f9218c39492b0868",
+    "docs\\reviews\\devin\\Devin-Goal-F.md": "5c3220d3ba445a6575a5a9012b853a27e2fc883295c6244f17c935361962ca98"
+  }
+}

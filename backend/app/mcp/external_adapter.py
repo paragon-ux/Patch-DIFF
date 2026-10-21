@@ -130,6 +130,8 @@ def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.st
 
 
 def main() -> None:
+    sys.stdin.reconfigure(encoding="utf-8", errors="strict")
+    sys.stdout.reconfigure(encoding="utf-8", errors="strict")
     serve_stdio()
 
 

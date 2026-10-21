@@ -1,0 +1,669 @@
+{
+  "classification": "Direct subprocess transport diagnostic after native workflows; not native Codex-host execution.",
+  "timestamp_utc": "2026-10-21T17:31:15.173806+00:00",
+  "platform": "Windows-10-10.0.22000-SP0",
+  "source_head": "b5caa40bd41848420c4323d22ab648847cdc6745",
+  "database": "patchdiff_codex_reproduction_20261021",
+  "records": [
+    {
+      "summary": {
+        "utf8_override": false,
+        "ascii_json_escapes": true,
+        "process_profile": {
+          "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+          "stdin_encoding": "cp1252",
+          "stdin_errors": "surrogateescape",
+          "stdout_encoding": "cp1252",
+          "stdout_errors": "surrogateescape"
+        },
+        "target_file_id": "3807c292-8eed-473e-ae43-d72959387212",
+        "status": "accepted",
+        "exit_code": 0,
+        "stdout_all_ascii": true,
+        "expected_text": "🌟\n",
+        "actual_text": "🌟\n",
+        "exact_unicode": true
+      },
+      "setup": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_initialize_target",
+              "arguments": {
+                "filename": "g02-override-False-escaped-True.txt",
+                "content_type": "text/plain",
+                "content": "hello\n"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX2luaXRpYWxpemVfdGFyZ2V0IiwgImFyZ3VtZW50cyI6IHsiZmlsZW5hbWUiOiAiZzAyLW92ZXJyaWRlLUZhbHNlLWVzY2FwZWQtVHJ1ZS50eHQiLCAiY29udGVudF90eXBlIjogInRleHQvcGxhaW4iLCAiY29udGVudCI6ICJoZWxsb1xuIn19fQo=",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhY3RpdmVfZWRpdGluZ19jeWNsZV9pZFwiOiBcIjc0ZmNkZWRlLTY0NWItNGEyMC04OTMxLTU0NGQ4YTY4NmQ4YlwiLCBcImN1cnJlbnRfaGFzaFwiOiBcIjU4OTFiNWI1MjJkNWRmMDg2ZDBmZjBiMTEwZmJkOWQyMWJiNGZjNzE2M2FmMzRkMDgyODZhMmU4NDZmNmJlMDNcIiwgXCJmaWxlbmFtZVwiOiBcImcwMi1vdmVycmlkZS1GYWxzZS1lc2NhcGVkLVRydWUudHh0XCIsIFwidGFyZ2V0X2ZpbGVfaWRcIjogXCIzODA3YzI5Mi04ZWVkLTQ3M2UtYWU0My1kNzI5NTkzODcyMTJcIiwgXCJ0YXJnZXRfdHlwZVwiOiBcInRleHQvcGxhaW5cIiwgXCJ2ZXJzaW9uXCI6IDB9IiwidHlwZSI6InRleHQifV0sImlzRXJyb3IiOmZhbHNlfX0NCg==",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"active_editing_cycle_id\": \"74fcdede-645b-4a20-8931-544d8a686d8b\", \"current_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"filename\": \"g02-override-False-escaped-True.txt\", \"target_file_id\": \"3807c292-8eed-473e-ae43-d72959387212\", \"target_type\": \"text/plain\", \"version\": 0}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      },
+      "edit_and_export": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_submit_edits",
+              "arguments": {
+                "target_file_id": "3807c292-8eed-473e-ae43-d72959387212",
+                "expected_target_version": 0,
+                "intent": "Replace greeting with one star.",
+                "edits": [
+                  {
+                    "match": "hello",
+                    "replace": "🌟"
+                  }
+                ],
+                "client_request_id": "g02-False-True"
+              }
+            }
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_export_target",
+              "arguments": {
+                "target_file_id": "3807c292-8eed-473e-ae43-d72959387212"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX3N1Ym1pdF9lZGl0cyIsICJhcmd1bWVudHMiOiB7InRhcmdldF9maWxlX2lkIjogIjM4MDdjMjkyLThlZWQtNDczZS1hZTQzLWQ3Mjk1OTM4NzIxMiIsICJleHBlY3RlZF90YXJnZXRfdmVyc2lvbiI6IDAsICJpbnRlbnQiOiAiUmVwbGFjZSBncmVldGluZyB3aXRoIG9uZSBzdGFyLiIsICJlZGl0cyI6IFt7Im1hdGNoIjogImhlbGxvIiwgInJlcGxhY2UiOiAiXHVkODNjXHVkZjFmIn1dLCAiY2xpZW50X3JlcXVlc3RfaWQiOiAiZzAyLUZhbHNlLVRydWUifX19CnsianNvbnJwYyI6ICIyLjAiLCAiaWQiOiAzLCAibWV0aG9kIjogInRvb2xzL2NhbGwiLCAicGFyYW1zIjogeyJuYW1lIjogInBhdGNoZGlmZl9leHBvcnRfdGFyZ2V0IiwgImFyZ3VtZW50cyI6IHsidGFyZ2V0X2ZpbGVfaWQiOiAiMzgwN2MyOTItOGVlZC00NzNlLWFlNDMtZDcyOTU5Mzg3MjEyIn19fQo=",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhZnRlcl9oYXNoXCI6IFwiY2U1MTA1OWI5N2NiZDdkM2I1ZmFhM2FkZDYxZjhjNDlmNWJjMDM4OTc1MDUwODg0NmY3NTJmMDFjNGZhYzc5ZFwiLCBcImJlZm9yZV9oYXNoXCI6IFwiNTg5MWI1YjUyMmQ1ZGYwODZkMGZmMGIxMTBmYmQ5ZDIxYmI0ZmM3MTYzYWYzNGQwODI4NmEyZTg0NmY2YmUwM1wiLCBcImNsaWVudF9yZXF1ZXN0X2lkXCI6IFwiZzAyLUZhbHNlLVRydWVcIiwgXCJkZWR1cGxpY2F0ZWRcIjogZmFsc2UsIFwiZXZpZGVuY2VcIjoge1wiY2hhbmdlc1wiOiBbe1wiY2hhbmdlX2lkXCI6IFwiY2hnXzAwMVwiLCBcImNoYW5nZV9pbmRleFwiOiAxLCBcIm1hdGNoZWRfY2hhcnNcIjogNSwgXCJtYXRjaGVkX3NoYTI1NlwiOiBcIjJjZjI0ZGJhNWZiMGEzMGUyNmU4M2IyYWM1YjllMjllMWIxNjFlNWMxZmE3NDI1ZTczMDQzMzYyOTM4Yjk4MjRcIiwgXCJyZXBsYWNlbWVudF9jaGFyc1wiOiAxLCBcInJlcGxhY2VtZW50X3NoYTI1NlwiOiBcIjg1ZjEzZDU5NTdkZGM5NTY1NzRiYTRhMThlMmFhMzI5YWFlOWZiZDM4MTZhOTE3ODE5ZDE0NTIxMzlhMDBmZDlcIiwgXCJzcGFuX2VuZFwiOiA1LCBcInNwYW5fc3RhcnRcIjogMH1dfSwgXCJtYW5pZmVzdF9lbnRyaWVzX2FkZGVkXCI6IDEsIFwicGRjcF9sb2dfaWRcIjogXCI2ZWZjMDBjNC02MTMyLTQzYTctYjIzMC02YzcxZWFiZjAzYzdcIiwgXCJzdGF0dXNcIjogXCJhY2NlcHRlZFwiLCBcInRhcmdldF9maWxlX2lkXCI6IFwiMzgwN2MyOTItOGVlZC00NzNlLWFlNDMtZDcyOTU5Mzg3MjEyXCIsIFwidmFsaWRpdHlcIjoge1wicHJvdG9jb2xfdmFsaWRcIjogdHJ1ZSwgXCJzZW1hbnRpY1wiOiBcIm5vdF9ldmFsdWF0ZWRcIiwgXCJ0YXNrX2NvcnJlY3RcIjogXCJub3RfZXZhbHVhdGVkXCIsIFwidHJhbnNhY3Rpb25fdmFsaWRcIjogdHJ1ZX0sIFwidmVyc2lvblwiOiAxLCBcIndhcm5pbmdzXCI6IFtdfSIsInR5cGUiOiJ0ZXh0In1dLCJpc0Vycm9yIjpmYWxzZX19DQp7ImlkIjozLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJjb250ZW50XCI6IFwiXFx1ZDgzY1xcdWRmMWZcXG5cIiwgXCJjb250ZW50X3R5cGVcIjogXCJ0ZXh0L3BsYWluXCIsIFwiY3VycmVudF9oYXNoXCI6IFwiY2U1MTA1OWI5N2NiZDdkM2I1ZmFhM2FkZDYxZjhjNDlmNWJjMDM4OTc1MDUwODg0NmY3NTJmMDFjNGZhYzc5ZFwiLCBcImZpbGVuYW1lXCI6IFwiZzAyLW92ZXJyaWRlLUZhbHNlLWVzY2FwZWQtVHJ1ZS50eHRcIiwgXCJmb3JtYXRcIjogXCJvcmlnaW5hbF90ZXh0XCIsIFwiaGFzaFwiOiBcImNlNTEwNTliOTdjYmQ3ZDNiNWZhYTNhZGQ2MWY4YzQ5ZjViYzAzODk3NTA1MDg4NDZmNzUyZjAxYzRmYWM3OWRcIiwgXCJ0YXJnZXRfdHlwZVwiOiBcInRleHQvcGxhaW5cIiwgXCJ2ZXJzaW9uXCI6IDF9IiwidHlwZSI6InRleHQifV0sImlzRXJyb3IiOmZhbHNlfX0NCg==",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"after_hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"before_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"client_request_id\": \"g02-False-True\", \"deduplicated\": false, \"evidence\": {\"changes\": [{\"change_id\": \"chg_001\", \"change_index\": 1, \"matched_chars\": 5, \"matched_sha256\": \"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\", \"replacement_chars\": 1, \"replacement_sha256\": \"85f13d5957ddc956574ba4a18e2aa329aae9fbd3816a917819d1452139a00fd9\", \"span_end\": 5, \"span_start\": 0}]}, \"manifest_entries_added\": 1, \"pdcp_log_id\": \"6efc00c4-6132-43a7-b230-6c71eabf03c7\", \"status\": \"accepted\", \"target_file_id\": \"3807c292-8eed-473e-ae43-d72959387212\", \"validity\": {\"protocol_valid\": true, \"semantic\": \"not_evaluated\", \"task_correct\": \"not_evaluated\", \"transaction_valid\": true}, \"version\": 1, \"warnings\": []}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          },
+          {
+            "id": 3,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"content\": \"\\ud83c\\udf1f\\n\", \"content_type\": \"text/plain\", \"current_hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"filename\": \"g02-override-False-escaped-True.txt\", \"format\": \"original_text\", \"hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"target_type\": \"text/plain\", \"version\": 1}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "summary": {
+        "utf8_override": false,
+        "ascii_json_escapes": false,
+        "process_profile": {
+          "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+          "stdin_encoding": "cp1252",
+          "stdin_errors": "surrogateescape",
+          "stdout_encoding": "cp1252",
+          "stdout_errors": "surrogateescape"
+        },
+        "target_file_id": "4b0b66aa-8c30-4efe-aa6c-e4308c2e111f",
+        "status": "accepted",
+        "exit_code": 0,
+        "stdout_all_ascii": true,
+        "expected_text": "🌟\n",
+        "actual_text": "ðŸŒŸ\n",
+        "exact_unicode": false
+      },
+      "setup": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_initialize_target",
+              "arguments": {
+                "filename": "g02-override-False-escaped-False.txt",
+                "content_type": "text/plain",
+                "content": "hello\n"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX2luaXRpYWxpemVfdGFyZ2V0IiwgImFyZ3VtZW50cyI6IHsiZmlsZW5hbWUiOiAiZzAyLW92ZXJyaWRlLUZhbHNlLWVzY2FwZWQtRmFsc2UudHh0IiwgImNvbnRlbnRfdHlwZSI6ICJ0ZXh0L3BsYWluIiwgImNvbnRlbnQiOiAiaGVsbG9cbiJ9fX0K",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhY3RpdmVfZWRpdGluZ19jeWNsZV9pZFwiOiBcImJjZGU4MWJjLWU0YmMtNGNmOS05ZmRmLWJkM2ZhOGZmYTUyY1wiLCBcImN1cnJlbnRfaGFzaFwiOiBcIjU4OTFiNWI1MjJkNWRmMDg2ZDBmZjBiMTEwZmJkOWQyMWJiNGZjNzE2M2FmMzRkMDgyODZhMmU4NDZmNmJlMDNcIiwgXCJmaWxlbmFtZVwiOiBcImcwMi1vdmVycmlkZS1GYWxzZS1lc2NhcGVkLUZhbHNlLnR4dFwiLCBcInRhcmdldF9maWxlX2lkXCI6IFwiNGIwYjY2YWEtOGMzMC00ZWZlLWFhNmMtZTQzMDhjMmUxMTFmXCIsIFwidGFyZ2V0X3R5cGVcIjogXCJ0ZXh0L3BsYWluXCIsIFwidmVyc2lvblwiOiAwfSIsInR5cGUiOiJ0ZXh0In1dLCJpc0Vycm9yIjpmYWxzZX19DQo=",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"active_editing_cycle_id\": \"bcde81bc-e4bc-4cf9-9fdf-bd3fa8ffa52c\", \"current_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"filename\": \"g02-override-False-escaped-False.txt\", \"target_file_id\": \"4b0b66aa-8c30-4efe-aa6c-e4308c2e111f\", \"target_type\": \"text/plain\", \"version\": 0}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      },
+      "edit_and_export": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_submit_edits",
+              "arguments": {
+                "target_file_id": "4b0b66aa-8c30-4efe-aa6c-e4308c2e111f",
+                "expected_target_version": 0,
+                "intent": "Replace greeting with one star.",
+                "edits": [
+                  {
+                    "match": "hello",
+                    "replace": "🌟"
+                  }
+                ],
+                "client_request_id": "g02-False-False"
+              }
+            }
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_export_target",
+              "arguments": {
+                "target_file_id": "4b0b66aa-8c30-4efe-aa6c-e4308c2e111f"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX3N1Ym1pdF9lZGl0cyIsICJhcmd1bWVudHMiOiB7InRhcmdldF9maWxlX2lkIjogIjRiMGI2NmFhLThjMzAtNGVmZS1hYTZjLWU0MzA4YzJlMTExZiIsICJleHBlY3RlZF90YXJnZXRfdmVyc2lvbiI6IDAsICJpbnRlbnQiOiAiUmVwbGFjZSBncmVldGluZyB3aXRoIG9uZSBzdGFyLiIsICJlZGl0cyI6IFt7Im1hdGNoIjogImhlbGxvIiwgInJlcGxhY2UiOiAi8J+MnyJ9XSwgImNsaWVudF9yZXF1ZXN0X2lkIjogImcwMi1GYWxzZS1GYWxzZSJ9fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDMsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX2V4cG9ydF90YXJnZXQiLCAiYXJndW1lbnRzIjogeyJ0YXJnZXRfZmlsZV9pZCI6ICI0YjBiNjZhYS04YzMwLTRlZmUtYWE2Yy1lNDMwOGMyZTExMWYifX19Cg==",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhZnRlcl9oYXNoXCI6IFwiNjNkMWE0N2FiMzMwYjYwM2YxM2VhYjBlOTRlNmU4YzY5NjU3MjUxODhlY2I0MWQzZWI3Zjc1ZDFkODA0OGJmN1wiLCBcImJlZm9yZV9oYXNoXCI6IFwiNTg5MWI1YjUyMmQ1ZGYwODZkMGZmMGIxMTBmYmQ5ZDIxYmI0ZmM3MTYzYWYzNGQwODI4NmEyZTg0NmY2YmUwM1wiLCBcImNsaWVudF9yZXF1ZXN0X2lkXCI6IFwiZzAyLUZhbHNlLUZhbHNlXCIsIFwiZGVkdXBsaWNhdGVkXCI6IGZhbHNlLCBcImV2aWRlbmNlXCI6IHtcImNoYW5nZXNcIjogW3tcImNoYW5nZV9pZFwiOiBcImNoZ18wMDFcIiwgXCJjaGFuZ2VfaW5kZXhcIjogMSwgXCJtYXRjaGVkX2NoYXJzXCI6IDUsIFwibWF0Y2hlZF9zaGEyNTZcIjogXCIyY2YyNGRiYTVmYjBhMzBlMjZlODNiMmFjNWI5ZTI5ZTFiMTYxZTVjMWZhNzQyNWU3MzA0MzM2MjkzOGI5ODI0XCIsIFwicmVwbGFjZW1lbnRfY2hhcnNcIjogNCwgXCJyZXBsYWNlbWVudF9zaGEyNTZcIjogXCIyM2UzNzAyMjliY2E3MGNkN2M3YjNkM2FkYTcyZmZhMzYzY2Q1YTNlMjU5MzFjZDM0N2QxMDg1ZjBhMjc4ZWRjXCIsIFwic3Bhbl9lbmRcIjogNSwgXCJzcGFuX3N0YXJ0XCI6IDB9XX0sIFwibWFuaWZlc3RfZW50cmllc19hZGRlZFwiOiAxLCBcInBkY3BfbG9nX2lkXCI6IFwiZWMwNjY2YWQtNzFmMC00ZmM2LTlmMGEtZDU0MTRkM2ZmNzFjXCIsIFwic3RhdHVzXCI6IFwiYWNjZXB0ZWRcIiwgXCJ0YXJnZXRfZmlsZV9pZFwiOiBcIjRiMGI2NmFhLThjMzAtNGVmZS1hYTZjLWU0MzA4YzJlMTExZlwiLCBcInZhbGlkaXR5XCI6IHtcInByb3RvY29sX3ZhbGlkXCI6IHRydWUsIFwic2VtYW50aWNcIjogXCJub3RfZXZhbHVhdGVkXCIsIFwidGFza19jb3JyZWN0XCI6IFwibm90X2V2YWx1YXRlZFwiLCBcInRyYW5zYWN0aW9uX3ZhbGlkXCI6IHRydWV9LCBcInZlcnNpb25cIjogMSwgXCJ3YXJuaW5nc1wiOiBbXX0iLCJ0eXBlIjoidGV4dCJ9XSwiaXNFcnJvciI6ZmFsc2V9fQ0KeyJpZCI6MywianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjb250ZW50IjpbeyJ0ZXh0Ijoie1wiY29udGVudFwiOiBcIlxcdTAwZjBcXHUwMTc4XFx1MDE1MlxcdTAxNzhcXG5cIiwgXCJjb250ZW50X3R5cGVcIjogXCJ0ZXh0L3BsYWluXCIsIFwiY3VycmVudF9oYXNoXCI6IFwiNjNkMWE0N2FiMzMwYjYwM2YxM2VhYjBlOTRlNmU4YzY5NjU3MjUxODhlY2I0MWQzZWI3Zjc1ZDFkODA0OGJmN1wiLCBcImZpbGVuYW1lXCI6IFwiZzAyLW92ZXJyaWRlLUZhbHNlLWVzY2FwZWQtRmFsc2UudHh0XCIsIFwiZm9ybWF0XCI6IFwib3JpZ2luYWxfdGV4dFwiLCBcImhhc2hcIjogXCI2M2QxYTQ3YWIzMzBiNjAzZjEzZWFiMGU5NGU2ZThjNjk2NTcyNTE4OGVjYjQxZDNlYjdmNzVkMWQ4MDQ4YmY3XCIsIFwidGFyZ2V0X3R5cGVcIjogXCJ0ZXh0L3BsYWluXCIsIFwidmVyc2lvblwiOiAxfSIsInR5cGUiOiJ0ZXh0In1dLCJpc0Vycm9yIjpmYWxzZX19DQo=",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"after_hash\": \"63d1a47ab330b603f13eab0e94e6e8c6965725188ecb41d3eb7f75d1d8048bf7\", \"before_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"client_request_id\": \"g02-False-False\", \"deduplicated\": false, \"evidence\": {\"changes\": [{\"change_id\": \"chg_001\", \"change_index\": 1, \"matched_chars\": 5, \"matched_sha256\": \"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\", \"replacement_chars\": 4, \"replacement_sha256\": \"23e370229bca70cd7c7b3d3ada72ffa363cd5a3e25931cd347d1085f0a278edc\", \"span_end\": 5, \"span_start\": 0}]}, \"manifest_entries_added\": 1, \"pdcp_log_id\": \"ec0666ad-71f0-4fc6-9f0a-d5414d3ff71c\", \"status\": \"accepted\", \"target_file_id\": \"4b0b66aa-8c30-4efe-aa6c-e4308c2e111f\", \"validity\": {\"protocol_valid\": true, \"semantic\": \"not_evaluated\", \"task_correct\": \"not_evaluated\", \"transaction_valid\": true}, \"version\": 1, \"warnings\": []}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          },
+          {
+            "id": 3,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"content\": \"\\u00f0\\u0178\\u0152\\u0178\\n\", \"content_type\": \"text/plain\", \"current_hash\": \"63d1a47ab330b603f13eab0e94e6e8c6965725188ecb41d3eb7f75d1d8048bf7\", \"filename\": \"g02-override-False-escaped-False.txt\", \"format\": \"original_text\", \"hash\": \"63d1a47ab330b603f13eab0e94e6e8c6965725188ecb41d3eb7f75d1d8048bf7\", \"target_type\": \"text/plain\", \"version\": 1}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "summary": {
+        "utf8_override": true,
+        "ascii_json_escapes": true,
+        "process_profile": {
+          "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+          "stdin_encoding": "utf-8",
+          "stdin_errors": "strict",
+          "stdout_encoding": "utf-8",
+          "stdout_errors": "strict"
+        },
+        "target_file_id": "ae3a4426-535d-42a0-a35d-f2e7662316e0",
+        "status": "accepted",
+        "exit_code": 0,
+        "stdout_all_ascii": true,
+        "expected_text": "🌟\n",
+        "actual_text": "🌟\n",
+        "exact_unicode": true
+      },
+      "setup": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_initialize_target",
+              "arguments": {
+                "filename": "g02-override-True-escaped-True.txt",
+                "content_type": "text/plain",
+                "content": "hello\n"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX2luaXRpYWxpemVfdGFyZ2V0IiwgImFyZ3VtZW50cyI6IHsiZmlsZW5hbWUiOiAiZzAyLW92ZXJyaWRlLVRydWUtZXNjYXBlZC1UcnVlLnR4dCIsICJjb250ZW50X3R5cGUiOiAidGV4dC9wbGFpbiIsICJjb250ZW50IjogImhlbGxvXG4ifX19Cg==",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhY3RpdmVfZWRpdGluZ19jeWNsZV9pZFwiOiBcIjY4MjU2NzEwLWZmZTktNGNkMy1iYzc2LTE5YjUwYmUzMmFjOFwiLCBcImN1cnJlbnRfaGFzaFwiOiBcIjU4OTFiNWI1MjJkNWRmMDg2ZDBmZjBiMTEwZmJkOWQyMWJiNGZjNzE2M2FmMzRkMDgyODZhMmU4NDZmNmJlMDNcIiwgXCJmaWxlbmFtZVwiOiBcImcwMi1vdmVycmlkZS1UcnVlLWVzY2FwZWQtVHJ1ZS50eHRcIiwgXCJ0YXJnZXRfZmlsZV9pZFwiOiBcImFlM2E0NDI2LTUzNWQtNDJhMC1hMzVkLWYyZTc2NjIzMTZlMFwiLCBcInRhcmdldF90eXBlXCI6IFwidGV4dC9wbGFpblwiLCBcInZlcnNpb25cIjogMH0iLCJ0eXBlIjoidGV4dCJ9XSwiaXNFcnJvciI6ZmFsc2V9fQ0K",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"active_editing_cycle_id\": \"68256710-ffe9-4cd3-bc76-19b50be32ac8\", \"current_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"filename\": \"g02-override-True-escaped-True.txt\", \"target_file_id\": \"ae3a4426-535d-42a0-a35d-f2e7662316e0\", \"target_type\": \"text/plain\", \"version\": 0}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      },
+      "edit_and_export": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_submit_edits",
+              "arguments": {
+                "target_file_id": "ae3a4426-535d-42a0-a35d-f2e7662316e0",
+                "expected_target_version": 0,
+                "intent": "Replace greeting with one star.",
+                "edits": [
+                  {
+                    "match": "hello",
+                    "replace": "🌟"
+                  }
+                ],
+                "client_request_id": "g02-True-True"
+              }
+            }
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_export_target",
+              "arguments": {
+                "target_file_id": "ae3a4426-535d-42a0-a35d-f2e7662316e0"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX3N1Ym1pdF9lZGl0cyIsICJhcmd1bWVudHMiOiB7InRhcmdldF9maWxlX2lkIjogImFlM2E0NDI2LTUzNWQtNDJhMC1hMzVkLWYyZTc2NjIzMTZlMCIsICJleHBlY3RlZF90YXJnZXRfdmVyc2lvbiI6IDAsICJpbnRlbnQiOiAiUmVwbGFjZSBncmVldGluZyB3aXRoIG9uZSBzdGFyLiIsICJlZGl0cyI6IFt7Im1hdGNoIjogImhlbGxvIiwgInJlcGxhY2UiOiAiXHVkODNjXHVkZjFmIn1dLCAiY2xpZW50X3JlcXVlc3RfaWQiOiAiZzAyLVRydWUtVHJ1ZSJ9fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDMsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX2V4cG9ydF90YXJnZXQiLCAiYXJndW1lbnRzIjogeyJ0YXJnZXRfZmlsZV9pZCI6ICJhZTNhNDQyNi01MzVkLTQyYTAtYTM1ZC1mMmU3NjYyMzE2ZTAifX19Cg==",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhZnRlcl9oYXNoXCI6IFwiY2U1MTA1OWI5N2NiZDdkM2I1ZmFhM2FkZDYxZjhjNDlmNWJjMDM4OTc1MDUwODg0NmY3NTJmMDFjNGZhYzc5ZFwiLCBcImJlZm9yZV9oYXNoXCI6IFwiNTg5MWI1YjUyMmQ1ZGYwODZkMGZmMGIxMTBmYmQ5ZDIxYmI0ZmM3MTYzYWYzNGQwODI4NmEyZTg0NmY2YmUwM1wiLCBcImNsaWVudF9yZXF1ZXN0X2lkXCI6IFwiZzAyLVRydWUtVHJ1ZVwiLCBcImRlZHVwbGljYXRlZFwiOiBmYWxzZSwgXCJldmlkZW5jZVwiOiB7XCJjaGFuZ2VzXCI6IFt7XCJjaGFuZ2VfaWRcIjogXCJjaGdfMDAxXCIsIFwiY2hhbmdlX2luZGV4XCI6IDEsIFwibWF0Y2hlZF9jaGFyc1wiOiA1LCBcIm1hdGNoZWRfc2hhMjU2XCI6IFwiMmNmMjRkYmE1ZmIwYTMwZTI2ZTgzYjJhYzViOWUyOWUxYjE2MWU1YzFmYTc0MjVlNzMwNDMzNjI5MzhiOTgyNFwiLCBcInJlcGxhY2VtZW50X2NoYXJzXCI6IDEsIFwicmVwbGFjZW1lbnRfc2hhMjU2XCI6IFwiODVmMTNkNTk1N2RkYzk1NjU3NGJhNGExOGUyYWEzMjlhYWU5ZmJkMzgxNmE5MTc4MTlkMTQ1MjEzOWEwMGZkOVwiLCBcInNwYW5fZW5kXCI6IDUsIFwic3Bhbl9zdGFydFwiOiAwfV19LCBcIm1hbmlmZXN0X2VudHJpZXNfYWRkZWRcIjogMSwgXCJwZGNwX2xvZ19pZFwiOiBcIjc5ZDM2NGEzLTJhYzMtNGY4Mi1iNTdiLTJmZTQyOGEzNmM5OVwiLCBcInN0YXR1c1wiOiBcImFjY2VwdGVkXCIsIFwidGFyZ2V0X2ZpbGVfaWRcIjogXCJhZTNhNDQyNi01MzVkLTQyYTAtYTM1ZC1mMmU3NjYyMzE2ZTBcIiwgXCJ2YWxpZGl0eVwiOiB7XCJwcm90b2NvbF92YWxpZFwiOiB0cnVlLCBcInNlbWFudGljXCI6IFwibm90X2V2YWx1YXRlZFwiLCBcInRhc2tfY29ycmVjdFwiOiBcIm5vdF9ldmFsdWF0ZWRcIiwgXCJ0cmFuc2FjdGlvbl92YWxpZFwiOiB0cnVlfSwgXCJ2ZXJzaW9uXCI6IDEsIFwid2FybmluZ3NcIjogW119IiwidHlwZSI6InRleHQifV0sImlzRXJyb3IiOmZhbHNlfX0NCnsiaWQiOjMsImpzb25ycGMiOiIyLjAiLCJyZXN1bHQiOnsiY29udGVudCI6W3sidGV4dCI6IntcImNvbnRlbnRcIjogXCJcXHVkODNjXFx1ZGYxZlxcblwiLCBcImNvbnRlbnRfdHlwZVwiOiBcInRleHQvcGxhaW5cIiwgXCJjdXJyZW50X2hhc2hcIjogXCJjZTUxMDU5Yjk3Y2JkN2QzYjVmYWEzYWRkNjFmOGM0OWY1YmMwMzg5NzUwNTA4ODQ2Zjc1MmYwMWM0ZmFjNzlkXCIsIFwiZmlsZW5hbWVcIjogXCJnMDItb3ZlcnJpZGUtVHJ1ZS1lc2NhcGVkLVRydWUudHh0XCIsIFwiZm9ybWF0XCI6IFwib3JpZ2luYWxfdGV4dFwiLCBcImhhc2hcIjogXCJjZTUxMDU5Yjk3Y2JkN2QzYjVmYWEzYWRkNjFmOGM0OWY1YmMwMzg5NzUwNTA4ODQ2Zjc1MmYwMWM0ZmFjNzlkXCIsIFwidGFyZ2V0X3R5cGVcIjogXCJ0ZXh0L3BsYWluXCIsIFwidmVyc2lvblwiOiAxfSIsInR5cGUiOiJ0ZXh0In1dLCJpc0Vycm9yIjpmYWxzZX19DQo=",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"after_hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"before_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"client_request_id\": \"g02-True-True\", \"deduplicated\": false, \"evidence\": {\"changes\": [{\"change_id\": \"chg_001\", \"change_index\": 1, \"matched_chars\": 5, \"matched_sha256\": \"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\", \"replacement_chars\": 1, \"replacement_sha256\": \"85f13d5957ddc956574ba4a18e2aa329aae9fbd3816a917819d1452139a00fd9\", \"span_end\": 5, \"span_start\": 0}]}, \"manifest_entries_added\": 1, \"pdcp_log_id\": \"79d364a3-2ac3-4f82-b57b-2fe428a36c99\", \"status\": \"accepted\", \"target_file_id\": \"ae3a4426-535d-42a0-a35d-f2e7662316e0\", \"validity\": {\"protocol_valid\": true, \"semantic\": \"not_evaluated\", \"task_correct\": \"not_evaluated\", \"transaction_valid\": true}, \"version\": 1, \"warnings\": []}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          },
+          {
+            "id": 3,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"content\": \"\\ud83c\\udf1f\\n\", \"content_type\": \"text/plain\", \"current_hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"filename\": \"g02-override-True-escaped-True.txt\", \"format\": \"original_text\", \"hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"target_type\": \"text/plain\", \"version\": 1}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "summary": {
+        "utf8_override": true,
+        "ascii_json_escapes": false,
+        "process_profile": {
+          "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+          "stdin_encoding": "utf-8",
+          "stdin_errors": "strict",
+          "stdout_encoding": "utf-8",
+          "stdout_errors": "strict"
+        },
+        "target_file_id": "a50d75fc-eb62-4a7e-b723-f09382ecb351",
+        "status": "accepted",
+        "exit_code": 0,
+        "stdout_all_ascii": true,
+        "expected_text": "🌟\n",
+        "actual_text": "🌟\n",
+        "exact_unicode": true
+      },
+      "setup": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_initialize_target",
+              "arguments": {
+                "filename": "g02-override-True-escaped-False.txt",
+                "content_type": "text/plain",
+                "content": "hello\n"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX2luaXRpYWxpemVfdGFyZ2V0IiwgImFyZ3VtZW50cyI6IHsiZmlsZW5hbWUiOiAiZzAyLW92ZXJyaWRlLVRydWUtZXNjYXBlZC1GYWxzZS50eHQiLCAiY29udGVudF90eXBlIjogInRleHQvcGxhaW4iLCAiY29udGVudCI6ICJoZWxsb1xuIn19fQo=",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhY3RpdmVfZWRpdGluZ19jeWNsZV9pZFwiOiBcImZlNTk2NWM2LTMzMWMtNGY5Zi1hMzY0LTZiNzYwMzFkMzk3MFwiLCBcImN1cnJlbnRfaGFzaFwiOiBcIjU4OTFiNWI1MjJkNWRmMDg2ZDBmZjBiMTEwZmJkOWQyMWJiNGZjNzE2M2FmMzRkMDgyODZhMmU4NDZmNmJlMDNcIiwgXCJmaWxlbmFtZVwiOiBcImcwMi1vdmVycmlkZS1UcnVlLWVzY2FwZWQtRmFsc2UudHh0XCIsIFwidGFyZ2V0X2ZpbGVfaWRcIjogXCJhNTBkNzVmYy1lYjYyLTRhN2UtYjcyMy1mMDkzODJlY2IzNTFcIiwgXCJ0YXJnZXRfdHlwZVwiOiBcInRleHQvcGxhaW5cIiwgXCJ2ZXJzaW9uXCI6IDB9IiwidHlwZSI6InRleHQifV0sImlzRXJyb3IiOmZhbHNlfX0NCg==",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"active_editing_cycle_id\": \"fe5965c6-331c-4f9f-a364-6b76031d3970\", \"current_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"filename\": \"g02-override-True-escaped-False.txt\", \"target_file_id\": \"a50d75fc-eb62-4a7e-b723-f09382ecb351\", \"target_type\": \"text/plain\", \"version\": 0}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      },
+      "edit_and_export": {
+        "requests": [
+          {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {}
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_submit_edits",
+              "arguments": {
+                "target_file_id": "a50d75fc-eb62-4a7e-b723-f09382ecb351",
+                "expected_target_version": 0,
+                "intent": "Replace greeting with one star.",
+                "edits": [
+                  {
+                    "match": "hello",
+                    "replace": "🌟"
+                  }
+                ],
+                "client_request_id": "g02-True-False"
+              }
+            }
+          },
+          {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+              "name": "patchdiff_export_target",
+              "arguments": {
+                "target_file_id": "a50d75fc-eb62-4a7e-b723-f09382ecb351"
+              }
+            }
+          }
+        ],
+        "stdin_base64": "eyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDEsICJtZXRob2QiOiAiaW5pdGlhbGl6ZSIsICJwYXJhbXMiOiB7fX0KeyJqc29ucnBjIjogIjIuMCIsICJpZCI6IDIsICJtZXRob2QiOiAidG9vbHMvY2FsbCIsICJwYXJhbXMiOiB7Im5hbWUiOiAicGF0Y2hkaWZmX3N1Ym1pdF9lZGl0cyIsICJhcmd1bWVudHMiOiB7InRhcmdldF9maWxlX2lkIjogImE1MGQ3NWZjLWViNjItNGE3ZS1iNzIzLWYwOTM4MmVjYjM1MSIsICJleHBlY3RlZF90YXJnZXRfdmVyc2lvbiI6IDAsICJpbnRlbnQiOiAiUmVwbGFjZSBncmVldGluZyB3aXRoIG9uZSBzdGFyLiIsICJlZGl0cyI6IFt7Im1hdGNoIjogImhlbGxvIiwgInJlcGxhY2UiOiAi8J+MnyJ9XSwgImNsaWVudF9yZXF1ZXN0X2lkIjogImcwMi1UcnVlLUZhbHNlIn19fQp7Impzb25ycGMiOiAiMi4wIiwgImlkIjogMywgIm1ldGhvZCI6ICJ0b29scy9jYWxsIiwgInBhcmFtcyI6IHsibmFtZSI6ICJwYXRjaGRpZmZfZXhwb3J0X3RhcmdldCIsICJhcmd1bWVudHMiOiB7InRhcmdldF9maWxlX2lkIjogImE1MGQ3NWZjLWViNjItNGE3ZS1iNzIzLWYwOTM4MmVjYjM1MSJ9fX0K",
+        "stdout_base64": "eyJpZCI6MSwianNvbnJwYyI6IjIuMCIsInJlc3VsdCI6eyJjYXBhYmlsaXRpZXMiOnsidG9vbHMiOnt9fSwicHJvdG9jb2xWZXJzaW9uIjoiMjAyNC0xMS0wNSIsInNlcnZlckluZm8iOnsibmFtZSI6InBhdGNoZGlmZi1tdnAiLCJ2ZXJzaW9uIjoiMC4yLjIifX19DQp7ImlkIjoyLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJhZnRlcl9oYXNoXCI6IFwiY2U1MTA1OWI5N2NiZDdkM2I1ZmFhM2FkZDYxZjhjNDlmNWJjMDM4OTc1MDUwODg0NmY3NTJmMDFjNGZhYzc5ZFwiLCBcImJlZm9yZV9oYXNoXCI6IFwiNTg5MWI1YjUyMmQ1ZGYwODZkMGZmMGIxMTBmYmQ5ZDIxYmI0ZmM3MTYzYWYzNGQwODI4NmEyZTg0NmY2YmUwM1wiLCBcImNsaWVudF9yZXF1ZXN0X2lkXCI6IFwiZzAyLVRydWUtRmFsc2VcIiwgXCJkZWR1cGxpY2F0ZWRcIjogZmFsc2UsIFwiZXZpZGVuY2VcIjoge1wiY2hhbmdlc1wiOiBbe1wiY2hhbmdlX2lkXCI6IFwiY2hnXzAwMVwiLCBcImNoYW5nZV9pbmRleFwiOiAxLCBcIm1hdGNoZWRfY2hhcnNcIjogNSwgXCJtYXRjaGVkX3NoYTI1NlwiOiBcIjJjZjI0ZGJhNWZiMGEzMGUyNmU4M2IyYWM1YjllMjllMWIxNjFlNWMxZmE3NDI1ZTczMDQzMzYyOTM4Yjk4MjRcIiwgXCJyZXBsYWNlbWVudF9jaGFyc1wiOiAxLCBcInJlcGxhY2VtZW50X3NoYTI1NlwiOiBcIjg1ZjEzZDU5NTdkZGM5NTY1NzRiYTRhMThlMmFhMzI5YWFlOWZiZDM4MTZhOTE3ODE5ZDE0NTIxMzlhMDBmZDlcIiwgXCJzcGFuX2VuZFwiOiA1LCBcInNwYW5fc3RhcnRcIjogMH1dfSwgXCJtYW5pZmVzdF9lbnRyaWVzX2FkZGVkXCI6IDEsIFwicGRjcF9sb2dfaWRcIjogXCJlNTQwOTZlNy1iODk2LTQyMDYtYTI0ZC02NTdkODQwY2Q2YTZcIiwgXCJzdGF0dXNcIjogXCJhY2NlcHRlZFwiLCBcInRhcmdldF9maWxlX2lkXCI6IFwiYTUwZDc1ZmMtZWI2Mi00YTdlLWI3MjMtZjA5MzgyZWNiMzUxXCIsIFwidmFsaWRpdHlcIjoge1wicHJvdG9jb2xfdmFsaWRcIjogdHJ1ZSwgXCJzZW1hbnRpY1wiOiBcIm5vdF9ldmFsdWF0ZWRcIiwgXCJ0YXNrX2NvcnJlY3RcIjogXCJub3RfZXZhbHVhdGVkXCIsIFwidHJhbnNhY3Rpb25fdmFsaWRcIjogdHJ1ZX0sIFwidmVyc2lvblwiOiAxLCBcIndhcm5pbmdzXCI6IFtdfSIsInR5cGUiOiJ0ZXh0In1dLCJpc0Vycm9yIjpmYWxzZX19DQp7ImlkIjozLCJqc29ucnBjIjoiMi4wIiwicmVzdWx0Ijp7ImNvbnRlbnQiOlt7InRleHQiOiJ7XCJjb250ZW50XCI6IFwiXFx1ZDgzY1xcdWRmMWZcXG5cIiwgXCJjb250ZW50X3R5cGVcIjogXCJ0ZXh0L3BsYWluXCIsIFwiY3VycmVudF9oYXNoXCI6IFwiY2U1MTA1OWI5N2NiZDdkM2I1ZmFhM2FkZDYxZjhjNDlmNWJjMDM4OTc1MDUwODg0NmY3NTJmMDFjNGZhYzc5ZFwiLCBcImZpbGVuYW1lXCI6IFwiZzAyLW92ZXJyaWRlLVRydWUtZXNjYXBlZC1GYWxzZS50eHRcIiwgXCJmb3JtYXRcIjogXCJvcmlnaW5hbF90ZXh0XCIsIFwiaGFzaFwiOiBcImNlNTEwNTliOTdjYmQ3ZDNiNWZhYTNhZGQ2MWY4YzQ5ZjViYzAzODk3NTA1MDg4NDZmNzUyZjAxYzRmYWM3OWRcIiwgXCJ0YXJnZXRfdHlwZVwiOiBcInRleHQvcGxhaW5cIiwgXCJ2ZXJzaW9uXCI6IDF9IiwidHlwZSI6InRleHQifV0sImlzRXJyb3IiOmZhbHNlfX0NCg==",
+        "stderr_base64": "",
+        "stdout_all_ascii": true,
+        "exit_code": 0,
+        "responses": [
+          {
+            "id": 1,
+            "jsonrpc": "2.0",
+            "result": {
+              "capabilities": {
+                "tools": {}
+              },
+              "protocolVersion": "2024-11-05",
+              "serverInfo": {
+                "name": "patchdiff-mvp",
+                "version": "0.2.2"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"after_hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"before_hash\": \"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03\", \"client_request_id\": \"g02-True-False\", \"deduplicated\": false, \"evidence\": {\"changes\": [{\"change_id\": \"chg_001\", \"change_index\": 1, \"matched_chars\": 5, \"matched_sha256\": \"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\", \"replacement_chars\": 1, \"replacement_sha256\": \"85f13d5957ddc956574ba4a18e2aa329aae9fbd3816a917819d1452139a00fd9\", \"span_end\": 5, \"span_start\": 0}]}, \"manifest_entries_added\": 1, \"pdcp_log_id\": \"e54096e7-b896-4206-a24d-657d840cd6a6\", \"status\": \"accepted\", \"target_file_id\": \"a50d75fc-eb62-4a7e-b723-f09382ecb351\", \"validity\": {\"protocol_valid\": true, \"semantic\": \"not_evaluated\", \"task_correct\": \"not_evaluated\", \"transaction_valid\": true}, \"version\": 1, \"warnings\": []}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          },
+          {
+            "id": 3,
+            "jsonrpc": "2.0",
+            "result": {
+              "content": [
+                {
+                  "text": "{\"content\": \"\\ud83c\\udf1f\\n\", \"content_type\": \"text/plain\", \"current_hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"filename\": \"g02-override-True-escaped-False.txt\", \"format\": \"original_text\", \"hash\": \"ce51059b97cbd7d3b5faa3add61f8c49f5bc0389750508846f752f01c4fac79d\", \"target_type\": \"text/plain\", \"version\": 1}",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
