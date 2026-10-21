@@ -70,7 +70,7 @@ def find_exact_occurrences(target_text: str, match_text: str, *, overlapping: bo
 For legacy replay under `patchdiff-mvp-0.1.0`, non-overlapping stepping (`index += len(pattern)`) is preserved.
 
 If pattern is not found: return `match_absent`.
-If multiple occurrences have no selecting constraint: return match_ambiguous. Supplied selecting constraints that fail return disambiguation_invalid, including for one occurrence under the current profile.
+If multiple occurrences have empty disambiguation: return match_ambiguous. A nonempty advisory-only mapping returns disambiguation_invalid. Supplied selecting constraints that fail return disambiguation_invalid, including for one occurrence under the current profile.
 
 ## Disambiguation
 

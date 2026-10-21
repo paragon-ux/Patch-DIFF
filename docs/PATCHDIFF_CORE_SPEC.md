@@ -117,7 +117,7 @@ In current runtime 0.2.2, supplied selecting fields are conjunctive constraints 
 4. `region_hint`: legacy advisory field supported on `.pdcp` v0.2.3 only (does not select by itself; rejected on typed path).
 
 If 0 occurrences match: reject with `FailureReason.MATCH_ABSENT`.
-If multiple occurrences exist with no selecting fields: reject with FailureReason.MATCH_AMBIGUOUS. Advisory legacy region_hint cannot select an occurrence. A singleton with no selecting fields succeeds.
+If multiple occurrences exist with an empty disambiguation mapping: reject with FailureReason.MATCH_AMBIGUOUS. A nonempty advisory-only mapping (for example region_hint alone) rejects with FailureReason.DISAMBIGUATION_INVALID; advisory metadata cannot select an occurrence. A singleton with no selecting fields succeeds.
 If supplied selecting constraints fail to leave exactly one span, including an out-of-range singleton index or excluding anchor: reject with FailureReason.DISAMBIGUATION_INVALID. Anchors may occur anywhere strictly before/after the selected span; adjacency is not required.
 
 Historical 0.1.0, 0.2.0 and 0.2.1 logs retain the ignored-singleton-selector behavior. Profile 0.2.2 changes that setting only; overlap enumeration and historical change-ID grammars retain their existing behavior. Unknown/missing profiles fail closed.
