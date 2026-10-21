@@ -1,6 +1,6 @@
 # PatchDIFF Modernization Change Document
 
-Status: **The six required Devin defects are implemented and independently rechecked in stacked PRs #4–#8. Final local product verification passes834 tests, including live PostgreSQL and real stdio; PR#8 generated-merge b0444e2 CI passes613 unit/221 integration tests. DEV-SVC-002 retains current identity by decision; D01 documentation is in final review. Earlier closure records below remain evidence for their pinned revisions. Current execution is under docs/remediation/. Nothing is merged into PR#1.**
+Status: **The six required Devin defects are implemented and independently rechecked in stacked PRs #4–#8. Final local product verification passes834 tests, including live PostgreSQL and real stdio; PR#8 generated-merge b0444e2 CI passes613 unit/221 integration tests. DEV-SVC-002 retains current identity by decision; D01 documentation passes independent source/contract review at336f1e5/fb60723 and is ready for the final docs PR. Earlier closure records below remain evidence for their pinned revisions. Current execution is under docs/remediation/. Nothing is merged into PR#1.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
