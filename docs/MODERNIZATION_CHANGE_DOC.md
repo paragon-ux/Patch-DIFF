@@ -4,6 +4,12 @@ Status: **The six required Devin defects are implemented and independently reche
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
+## Current remediation: Goal G / G02 transport
+
+The accepted [Gemini change plan](reviews/gemini/GEMINI_CHANGE_PLAN.md) and [Goal G](reviews/gemini/Gemini-Goal-G.md) replace the original Gemini recommendations after actual native workflows and raw-byte controls. Original reports and reproduction evidence remain hash-checked under reviews/gemini/archive. G02 is corrected to Windows input corruption: raw UTF-8 could be accepted and persisted as mojibake under cp1252; a stdout crash did not reproduce. G03 returned a handled tool error; G07 search already supplied version/current_hash. Cursor, history and sequential semantics are preserved.
+
+The selected entry-point fix explicitly configures strict UTF-8 stdin/stdout without changing injected-stream serving, JSON escaping, protocols, profiles, fingerprints, persistence or dependencies. The pre-code decision and implementation verification are recorded under docs/gemini-remediation. Tests, manual execution and independent recheck must be recorded before declaring G02 closed. Existing native reproduction registration/configuration is unchanged; merges remain unapproved.
+
 ## Current remediation: DEV-RUN-001
 
 New runtime 0.2.2 enforces all supplied selectors on singleton matches through the shared applier and locked submit path. Historical profiles preserve ignored-singleton semantics with a separate profile setting; overlap behavior and historical ID decoding are unchanged. The active core contract, architecture/profile table, MCP/PDCP fields, host typed/legacy examples and skills are reconciled. Verification and independent recheck are recorded in [the remediation workflow](remediation/WORKFLOW.md). No current whole-PR approval or completion of the other five defects is claimed.

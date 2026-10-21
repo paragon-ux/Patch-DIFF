@@ -83,6 +83,8 @@ Invoke-RestMethod http://127.0.0.1:8000/health/ready
 
 PatchDIFF exposes a stdio JSON-RPC MCP adapter for external MCP hosts such as Claude Desktop.
 
+The adapter process uses strict UTF-8 for stdin/stdout, including Windows pipes, independently of the locale or PYTHONIOENCODING setting. Older revisions require PYTHONIOENCODING=utf-8 in the server environment to avoid misdecoding literal Unicode requests. See [the setup guide](docs/CLAUDE_DESKTOP_SETUP.md) for transport and restart guidance.
+
 Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
