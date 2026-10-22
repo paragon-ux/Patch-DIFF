@@ -24,7 +24,7 @@ New applicability ambiguity/selector failures retain at most five exact candidat
 
 This document defines the deterministic PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`).
 
-The core runtime accepts declarative, non-executable edit transactions—typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`) and frozen legacy `.pdcp` (v0.2.3) files—and canonical target text. It validates protocol structure, validates transaction applicability, applies exact `MATCH/REPLACE` operations sequentially in memory, computes runtime-derived change facts, commits atomically per target, logs all accepted and rejected attempts with retry lineage and idempotency, supports SAVE checkpointing, and executes deterministic replay.
+The core runtime accepts declarative, non-executable edit transactions—typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), sole guarded replacement (`patchdiff-tx/3`) and frozen legacy `.pdcp` (v0.2.3) files—and canonical target text. It validates protocol structure, validates transaction applicability, applies exact `MATCH/REPLACE` operations sequentially in memory, computes runtime-derived change facts, commits atomically per target, logs all accepted and rejected attempts with retry lineage and idempotency, supports SAVE checkpointing, and executes deterministic replay.
 
 The core runtime is deterministic, pure, and trusted.
 
@@ -37,7 +37,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ```text
 canonical UTF-8 target text
-+ declarative non-executable transaction (patchdiff-tx/1, patchdiff-tx/2 or .pdcp 0.2.3)
++ declarative non-executable transaction (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3 or .pdcp 0.2.3)
 -> lowering into ParsedPDCP representation
 -> exact deterministic MATCH (all exact spans counted)
 -> immediate sequential REPLACE simulation in memory

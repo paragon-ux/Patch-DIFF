@@ -547,7 +547,8 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
     invocation = {"correlation_id": result.correlation_id} if result.correlation_id is not None else {}
     if result.status == "invalid_argument":
         return {"status": "invalid_argument", "target_file_id": str(result.target_file_id),
-                "failure_detail": result.failure_detail}
+                "failure_detail": result.failure_detail, **invocation,
+                **({"pdcp_log_id": None, "diagnostic": result.diagnostic} if result.diagnostic is not None else {})}
     if result.status == "accepted":
         return {
             "status": "accepted",

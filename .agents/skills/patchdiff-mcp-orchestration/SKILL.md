@@ -24,7 +24,7 @@ The PatchDIFF MCP service provides deterministic validation, authoritative bound
 
 ## Tool Surface Overview
 
-PatchDIFF provides 17 tools across five functional areas:
+PatchDIFF provides 20 tools across five functional areas:
 
 1. **Target Lifecycle**:
    - `patchdiff_handle_upload`: register uploaded file content as a target.
@@ -33,16 +33,20 @@ PatchDIFF provides 17 tools across five functional areas:
    - `patchdiff_export_target`: retrieve current full text for saving/export.
 2. **Authoritative Reads & Exact Search**:
    - `patchdiff_read_target`: bounded slice reading with code-point offset `start`, `length`, and `next_start` pagination.
+   - `patchdiff_read_lines`: bounded inclusive LF line ranges with range-relative continuation and one coherent version/hash observation.
    - `patchdiff_find_occurrences`: exact string search returning all occurrence code-point spans, snippet context, `start_occurrence`, `max_results`, and `next_occurrence_index`.
 3. **Guarded Edit Submission**:
    - `patchdiff_submit_edits`: primary typed edit submission (`patchdiff-tx/1`). Requires `expected_target_version` and/or `expected_current_hash`. Supports `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage.
    - `patchdiff_submit_pdcp`: legacy `.pdcp` text submission (frozen v0.2.3 format).
+   - `patchdiff_submit_operations`: guarded match/span transactions (tx/2, profile0.3.0).
+   - `patchdiff_submit_replacement`: guarded sole replace_all (tx/3, profile0.4.0); valid fresh oversize is a structured no-attempt admission error.
 4. **Checkpoints, Replay & History**:
    - `patchdiff_save`: snapshots target and rotates editing cycle.
    - `patchdiff_replay`: deterministically reconstructs target from initial state and accepted history.
    - `patchdiff_get_pdcp_log`: bounded newest-first inspection of attempt history.
    - `patchdiff_get_manifest_ledger`: bounded inspection of accepted changes with runtime facts.
 5. **Bounded Preview & Deprecated Wrappers**:
+   - `patchdiff_preview`: advisory zero-audit/keyless evaluation of a fresh proposal through the shared read-only evaluator; later submission rechecks guards.
    - `patchdiff_build_prompt_context`: convenience bounded prefix preview (`context_truncated`).
    - `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`: deprecated server-prompt wrappers preserved for compatibility.
 

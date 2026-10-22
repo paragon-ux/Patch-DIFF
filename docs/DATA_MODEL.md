@@ -125,7 +125,7 @@ Mutable record of the most recent submission for a target (display/session state
 | `pdcp_file_id` | UUID | PK | Row identifier |
 | `target_file_id` | UUID | FK -> `cloud_target_files.target_file_id` UNIQUE NOT NULL | One row per target |
 | `editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Submission cycle |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or `0.2.3` |
 | `pdcp_content` | TEXT | NOT NULL | Raw text or canonical JSON |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `pending_validation`, `accepted`, `rejected`, `superseded` |
@@ -150,7 +150,7 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `regeneration_attempt` | INTEGER | NULLABLE | 1-based retry attempt |
 | `regeneration_source` | TEXT | NULLABLE | Host or policy label |
 | `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or `0.2.3` |
 | `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.2`) |
 | `pdcp_content` | TEXT | NOT NULL | Canonical JSON or raw PDCP for ordinary input; reversible ASCII JSON evidence for rejected invalid text |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |

@@ -66,7 +66,7 @@ New admitted submissions on known targets append a terminal row in the submissio
 - `parent_pdcp_log_id`: link to predecessor log in retry lineage.
 - `before_version`, `after_version`: target version progression.
 - `before_hash`, `after_hash`: target SHA-256 progression.
-- `pdcp_content`: canonical JSON for `patchdiff-tx/1` or `patchdiff-tx/2`; raw valid legacy text for `0.2.3`. Invalid-text rejections use the reversible ASCII evidence envelope.
+- `pdcp_content`: canonical JSON for `patchdiff-tx/1`, `patchdiff-tx/2` or `patchdiff-tx/3`; raw valid legacy text for `0.2.3`. Invalid-text rejections use the reversible ASCII evidence envelope.
 - `pdcp_content_hash`: SHA-256 of `pdcp_content`.
 
 For rejected invalid Unicode, pdcp_content contains a deterministic ASCII-escaped patchdiff-invalid-input/1 evidence envelope of the original input, not an accepted transaction. JSONB holds safe marker/path strings only. A safe request key recovers its original rejection with a domain-separated invalid-evidence fingerprint; unencodable keys remain NULL on the row and are preserved in evidence. Never write decoded surrogate/NUL text to PostgreSQL or change valid-input fingerprints. Caller-owned commit/rollback and target locks retain their usual semantics.

@@ -5,6 +5,9 @@ from jsonschema import Draft202012Validator
 
 from app.mcp.external_adapter import ExternalMCPAdapter, TOOL_EXAMPLES
 from app.services.read_service import line_slice
+from app.mcp.tools import _submit_result_to_payload
+from app.services.pdcp_service import SubmitPDCPResult
+import uuid
 
 
 @pytest.mark.parametrize("content,start,end,text,lines,begin,stop", [
@@ -57,3 +60,13 @@ def test_discovery_examples_are_valid_bounded_and_isolated():
     schemas["patchdiff_submit_edits"]["examples"][0]["edits"][0]["replace"] = "mutated"
     assert adapter.list_tools() != tools
     assert TOOL_EXAMPLES["patchdiff_submit_edits"][0]["edits"][0]["replace"] == "beta"
+
+
+def test_structured_admission_survives_mcp_serialization():
+    result = SubmitPDCPResult(status="invalid_argument", target_file_id=uuid.uuid4(), pdcp_log_id=None,
+                             before_hash=None, after_hash=None, before_version=None, after_version=None,
+                             diagnostic={"code": "replacement_too_large", "limit_exceeded": "raw_code_points"},
+                             correlation_id=str(uuid.uuid4()))
+    payload = _submit_result_to_payload(result)
+    assert payload["pdcp_log_id"] is None and payload["diagnostic"] == result.diagnostic
+    assert payload["correlation_id"] == result.correlation_id and payload["status"] == "invalid_argument"

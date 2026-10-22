@@ -140,7 +140,7 @@ def run():
         dedup = client.call("patchdiff_submit_edits", first_args)
         assert dedup["deduplicated"] and dedup["pdcp_log_id"] == first["pdcp_log_id"]
         rejected = client.call("patchdiff_submit_edits", bound("patchdiff_submit_edits", 1, expected_target_version=1))
-        assert rejected["failure_reason"] == "match_not_found"
+        assert rejected["failure_reason"] == "match_absent"
         retry = client.call("patchdiff_submit_edits", bound("patchdiff_submit_edits", 2,
                             expected_target_version=1, parent_pdcp_log_id=rejected["pdcp_log_id"]))
         assert retry["status"] == "accepted" and retry["version"] == 2
