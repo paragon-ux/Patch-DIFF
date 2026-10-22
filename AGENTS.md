@@ -1,5 +1,14 @@
 # AGENTS.md
 
+## Goal F Pass B contract
+
+The [Pass B decision](docs/usability/PASS-B-decision.md) defines F09/F10/F11/F12 before implementation. New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
+
+patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
+
+Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. V02/V04 remain limited to local synthetic evidence because no representative sanitized dataset/benchmark threshold was supplied.
+
+
 ## Project
 
 PatchDIFF is an MCP-first, server-side deterministic document transaction service.
@@ -40,7 +49,7 @@ If ambiguity remains, preserve PatchDIFF’s locked invariants and choose the si
 
 ## Transaction Input Formats (`patchdiff-tx/1` Edits, `patchdiff-tx/2` Operations, Frozen Legacy `.pdcp`)
 
-PatchDIFF supports three declarative, non-executable transaction input formats that lower into the same `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
+PatchDIFF supports four declarative, non-executable transaction input formats that lower into the same `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 
 1. **Guarded operations (`patchdiff_submit_operations` / `patchdiff-tx/2`)**: ordered explicit match/span operations with intent and mandatory hash/version guard; sequential code-point spans require exact expected_text. Zero-length insertion is explicit span behavior, never empty MATCH. Shared applier and immutable 0.3.0 profile; tx/1 and legacy histories/profiles remain unchanged. No replace_all operation in 0.3.0.
 2. **Typed transaction (`patchdiff_submit_edits` / `protocol_version = "patchdiff-tx/1"`, preferred)**:
@@ -50,6 +59,7 @@ PatchDIFF supports three declarative, non-executable transaction input formats t
 3. **Legacy PDCP file (`patchdiff_submit_pdcp` / `protocol_version = "0.2.3"`, frozen legacy/import)**:
    - Raw `.pdcp` text with `PDCP 0.2.3` header, 7 required `# MANIFEST` fields per change block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters.
    - Retained for backward compatibility and replay of historical logs.
+4. **Sole replacement (`patchdiff_submit_replacement` / `patchdiff-tx/3`)**: explicit guarded replace_all through the shared applier and immutable 0.4.0 profile, with bounded fresh admission and one full-span ledger fact. Replay does not reapply fresh admission limits.
 
 Keep this boundary:
 
@@ -69,7 +79,7 @@ PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`) is pure and de
 
 It may:
 
-- parse and validate `.pdcp` (`0.2.3`), typed edits (`patchdiff-tx/1`) and guarded operations (`patchdiff-tx/2`)
+- parse and validate `.pdcp` (`0.2.3`), typed edits (`patchdiff-tx/1`), guarded operations (`patchdiff-tx/2`) and sole replacements (`patchdiff-tx/3`)
 - enumerate all exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.2`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, or legacy `region_hint` in `0.2.3`)
 - simulate sequential exact `MATCH/REPLACE` and guarded explicit span operations in memory and compute `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests)
@@ -120,7 +130,7 @@ PatchDIFF must always preserve:
 
 ```text
 canonical UTF-8 target text (LF normalized)
-+ declarative non-executable transactions (patchdiff-tx/1, patchdiff-tx/2 and PDCP 0.2.3)
++ declarative non-executable transactions (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3 and PDCP 0.2.3)
 + exact deterministic MATCH (all exact occurrences counted)
 + immediate sequential in-memory REPLACE simulation
 + per-target atomic Postgres commit under SELECT ... FOR UPDATE

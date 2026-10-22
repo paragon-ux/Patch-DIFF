@@ -11,7 +11,7 @@ from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.validity import validity_levels
 from app.mcp.server import registry
 from app.services.export_service import export_target, get_target
-from app.services.pdcp_service import SubmitPDCPResult, submit_edits, submit_pdcp, submit_operations
+from app.services.pdcp_service import SubmitPDCPResult, submit_edits, submit_pdcp, submit_operations, submit_replacement, preview
 from app.services.prompt_context_service import build_prompt_context
 from app.services.regeneration_service import (
     build_regeneration_context,
@@ -24,6 +24,7 @@ from app.services.read_service import (
     clamp_limit,
     find_occurrences,
     read_target,
+    read_lines,
 )
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
@@ -34,6 +35,8 @@ from app.storage.models import (
     AppendOnlyPdcpLogs,
     CloudTargetFiles,
 )
+
+_UNSET = object()
 
 
 @registry.register("patchdiff_handle_upload")
@@ -170,6 +173,42 @@ def patchdiff_submit_operations(
 def patchdiff_read_target(*, target_file_id: str, start: int = 0, length: int | None = None) -> dict[str, Any]:
     with SessionLocal() as session:
         return read_target(session, target_file_id=target_file_id, start=start, length=length)
+
+
+@registry.register("patchdiff_submit_replacement")
+def patchdiff_submit_replacement(
+    *, target_file_id: str, intent: str, replacement: str,
+    expected_target_version: int | None = None, expected_current_hash: str | None = None,
+    source: str = "model_response", parent_pdcp_log_id: str | None = None,
+    attempt: int | None = None, client_request_id: str | None = None, include_correlation_id: bool = False,
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        result = submit_replacement(session, target_file_id=target_file_id, intent=intent, replacement=replacement,
+                                    expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+                                    submission_source=source, parent_pdcp_log_id=parent_pdcp_log_id, attempt=attempt,
+                                    client_request_id=client_request_id, include_correlation_id=include_correlation_id)
+    return _submit_result_to_payload(result)
+
+
+@registry.register("patchdiff_read_lines")
+def patchdiff_read_lines(*, target_file_id: str, start_line: int = 1, end_line: int | None = None,
+                        offset: int = 0, max_chars: int | None = None) -> dict[str, Any]:
+    with SessionLocal() as session:
+        return read_lines(session, target_file_id=target_file_id, start_line=start_line,
+                          end_line=end_line, offset=offset, max_chars=max_chars)
+
+
+@registry.register("patchdiff_preview")
+def patchdiff_preview(
+    *, target_file_id: str, format: str, intent: str | None = _UNSET, edits: list[dict] | None = _UNSET,
+    operations: list[dict] | None = _UNSET, replacement: str | None = _UNSET, pdcp_content: str | None = _UNSET,
+    expected_target_version: int | None = None, expected_current_hash: str | None = None,
+) -> dict[str, Any]:
+    proposal = {key: value for key, value in {"intent": intent, "edits": edits, "operations": operations,
+                "replacement": replacement, "pdcp_content": pdcp_content}.items() if value is not _UNSET}
+    with SessionLocal() as session:
+        return preview(session, target_file_id=target_file_id, format=format, **proposal,
+                       expected_target_version=expected_target_version, expected_current_hash=expected_current_hash)
 
 
 @registry.register("patchdiff_find_occurrences")

@@ -4,7 +4,24 @@ Audience: the host that talks to the model (chat client, agent loop, skill autho
 
 Why this document exists: the server is a transaction service; the host owns planning, wording, retry and compaction ([MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), A1). If the host's behavior is only specified in server-built prompt strings, it cannot be versioned, reviewed or adapted per host. Here it can. Contract details are in [MCP_TOOLS.md](MCP_TOOLS.md); this guide says how to *use* them.
 
+## Goal F Pass B contract
+
+The [Pass B decision](usability/PASS-B-decision.md) defines F09/F10/F11/F12 before implementation. New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
+
+patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
+
+Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. V02/V04 remain limited to local synthetic evidence because no representative sanitized dataset/benchmark threshold was supplied.
+
+
 ## Goal F Pass A contract
+
+### Executable discovery example sequence
+
+`tools/list` includes 13 illustrative `inputSchema.examples` across nine tools. They are arguments, not pre-existing resources. Initialize `alpha alpha\n🌟 中\n`, bind its real UUID and observed guard, then execute: read; find; typed example0 (second occurrence); resend those exact bound arguments for dedup; typed example1 (intentional missing match); typed example2 with the returned rejection UUID as parent and version1; span example at version2; sole replacement at version3; line read; preview at version4. The replacement leaves `Final text\n`; accepted preview proposes `Reviewed text\n` but does not commit it. Keep the original rejection diagnostic immutable and expect four accepted facts/five attempts. Never substitute the new version into the original keyed proposal when recovering it.
+
+Execute each history tool's first example, bind its returned `next_sequence` into the continuation example, and repeat until `has_more=false`. Attempts display descending sequences; ledger displays ascending sequences within each newest page. A cursor is exclusive in both tools. `docs/usability/PASS-B-live-verify.py` executes every advertised pair through real stdio with schema validation, nonvacuous paging and independent SQL assertions. This is executable API coverage, not a model success-rate measurement.
+
+Line-range continuation uses the same selected line range plus `next_offset`; a later call observes a fresh version/hash and can change under concurrent edits. Preview uses no retry key and never reserves one; use a version guard when submitting after preview. A content hash alone cannot detect intervening no-op or ABA changes. Whole-target replacement requires explicit user/host intent through its separate tool and a guard; the ordinary match/span tools keep their existing formats.
 
 The normative [Pass A decision](usability/PASS-A-decision.md) defines F03/F05/F06/F07 fields, bounds, omission states, ownership and compatibility before implementation. `include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
 

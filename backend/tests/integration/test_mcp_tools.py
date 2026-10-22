@@ -25,6 +25,9 @@ def test_required_tool_names_are_registered() -> None:
         # Added by the modernization (docs/MODERNIZATION_ARCHITECTURE.md A1/A2).
         "patchdiff_submit_edits",
         "patchdiff_submit_operations",
+        "patchdiff_submit_replacement",
+        "patchdiff_read_lines",
+        "patchdiff_preview",
         "patchdiff_read_target",
         "patchdiff_find_occurrences",
     }

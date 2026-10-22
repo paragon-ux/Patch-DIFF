@@ -4,6 +4,10 @@ Status: **Modernization/remediation PRs and Goal G are merged into main at 2ee7c
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
+## Consolidated Goal F Pass B
+
+The pre-code decision is docs/usability/PASS-B-decision.md. Whole-batch implementation covers guarded replacement, coherent line reads, shared-evaluator zero-audit preview and bounded executable discovery examples. Verification is pending one final consolidated root run. No migration or old-profile/identity rewrite; no representative dataset or production benchmark threshold was provided.
+
 ## Consolidated Goal F Pass A
 
 F01 is the reviewed foundation. F03/F05/F06/F07 decisions and normative contract amendments are recorded before production changes in docs/usability/PASS-A-decision.md. F02/F04 remain deferred. Implementation is complete through the shared pipeline. Focused verification passes 386 tests in 31.30 seconds; a final 50-test pure diagnostic/operations run passes in 5.39 seconds and includes five additional boundary cases, for 391 distinct focused cases. New Pass A coverage is 103 cases (50 pure, 53 live PostgreSQL/stdio). Database patchdiff_goal_f_f01_20261021 remains separate from root manual verification. Existing Unicode phase-inspection mocks exercise the undecorated persistence-input boundary; real public tests verify response enrichment. One consolidated source-pinned full verification/manual/review cycle follows. No per-feature PR or old-profile/identity rewrite.

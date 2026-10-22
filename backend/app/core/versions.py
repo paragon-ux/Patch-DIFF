@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 RUNTIME_VERSION = "patchdiff-mvp-0.2.2"
 OPERATIONS_RUNTIME_VERSION = "patchdiff-mvp-0.3.0"
+REPLACEMENT_RUNTIME_VERSION = "patchdiff-mvp-0.4.0"
 PRE_SELECTOR_RUNTIME_VERSION = "patchdiff-mvp-0.2.1"
 PREVIOUS_RUNTIME_VERSION = "patchdiff-mvp-0.2.0"
 LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"
@@ -16,6 +17,7 @@ class RuntimeProfile:
     overlapping_matches: bool
     enforce_singleton_selectors: bool
     span_operations: bool = False
+    replace_all_operations: bool = False
 
 
 # Recorded profiles never inherit new execution semantics.
@@ -25,6 +27,7 @@ SUPPORTED_RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
     PRE_SELECTOR_RUNTIME_VERSION: RuntimeProfile(True, False),
     RUNTIME_VERSION: RuntimeProfile(True, True),
     OPERATIONS_RUNTIME_VERSION: RuntimeProfile(True, True, True),
+    REPLACEMENT_RUNTIME_VERSION: RuntimeProfile(True, True, True, True),
 }
 
 
