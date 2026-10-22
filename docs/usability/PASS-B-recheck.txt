@@ -1,0 +1,15 @@
+....................F.......                                             [100%]
+================================== FAILURES ===================================
+____________ test_structured_admission_survives_mcp_serialization _____________
+
+    def test_structured_admission_survives_mcp_serialization():
+>       result = SubmitPDCPResult(status="invalid_argument", target_file_id=uuid.uuid4(), pdcp_log_id=None,
+                                 before_hash=None, after_hash=None, before_version=None, after_version=None,
+                                 diagnostic={"code": "replacement_too_large", "limit_exceeded": "raw_code_points"},
+                                 correlation_id=str(uuid.uuid4()))
+E       TypeError: SubmitPDCPResult.__init__() missing 2 required positional arguments: 'current_hash' and 'current_version'
+
+backend\tests\unit\test_pass_b_reads_discovery.py:66: TypeError
+- generated xml file: C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\goal-f-pass-b-worktree\docs\usability\PASS-B-recheck-junit.xml -
+=========================== short test summary info ===========================
+FAILED backend/tests/unit/test_pass_b_reads_discovery.py::test_structured_admission_survives_mcp_serialization

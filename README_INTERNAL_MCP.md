@@ -10,11 +10,11 @@ The internal registry is not a separate product path.
 
 It must keep the same invariants as the external adapter:
 
-- Transactions are untrusted until submitted through `patchdiff_submit_edits` (typed `patchdiff-tx/1`) or `patchdiff_submit_pdcp` (legacy `0.2.3`).
+- Transactions are untrusted until submitted through `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), `patchdiff_submit_replacement` (`patchdiff-tx/3`) or `patchdiff_submit_pdcp` (legacy `0.2.3`). All use the shared locked commit path.
 - Target content mutation must come only from accepted transactions validated by the deterministic core runtime.
 - The registry must not bypass parser, validator, matcher, applier, or service-layer commit paths.
 - SAVE may create snapshots and advance editing cycles, but must not alter target content.
-- Rejected attempts remain logged in `append_only_pdcp_logs` with failure reasons and must not append manifest ledger rows.
+- Admitted known-target rejections append attempt rows within the owner transaction and no ledger rows. Exact recovery, reads, preview and documented pre-admission failures add no attempt; caller rollback/infrastructure failure does not promise durability.
 
 ## Prerequisites
 
@@ -24,7 +24,8 @@ From the repo root:
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[test]"
+python -m pip install -r requirements.lock
+python -m pip install --no-deps -e .
 docker compose up -d postgres
 $env:PYTHONPATH = "backend"
 .\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
@@ -60,7 +61,7 @@ Submit the file through the internal registry:
 .\.venv\Scripts\python.exe -c "from app.mcp import tools; from app.mcp.server import registry; print('\n'.join(registry.names()))"
 ```
 
-Expected tool surface (16 tools):
+Expected tool surface (20 tools):
 
 ```text
 patchdiff_build_prompt_context
@@ -73,12 +74,16 @@ patchdiff_get_regeneration_context
 patchdiff_get_target
 patchdiff_handle_upload
 patchdiff_initialize_target
+patchdiff_preview
+patchdiff_read_lines
 patchdiff_read_target
 patchdiff_replay
 patchdiff_request_regeneration
 patchdiff_save
 patchdiff_submit_edits
+patchdiff_submit_operations
 patchdiff_submit_pdcp
+patchdiff_submit_replacement
 ```
 
 The three regeneration tools (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are deprecated compatibility wrappers. Modern host workflows use `patchdiff_read_target` / `patchdiff_find_occurrences` and host-owned retries.

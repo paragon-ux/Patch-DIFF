@@ -117,7 +117,7 @@ def test_invalid_rejection_respects_caller_owned_transaction(finish):
 def terminal_outcome(result):
     """Compare the recorded outcome, excluding intentionally refreshed target state."""
     values = asdict(result)
-    for name in ("deduplicated", "current_hash", "current_version"):
+    for name in ("deduplicated", "current_hash", "current_version", "current_context", "near_misses", "correlation_id"):
         values.pop(name)
     return values
 
@@ -267,6 +267,9 @@ def test_historical_rejected_invalid_parent_keeps_original_keyed_recovery(monkey
         recovered = pdcp_service.submit_edits(session, **args)
         assert recovered.deduplicated and terminal_outcome(recovered) == terminal_outcome(original)
         assert recovered.current_version == 1 and recovered.current_hash == canonical_sha256("gamma")
+        assert recovered.current_context["text"] == "gamma"
+        assert recovered.current_context["observed_target_hash"] == recovered.current_hash
+        assert recovered.diagnostic["failure_context"]["text"] == "alpha"
         session.refresh(log)
         assert (log.pdcp_content, log.pdcp_content_hash, log.request_fingerprint) == recorded
         assert session.scalar(select(func.count()).select_from(AppendOnlyPdcpLogs).where(

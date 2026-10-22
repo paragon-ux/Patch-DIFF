@@ -1,6 +1,6 @@
 ---
 name: patchdiff-testing-review
-description: Use when adding tests, reviewing implementation, verifying completion, or auditing for PatchDIFF protocol and MCP-first architectural consistency.
+description: "Use when adding tests, reviewing implementation, verifying completion, or auditing for PatchDIFF protocol and MCP-first architectural consistency."
 ---
 
 # PatchDIFF Testing and Review Skill
@@ -90,3 +90,13 @@ Verified:
 - Subprocess E2E: passed
 - Offline eval: passed (verdict equivalence verified)
 ```
+
+## Goal F additions
+
+When testing or reviewing Goal F behavior, cover:
+
+- tx/2 spans: sequential coordinates, insertion, CRLF `expected_text`, out-of-bounds and mismatch atomicity, selectors and boolean coordinates rejected, profile gates and replay.
+- tx/3: inclusive admission boundaries, recovery/conflict before admission, empty replacement, replay without limits.
+- Preview: verdicts identical to submission, zero managed-table changes, no blocking on a locked row, budget and omission metadata.
+- Diagnostics: failure versus current context, intermediate-buffer labeling, exact-key recovery, near misses only after a service-owned commit, banded near-miss results equal to an unbanded Levenshtein reference.
+- Discovery: every advertised example executed over real stdio and PostgreSQL; capability metadata equal to the runtime constants.

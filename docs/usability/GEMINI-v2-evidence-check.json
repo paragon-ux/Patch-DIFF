@@ -1,0 +1,190 @@
+{
+  "checked_at_utc": "2026-10-21T22:33:05.296277+00:00",
+  "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+  "classification": "Independent artifact inspection and read-only SQL; no Gemini workflow rerun or product mutation.",
+  "report_sha256": {
+    "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\docs\\reviews\\gemini\\v1\\LIVE_FEATURE_SET_TEST_REPORT.md": "fb791e2007564d123bd501d20b7f1d18b4e7eab88e12737e4429c7a35fb8b3df",
+    "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\docs\\reviews\\gemini\\v1\\REAL_WORKFLOW_FRICTION_TEST_REPORT.md": "e4b6786b6e7c7962c3a71214b4a8dcf1c443e0abe0cb86d385f7d925bd8a4b8c",
+    "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\docs\\reviews\\gemini\\v2\\LIVE_FEATURE_SET_TEST_REPORT.md": "9a52f5a7054dc9e8d0268af450f1d0794e41892b150a99ea1fe75d17c5363dde",
+    "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\docs\\reviews\\gemini\\v2\\REAL_WORKFLOW_FRICTION_TEST_REPORT.md": "8458864f58f15979f562fef4e7df6a115231fb1ada910320c2ded2535cbde958"
+  },
+  "playground_head": "2ee7ce46461598d71f0f9b2570ad7d9d3aa03d10",
+  "playground_status": " M docs/gemini-remediation/G02-live-results.json\n?? live_test_harness.py\n?? live_test_results.json\n",
+  "harness": {
+    "file": "C:\\Users\\USER\\Desktop\\Frameworks\\Antigravity-playground\\patch-diff\\Patch-DIFF\\live_test_results.json",
+    "sha256": "a4ff85dc6dfb20b8d510ae9e868baa4f53ad416c064c62443a2ca0588c6cb88e",
+    "status_counts": {
+      "PASS": 28
+    },
+    "concurrency": [
+      {
+        "step_id": "CONCURRENCY_01",
+        "observed": "res1_dedup=False, res2_dedup=True, target_version=1, logs_count=1, ledgers_count=1",
+        "status": "PASS"
+      },
+      {
+        "step_id": "CONCURRENCY_02",
+        "observed": "res1_status=accepted, res2_status=rejected, res2_reason=context_invalid, log0_key=conc-req-key-conflict, log1_key=None",
+        "status": "PASS"
+      },
+      {
+        "step_id": "CONCURRENCY_03",
+        "observed": "Session 2 saw version 0 and 0 logs during transaction; after rollback, target remains at version 0 with 0 logs and 0 ledgers",
+        "status": "PASS"
+      }
+    ]
+  },
+  "g02": {
+    "file": "C:\\Users\\USER\\Desktop\\Frameworks\\Antigravity-playground\\patch-diff\\Patch-DIFF\\docs\\gemini-remediation\\G02-live-results.json",
+    "sha256": "1a51b6a1e99d6f06fbd6ad83d4ac330456533b248bad1f9ab542cceef149d938",
+    "top_level_keys": [
+      "classification",
+      "timestamp_utc",
+      "executed_head",
+      "python",
+      "database",
+      "source_sha256",
+      "summaries",
+      "runs"
+    ],
+    "executed_head": "2ee7ce46461598d71f0f9b2570ad7d9d3aa03d10",
+    "database": "patchdiff_goal_g_manual_20261021",
+    "summaries": [
+      {
+        "profile": "absent",
+        "json_ascii_escaped": false,
+        "target_file_id": "29e70246-8ac5-40f5-a1c5-f41cb71a5b39",
+        "exact_SQL_state": {
+          "content": "\ud83c\udf1f caf\u00e9 \u4e16\u754c\ncaf\u00e9 \u4e16\u754c \ud83d\ude80\n",
+          "version": 1,
+          "logs": {
+            "accepted": 1,
+            "rejected": 2
+          },
+          "ledger": 1
+        },
+        "replay": {
+          "content_matches": true,
+          "recomputed_hash_matches": true,
+          "stored_hash_matches": true,
+          "version_matches": true
+        },
+        "malformed_wire_no_mutation": true
+      },
+      {
+        "profile": "absent",
+        "json_ascii_escaped": true,
+        "target_file_id": "89c09252-4feb-4468-81df-14eab20afea6",
+        "exact_SQL_state": {
+          "content": "\ud83c\udf1f caf\u00e9 \u4e16\u754c\ncaf\u00e9 \u4e16\u754c \ud83d\ude80\n",
+          "version": 1,
+          "logs": {
+            "accepted": 1,
+            "rejected": 2
+          },
+          "ledger": 1
+        },
+        "replay": {
+          "content_matches": true,
+          "recomputed_hash_matches": true,
+          "stored_hash_matches": true,
+          "version_matches": true
+        },
+        "malformed_wire_no_mutation": true
+      },
+      {
+        "profile": "cp1252",
+        "json_ascii_escaped": false,
+        "target_file_id": "501db673-c11b-4d60-bf6d-c25a46a686ed",
+        "exact_SQL_state": {
+          "content": "\ud83c\udf1f caf\u00e9 \u4e16\u754c\ncaf\u00e9 \u4e16\u754c \ud83d\ude80\n",
+          "version": 1,
+          "logs": {
+            "accepted": 1,
+            "rejected": 2
+          },
+          "ledger": 1
+        },
+        "replay": {
+          "content_matches": true,
+          "recomputed_hash_matches": true,
+          "stored_hash_matches": true,
+          "version_matches": true
+        },
+        "malformed_wire_no_mutation": true
+      },
+      {
+        "profile": "cp1252",
+        "json_ascii_escaped": true,
+        "target_file_id": "dfe682e5-1842-4615-ba33-d0c91039433a",
+        "exact_SQL_state": {
+          "content": "\ud83c\udf1f caf\u00e9 \u4e16\u754c\ncaf\u00e9 \u4e16\u754c \ud83d\ude80\n",
+          "version": 1,
+          "logs": {
+            "accepted": 1,
+            "rejected": 2
+          },
+          "ledger": 1
+        },
+        "replay": {
+          "content_matches": true,
+          "recomputed_hash_matches": true,
+          "stored_hash_matches": true,
+          "version_matches": true
+        },
+        "malformed_wire_no_mutation": true
+      }
+    ],
+    "source_hashes_match_current_files": {
+      "backend/app/mcp/external_adapter.py": true,
+      "docs/gemini-remediation/G02-live-verify.py": true
+    },
+    "independent_live_read_only_SQL": [
+      {
+        "target": "29e70246-8ac5-40f5-a1c5-f41cb71a5b39",
+        "SQL_matches_recorded_summary": true
+      },
+      {
+        "target": "89c09252-4feb-4468-81df-14eab20afea6",
+        "SQL_matches_recorded_summary": true
+      },
+      {
+        "target": "501db673-c11b-4d60-bf6d-c25a46a686ed",
+        "SQL_matches_recorded_summary": true
+      },
+      {
+        "target": "dfe682e5-1842-4615-ba33-d0c91039433a",
+        "SQL_matches_recorded_summary": true
+      }
+    ]
+  },
+  "database_catalogs": {
+    "127.0.0.1": {
+      "server_version": "PostgreSQL 16.3 on x86_64-pc-linux-musl, compiled by gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, 64-bit",
+      "databases": [
+        "patchdiff",
+        "patchdiff_codex_reproduction_20261021",
+        "patchdiff_goal_f_baseline_20261021",
+        "patchdiff_goal_f_baseline_manual_20261021",
+        "patchdiff_goal_g_manual_20261021",
+        "patchdiff_goal_g_suite_20261021",
+        "patchdiff_goal_g_worker_20261021"
+      ],
+      "read_only": "on"
+    },
+    "localhost": {
+      "server_version": "PostgreSQL 16.3 on x86_64-pc-linux-musl, compiled by gcc (Alpine 13.2.1_git20240309) 13.2.1 20240309, 64-bit",
+      "databases": [
+        "patchdiff",
+        "patchdiff_codex_reproduction_20261021",
+        "patchdiff_goal_f_baseline_20261021",
+        "patchdiff_goal_f_baseline_manual_20261021",
+        "patchdiff_goal_g_manual_20261021",
+        "patchdiff_goal_g_suite_20261021",
+        "patchdiff_goal_g_worker_20261021"
+      ],
+      "read_only": "on"
+    }
+  },
+  "database_verification": "Unavailable: reported v2 database does not currently exist; no conclusion about historical run validity. No database was created or modified."
+}

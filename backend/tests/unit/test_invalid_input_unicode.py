@@ -29,6 +29,7 @@ FIELDS = [
 ]
 
 
+# Phase tests inspect persistence kwargs below the response wrapper; live tests cover public enrichment.
 class FakeSession:
     identity_map = {}
     no_autoflush = nullcontext()
@@ -67,7 +68,7 @@ def test_every_input_field_reaches_safe_encoding_rejection(monkeypatch, bad, fie
     monkeypatch.setattr(pdcp_service, "_resolve_parent_log", lambda *a: (None, None))
     monkeypatch.setattr(pdcp_service, "_upsert_current_pdcp", lambda *a, **kw: kw)
     monkeypatch.setattr(pdcp_service, "_persist_rejection", lambda *a, **kw: kw)
-    result = pdcp_service.submit_edits(FakeSession(), **args)
+    result = pdcp_service.submit_edits.__wrapped__(FakeSession(), **args)
     assert result["rejection"].failure_reason is FailureReason.TARGET_ENCODING_INVALID
     assert result["stage"] is ValidationStage.PROTOCOL_VALIDATION
     assert result["pdcp_content"].isascii()
@@ -92,7 +93,7 @@ def test_legacy_text_and_metadata_are_checked_before_hashing(monkeypatch, bad, f
     monkeypatch.setattr(pdcp_service, "_resolve_parent_log", lambda *a: (None, None))
     monkeypatch.setattr(pdcp_service, "_upsert_current_pdcp", lambda *a, **kw: kw)
     monkeypatch.setattr(pdcp_service, "_persist_rejection", lambda *a, **kw: kw)
-    result = pdcp_service.submit_pdcp(FakeSession(), **args)
+    result = pdcp_service.submit_pdcp.__wrapped__(FakeSession(), **args)
     assert result["rejection"].failure_reason is FailureReason.TARGET_ENCODING_INVALID
     assert result["pdcp_content"].isascii()
     assert json.loads(result["pdcp_content"])["inputs"][field if field != "pdcp_content" else "record"] == bad
@@ -199,7 +200,7 @@ def test_depth_500_json_is_checked_without_python_recursion(monkeypatch, leaf):
     monkeypatch.setattr(pdcp_service, "_resolve_parent_log", lambda *a: (None, None))
     monkeypatch.setattr(pdcp_service, "_upsert_current_pdcp", lambda *a, **kw: kw)
     monkeypatch.setattr(pdcp_service, "_persist_rejection", lambda *a, **kw: kw)
-    result = pdcp_service.submit_edits(FakeSession(), **args)
+    result = pdcp_service.submit_edits.__wrapped__(FakeSession(), **args)
     expected = FailureReason.TARGET_ENCODING_INVALID if leaf in BAD else FailureReason.MANIFEST_INVALID
     assert result["rejection"].failure_reason is expected
     assert result["stage"] is ValidationStage.PROTOCOL_VALIDATION

@@ -6,6 +6,8 @@ PatchDIFF receives document-upload, read/search, and edit-submission requests ov
 
 The host/chatbot owns planning, context selection, proposal generation, and retries. PatchDIFF owns authoritative document state, validation, and atomic commits.
 
+This update adds guarded span edits and explicit whole-target replacement, bounded line reads, a keyless advisory preview, and structured rejection evidence. Existing accepted history keeps its recorded semantics. See the [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md) and [security policy](SECURITY.md).
+
 ```text
 PatchDIFF server = deterministic transaction runtime + authoritative read/commit service
 MCP = transport/interface (stdio JSON-RPC / internal registry)
@@ -29,7 +31,8 @@ From the repo root:
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[test]"
+python -m pip install -r requirements.lock
+python -m pip install --no-deps -e .
 docker compose up -d postgres
 $env:PYTHONPATH = "backend"
 .\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
@@ -37,6 +40,8 @@ uvicorn app.main:app --app-dir backend --reload
 ```
 
 The FastAPI server runs at `http://127.0.0.1:8000` (used for health checks and HTTP APIs). The primary interface for external MCP clients (such as Claude Desktop) is the stdio MCP adapter.
+
+For MCP-only use, stop after migrations and configure the host below; Uvicorn is optional. Compose publishes PostgreSQL on `127.0.0.1:5432` only. The example database password is for isolated local development; see [SECURITY.md](SECURITY.md) before using real data or another deployment.
 
 ## Configuration
 
@@ -92,10 +97,10 @@ Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`):
   "mcpServers": {
     "patchdiff": {
       "type": "stdio",
-      "command": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\Patch-DIFF\\.venv\\Scripts\\python.exe",
       "args": ["-m", "app.mcp.external_adapter"],
       "env": {
-        "PYTHONPATH": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\backend",
+        "PYTHONPATH": "C:\\path\\to\\Patch-DIFF\\backend",
         "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff"
       }
     }
@@ -125,12 +130,14 @@ See [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md) for full setup 
 ## MCP Tool Surface
 
 - **Document Lifecycle**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
-- **Authoritative Reads & Exact Search**: `patchdiff_read_target` (bounded slices with `next_start`), `patchdiff_find_occurrences` (exact spans with context and pagination)
-- **Guarded Submission**: `patchdiff_submit_edits` (primary typed transaction format `patchdiff-tx/1`), `patchdiff_submit_pdcp` (legacy `.pdcp` format)
+- **Authoritative Reads & Exact Search**: `patchdiff_read_target` (bounded slices with `next_start`), `patchdiff_read_lines` (inclusive LF ranges with `next_offset`), `patchdiff_find_occurrences` (exact spans with context and pagination)
+- **Guarded Submission**: `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (sequential match/span edits, `patchdiff-tx/2`), `patchdiff_submit_replacement` (sole explicit whole-target replacement, `patchdiff-tx/3`), `patchdiff_submit_pdcp` (legacy `.pdcp` format)
 - **Checkpoints, Replay & History**: `patchdiff_save` (editing cycle rotation), `patchdiff_replay` (deterministic profile-dispatched reconstruction), `patchdiff_get_pdcp_log` (bounded attempt log), `patchdiff_get_manifest_ledger` (accepted changes with runtime facts)
-- **Bounded Preview & Legacy Compatibility**: `patchdiff_build_prompt_context` (bounded prefix preview), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
+- **Advisory Preview & Legacy Compatibility**: `patchdiff_preview` (bounded verdict/facts without audit, keys or target mutation); `patchdiff_build_prompt_context` (bounded prefix convenience), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 
 See [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) and [docs/HOST_INTEGRATION_GUIDE.md](docs/HOST_INTEGRATION_GUIDE.md).
+
+Discovery advertises 20 tools and 13 executable examples across nine tools. Bind examples to actual target IDs, guards, rejection parents and returned cursors. A preview does not reserve state: subsequent submission must recheck a version or hash guard. Span and whole-target replacement always require a guard; a version guard also detects intervening no-op/ABA edits. Correlation IDs are opt-in invocation metadata, separate from caller-known retry keys.
 
 ## Testing & Offline Evaluation
 
@@ -169,10 +176,14 @@ Read in order of precedence:
 
 1. `AGENTS.md` (locked architectural invariants)
 2. `docs/MODERNIZATION_ARCHITECTURE.md` (architectural decisions A1–A8 and contracts C1–C6)
-3. `docs/MODERNIZATION_CHANGE_DOC.md` (as-built record, verification evidence, reconciliation table)
+3. `docs/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/MCP_TOOLS.md` (MCP tool contracts and schemas)
 5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic core runtime specification)
 6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001` + `0002`)
-7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1` typed record and legacy `.pdcp` format)
+7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1`, guarded operations `patchdiff-tx/2`, sole replacement `patchdiff-tx/3`, legacy `.pdcp`)
 8. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop, reads, guards, retries, and failure handling)
 9. `docs/TEST_MATRIX.md` & `docs/CODEX_BUILD_PLAN.md`
+
+## License
+
+[MIT](LICENSE), selected by the repository owner. Third-party packages retain their own licenses; the release checklist records dependency and security review limits.

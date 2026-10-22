@@ -1,13 +1,24 @@
 # PatchDIFF Modernization Architecture
 
-Revision 2, 2026-10-20. Baseline: commit `0c75c4054b5da01eb56c53ce5579c74014270f3a`, remediating and completing the partial modernization draft in `2102bca0-f029-4718-b18e-89fa7df65ccb`.
+Current architecture and compatibility contracts for the MCP transaction service.
 
-The as-built record, contract matrix, documentation reconciliation table, and verification evidence are in [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+The as-built record, compatibility details and verification scope are in [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+
+## Goal F extensions: guarded operations, replacement, preview and diagnostics
+
+These extensions keep the thesis unchanged: exact matching, sequential in-memory simulation, per-target atomic commit, append-only history and PostgreSQL authority. Decisions are recorded in [F01](usability/F01-decision.md), [Pass A](usability/PASS-A-decision.md) and [Pass B](usability/PASS-B-decision.md). The normative tool contract is [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
+
+- **New formats, new immutable profiles.** `patchdiff-tx/2` (ordered match/span operations with exact `expected_text`, runtime `patchdiff-mvp-0.3.0`) and `patchdiff-tx/3` (one guarded `replace_all`, runtime `patchdiff-mvp-0.4.0`) lower into the shared `ParsedPDCP` and applier. Earlier formats, profiles, records and fingerprints are unchanged, and no migration is needed.
+- **Admission is a service boundary.** tx/3 fresh size limits (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) run after request-key recovery or conflict auditing and never during replay.
+- **Advisory reads are not authority.** `patchdiff_preview` and `patchdiff_read_lines` observe one committed row without locks or writes; submission always re-locks and rechecks guards. Preview evidence is projected into a 32,768-byte budget with explicit omission metadata, without changing shared results or stored history.
+- **Bounded failure evidence.** Rejections persist a bounded prefix of the actual failing buffer (at most 256 code points), bounded exact candidates and the bounded near-miss query. Near-miss ranking and `current_context` are response-only. Near misses run only after a service-owned commit releases the lock, never inside caller-owned transactions, and use a banded exact Levenshtein within a fixed cell cap.
+- **Invocation metadata is not identity.** The optional `correlation_id` is never stored and never enters request keys or fingerprints.
+- **Evidence limits.** Discovery examples run over real stdio and PostgreSQL. No model-success or representative production-performance claim is made; measurements are local and synthetic.
 
 ## 0. Reading guide and evidence limits
 
 - **Design thesis** = `docs/PatchDIFF-Concept-Paper-5.md` (the paper, "P1"). Historical protocol/implementation freezes = `docs/PatchDIFF-Protocol-Spec-v0.2.3.md` and `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`. These historical documents are preserved untouched as historical design artifacts.
-- **Active implementation contract** = `AGENTS.md`, `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/MCP_TOOLS.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md`, `docs/HOST_INTEGRATION_GUIDE.md`, `docs/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md`, and `.agents/skills/patchdiff-*/SKILL.md`. Active documents state the current modernized system coherently in their main body rather than contradicting themselves via tacked-on footers.
+- **Active implementation contract** = `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/MCP_TOOLS.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md`, `docs/HOST_INTEGRATION_GUIDE.md`, `docs/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md`. Active documents state the current modernized system coherently in their main body rather than contradicting themselves via tacked-on footers.
 - **Primary external evidence (E1–E8)** was fetched and verified directly from the primary vendor documentation pages and release endpoints on `2026-10-20` (Section 3.1).
 - **No live-model or third-party benchmark claims**: Deterministic guarantees, live Postgres persistence, migrations, and stdio MCP subprocess workflows are verified locally (`pytest`). Offline byte/verdict accounting is verified (`evaluation/offline_eval.py`). Live-model/live-host comparative token and validity-rate trials have **not** been run and are labelled accordingly.
 
@@ -25,7 +36,7 @@ From `docs/PatchDIFF-Concept-Paper-5.md` (abstract, Section 4, Section 9): Patch
 
 | Responsibility | Owner | Implementation / Contract |
 | --- | --- | --- |
-| User intent, planning, model selection, conversation compaction | **Host** | Host agent/IDE loop (`AGENTS.md`, `HOST_INTEGRATION_GUIDE.md`). PatchDIFF never calls an LLM or holds model credentials. |
+| User intent, planning, model selection, conversation compaction | **Host** | Host/client loop (`HOST_INTEGRATION_GUIDE.md`). PatchDIFF never calls an LLM or holds model credentials. |
 | Authoritative target reads and exact occurrence search | **PatchDIFF** | `patchdiff_read_target` (`start`, `length`, `next_start`, `truncated`) and `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`). |
 | Proposal generation & retry loop | **Host / Model** | Model emits typed `patchdiff_submit_edits` (preferred) or legacy `patchdiff_submit_pdcp`. On rejection, host inspects diagnostics, re-reads via `patchdiff_read_target` / `patchdiff_find_occurrences`, and resubmits with `parent_pdcp_log_id` and `attempt`. |
 | Convenience prompt-context / legacy regeneration wrappers | **PatchDIFF (Compatibility)** | `patchdiff_build_prompt_context` (labelled convenience prefix with `context_truncated`); `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration` (deprecated wrappers). |
@@ -61,7 +72,7 @@ All eight external sources were fetched directly from their primary vendor pages
 
 ```mermaid
 flowchart LR
-    U["User"] --> H["Host Agent Loop: planning, generation, retry, review UI"]
+    U["User"] --> H["Host: planning, generation, retry, review UI"]
     H -- "patchdiff_read_target / patchdiff_find_occurrences" --> T
     H -- "patchdiff_submit_edits (typed, guarded, idempotent)" --> T
     H -- "patchdiff_submit_pdcp (legacy PDCP v0.2.3)" --> T
@@ -81,7 +92,7 @@ flowchart LR
 | Decision | Summary |
 | --- | --- |
 | **A1: Server Role & Host-Owned Retry** | PatchDIFF is a deterministic transaction service with authoritative read/search tools (`patchdiff_read_target`, `patchdiff_find_occurrences`). Planning and retry loops belong to the host. `patchdiff_build_prompt_context` is retained as a labelled convenience (`context_truncated`); `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, and `patchdiff_request_regeneration` are deprecated compatibility wrappers. |
-| **A2: Typed Input Primary; PDCP v0.2.3 Frozen Legacy** | `patchdiff_submit_edits` accepts structured `edits[]` and persists canonical JSON records with `protocol_version = "patchdiff-tx/1"`. `patchdiff_submit_pdcp` accepts `.pdcp` v0.2.3 (`protocol_version = "0.2.3"`). Both lower into `ParsedPDCP` and execute through `apply_pdcp_transaction`. |
+| **A2: Typed Input Primary; PDCP v0.2.3 Frozen Legacy** | `patchdiff_submit_edits` accepts structured `edits[]` and persists canonical JSON records with `protocol_version = "patchdiff-tx/1"`. `patchdiff_submit_pdcp` accepts `.pdcp` v0.2.3 (`protocol_version = "0.2.3"`). Guarded operations add `patchdiff_submit_operations` / `patchdiff-tx/2` with explicit match/span edits. Sole replacement adds `patchdiff_submit_replacement` / `patchdiff-tx/3`. All four lower into `ParsedPDCP` and execute through `apply_pdcp_transaction`. |
 | **A3: Asserted vs. Derived Metadata** | Typed submissions require top-level `intent` and allow optional per-edit `change_id`, `rationale`, `risk`. The runtime computes `derived_json` (`span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`) for **both** typed (`origin='typed'`) and PDCP (`origin='pdcp_manifest'`) accepted ledger entries. |
 | **A4: Managed Postgres Target Authority** | Canonical target state lives in Postgres (`cloud_target_files`) guarded by row-level locks (`SELECT ... FOR UPDATE` with `execution_options(populate_existing=True)`). Evaluates state guards against freshly loaded database state after acquiring the lock. Rejects pending direct in-memory mutations on the target before autoflush/refresh. The service does not commit caller-owned outer transactions. |
 | **A5: SAVE Checkpointing & Bounded History** | `patchdiff_save` creates a `save_checkpoint` snapshot and rotates the active editing cycle. Both `patchdiff_get_pdcp_log` and `patchdiff_get_manifest_ledger` provide bounded pagination (default 50, maximum 200, exclusive `before_sequence` over `log_sequence` / `ledger_sequence`, returning `has_more` and `next_sequence`). Omitted limit selects bounded default 50. |
@@ -100,7 +111,9 @@ flowchart LR
     - Required: `match` (non-empty `string`), `replace` (`string`, empty string `""` deletes the matched span).
     - Optional: `change_id` (`string | null`; defaults to `chg_001`, `chg_002`, ... by 1-based index when omitted or `null`; validated against `^[A-Za-z0-9_.:-]{1,64}$` and per-transaction uniqueness), `rationale` (`string | null`, non-blank if provided), `risk` (`"low" | "medium" | "high" | null`), `occurrence_index` (`integer >= 1 | null`), `anchor_before` (`string | null`, non-empty if provided), `anchor_after` (`string | null`, non-empty if provided).
     - `region_hint` is **not** part of `patchdiff-tx/1` and is rejected as an unknown edit field (`FailureReason.MANIFEST_INVALID`); it remains supported on legacy PDCP v0.2.3.
-- **Canonical Persisted Record (ordinary input; invalid-text evidence exception below)**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over the submitted record with raw decoded string values preserved. Canonical JSON normalizes object-key order and serialization, not newlines inside string values; runtime matching separately canonicalizes text. This D01 clarification follows C4 and existing build_record/canonical_record_json behavior; it does not introduce a new normalized-identity alternative.
+- **Canonical Persisted Record (ordinary input; invalid-text evidence exception below)**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over the submitted record with raw decoded string values preserved. Canonical JSON normalizes object-key order and serialization, not newlines inside string values; runtime matching separately canonicalizes text. This follows the request identity contract and existing build_record/canonical_record_json behavior; it does not introduce a new normalized-identity alternative.
+
+Rejection context: newly recorded rejections persist immutable `diagnostic.failure_context`; rejected submission responses also return separate response-only `current_context` from the refreshed locked canonical target. The full representation and numeric budgets are specified in MCP_TOOLS. Applicability failures capture only a bounded prefix of the actual failing buffer, labeled `canonical_target` or `intermediate_buffer` with `prior_changes`. Observed version/hash always identify transaction-start canonical state, never an uncommitted intermediate hash. Unknown/malformed targets and pending caller-local dirty state return explicit unavailable contexts. Acceptance, exact matching, request identity and replay profiles are unchanged.
 
 #### C2. Validation Stage Model, Failure Mapping, and Format-Specific Diagnostics
 
@@ -111,7 +124,7 @@ flowchart LR
   4. `COMMIT_GUARD`: Post-simulation re-check of `target.version` and `target.current_hash` (`TARGET_DIVERGED`). Reports `protocol_valid: true, transaction_valid: true`.
   5. `ACCEPTED`: Transaction committed. Reports `protocol_valid: true, transaction_valid: true`.
 - **Format-Specific Diagnostics**:
-  - Every rejection diagnostic includes `"format"` (`"patchdiff-tx/1"` or `"0.2.3"`), `"retryable"`, `"requires_new_submission": true`, and `"validation_stage"`.
+  - Durably recorded rejection diagnostics include `"format"` (`"patchdiff-tx/1"`, `"patchdiff-tx/2"`, `"patchdiff-tx/3"` or `"0.2.3"`), `"retryable"`, `"requires_new_submission": true`, and `"validation_stage"`. Unlinked precondition rejections (malformed/missing target or pending local direct modifications, with `pdcp_log_id: null`) retain their existing minimal diagnostic fields plus explicit unavailable failure context; their public validity fields still report the reached precondition stage.
   - Typed (`patchdiff-tx/1`) rejections never include PDCP-only keys (`requires_new_pdcp`, `missing_fields`, `invalid_fields`, `unknown_fields`, `allowed_manifest_fields`, `required_manifest_fields`, `manifest_line_format`). On `MANIFEST_INVALID` / `MANIFEST_MISSING`, typed rejections report `allowed_edit_fields`, `required_edit_fields`, and `valid_risk_values`.
   - Legacy PDCP (`0.2.3`) rejections include `"requires_new_pdcp": true` alongside `"requires_new_submission": true` and the PDCP manifest field lists.
 - **Lineage & UUID Safety**:
@@ -122,7 +135,7 @@ flowchart LR
   - Malformed or out-of-range typed metadata (`expected_target_version`, `expected_current_hash`, `attempt`) are set to `NULL` in the constrained DB columns before flushing.
   - Raw unvalidated input values are preserved in `diagnostic_json` (`raw_expected_target_version`, `raw_expected_current_hash`, `raw_attempt`) and in the canonical request record.
 
-#### Invalid Unicode input and rejected-attempt evidence (DEV-RUN-002)
+#### Invalid Unicode input and rejected-attempt evidence
 
 Edit submissions and metadata must be representable as UTF-8/PostgreSQL text before normal hashing and binding. Unpaired surrogate code points and NUL are rejected, never repaired. For a known target, the shared locked submit path persists target_encoding_invalid at PROTOCOL_VALIDATION with no target/version/accepted-ledger mutation. Exact safe-key outcome recovery remains before state-guard checks; a conflicting existing key follows the fingerprint-conflict contract.
 
@@ -142,7 +155,7 @@ Read/search string arguments return invalid_argument with safely serialized deta
   - Because all application mutation paths serialize through `select_target_for_update`, this establishes a point-in-time observation boundary relative to participating writers without phantom divergence.
   - Caller transaction ownership is preserved: in a caller-owned transaction, the row lock remains held until that transaction ends.
 - **Explicit Profile Dispatch**:
-  - `protocol_version`: `"0.2.3"` (parsed via `parse_pdcp` + `validate_pdcp`) or `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
+  - `protocol_version`: `"0.2.3"` (parsed via `parse_pdcp` + `validate_pdcp`) or `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). `"patchdiff-tx/2"` dispatches `decode_operations_record` + `to_parsed_operations` and requires a span-capable recorded profile. `"patchdiff-tx/3"` dispatches `decode_replacement_record` + `to_parsed_replacement` and requires replacement-capable 0.4.0; replay does not apply fresh size-admission limits. Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
   - Runtime profiles are immutable execution settings, with separate overlap and singleton-selector flags:
 
     | Runtime | Overlapping matches | Enforce singleton selectors | Typed change IDs |
@@ -150,11 +163,13 @@ Read/search string arguments return invalid_argument with safely serialized deta
     | patchdiff-mvp-0.1.0 | false | false | Historical grammar |
     | patchdiff-mvp-0.2.0 | true | false | Historical grammar |
     | patchdiff-mvp-0.2.1 | true | false | Strict grammar |
-    | patchdiff-mvp-0.2.2 (current) | true | true | Strict grammar |
+    | patchdiff-mvp-0.2.2 (tx/1 and legacy submissions) | true | true | Strict grammar; match only |
+    | patchdiff-mvp-0.3.0 (tx/2 operations) | true | true | Strict grammar; explicit match/span |
+    | patchdiff-mvp-0.4.0 (tx/3 sole replacement) | true | true | Strict grammar; prior capabilities plus sole replace_all |
 
-    The sole new release profile is 0.2.2, for DEV-RUN-001. Submission and replay explicitly resolve both settings. Unknown or missing versions fail with UnsupportedRuntimeVersionError / REPLAY_PROTOCOL_INVALID. Never redefine a profile after it writes durable history.
-- **Typed decoder compatibility (DB-003)**: Current submissions record runtime version patchdiff-mvp-0.2.2 and use strict full-string ID validation. Recorded patchdiff-mvp-0.2.0 keeps overlapping matches and its original permissive change-ID grammar during replay only; supported 0.1.0 history also retains its old ID decoding and non-overlapping matching. Unknown runtime profiles fail explicitly. Legacy ID text is preserved byte-for-byte, never trimmed, and historical logs are not rewritten.
-- **Persisted request-key compatibility (SVC-003)**: Under the target lock, exact existing string keys are looked up before enforcing new-key syntax. Only an already-persisted key can recover its recorded outcome or receive a fingerprint-conflict response. Fresh invalid keys reject; recovery does not normalize a legacy newline key.
+    Profile 0.2.2 enforces all supplied match selectors. Immutable 0.3.0 adds explicit guarded spans without replace_all. Separate immutable 0.4.0 supports tx/3 sole replacement. Submission and replay explicitly resolve all profile settings. Unknown or missing versions fail with UnsupportedRuntimeVersionError / REPLAY_PROTOCOL_INVALID. Never redefine a profile after it writes durable history.
+- **Typed decoder compatibility**: Current typed-match and legacy submissions record runtime version patchdiff-mvp-0.2.2. Strict full-string typed change-ID validation applies to typed matches and match/span operations; frozen legacy manifest IDs retain their existing nonempty/unique grammar. Guarded operations use 0.3.0; sole replacement uses 0.4.0. Recorded patchdiff-mvp-0.2.0 keeps overlapping matches and its original permissive typed change-ID grammar during replay only; supported 0.1.0 history also retains its old decoding and non-overlapping matching. Unknown runtime profiles fail explicitly. Existing recorded ID text is preserved byte-for-byte, never trimmed, and historical logs are not rewritten.
+- **Persisted request-key compatibility**: Under the target lock, exact existing string keys are looked up before enforcing new-key syntax. Only an already-persisted key can recover its recorded outcome or receive a fingerprint-conflict response. Fresh invalid keys reject; recovery does not normalize a legacy newline key.
 - **Integrity Checks per Replay Step**:
   1. Initial snapshot exists, belongs to `target.target_file_id`, and `canonical_sha256(canonicalize_text(initial_snapshot.content)) == initial_snapshot.content_hash`.
   2. Each accepted log row belongs to `target.target_file_id`, decodes cleanly under its recorded `protocol_version`, has a supported `runtime_version`, satisfies `before_version == expected_version` and `after_version == expected_version + 1`, and satisfies `before_hash == canonical_sha256(buffer)`.
@@ -162,21 +177,23 @@ Read/search string arguments return invalid_argument with safely serialized deta
 - **Materialized-State Health**:
   - `materialized_state_checks` reports four booleans: `content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, and `version_matches`.
   - `materialized_state_matches` is `True` if and only if all four component checks are `True`.
-  - DEV-DB-001 contract correction:content_matches compares raw stored target.current_content directly with the reconstructed canonical buffer; do not normalize storage before this check. stored_hash_matches compares stored current_hash with reconstructed_hash; recomputed_hash_matches retains canonical_sha256(target.current_content) == reconstructed_hash; version_matches compares stored and reconstructed versions.
+  - Materialized-state comparison: content_matches compares raw stored target.current_content directly with the reconstructed canonical buffer; do not normalize storage before this check. stored_hash_matches compares stored current_hash with reconstructed_hash; recomputed_hash_matches retains canonical_sha256(target.current_content) == reconstructed_hash; version_matches compares stored and reconstructed versions.
   - A reconstructed history can return status=success with materialized_state_matches=false. Replay reports storage divergence without repairing or rewriting target/history. CRLF or bare CR corruption fails content_matches even when canonical hashes still agree.
 
 The lock-then-read outcome-recovery guarantee is supported and verified at PostgreSQL READ COMMITTED. A caller choosing stronger isolation may receive serialization/deadlock errors and owns any whole-transaction retry. The service never retries or commits an outer transaction or masks infrastructure errors. Concurrent tests must prove actual lock blocking and committed visibility using independent connections, not sequential calls or sleeps alone.
 
 #### C4. Request Idempotency and Lost-Response Recovery (`client_request_id`)
 
-- `patchdiff_submit_edits` and `patchdiff_submit_pdcp` accept optional `client_request_id` (`^[\x21-\x7E]{1,128}$`).
+- All four submission tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement` and `patchdiff_submit_pdcp`) accept optional `client_request_id` (`^[\x21-\x7E]{1,128}$`).
 - `append_only_pdcp_logs` stores `client_request_id` and `request_fingerprint` (SHA-256 over canonical JSON of `{protocol_version, target_file_id, pdcp_content_hash, expected_target_version, expected_current_hash, parent_pdcp_log_id}`), enforced by partial unique index `uq_pdcp_logs_target_client_request_id ON append_only_pdcp_logs(target_file_id, client_request_id) WHERE client_request_id IS NOT NULL`.
 - Under the target's `FOR UPDATE` lock, **before** evaluating version/hash preconditions:
   - If `(target_file_id, client_request_id)` exists with the **same** `request_fingerprint`, the service returns the recorded terminal outcome (`status: "accepted" | "rejected"`, `deduplicated: true`, original `pdcp_log_id`, `before_hash`, `after_hash`, `version`, `validity`, `evidence` / `diagnostic`) without re-applying the edit or inserting a new log row. This safely handles lost responses even after subsequent edits, no-op edits, or ABA hash transitions.
-  - If `(target_file_id, client_request_id)` exists with a **different** `request_fingerprint`, the service rejects with `FailureReason.CONTEXT_INVALID` (`deduplicated: false`, `diagnostic.existing_pdcp_log_id`) without mutating target state or overwriting the original log row. The same locked rejection path appends a separate rejected attempt with client_request_id=NULL and request_fingerprint equal to this submitted attempt's fingerprint. It returns the new pdcp_log_id; diagnostics link existing_pdcp_log_id and submitted_client_request_id (preview capped at256 characters with an explicit truncation flag). The original keyed row remains unchanged and recovers its original outcome. Every separately admitted conflict, including repeated identical conflicts, creates a distinct immutable row; no collapse, cap, counter update or deletion.
+  - If `(target_file_id, client_request_id)` exists with a **different** `request_fingerprint`, the service rejects with `FailureReason.CONTEXT_INVALID` (`deduplicated: false`, `diagnostic.existing_pdcp_log_id`) without mutating target state or overwriting the original log row. The same locked rejection path appends a separate rejected attempt with client_request_id=NULL and request_fingerprint equal to this submitted attempt's fingerprint. It returns the new pdcp_log_id; diagnostics link existing_pdcp_log_id and submitted_client_request_id (preview capped at 256 characters with an explicit truncation flag). The original keyed row remains unchanged and recovers its original outcome. Every separately admitted conflict, including repeated identical conflicts, creates a distinct immutable row; no collapse, cap, counter update or deletion.
 - `patchdiff_get_pdcp_log` supports filtering by `client_request_id` and `content_hash`.
 
-DEV-SVC-002 decision: retain existing parent identity. Only a same-target rejected parent that passes lineage resolves to canonical UUID spelling; other supplied parent strings remain raw identity on rejection. Broader syntactic UUID normalization is not adopted; it would need separate historical-fingerprint compatibility. D01 details are in DATA_MODEL and HOST_INTEGRATION_GUIDE.
+Parent identity: retain existing parent identity. Only a same-target rejected parent that passes lineage resolves to canonical UUID spelling; other supplied parent strings remain raw identity on rejection. Broader syntactic UUID normalization is not adopted; it would need separate historical-fingerprint compatibility. Request identity details are in DATA_MODEL and HOST_INTEGRATION_GUIDE.
+
+For rejected exact recovery, the complete stored diagnostic (including original `failure_context`, when present) remains unchanged. Only top-level `current_context` and existing current identity fields reflect the newly locked target. Older rows without failure context are returned without retrofitting evidence. Context is cheap bounded capture inside the existing transaction; caller-owned locks and commit/rollback ownership are preserved.
 
 #### C5. Ledger and Schema Contract (Migration `20261020_0002`)
 
@@ -198,19 +215,21 @@ DEV-SVC-002 decision: retain existing parent identity. Only a same-target reject
   - Defaults `length` to `DEFAULT_READ_CHARS = 4000` when omitted or `None`; clamps `length` to `MAX_READ_CHARS = 8000`.
   - Returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `start`, `end`, `text`, `total_chars`, `truncated`, and `next_start` (`end` when `truncated` is `True`, else `None`).
 - `patchdiff_find_occurrences(target_file_id, text, context_chars=40, start_occurrence=1, max_results=200)`:
-  - Validates `target_file_id` (UUID), non-empty `text`, `context_chars` as a non-bool integer >=0 (default40, clamped to400), `start_occurrence >= 1`, `max_results >= 1`.
+  - Validates `target_file_id` (UUID), non-empty `text`, `context_chars` as a non-bool integer >=0 (default 40, clamped to 400), `start_occurrence >= 1`, `max_results >= 1`.
   - Enumerates all exact occurrences (overlapping counted) over canonical content; returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `occurrence_count`, `returned_count`, `start_occurrence`, `occurrences` (each `{occurrence_index, start, end, before, after}`), `truncated`, and `next_occurrence_index` (`slice_end + 1` when `truncated` is `True`, else `None`).
+- Submission prefix context is diagnostic evidence, not a read/search cursor or a claim to locate an absent match. Fresh context describes the locked transaction view; caller-owned transactions can remain provisional until commit. Original failure context remains available in attempt history; history never adds a fresh target context to old diagnostics.
+
 - `patchdiff_get_pdcp_log(target_file_id, limit=50, before_sequence=None, status=None, content_hash=None, client_request_id=None, include_content=False)`:
-  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects50; values above200 clamp to200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
+  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects 50; values above 200 clamp to 200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
   - Returns newest-first `entries` including `pdcp_log_id`, `log_sequence`, `status`, `failure_reason`, `failure_detail`, `failed_change_id`, `before_hash`, `after_hash`, `before_version`, `after_version`, `pdcp_content_hash`, `protocol_version`, `runtime_version`, `submission_source`, `parent_pdcp_log_id`, `regeneration_attempt`, `regeneration_source`, `client_request_id`, `request_fingerprint`, `diagnostic`, `created_at`, and optional `pdcp_content`.
   - Fetch limit+1 after target/status/content-hash/exact-request-key/exclusive-cursor filters, trim to limit and expose has_more and next_sequence (smallest returned sequence only when more rows exist; otherwise null). status is accepted/rejected/null, hash/key filters are safe strings or null, and include_content is boolean. History key filters retain exact safe legacy strings rather than imposing new-submission key syntax.
 - `patchdiff_get_manifest_ledger(target_file_id, include_previous_cycles=False, limit=50, before_sequence=None)`:
-  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects50; values above200 clamp to200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
+  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects 50; values above 200 clamp to 200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
   - Filters `AppendOnlyManifestLedger.ledger_sequence < before_sequence` when `before_sequence` is supplied.
   - Queries newest eligible entries up to `limit + 1` to compute `has_more = len(rows) > limit`, trims to `limit`, and presents oldest-first.
   - Returns `entries` (including `ledger_sequence`), `has_more: bool`, and `next_sequence: int | None` (the smallest `ledger_sequence` in the returned page when `has_more` is `True`, else `None`).
   - Caller note: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal.
-  - include_previous_cycles must be boolean. Attempts remain newest-first; ledger selects the newest eligible page then renders it oldest-first. With sequences1..10 and limit3, attempts=[10,9,8], ledger=[8,9,10], both next_sequence=8; ledger before_sequence=8 gives [5,6,7]. Newer inserts do not enter a traversal continuing below its exclusive cursor.
+  - include_previous_cycles must be boolean. Attempts remain newest-first; ledger selects the newest eligible page then renders it oldest-first. With sequences 1..10 and limit 3, attempts=[10,9,8], ledger=[8,9,10], both next_sequence=8; ledger before_sequence=8 gives [5,6,7]. Newer inserts do not enter a traversal continuing below its exclusive cursor.
 
 ## 5. Documentation Architecture and Precedence (Section 10)
 
@@ -218,11 +237,10 @@ DEV-SVC-002 decision: retain existing parent identity. Only a same-target reject
 
 | Layer | Files | Role & Maintenance Rule |
 | --- | --- | --- |
-| **1. Historical Thesis & Frozen Specs** | `docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/*`, `docs/Archive/*` | Preserved untouched as historical design records. Never edited to hide historical evolution. |
-| **2. Architecture & Change Record** | `docs/MODERNIZATION_ARCHITECTURE.md`, `docs/MODERNIZATION_CHANGE_DOC.md` | Authoritative record of modernization decisions (A1–A8), contracts (C1–C6), primary evidence (E1–E8), documentation reconciliation table, and verification status. |
-| **3. Active System Specifications** | `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/MCP_TOOLS.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` | Coherent active specifications describing the current system (`patchdiff-tx/1` primary, PDCP v0.2.3 frozen legacy, host-owned retry, migration `0002`, stage validity, explicit replay profiles). **Rewrite coherently when active contracts change; do not append contradictory footers.** |
+| **1. Historical Thesis, Frozen Specs & Records** | `docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/*`, `docs/Archive/*`, `docs/usability/**` (Goal F decisions, accepted plans, verification captures and the earlier as-built record `docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md`), `docs/reviews/*` | Preserved untouched as historical design and evidence records. Never edited to hide historical evolution. Recorded decisions remain the provenance for current contracts. |
+| **2. Architecture & Change Record** | `docs/MODERNIZATION_ARCHITECTURE.md`, `docs/MODERNIZATION_CHANGE_DOC.md` | This document holds decisions A1–A8, contracts C1–C6 and primary evidence E1–E8. The change record holds current product behavior, format compatibility and verification scope. |
+| **3. Active System Specifications** | `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/MCP_TOOLS.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` | Coherent active specifications describing the current system (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement, PDCP v0.2.3 frozen legacy, host-owned retry, migration `0002`, stage validity, explicit replay profiles). **Rewrite coherently when active contracts change; do not append contradictory footers.** |
 | **4. Host & Operator Guides** | `docs/HOST_INTEGRATION_GUIDE.md`, `docs/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md` | Operational and host-facing instructions aligned with Layer 3. |
-| **5. Agent Rules & Skills** | `AGENTS.md`, `.agents/skills/patchdiff-core-runtime/SKILL.md`, `.agents/skills/patchdiff-mcp-orchestration/SKILL.md`, `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`, `.agents/skills/patchdiff-testing-review/SKILL.md` | Implementation guidance for coding agents. All four skills are kept synchronized with Layers 2–3. |
 
 ### 5.2 Precedence Order
 
@@ -230,10 +248,10 @@ DEV-SVC-002 decision: retain existing parent identity. Only a same-target reject
 2. `docs/MODERNIZATION_ARCHITECTURE.md` and `docs/MODERNIZATION_CHANGE_DOC.md`.
 3. Active contract documents (`docs/MCP_TOOLS.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/MCP_FIRST_MVP.md`, `docs/TEST_MATRIX.md`).
 4. Frozen v0.2.3 specifications for legacy `.pdcp` wire syntax details.
-5. Host guides, skills, and READMEs.
+5. Host guides and READMEs.
 
 ## 6. Verification Summary
 
-Current remediation verification and finding status are recorded in [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md), section 6, and revision-pinned reports under docs/reviews/. The prior 174/87 aggregate is historical and does not certify subsequent fixes. The current local suite has 181 unit and 138 live Postgres integration cases, including real stdio subprocess execution and isolated populated migration preservation/refusal checks. Independent review and CI evidence must identify the actual executed revision before merge.
+[MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md) records product behavior and verification scope. [TEST_MATRIX.md](TEST_MATRIX.md) maps unit, live PostgreSQL, real stdio subprocess and isolated populated migration preservation/refusal coverage. Test and CI results must identify the executed revision; historical suite totals do not certify later changes.
 
 No live-model comparative study or external Desktop-host performance claim is established by these deterministic tests.

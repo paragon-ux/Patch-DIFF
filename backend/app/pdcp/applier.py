@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from app.core.canonicalization import canonicalize_text
 from app.core.failures import FailureReason
+from app.core.diagnostics import exact_candidates, near_miss_query
 from app.core.hashing import canonical_sha256
-from app.core.result import AcceptedCoreResult, RejectedCoreResult
+from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
 from app.pdcp.disambiguation import MatchResolutionError, resolve_match_span
-from app.pdcp.matcher import find_exact_occurrences
+from app.pdcp.matcher import MatchSpan, find_exact_occurrences
 from app.pdcp.models import ParsedPDCP
 
 
@@ -17,6 +18,8 @@ def apply_pdcp_transaction(
     *,
     overlapping_matches: bool = True,
     enforce_singleton_selectors: bool = True,
+    allow_span_operations: bool = False,
+    allow_replace_all_operations: bool = False,
 ) -> AcceptedCoreResult | RejectedCoreResult:
     """Apply a parsed+validated transaction to an in-memory buffer.
 
@@ -34,50 +37,78 @@ def apply_pdcp_transaction(
             FailureReason.TARGET_HASH_MISMATCH,
             "PDCP target_hash does not match the current target hash.",
             before_hash,
+            buffer=current,
         )
 
     change_facts: list[dict] = []
     for change in parsed.changes:
         change_id = change.manifest.change_id
-        if change.match_payload == "":
-            return _rejected(
-                FailureReason.BLOCK_MALFORMED,
-                "MATCH payload must not be empty.",
-                before_hash,
-                change_id,
-            )
-
-        manifest_target_hash = change.manifest.fields.get("target_hash")
-        if manifest_target_hash is not None and manifest_target_hash != canonical_sha256(current):
-            return _rejected(
-                FailureReason.TARGET_HASH_MISMATCH,
-                "Manifest target_hash does not match the current target hash.",
-                before_hash,
-                change_id,
-            )
-
-        try:
-            span = resolve_match_span(
-                current,
-                change.match_payload,
-                change.manifest.disambiguation,
-                overlapping=overlapping_matches,
-                enforce_singleton_selectors=enforce_singleton_selectors,
-            )
-        except MatchResolutionError as exc:
-            reason = exc.failure_reason
-            if (
-                reason is FailureReason.MATCH_ABSENT
-                and change.change_index > 1
-                and find_exact_occurrences(original, change.match_payload, overlapping=overlapping_matches)
-            ):
-                reason = FailureReason.SEQUENTIAL_MATCH_INVALID
-            extra: dict = {}
-            if reason in {FailureReason.MATCH_AMBIGUOUS, FailureReason.DISAMBIGUATION_INVALID}:
-                extra["occurrence_count"] = len(
-                    find_exact_occurrences(current, change.match_payload, overlapping=overlapping_matches)
+        if change.operation == "replace_all":
+            if not allow_replace_all_operations or len(parsed.changes) != 1:
+                return _rejected(FailureReason.BLOCK_MALFORMED, "Sole replacement is unsupported by this runtime profile.",
+                                 before_hash, change_id, buffer=current, prior_changes=len(change_facts))
+            span = MatchSpan(0, len(current))
+        elif change.operation != "match":
+            if change.operation != "span" or not allow_span_operations:
+                return _rejected(FailureReason.BLOCK_MALFORMED, "Operation is unsupported by this runtime profile.",
+                                 before_hash, change_id, buffer=current, prior_changes=len(change_facts))
+            start, end = change.span_start, change.span_end
+            if any(isinstance(value, bool) or not isinstance(value, int) for value in (start, end)) or not 0 <= start <= end <= len(current):
+                return _rejected(FailureReason.SPAN_OUT_OF_BOUNDS, "Span is outside the sequential buffer.",
+                                 before_hash, change_id, buffer=current, prior_changes=len(change_facts))
+            if current[start:end] != canonicalize_text(change.match_payload):
+                return _rejected(FailureReason.SPAN_EXPECTED_TEXT_MISMATCH, "Span expected_text does not match the sequential buffer.",
+                                 before_hash, change_id, buffer=current, prior_changes=len(change_facts))
+            span = MatchSpan(start, end)
+        else:
+            if change.match_payload == "":
+                return _rejected(
+                    FailureReason.BLOCK_MALFORMED,
+                    "MATCH payload must not be empty.",
+                    before_hash,
+                    change_id,
+                    buffer=current,
+                    prior_changes=len(change_facts),
                 )
-            return _rejected(reason, exc.failure_detail, before_hash, change_id, extra)
+
+            manifest_target_hash = change.manifest.fields.get("target_hash")
+            if manifest_target_hash is not None and manifest_target_hash != canonical_sha256(current):
+                return _rejected(
+                    FailureReason.TARGET_HASH_MISMATCH,
+                    "Manifest target_hash does not match the current target hash.",
+                    before_hash,
+                    change_id,
+                    buffer=current,
+                    prior_changes=len(change_facts),
+                )
+
+            try:
+                span = resolve_match_span(
+                    current,
+                    change.match_payload,
+                    change.manifest.disambiguation,
+                    overlapping=overlapping_matches,
+                    enforce_singleton_selectors=enforce_singleton_selectors,
+                )
+            except MatchResolutionError as exc:
+                reason = exc.failure_reason
+                if (
+                    reason is FailureReason.MATCH_ABSENT
+                    and change.change_index > 1
+                    and find_exact_occurrences(original, change.match_payload, overlapping=overlapping_matches)
+                ):
+                    reason = FailureReason.SEQUENTIAL_MATCH_INVALID
+                extra: dict = {}
+                if reason in {FailureReason.MATCH_AMBIGUOUS, FailureReason.DISAMBIGUATION_INVALID}:
+                    occurrences = find_exact_occurrences(current, change.match_payload, overlapping=overlapping_matches)
+                    extra["occurrence_count"] = len(occurrences)
+                    extra["exact_candidates"] = exact_candidates(current, occurrences)
+                if reason in {FailureReason.MATCH_ABSENT, FailureReason.SEQUENTIAL_MATCH_INVALID}:
+                    extra["near_miss_query"] = near_miss_query(change.match_payload)
+                return _rejected(
+                    reason, exc.failure_detail, before_hash, change_id, extra,
+                    buffer=current, prior_changes=len(change_facts),
+                )
 
         replacement = canonicalize_text(change.replace_payload)
         matched = current[span.start : span.end]
@@ -94,6 +125,8 @@ def apply_pdcp_transaction(
                 "replacement_sha256": canonical_sha256(replacement),
             }
         )
+        if change.operation != "match":
+            change_facts[-1]["operation"] = change.operation
 
     return AcceptedCoreResult(
         before_hash=before_hash,
@@ -111,6 +144,9 @@ def _rejected(
     before_hash: str,
     failed_change_id: str | None = None,
     extra_diagnostic: dict | None = None,
+    *,
+    buffer: str,
+    prior_changes: int = 0,
 ) -> RejectedCoreResult:
     diagnostic = {
         "retryable": reason
@@ -132,4 +168,5 @@ def _rejected(
         before_hash=before_hash,
         failed_change_id=failed_change_id,
         diagnostic=diagnostic,
+        failure_buffer=FailureBufferContext.capture(buffer, prior_changes),
     )

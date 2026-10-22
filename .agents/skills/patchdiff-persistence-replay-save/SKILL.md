@@ -1,6 +1,6 @@
 ---
 name: patchdiff-persistence-replay-save
-description: Use when implementing, reviewing, or testing Postgres persistence, Docker Compose setup, Alembic migrations, append-only logs, row-locking concurrency guards, editing cycles, SAVE snapshots, and profile-dispatched deterministic replay.
+description: "Use when implementing, reviewing, or testing Postgres persistence, Docker Compose setup, Alembic migrations, append-only logs, row-locking concurrency guards, editing cycles, SAVE snapshots, and profile-dispatched deterministic replay."
 ---
 
 # PatchDIFF Persistence, Replay, and SAVE Skill
@@ -54,11 +54,11 @@ $env:PYTHONPATH = "backend"
 
 ## Append-Only Attempt Log (`append_only_pdcp_logs`)
 
-Every submission (accepted or rejected) creates an append-only row:
+New admitted submissions on known targets append a terminal row in the submission transaction. Exact keyed recovery appends none. Unknown/malformed targets, pre-admission option errors and disallowed pending local changes have no linked row; caller rollback and infrastructure failures can prevent persistence.
 - `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
 - `target_file_id`: foreign key to `cloud_target_files`.
-- `protocol_version`: `'patchdiff-tx/1'` or `'0.2.3'`.
-- `runtime_version`: `'patchdiff-mvp-0.2.2'` (or historical `'patchdiff-mvp-0.1.0'`).
+- `protocol_version`: `'patchdiff-tx/1'`, `'patchdiff-tx/2'`, `'patchdiff-tx/3'` or `'0.2.3'`.
+- `runtime_version`: `'patchdiff-mvp-0.4.0'` for `patchdiff-tx/3`, `'patchdiff-mvp-0.3.0'` for `patchdiff-tx/2`; current legacy and `patchdiff-tx/1` submissions retain `'patchdiff-mvp-0.2.2'`. Historical `0.1.0`, `0.2.0` and `0.2.1` profiles remain supported under their recorded identifiers.
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
 - `client_request_id`: client-supplied TEXT key for idempotency (1–128 printable ASCII characters without whitespace; `req-001` is valid, a UUID is optional).
@@ -66,7 +66,7 @@ Every submission (accepted or rejected) creates an append-only row:
 - `parent_pdcp_log_id`: link to predecessor log in retry lineage.
 - `before_version`, `after_version`: target version progression.
 - `before_hash`, `after_hash`: target SHA-256 progression.
-- `pdcp_content`: canonical JSON string for `patchdiff-tx/1`; raw text for `0.2.3`.
+- `pdcp_content`: canonical JSON for `patchdiff-tx/1`, `patchdiff-tx/2` or `patchdiff-tx/3`; raw valid legacy text for `0.2.3`. Invalid-text rejections use the reversible ASCII evidence envelope.
 - `pdcp_content_hash`: SHA-256 of `pdcp_content`.
 
 For rejected invalid Unicode, pdcp_content contains a deterministic ASCII-escaped patchdiff-invalid-input/1 evidence envelope of the original input, not an accepted transaction. JSONB holds safe marker/path strings only. A safe request key recovers its original rejection with a domain-separated invalid-evidence fingerprint; unencodable keys remain NULL on the row and are preserved in evidence. Never write decoded surrogate/NUL text to PostgreSQL or change valid-input fingerprints. Caller-owned commit/rollback and target locks retain their usual semantics.
@@ -127,3 +127,11 @@ Current typed submissions record patchdiff-mvp-0.2.2. Replay explicitly retains 
 The current 0.2.2 profile enforces every supplied selector even for one occurrence. All older supported profiles retain ignored singleton selectors. Resolve both profile settings in submission and replay; never repurpose a recorded profile.
 
 A successful reconstruction can report materialized_state_matches=false. CRLF/bare-CR storage corruption must fail content_matches even with matching canonical hashes; replay never repairs storage.
+
+## Goal F additions
+
+- New pairs: tx/2 with `patchdiff-mvp-0.3.0`, tx/3 with `patchdiff-mvp-0.4.0`; tx/1 and legacy stay on `patchdiff-mvp-0.2.2`. No migration. Replay dispatches tx/2 and tx/3 through their decoders, requires the matching profile flags, and never applies fresh admission limits.
+- Rejected rows persist bounded `failure_context`, `exact_candidates` and `near_miss_query`; `current_context`, `near_misses` and `correlation_id` are never stored. Exact recovery returns the stored diagnostic unchanged.
+- tx/3 writes one typed ledger row with `operation: "replace_all"`. A valid oversized fresh replacement writes nothing, while a key-conflict row stores the full submitted record.
+- `patchdiff_read_lines` and `patchdiff_preview` read one committed row under `no_autoflush`, with no lock and no write.
+- Contract: `docs/DATA_MODEL.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").

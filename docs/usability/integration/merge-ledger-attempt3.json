@@ -1,0 +1,143 @@
+{
+  "authorization": "User accepted merging the approved modernization/Goal G stack and beginning accepted Goal F.",
+  "starting_pr1": "b33faaf332e269019747772602afff34f9829e5c",
+  "pr4_merge": "d950d92b912b8e07a4219871019019ca07e67e5f",
+  "steps": [
+    {
+      "pr": 5,
+      "original_reviewed_head": "d8c71fe0dd02666463d443db9b713ea9bd8ffa4e",
+      "refreshed_head": "74431b72658a7768398b1eec5318b9040ae0ae65",
+      "base_sha": "d950d92b912b8e07a4219871019019ca07e67e5f",
+      "reviewed_tree_preserved": true,
+      "CI": {
+        "run_id": 39661605566,
+        "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/39661605566",
+        "head_sha": "74431b72658a7768398b1eec5318b9040ae0ae65",
+        "base_sha": "d950d92b912b8e07a4219871019019ca07e67e5f",
+        "executed_merge_sha": "d7b24ad28ab051a93399b7cf90e24dfe05ff7054",
+        "tree_sha": "bd10d8984fd069a018b9ecaf4196d20acb6ee275",
+        "passed_counts": [
+          500,
+          183
+        ],
+        "offline_equivalence": "OK",
+        "log_sha256": "5d834caa41be71a3bf9f0950077cf28335ea2420eec30cf8c6abc9fad7d60d92"
+      },
+      "merge_sha": "1bdae2aa19bd9c6f0ff591c9c29c33f394c019c3"
+    },
+    {
+      "pr": 6,
+      "original_reviewed_head": "fda5adba8c1912e207443ad4cdd964f7c0c5bc60",
+      "refreshed_head": "5ba78a157d6a91fc3c495a5eddda67120cc801be",
+      "base_sha": "1bdae2aa19bd9c6f0ff591c9c29c33f394c019c3",
+      "reviewed_tree_preserved": true,
+      "CI": {
+        "run_id": 39662203586,
+        "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/39662203586",
+        "head_sha": "5ba78a157d6a91fc3c495a5eddda67120cc801be",
+        "base_sha": "1bdae2aa19bd9c6f0ff591c9c29c33f394c019c3",
+        "executed_merge_sha": "6e97985e70de0f4fd433b9cc45b79c5e210ee490",
+        "tree_sha": "27e3ac016371877cd4a8a21d079bd68c63e2fc34",
+        "passed_counts": [
+          504,
+          209
+        ],
+        "offline_equivalence": "OK",
+        "log_sha256": "f200f80b1a4efbb550f47a04a854960a550c0752ea6f1ff4db4a834bc99ee84c"
+      },
+      "merge_sha": "0d574240858ee6cc68f207476cad4ac03dc2f5c3"
+    },
+    {
+      "pr": 7,
+      "original_reviewed_head": "dd5877de5d50ccae19faca12a6fb8463a291ec60",
+      "refreshed_head": "b041ca6336af2ae8aab07508cc4d49f227e6840c",
+      "base_sha": "0d574240858ee6cc68f207476cad4ac03dc2f5c3",
+      "reviewed_tree_preserved": true,
+      "CI": {
+        "run_id": 39662500697,
+        "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/39662500697",
+        "head_sha": "b041ca6336af2ae8aab07508cc4d49f227e6840c",
+        "base_sha": "0d574240858ee6cc68f207476cad4ac03dc2f5c3",
+        "executed_merge_sha": "9c4ff2d7b156460e51c74f2ed8f83c3e9879801b",
+        "tree_sha": "70e38b861fe255e7415bdfdde68d0e7c7e687f3c",
+        "passed_counts": [
+          504,
+          215
+        ],
+        "offline_equivalence": "OK",
+        "log_sha256": "2eb7c31b74f246d0eeec4f0a127a9e2c1f04fc54b4da4829efaaeb199f98f8f7"
+      },
+      "merge_sha": "0bd635db2ce117bc8f27e90e02b3d668fb3f253d"
+    },
+    {
+      "pr": 8,
+      "original_reviewed_head": "226ab2210be84f53527c1f0edb6acecd4564ec27",
+      "refreshed_head": "9e8c4f4865e3bd858c56711c4dd43ddf15ef9e06",
+      "base_sha": "0bd635db2ce117bc8f27e90e02b3d668fb3f253d",
+      "reviewed_tree_preserved": true,
+      "CI": {
+        "run_id": 39662684583,
+        "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/39662684583",
+        "head_sha": "9e8c4f4865e3bd858c56711c4dd43ddf15ef9e06",
+        "base_sha": "0bd635db2ce117bc8f27e90e02b3d668fb3f253d",
+        "executed_merge_sha": "cf7ab7726ddb20584858b63afc968e204d7acbb1",
+        "tree_sha": "b2922294c0c6234a6aed417a67cb26345bec2681",
+        "passed_counts": [
+          613,
+          221
+        ],
+        "offline_equivalence": "OK",
+        "log_sha256": "e601b23882b3b7c1f760dfe4a935f4a443c5c2868c3a0ad25b828d226f4c9133"
+      },
+      "merge_sha": "3b1c032500d074e8a38096b33cbb067c06744862"
+    },
+    {
+      "pr": 9,
+      "original_reviewed_head": "b5caa40bd41848420c4323d22ab648847cdc6745",
+      "refreshed_head": "047ca9034a52f6ef39204702e9a3303d2198eab0",
+      "base_sha": "3b1c032500d074e8a38096b33cbb067c06744862",
+      "reviewed_tree_preserved": true,
+      "CI": {
+        "run_id": 39662879868,
+        "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/39662879868",
+        "head_sha": "047ca9034a52f6ef39204702e9a3303d2198eab0",
+        "base_sha": "3b1c032500d074e8a38096b33cbb067c06744862",
+        "executed_merge_sha": "44e3dff15e7493775fb481e71bc58ef02e929d81",
+        "tree_sha": "d6a01ff8120a22dfebc48c676d4644f8be00b659",
+        "passed_counts": [
+          613,
+          221
+        ],
+        "offline_equivalence": "OK",
+        "log_sha256": "aba48a4d938812a2fdb16873b67b69d26304de7cfeb6010e08cd0e34af0f605e"
+      },
+      "merge_sha": "2ba0b6bba64bd1a17a02adc69d2c5ab56a373587"
+    },
+    {
+      "pr": 10,
+      "original_reviewed_head": "4ce9bf9e07ad07c969e0a4722bc1f17eaca8e3d4",
+      "refreshed_head": "5756b6c6cea15ac79ea828771f6ca9601b01f868",
+      "base_sha": "2ba0b6bba64bd1a17a02adc69d2c5ab56a373587",
+      "reviewed_tree_preserved": true,
+      "CI": {
+        "run_id": 39663057668,
+        "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/39663057668",
+        "head_sha": "5756b6c6cea15ac79ea828771f6ca9601b01f868",
+        "base_sha": "2ba0b6bba64bd1a17a02adc69d2c5ab56a373587",
+        "executed_merge_sha": "71a87a212b7351208ab8ddde140d4fbdbcec152a",
+        "tree_sha": "828b2783c63b6305c5ee42f802fc51c9377d2bcb",
+        "passed_counts": [
+          617,
+          225
+        ],
+        "offline_equivalence": "OK",
+        "log_sha256": "95ff555bf1f28f8a2c41981bea37b7593c285748b1a553c6a477d471df45a3d7"
+      },
+      "merge_sha": "43f273d5ace86509b04efdb9561c1a67599923f1"
+    }
+  ],
+  "recovered_attempt_errors": [
+    "Wrong generated-merge parents: {'fda5adba8c1912e207443ad4cdd964f7c0c5bc60', 'd8c71fe0dd02666463d443db9b713ea9bd8ffa4e'}"
+  ],
+  "stopped_with_error": "Consolidation differs from accepted final material"
+}

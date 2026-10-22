@@ -54,6 +54,8 @@ PROTOCOL_FAILURE_REASONS: frozenset[str] = frozenset(
 
 TRANSACTION_FAILURE_REASONS: frozenset[str] = frozenset(
     {
+        FailureReason.SPAN_OUT_OF_BOUNDS.value,
+        FailureReason.SPAN_EXPECTED_TEXT_MISMATCH.value,
         FailureReason.MATCH_ABSENT.value,
         FailureReason.MATCH_AMBIGUOUS.value,
         FailureReason.SEQUENTIAL_MATCH_INVALID.value,

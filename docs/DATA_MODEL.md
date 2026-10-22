@@ -1,5 +1,15 @@
 # DATA_MODEL.md
 
+## Storage effects of guarded operations, replacement and diagnostics
+
+No migration is added. The normative tool contract is [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
+
+- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` and `0.2.3` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
+- Accepted tx/2 and tx/3 transactions write `origin = 'typed'` ledger rows whose `derived_json` adds `operation` (`"span"` or `"replace_all"`). A tx/3 transaction writes exactly one row covering the full original span.
+- Rejected rows persist `diagnostic_json.failure_context` (a bounded prefix of the failing buffer, at most 256 code points) and, when applicable, `exact_candidates` or `near_miss_query`. Response-only `current_context`, `near_misses` and `correlation_id` are never stored.
+- A valid oversized fresh tx/3 replacement writes no attempt or `current_pdcp_files` row. A key-conflict attempt is audited before fresh admission, so its row stores the complete submitted record even when it exceeds the fresh limits, the same as any tx/1 or tx/2 attempt.
+- `patchdiff_read_lines` and `patchdiff_preview` only read one committed `cloud_target_files` row; they write nothing and take no locks.
+
 ## Scope
 
 This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema` and `20261020_0002_typed_ledger`.
@@ -107,7 +117,7 @@ Mutable record of the most recent submission for a target (display/session state
 | `pdcp_file_id` | UUID | PK | Row identifier |
 | `target_file_id` | UUID | FK -> `cloud_target_files.target_file_id` UNIQUE NOT NULL | One row per target |
 | `editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Submission cycle |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or `0.2.3` |
 | `pdcp_content` | TEXT | NOT NULL | Raw text or canonical JSON |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `pending_validation`, `accepted`, `rejected`, `superseded` |
@@ -132,7 +142,7 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `regeneration_attempt` | INTEGER | NULLABLE | 1-based retry attempt |
 | `regeneration_source` | TEXT | NULLABLE | Host or policy label |
 | `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or `0.2.3` |
 | `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.2`) |
 | `pdcp_content` | TEXT | NOT NULL | Canonical JSON or raw PDCP for ordinary input; reversible ASCII JSON evidence for rejected invalid text |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
@@ -159,7 +169,11 @@ Indexes:
 - `INDEX (status, failure_reason)`
 - Partial unique index: `uq_pdcp_logs_target_client_request_id ON append_only_pdcp_logs(target_file_id, client_request_id) WHERE client_request_id IS NOT NULL`
 
-#### Request identity: C4 / D01
+#### Bounded rejected-buffer evidence
+
+New rejected attempts store `failure_context` within existing `diagnostic_json`; no column or migration is added. It contains only the bounded original failure prefix, code-point counts, canonical/intermediate stage, prior simulated-change count and transaction-start observed target identity, using the representation and JSON-byte limits in MCP_TOOLS. This evidence is immutable. Exact recovery returns the stored diagnostic unchanged; pre-feature rows remain without failure context. Top-level fresh `current_context` is response-only and is never written into the recovered row. Unknown targets and pending local state have no target-linked durable attempt; their contexts explicitly report unavailable. Qualified audit and caller commit/rollback ownership are unchanged.
+
+#### Request identity
 
 For ordinary inputs, request_fingerprint hashes a canonical JSON envelope containing protocol_version, canonical target_file_id, pdcp_content_hash, expected_target_version, expected_current_hash and parent_pdcp_log_id. The client_request_id selects the per-target keyed row; it is not itself part of this envelope. Submission source and attempt metadata are not part of ordinary request identity. The separate invalid-input evidence domain described below covers its evidence envelope instead.
 
@@ -169,7 +183,7 @@ Changing intent, rationale, risk, selectors, edit order or a guard changes the r
 
 Legacy PDCP uses canonical_sha256 over its complete text, so LF/CRLF/bare-CR line endings normalize for that content hash. Do not extend that legacy equivalence to escaped line endings inside typed JSON values. Valid hashing and all stored fingerprints remain unchanged.
 
-#### Parent identity decision: DEV-SVC-002
+#### Parent identity
 
 Do not adopt broader parent UUID canonicalization in this release. _resolve_parent_log canonicalizes only a UUID that resolves to a rejected attempt on the same target. If the parent is missing, accepted, cross-target or malformed, lineage rejects and the fingerprint retains its supplied string spelling (for a truthy value); no invalid foreign key is stored. Changing case or spelling in such a rejected request can therefore conflict with an existing key. Exact original retries preserve their prior identity and outcome, including the lookup-only historical compatibility path.
 
@@ -183,7 +197,7 @@ The diagnostic marks this representation and safely identifies offending paths. 
 
 #### Conflicting-key audit policy
 
-An admitted fingerprint conflict uses client_request_id=NULL so the original target/key unique row stays authoritative. Its request_fingerprint is the newly submitted fingerprint, not the original row's fingerprint. Repeated conflicts remain separate immutable audit rows, even when their submitted fingerprints are identical. Diagnostics link the original log and show the submitted key with a256-character preview/truncation flag; the original keyed row retains the complete key. The returned response still identifies the submitted key and returns the newly persisted rejection's log ID.
+An admitted fingerprint conflict uses client_request_id=NULL so the original target/key unique row stays authoritative. Its request_fingerprint is the newly submitted fingerprint, not the original row's fingerprint. Repeated conflicts remain separate immutable audit rows, even when their submitted fingerprints are identical. Diagnostics link the original log and show the submitted key with a 256-character preview/truncation flag; the original keyed row retains the complete key. The returned response still identifies the submitted key and returns the newly persisted rejection's log ID.
 
 No target/version/accepted-ledger change is made. Exact outcome recovery remains the no-new-attempt exception. Rate/admission controls are separate operational work and are not implemented by dropping, capping or mutating audit rows here.
 

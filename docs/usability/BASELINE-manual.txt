@@ -1,0 +1,5 @@
+{"profile": "absent", "escaped": false, "target": "74317190-3cf1-4ab2-98eb-be81273285dd", "passed": true}
+{"profile": "absent", "escaped": true, "target": "744abb18-ae84-4627-81fe-d0c381186967", "passed": true}
+{"profile": "cp1252", "escaped": false, "target": "75ae9938-318d-43d2-b713-af8e223a1960", "passed": true}
+{"profile": "cp1252", "escaped": true, "target": "391b22c6-585a-491c-a47c-a1777571c75d", "passed": true}
+Four raw-byte/escaped profiles passed; SQL state, audited rejections, recovery, SAVE/replay and malformed-wire nonmutation verified.

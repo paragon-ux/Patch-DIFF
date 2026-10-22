@@ -1,0 +1,14 @@
+{
+  "authorization": "User accepted existing merges and explicitly authorized beginning Goal F according to these accepted documents on 2026-10-21. This authorization supersedes their earlier proposed-status wording without rewriting the originals.",
+  "main_base": "2ee7ce46461598d71f0f9b2570ad7d9d3aa03d10",
+  "verbatim_sources": {
+    "DEVIN_CHANGE_PLAN-b33faaf-v2.md": {
+      "original_path": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\docs\\reviews\\devin\\DEVIN_CHANGE_PLAN-b33faaf-v2.md",
+      "sha256": "bf1457ec019bd6475aa50dcb6fb0da0c118bcf196fe1b521f9218c39492b0868"
+    },
+    "Devin-Goal-F.md": {
+      "original_path": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\docs\\reviews\\devin\\Devin-Goal-F.md",
+      "sha256": "5c3220d3ba445a6575a5a9012b853a27e2fc883295c6244f17c935361962ca98"
+    }
+  }
+}

@@ -1,0 +1,543 @@
+{
+  "timestamp_utc": "2026-10-22T20:40:44.846549+00:00",
+  "source": "https://api.osv.dev/v1/querybatch",
+  "lock_sha256": "6a6ffe3f91cfd62a106c8abffc8abe98e3ddc99c85ca29a3e04a48cdada7d081",
+  "query": {
+    "queries": [
+      {
+        "package": {
+          "name": "alembic",
+          "ecosystem": "PyPI"
+        },
+        "version": "1.18.4"
+      },
+      {
+        "package": {
+          "name": "annotated-doc",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.0.4"
+      },
+      {
+        "package": {
+          "name": "annotated-types",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.7.0"
+      },
+      {
+        "package": {
+          "name": "anyio",
+          "ecosystem": "PyPI"
+        },
+        "version": "4.13.0"
+      },
+      {
+        "package": {
+          "name": "attrs",
+          "ecosystem": "PyPI"
+        },
+        "version": "26.1.0"
+      },
+      {
+        "package": {
+          "name": "certifi",
+          "ecosystem": "PyPI"
+        },
+        "version": "2026.4.22"
+      },
+      {
+        "package": {
+          "name": "click",
+          "ecosystem": "PyPI"
+        },
+        "version": "8.4.0"
+      },
+      {
+        "package": {
+          "name": "colorama",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.4.6"
+      },
+      {
+        "package": {
+          "name": "fastapi",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.136.1"
+      },
+      {
+        "package": {
+          "name": "greenlet",
+          "ecosystem": "PyPI"
+        },
+        "version": "3.5.0"
+      },
+      {
+        "package": {
+          "name": "h11",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.16.0"
+      },
+      {
+        "package": {
+          "name": "httpcore",
+          "ecosystem": "PyPI"
+        },
+        "version": "1.0.9"
+      },
+      {
+        "package": {
+          "name": "httptools",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.7.1"
+      },
+      {
+        "package": {
+          "name": "httpx",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.28.1"
+      },
+      {
+        "package": {
+          "name": "idna",
+          "ecosystem": "PyPI"
+        },
+        "version": "3.15"
+      },
+      {
+        "package": {
+          "name": "iniconfig",
+          "ecosystem": "PyPI"
+        },
+        "version": "2.3.0"
+      },
+      {
+        "package": {
+          "name": "jsonschema-specifications",
+          "ecosystem": "PyPI"
+        },
+        "version": "2025.9.1"
+      },
+      {
+        "package": {
+          "name": "jsonschema",
+          "ecosystem": "PyPI"
+        },
+        "version": "4.26.0"
+      },
+      {
+        "package": {
+          "name": "Mako",
+          "ecosystem": "PyPI"
+        },
+        "version": "1.3.12"
+      },
+      {
+        "package": {
+          "name": "MarkupSafe",
+          "ecosystem": "PyPI"
+        },
+        "version": "3.0.3"
+      },
+      {
+        "package": {
+          "name": "packaging",
+          "ecosystem": "PyPI"
+        },
+        "version": "26.2"
+      },
+      {
+        "package": {
+          "name": "pluggy",
+          "ecosystem": "PyPI"
+        },
+        "version": "1.6.0"
+      },
+      {
+        "package": {
+          "name": "psycopg-binary",
+          "ecosystem": "PyPI"
+        },
+        "version": "3.3.4"
+      },
+      {
+        "package": {
+          "name": "psycopg",
+          "ecosystem": "PyPI"
+        },
+        "version": "3.3.4"
+      },
+      {
+        "package": {
+          "name": "pydantic",
+          "ecosystem": "PyPI"
+        },
+        "version": "2.13.4"
+      },
+      {
+        "package": {
+          "name": "pydantic_core",
+          "ecosystem": "PyPI"
+        },
+        "version": "2.46.4"
+      },
+      {
+        "package": {
+          "name": "Pygments",
+          "ecosystem": "PyPI"
+        },
+        "version": "2.20.0"
+      },
+      {
+        "package": {
+          "name": "pytest",
+          "ecosystem": "PyPI"
+        },
+        "version": "8.4.2"
+      },
+      {
+        "package": {
+          "name": "python-dotenv",
+          "ecosystem": "PyPI"
+        },
+        "version": "1.2.2"
+      },
+      {
+        "package": {
+          "name": "PyYAML",
+          "ecosystem": "PyPI"
+        },
+        "version": "6.0.3"
+      },
+      {
+        "package": {
+          "name": "referencing",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.37.0"
+      },
+      {
+        "package": {
+          "name": "rpds-py",
+          "ecosystem": "PyPI"
+        },
+        "version": "2026.9.1"
+      },
+      {
+        "package": {
+          "name": "SQLAlchemy",
+          "ecosystem": "PyPI"
+        },
+        "version": "2.0.49"
+      },
+      {
+        "package": {
+          "name": "starlette",
+          "ecosystem": "PyPI"
+        },
+        "version": "1.0.0"
+      },
+      {
+        "package": {
+          "name": "typing-inspection",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.4.2"
+      },
+      {
+        "package": {
+          "name": "typing_extensions",
+          "ecosystem": "PyPI"
+        },
+        "version": "4.15.0"
+      },
+      {
+        "package": {
+          "name": "tzdata",
+          "ecosystem": "PyPI"
+        },
+        "version": "2026.2"
+      },
+      {
+        "package": {
+          "name": "uvicorn",
+          "ecosystem": "PyPI"
+        },
+        "version": "0.47.0"
+      },
+      {
+        "package": {
+          "name": "watchfiles",
+          "ecosystem": "PyPI"
+        },
+        "version": "1.2.0"
+      },
+      {
+        "package": {
+          "name": "websockets",
+          "ecosystem": "PyPI"
+        },
+        "version": "16.0"
+      }
+    ]
+  },
+  "response": {
+    "results": [
+      {},
+      {},
+      {},
+      {
+        "vulns": [
+          {
+            "id": "GHSA-5p39-cfhj-2xmp",
+            "modified": "2026-10-01T17:55:57.336188Z"
+          },
+          {
+            "id": "GHSA-82r6-8w77-94w6",
+            "modified": "2026-10-01T17:56:11.058322Z"
+          },
+          {
+            "id": "PYSEC-2026-4024",
+            "modified": "2026-10-01T17:45:01.995149Z"
+          },
+          {
+            "id": "PYSEC-2026-4025",
+            "modified": "2026-10-01T17:45:01.997111Z"
+          }
+        ]
+      },
+      {},
+      {
+        "vulns": [
+          {
+            "id": "GHSA-6q48-6c7w-9gw2",
+            "modified": "2026-10-20T22:11:14.336568Z"
+          },
+          {
+            "id": "PYSEC-2026-4320",
+            "modified": "2026-10-20T22:00:02.600723Z"
+          }
+        ]
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {
+        "vulns": [
+          {
+            "id": "GHSA-5639-2j2p-m4mx",
+            "modified": "2026-10-15T14:55:45.473045Z"
+          },
+          {
+            "id": "PYSEC-2026-4243",
+            "modified": "2026-10-15T14:45:09.219391Z"
+          }
+        ]
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {
+        "vulns": [
+          {
+            "id": "GHSA-6w46-j5rx-g56g",
+            "modified": "2026-09-10T03:50:32.768043Z"
+          },
+          {
+            "id": "PYSEC-2026-1845",
+            "modified": "2026-07-07T17:47:51.848748Z"
+          }
+        ]
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {
+        "vulns": [
+          {
+            "id": "GHSA-82w8-qh3p-5jfq",
+            "modified": "2026-09-10T03:51:08.156199Z"
+          },
+          {
+            "id": "GHSA-86qp-5c8j-p5mr",
+            "modified": "2026-09-10T03:51:08.121685Z"
+          },
+          {
+            "id": "GHSA-jp82-jpqv-5vv3",
+            "modified": "2026-09-10T03:50:50.050800Z"
+          },
+          {
+            "id": "GHSA-wqp7-x3pw-xc5r",
+            "modified": "2026-09-10T03:50:51.079936Z"
+          },
+          {
+            "id": "GHSA-x746-7m8f-x49c",
+            "modified": "2026-09-10T03:50:12.272722Z"
+          },
+          {
+            "id": "PYSEC-2026-161",
+            "modified": "2026-05-26T15:41:31.112064Z"
+          },
+          {
+            "id": "PYSEC-2026-2280",
+            "modified": "2026-07-13T07:15:42.498495Z"
+          },
+          {
+            "id": "PYSEC-2026-2281",
+            "modified": "2026-07-13T07:15:42.493904Z"
+          },
+          {
+            "id": "PYSEC-2026-248",
+            "modified": "2026-06-27T11:15:06.799060Z"
+          },
+          {
+            "id": "PYSEC-2026-249",
+            "modified": "2026-06-27T11:15:06.800792Z"
+          }
+        ]
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ]
+  },
+  "findings": [
+    {
+      "name": "anyio",
+      "version": "4.13.0",
+      "vulns": [
+        {
+          "id": "GHSA-5p39-cfhj-2xmp",
+          "modified": "2026-10-01T17:55:57.336188Z"
+        },
+        {
+          "id": "GHSA-82r6-8w77-94w6",
+          "modified": "2026-10-01T17:56:11.058322Z"
+        },
+        {
+          "id": "PYSEC-2026-4024",
+          "modified": "2026-10-01T17:45:01.995149Z"
+        },
+        {
+          "id": "PYSEC-2026-4025",
+          "modified": "2026-10-01T17:45:01.997111Z"
+        }
+      ]
+    },
+    {
+      "name": "certifi",
+      "version": "2026.4.22",
+      "vulns": [
+        {
+          "id": "GHSA-6q48-6c7w-9gw2",
+          "modified": "2026-10-20T22:11:14.336568Z"
+        },
+        {
+          "id": "PYSEC-2026-4320",
+          "modified": "2026-10-20T22:00:02.600723Z"
+        }
+      ]
+    },
+    {
+      "name": "Mako",
+      "version": "1.3.12",
+      "vulns": [
+        {
+          "id": "GHSA-5639-2j2p-m4mx",
+          "modified": "2026-10-15T14:55:45.473045Z"
+        },
+        {
+          "id": "PYSEC-2026-4243",
+          "modified": "2026-10-15T14:45:09.219391Z"
+        }
+      ]
+    },
+    {
+      "name": "pytest",
+      "version": "8.4.2",
+      "vulns": [
+        {
+          "id": "GHSA-6w46-j5rx-g56g",
+          "modified": "2026-09-10T03:50:32.768043Z"
+        },
+        {
+          "id": "PYSEC-2026-1845",
+          "modified": "2026-07-07T17:47:51.848748Z"
+        }
+      ]
+    },
+    {
+      "name": "starlette",
+      "version": "1.0.0",
+      "vulns": [
+        {
+          "id": "GHSA-82w8-qh3p-5jfq",
+          "modified": "2026-09-10T03:51:08.156199Z"
+        },
+        {
+          "id": "GHSA-86qp-5c8j-p5mr",
+          "modified": "2026-09-10T03:51:08.121685Z"
+        },
+        {
+          "id": "GHSA-jp82-jpqv-5vv3",
+          "modified": "2026-09-10T03:50:50.050800Z"
+        },
+        {
+          "id": "GHSA-wqp7-x3pw-xc5r",
+          "modified": "2026-09-10T03:50:51.079936Z"
+        },
+        {
+          "id": "GHSA-x746-7m8f-x49c",
+          "modified": "2026-09-10T03:50:12.272722Z"
+        },
+        {
+          "id": "PYSEC-2026-161",
+          "modified": "2026-05-26T15:41:31.112064Z"
+        },
+        {
+          "id": "PYSEC-2026-2280",
+          "modified": "2026-07-13T07:15:42.498495Z"
+        },
+        {
+          "id": "PYSEC-2026-2281",
+          "modified": "2026-07-13T07:15:42.493904Z"
+        },
+        {
+          "id": "PYSEC-2026-248",
+          "modified": "2026-06-27T11:15:06.799060Z"
+        },
+        {
+          "id": "PYSEC-2026-249",
+          "modified": "2026-06-27T11:15:06.800792Z"
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Registry advisory match for pinned PyPI packages only; not a source, container-image, or exploitation audit."
+  ]
+}

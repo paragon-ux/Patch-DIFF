@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\goal-f-pass-b-worktree\docs\usability\PASS-B-live-verify.py", line 232, in <module>
+    result = run()
+             ^^^^^
+  File "C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\goal-f-pass-b-worktree\docs\usability\PASS-B-live-verify.py", line 143, in run
+    assert rejected["failure_reason"] == "match_not_found"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

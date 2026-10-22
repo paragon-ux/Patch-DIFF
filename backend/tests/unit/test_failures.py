@@ -14,6 +14,8 @@ def test_all_pdcp_rejection_labels_are_present() -> None:
         "manifest_missing",
         "manifest_invalid",
         "block_malformed",
+        "span_out_of_bounds",
+        "span_expected_text_mismatch",
         "match_absent",
         "match_ambiguous",
         "disambiguation_invalid",

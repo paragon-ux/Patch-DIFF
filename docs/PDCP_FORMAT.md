@@ -4,9 +4,12 @@
 
 This document defines the transaction formats supported by PatchDIFF:
 1. **`patchdiff-tx/1` (Primary Typed Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content`. Delimiter-collision free, with reduced mandatory prose overhead.
-2. **`.pdcp` v0.2.3 (Frozen Legacy Text Format)**: The declarative text format with `PDCP 0.2.3` header, 7 required manifest fields per change, and `MATCH/REPLACE` delimiters, retained for backward compatibility and historical replay.
+2. **`patchdiff-tx/2` (Guarded Operations)**: canonical JSON with required intent and guard plus ordered `operations` carrying explicit `op:match` or `op:span`. Span records require start/end/expected_text/replace, use sequential canonical code-point coordinates and allow empty-span insertion. See [MCP_TOOLS.md](MCP_TOOLS.md#patchdiff_submit_operations-patchdiff-tx2) for complete fields and immutable profile `patchdiff-mvp-0.3.0`. Example canonical record: `{"expected_current_hash":null,"expected_target_version":2,"format":"patchdiff-tx/2","intent":"Insert a note","operations":[{"end":0,"expected_text":"","op":"span","replace":"Note: ","start":0},{"match":"alpha","op":"match","replace":"beta"}],"target_file_id":"<UUID>"}`.
 
-Neither format is executable code. Both lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
+3. **`patchdiff-tx/3` (Sole Replacement)**: A separate sole replacement record: `{"format":"patchdiff-tx/3","target_file_id":"<UUID>","intent":"explicit replacement","operations":[{"op":"replace_all","replace":"new text"}],"expected_target_version":0,"expected_current_hash":null}`. Exactly one operation with exactly `op,replace` is permitted. No match/span/selectors or mixed transaction in tx/3; tx/2 continues refusing replace_all. Both top-level guard keys are persisted with raw values, including null, through the same canonical JSON identity rule. At least one valid guard is required. Default change ID is chg_001; risk is low. Profile0.4.0 enables replacement without modifying0.3.0. Fresh size admission is a service rule, not decoding/replay grammar.
+4. **`.pdcp` v0.2.3 (Frozen Legacy Text Format)**: The declarative text format with `PDCP 0.2.3` header, 7 required manifest fields per change, and `MATCH/REPLACE` delimiters, retained for backward compatibility and historical replay.
+
+None of these formats is executable code. All lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
 
 Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
@@ -119,7 +122,7 @@ Optional disambiguation fields in v0.2.3: `anchor_before`, `anchor_after`, `occu
 
 ## 3. Shared Lowering and Applier Semantics
 
-Both formats lower into `ParsedPDCP`:
+All four formats lower into `ParsedPDCP`:
 ```python
 @dataclass(frozen=True, slots=True)
 class ParsedPDCP:
@@ -134,6 +137,7 @@ The applier `apply_pdcp_transaction(target_content, parsed)`:
    - Locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.2`).
    - Resolves disambiguation to exactly one span.
    - Slices buffer and splices `replace` immediately.
+   - For a tx/2 span, checks `0 <= start <= end <= len(buffer)` and `buffer[start:end] == expected_text` instead of matching; for the tx/3 sole `replace_all`, the span is the whole buffer.
    - Computes `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests).
 4. Computes final `after_hash`.
 5. Emits `AcceptedCoreResult` on full success or `RejectedCoreResult` on any failure.
