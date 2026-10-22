@@ -15,7 +15,7 @@ Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP 
 
 Fresh replacement raw text and canonical result each have inclusive limits of 1,000,000 code points and 1,048,576 UTF-8 bytes. Invalid Unicode follows the audited encoding-rejection path. Existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return `invalid_argument/replacement_too_large` without writes; replay does not reapply fresh admission limits. Runtime 0.3.0 continues to reject `replace_all`.
 
-Profiles are immutable. Replay dispatches on the stored protocol/runtime pair, preserving 0.1.0 non-overlapping matching, 0.2.0 historical change-ID grammar, 0.2.1 strict IDs, and the pre-0.2.2 ignored-singleton-selector behavior. Current match-capable profiles enforce every supplied selector, even for one occurrence. Unknown protocol/profile pairs fail closed; historical records and fingerprints are not rewritten.
+Profiles are immutable. Replay dispatches on the stored protocol/runtime pair, preserving 0.1.0 non-overlapping matching, 0.2.0 historical typed change-ID grammar, 0.2.1 strict typed IDs, and the pre-0.2.2 ignored-singleton-selector behavior. Current match-capable profiles enforce every supplied selector, even for one occurrence. Unknown protocol/profile pairs fail closed; historical records and fingerprints are not rewritten.
 
 ## Atomicity, identity and audit
 
