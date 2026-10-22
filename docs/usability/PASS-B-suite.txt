@@ -1,0 +1,66 @@
+........................................................................ [  6%]
+........................................................................ [ 12%]
+........................................................................ [ 19%]
+........................................................................ [ 25%]
+........................................................................ [ 32%]
+........................................................................ [ 38%]
+........................................................................ [ 45%]
+........................................................................ [ 51%]
+........................................................................ [ 58%]
+........................................................................ [ 64%]
+........................................................................ [ 70%]
+........................................................................ [ 77%]
+...........................................F............................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 96%]
+....................................                                     [100%]
+================================== FAILURES ===================================
+______________ test_every_published_example_real_stdio_postgres _______________
+
+tmp_path = WindowsPath('C:/Users/USER/AppData/Local/Temp/pytest-of-USER/pytest-795/test_every_published_example_r0')
+
+    def test_every_published_example_real_stdio_postgres(tmp_path):
+        root = Path(__file__).resolve().parents[3]
+        output = tmp_path / "live.json"
+        env = {**os.environ, "PYTHONPATH": str(root / "backend"), "PATCHDIFF_DATABASE_URL": settings.database_url}
+        process = subprocess.run([sys.executable, "-X", "utf8", str(root / "docs/usability/PASS-B-live-verify.py"), str(output)],
+                                 cwd=root, env=env, capture_output=True, timeout=60)
+>       assert process.returncode == 0, process.stdout.decode("utf-8") + process.stderr.decode("utf-8")
+E       AssertionError: Traceback (most recent call last):
+
+E           File "C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\goal-f-pass-b-worktree\docs\usability\PASS-B-live-verify.py", line 232, in <module>
+
+E             result = run()
+
+E                      ^^^^^
+
+E           File "C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\goal-f-pass-b-worktree\docs\usability\PASS-B-live-verify.py", line 143, in run
+
+E             assert rejected["failure_reason"] == "match_not_found"
+
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+E         AssertionError
+
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\.venv\\Scripts\\python.exe', '-X', 'utf8', '...ure_reason"] == "match_not_found"\r\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nAssertionError\r\n').returncode
+
+backend\tests\integration\test_pass_b_discovery.py:16: AssertionError
+============================== warnings summary ===============================
+backend/tests/unit/test_migration_0002_offline.py::test_single_head_is_the_typed_ledger_revision
+backend/tests/unit/test_migration_0002_offline.py::test_upgrade_sql_renders_typed_ledger_and_request_idempotency_columns
+backend/tests/unit/test_migration_0002_offline.py::test_downgrade_refuses_to_destroy_typed_rows
+backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+backend/tests/integration/test_migrations_reachable.py::test_populated_legacy_upgrade_downgrade_upgrade_preserves_history
+backend/tests/integration/test_migrations_reachable.py::test_live_migration_refuses_downgrade_when_typed_rows_exist
+backend/tests/integration/test_migrations_reachable.py::test_live_migration_refuses_downgrade_when_typed_rows_exist
+  C:\Users\USER\Desktop\Frameworks\Patch-DIFF\.venv\Lib\site-packages\alembic\config.py:612: DeprecationWarning: No path_separator found in configuration; falling back to legacy splitting on spaces, commas, and colons for prepend_sys_path.  Consider adding path_separator=os to Alembic config.
+    util.warn_deprecated(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\goal-f-pass-b-worktree\docs\usability\PASS-B-junit.xml -
+=========================== short test summary info ===========================
+FAILED backend/tests/integration/test_pass_b_discovery.py::test_every_published_example_real_stdio_postgres

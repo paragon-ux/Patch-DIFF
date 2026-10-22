@@ -1,12 +1,12 @@
 # PatchDIFF Modernization Change Document
 
-Status: **Modernization/remediation PRs and Goal G are merged into main at 2ee7ce46461598d71f0f9b2570ad7d9d3aa03d10. Accepted Goal F revision 2 is authorized and begins with F01. The merged-base baseline passes 842 tests, live migration upgrade/downgrade/upgrade, offline evaluation and four outside-pytest stdio/SQL profiles. F01 implementation passes focused verification below; full-suite verification and its separate source-pinned review remain pending. Earlier records below describe their pinned historical revisions.**
+Status: **Modernization/remediation PRs and Goal G merged main2ee7ce46461598d71f0f9b2570ad7d9d3aa03d10. Accepted Goal F revision2 is implemented in two consolidated feature passes, with F02/F04 and F10 editing adapter deferred. PR11 Pass A has independent review/live verification and green head/generated-merge CI. Pass B implementation, separate live verification and source review are recorded below; final PR/CI/merge gates remain pending. Earlier records describe their pinned historical revisions. See [delivery ledger](usability/GOAL-F-DELIVERY-LEDGER.md) for every F-ID and release gate.**
 
 Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
 
 ## Consolidated Goal F Pass B
 
-The pre-code decision is docs/usability/PASS-B-decision.md. Whole-batch implementation covers guarded replacement, coherent line reads, shared-evaluator zero-audit preview and bounded executable discovery examples. Verification is pending one final consolidated root run. No migration or old-profile/identity rewrite; no representative dataset or production benchmark threshold was provided.
+The pre-code decision is docs/usability/PASS-B-decision.md. Implementation f263f2e/84ec120 covers guarded replacement, coherent line reads, shared-evaluator zero-audit preview and bounded executable discovery examples; c34a7e5 closes reviewed serializer/contract/offline gaps and9854e1b corrects a test fixture. [Verification](usability/PASS-B-verification.md) preserves the initial failed full run and focused fixes, all13examples executed over separate outside-pytest stdio/PostgreSQL, immutable table/SQL/replay checks and bytes-only offline extension. Independent ten-category review is docs/reviews/Goal-F-PASS-B-84ec120-review.md. Final published CI/merge approval remains pending. No migration/old-profile/identity rewrite; no representative dataset/production benchmark threshold supplied.
 
 ## Consolidated Goal F Pass A
 
