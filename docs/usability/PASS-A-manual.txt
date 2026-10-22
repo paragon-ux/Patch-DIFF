@@ -1,0 +1,12 @@
+{
+  "passed": 7,
+  "checks": [
+    "F03/F06: fresh opt-in UUID; no generated retry key; bounded exact ambiguity candidates; no target mutation",
+    "F05: actual whitespace mismatch yields bounded labeled supplemental candidates from original failure evidence",
+    "F07: guarded insertion and mixed match/span operations use sequential Unicode code-point coordinates and typed ledger facts",
+    "F01/F03/F05/F07 recovery: immutable original diagnostics/near inputs; fresh state/UUID; response flags outside request identity; zero extra rows",
+    "F03/F07 rejection: expected-text/bounds/second-operation failures remain atomic; invalid correlation option creates no attempt",
+    "Integrated history: existing exclusive paging, old/new recorded profiles, SAVE/replay/export and original audit evidence all agree with SQL",
+    "F05 live lock probe: committed service rejection visible and lock free at comparison entry; caller lock retained with explicit omission and rollback ownership"
+  ]
+}
