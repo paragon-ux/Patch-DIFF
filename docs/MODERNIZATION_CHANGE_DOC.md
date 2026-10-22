@@ -6,6 +6,8 @@ Architecture decisions and primary external evidence (E1–E8): [MODERNIZATION_A
 
 ## Consolidated Goal F Pass B
 
+Subsequent completion-audit fixes:1e0b800 preserves exact accepted snapshot bytes under Git newline conversion;24eccef defines numeric preview output budgets before537937d implements a preview-only evidence projection. Both findings independently triaged; bounded-preview correction passes88focused cases and3outside-pytest real-stdio/SQL budget groups, with independent wire/hash/SQL recheck. See the corrective review docs/reviews/Goal-F-PASS-B-budget-537937d-review.md and appended verification record. Earlier green1117-test PR12 snapshots remain pinned historical evidence; final corrected publication CI/merge gates remain pending.
+
 The pre-code decision is docs/usability/PASS-B-decision.md. Implementation f263f2e/84ec120 covers guarded replacement, coherent line reads, shared-evaluator zero-audit preview and bounded executable discovery examples; c34a7e5 closes reviewed serializer/contract/offline gaps and9854e1b corrects a test fixture. [Verification](usability/PASS-B-verification.md) preserves the initial failed full run and focused fixes, all13examples executed over separate outside-pytest stdio/PostgreSQL, immutable table/SQL/replay checks and bytes-only offline extension. Independent ten-category review is docs/reviews/Goal-F-PASS-B-84ec120-review.md. Final published CI/merge approval remains pending. No migration/old-profile/identity rewrite; no representative dataset/production benchmark threshold supplied.
 
 ## Consolidated Goal F Pass A
