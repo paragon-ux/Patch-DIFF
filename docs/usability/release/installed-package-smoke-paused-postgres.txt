@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\reproduction\2026-10-22\release\installed-package-smoke.py", line 30, in <module>
+    with psycopg.connect("postgresql://patchdiff:patchdiff@127.0.0.1:5432/postgres", autocommit=True, connect_timeout=5) as conn:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\USER\OneDrive - Wake Tech Community College\Documents\ChatGPT\Patch-DIFF\goal-f-pass-b-worktree\.venv-release\Lib\site-packages\psycopg\connection.py", line 122, in connect
+    raise last_ex.with_traceback(None)
+psycopg.errors.ConnectionTimeout: connection timeout expired

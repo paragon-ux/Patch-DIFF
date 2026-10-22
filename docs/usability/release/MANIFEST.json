@@ -1,0 +1,263 @@
+{
+  "source_suite_commit": "57dd7c44b7fbd2e421abaa087591526f0de7037c",
+  "wheel_source_commit": "9473e8bdfc64ae2c2630146af53e2c3428f1ca55",
+  "python": "3.11.9",
+  "platform": "Windows-10-10.0.22000-SP0",
+  "suite_pythonpath": ".;backend",
+  "suite_database": "patchdiff_release_suite_20261022",
+  "manual_database": "patchdiff_release_package_20261022",
+  "pip_check": "No broken requirements found.",
+  "installed_packages": [
+    {
+      "name": "alembic",
+      "version": "1.18.4"
+    },
+    {
+      "name": "annotated-doc",
+      "version": "0.0.4"
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.7.0"
+    },
+    {
+      "name": "anyio",
+      "version": "4.14.2"
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.10.19"
+    },
+    {
+      "name": "click",
+      "version": "8.4.0"
+    },
+    {
+      "name": "colorama",
+      "version": "0.4.6"
+    },
+    {
+      "name": "fastapi",
+      "version": "0.136.1"
+    },
+    {
+      "name": "greenlet",
+      "version": "3.5.0"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0"
+    },
+    {
+      "name": "httpcore",
+      "version": "1.0.9"
+    },
+    {
+      "name": "httptools",
+      "version": "0.7.1"
+    },
+    {
+      "name": "httpx",
+      "version": "0.28.1"
+    },
+    {
+      "name": "idna",
+      "version": "3.15"
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.0"
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.26.0"
+    },
+    {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1"
+    },
+    {
+      "name": "Mako",
+      "version": "1.4.2"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3"
+    },
+    {
+      "name": "packaging",
+      "version": "26.2"
+    },
+    {
+      "name": "patchdiff-mvp",
+      "version": "0.1.0"
+    },
+    {
+      "name": "pip",
+      "version": "24.0"
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0"
+    },
+    {
+      "name": "psycopg",
+      "version": "3.3.4"
+    },
+    {
+      "name": "psycopg-binary",
+      "version": "3.3.4"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.4"
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.46.4"
+    },
+    {
+      "name": "Pygments",
+      "version": "2.20.0"
+    },
+    {
+      "name": "pytest",
+      "version": "9.0.3"
+    },
+    {
+      "name": "python-dotenv",
+      "version": "1.2.2"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3"
+    },
+    {
+      "name": "referencing",
+      "version": "0.37.0"
+    },
+    {
+      "name": "rpds-py",
+      "version": "2026.9.1"
+    },
+    {
+      "name": "setuptools",
+      "version": "84.2.1"
+    },
+    {
+      "name": "SQLAlchemy",
+      "version": "2.0.49"
+    },
+    {
+      "name": "starlette",
+      "version": "1.3.1"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.15.0"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.2"
+    },
+    {
+      "name": "tzdata",
+      "version": "2026.2"
+    },
+    {
+      "name": "uvicorn",
+      "version": "0.47.0"
+    },
+    {
+      "name": "watchfiles",
+      "version": "1.2.0"
+    },
+    {
+      "name": "websockets",
+      "version": "16.0"
+    },
+    {
+      "name": "wheel",
+      "version": "0.48.0"
+    }
+  ],
+  "artifacts": {
+    "compose-port.json": {
+      "bytes": 119,
+      "sha256": "7ba66cc861a4d63df117360661c12d031f89e616a60d218aa0b59db308494465"
+    },
+    "dependency-advisories.json": {
+      "bytes": 72490,
+      "sha256": "3a2fa228844aaf009abf6b49aac358d5804cf713a931d3aca7cc361a3978fce5"
+    },
+    "dependency-osv.json": {
+      "bytes": 12053,
+      "sha256": "8b80d800e4486620f269002d76a85d660015d1acd8ae200b0a7bba29295ac40e"
+    },
+    "dependency-osv-corrected.json": {
+      "bytes": 6655,
+      "sha256": "0deb039839e56db9947da26e751217362263e12b1997b50fee9ce274c06a0fa7"
+    },
+    "final-suite-junit.xml": {
+      "bytes": 197835,
+      "sha256": "51e7c4c4c1f2d045d9391fa8e41d4d1ff0255dcef113a7360a2fc9bda11449ba"
+    },
+    "final-suite.txt": {
+      "bytes": 3293,
+      "sha256": "2c96b8e9121f8da5a757343f4495db842190bac5df7dc5cc78b5ffcd88394cf4"
+    },
+    "installed-package-smoke-paused-postgres.txt": {
+      "bytes": 755,
+      "sha256": "4aa16d40e16fb6db54eacfaffc4a89e2f5fb0cdd9066db1728e32e75cefd88cd"
+    },
+    "installed-package-smoke.json": {
+      "bytes": 51103,
+      "sha256": "4a99516676f2cfe1b05860063d79dccbd80cabe48360dfa244f43cb32346eb7c"
+    },
+    "installed-package-smoke.py": {
+      "bytes": 8637,
+      "sha256": "13e973389ff4efe8996896d9c0fcb5e4daeea450cd85a6e46a56430e08524aeb"
+    },
+    "installed-package-smoke.txt": {
+      "bytes": 203,
+      "sha256": "f9da04db70bff9b4eb853346fc61725dbd66c7f0914bc84b8d7f2e34376662f3"
+    },
+    "offline-final.txt": {
+      "bytes": 3201,
+      "sha256": "86e93aa19e57eeb62fcba29b4d437cdc23f8d7ae650d94084ccd44ee501a450b"
+    },
+    "install.txt": {
+      "bytes": 9998,
+      "sha256": "b2cba626bd63114c7899e74e01045bccd8cf91e7bcfc5b9e57953cc1f38258a0"
+    },
+    "wheel-build-initial.txt": {
+      "bytes": 1016,
+      "sha256": "9c991c222f82377e77bfb2f8eccaba8d4cf96ba199d596cb1302bac55ddf3532"
+    },
+    "wheel-build-9473e8b.txt": {
+      "bytes": 1039,
+      "sha256": "2e4f469eb16fd49b893c1b6a4a076fc85d522bd6176f4d42962048c5d77cc723"
+    },
+    "source-9473e8b.zip": {
+      "bytes": 1100622,
+      "sha256": "328b889b7c41515878fa70703d8077a01275b9e79a5a47f61faca9edf8c16daa",
+      "retained": "local unpublished build artifact; binary not committed"
+    },
+    "wheels-initial/patchdiff_mvp-0.1.0-py3-none-any.whl": {
+      "bytes": 201954,
+      "sha256": "49df2671fc460ada5da4efa976934a795e780ca66b9b5dbd689ab7fe91bc858d",
+      "retained": "local unpublished build artifact; binary not committed"
+    },
+    "wheels-9473e8b/patchdiff_mvp-0.1.0-py3-none-any.whl": {
+      "bytes": 83108,
+      "sha256": "5b132265d6243a77faec627727b26a71ca20bb90394fcf4040f84ac3ac12fcca",
+      "retained": "local unpublished build artifact; binary not committed"
+    }
+  },
+  "lock_worktree_sha256": "58ad0b6ba179bf7e810227dfedd8aaf55f0e7d7a7dbdbf8438c0052c2b79a029",
+  "lock_git_blob_sha256": "e706b9b89053ed17b018982e0984f71127269b94bec2f6ac0a34580fa7d5a144"
+}
