@@ -1,22 +1,14 @@
 # DATA_MODEL.md
 
-## Guarded replacement, line reads and preview
+## Storage effects of guarded operations, replacement and diagnostics
 
-New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
+No migration is added. The normative tool contract is [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
 
-patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
-
-Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. Dataset and performance evidence is limited to local synthetic cases because no representative sanitized dataset or production benchmark threshold was supplied.
-
-
-## Guarded operations and bounded diagnostics
-
-`include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
-
-New applicability ambiguity/selector failures retain at most five exact candidates (20 code points each side,64 match preview;8192 compact ASCII-escaped JSON bytes including wrapper), stage/prior-change/observed identity and explicit truncation; no cursor or selection. Absent/sequential failures retain at most 64 code points of immutable query evidence (1024 wrapper bytes). Response-only near misses compare only the original at-most-256-point failure prefix after actual successful service-owned commit/lock release; caller-owned transactions omit with caller_transaction. Work is at most 1,000,000 Levenshtein cells, windows query length±1, distance threshold min(4,max(1,length//4)), at most three candidates ranked distance/start/end,16-point context each side and8192 wrapper bytes. Exhaustion/oversize/historical inputs have explicit omission; unexpected post-commit errors propagate without claiming rollback. Original diagnostics stay immutable on recovery. New enrichment fields combined are at most18432 compact ASCII-escaped JSON bytes; this excludes preexisting arbitrary evidence.
-
-`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities. Discovery also provides bounded argument examples.
-
+- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` and `0.2.3` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
+- Accepted tx/2 and tx/3 transactions write `origin = 'typed'` ledger rows whose `derived_json` adds `operation` (`"span"` or `"replace_all"`). A tx/3 transaction writes exactly one row covering the full original span.
+- Rejected rows persist `diagnostic_json.failure_context` (a bounded prefix of the failing buffer, at most 256 code points) and, when applicable, `exact_candidates` or `near_miss_query`. Response-only `current_context`, `near_misses` and `correlation_id` are never stored.
+- A valid oversized fresh tx/3 replacement writes no attempt or `current_pdcp_files` row. A key-conflict attempt is audited before fresh admission, so its row stores the complete submitted record even when it exceeds the fresh limits, the same as any tx/1 or tx/2 attempt.
+- `patchdiff_read_lines` and `patchdiff_preview` only read one committed `cloud_target_files` row; they write nothing and take no locks.
 
 ## Scope
 
@@ -205,7 +197,7 @@ The diagnostic marks this representation and safely identifies offending paths. 
 
 #### Conflicting-key audit policy
 
-An admitted fingerprint conflict uses client_request_id=NULL so the original target/key unique row stays authoritative. Its request_fingerprint is the newly submitted fingerprint, not the original row's fingerprint. Repeated conflicts remain separate immutable audit rows, even when their submitted fingerprints are identical. Diagnostics link the original log and show the submitted key with a256-character preview/truncation flag; the original keyed row retains the complete key. The returned response still identifies the submitted key and returns the newly persisted rejection's log ID.
+An admitted fingerprint conflict uses client_request_id=NULL so the original target/key unique row stays authoritative. Its request_fingerprint is the newly submitted fingerprint, not the original row's fingerprint. Repeated conflicts remain separate immutable audit rows, even when their submitted fingerprints are identical. Diagnostics link the original log and show the submitted key with a 256-character preview/truncation flag; the original keyed row retains the complete key. The returned response still identifies the submitted key and returns the newly persisted rejection's log ID.
 
 No target/version/accepted-ledger change is made. Exact outcome recovery remains the no-new-attempt exception. Rate/admission controls are separate operational work and are not implemented by dropping, capping or mutating audit rows here.
 

@@ -91,14 +91,12 @@ Verified:
 - Offline eval: passed (verdict equivalence verified)
 ```
 
-## F01 rejection context
+## Goal F additions
 
-Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most 256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
+When testing or reviewing Goal F behavior, cover:
 
-## Pass A additions
-
-Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.
-
-## Pass B additions
-
-Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.
+- tx/2 spans: sequential coordinates, insertion, CRLF `expected_text`, out-of-bounds and mismatch atomicity, selectors and boolean coordinates rejected, profile gates and replay.
+- tx/3: inclusive admission boundaries, recovery/conflict before admission, empty replacement, replay without limits.
+- Preview: verdicts identical to submission, zero managed-table changes, no blocking on a locked row, budget and omission metadata.
+- Diagnostics: failure versus current context, intermediate-buffer labeling, exact-key recovery, near misses only after a service-owned commit, banded near-miss results equal to an unbanded Levenshtein reference.
+- Discovery: every advertised example executed over real stdio and PostgreSQL; capability metadata equal to the runtime constants.

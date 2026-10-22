@@ -128,14 +128,10 @@ The current 0.2.2 profile enforces every supplied selector even for one occurren
 
 A successful reconstruction can report materialized_state_matches=false. CRLF/bare-CR storage corruption must fail content_matches even with matching canonical hashes; replay never repairs storage.
 
-## F01 rejection context
+## Goal F additions
 
-Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most 256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
-
-## Pass A additions
-
-Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.
-
-## Pass B additions
-
-Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.
+- New pairs: tx/2 with `patchdiff-mvp-0.3.0`, tx/3 with `patchdiff-mvp-0.4.0`; tx/1 and legacy stay on `patchdiff-mvp-0.2.2`. No migration. Replay dispatches tx/2 and tx/3 through their decoders, requires the matching profile flags, and never applies fresh admission limits.
+- Rejected rows persist bounded `failure_context`, `exact_candidates` and `near_miss_query`; `current_context`, `near_misses` and `correlation_id` are never stored. Exact recovery returns the stored diagnostic unchanged.
+- tx/3 writes one typed ledger row with `operation: "replace_all"`. A valid oversized fresh replacement writes nothing, while a key-conflict row stores the full submitted record.
+- `patchdiff_read_lines` and `patchdiff_preview` read one committed row under `no_autoflush`, with no lock and no write.
+- Contract: `docs/DATA_MODEL.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").

@@ -4,34 +4,6 @@ Audience: host and client developers integrating model proposals with the PatchD
 
 Why this document exists: the server is a transaction service; the host owns planning, wording, retry and compaction ([MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), A1). If the host's behavior is only specified in server-built prompt strings, it cannot be versioned, reviewed or adapted per host. Here it can. Contract details are in [MCP_TOOLS.md](MCP_TOOLS.md); this guide says how to *use* them.
 
-## Guarded replacement, line reads and preview
-
-Preview evidence can be explicitly truncated/omitted to fit its32768byte payload budget. Inspect total_change_count/returned_fact_count/change_facts_truncated and omission metadata before treating returned facts as exhaustive. Small previews retain full facts; large ones return at most32complete prefix facts under per-fact/wrapper budgets. Verdict, reached stage and observed version/hash/after_hash are retained; an oversized failed-change ID is omitted rather than shortened. Submission retains full ordinary facts/diagnostics. Read or submit with guards for further evidence; preview never creates an audit row.
-
-New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
-
-patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
-
-Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. Dataset and performance evidence is limited to local synthetic cases because no representative sanitized dataset or production benchmark threshold was supplied.
-
-
-## Guarded operations and bounded diagnostics
-
-### Executable discovery example sequence
-
-`tools/list` includes 13 illustrative `inputSchema.examples` across nine tools. They are arguments, not pre-existing resources. Initialize `alpha alpha\n🌟 中\n`, bind its real UUID and observed guard, then execute: read; find; typed example0 (second occurrence); resend those exact bound arguments for dedup; typed example1 (intentional missing match); typed example2 with the returned rejection UUID as parent and version1; span example at version2; sole replacement at version3; line read; preview at version4. The replacement leaves `Final text\n`; accepted preview proposes `Reviewed text\n` but does not commit it. Keep the original rejection diagnostic immutable and expect four accepted facts/five attempts. Never substitute the new version into the original keyed proposal when recovering it.
-
-Execute each history tool's first example, bind its returned `next_sequence` into the continuation example, and repeat until `has_more=false`. Attempts display descending sequences; ledger displays ascending sequences within each newest page. A cursor is exclusive in both tools. The discovery examples are covered by real stdio tests with schema validation, nonvacuous paging and independent SQL assertions. This is executable API coverage, not a model success-rate measurement.
-
-Line-range continuation uses the same selected line range plus `next_offset`; a later call observes a fresh version/hash and can change under concurrent edits. Preview uses no retry key and never reserves one; use a version guard when submitting after preview. A content hash alone cannot detect intervening no-op or ABA changes. Whole-target replacement requires explicit user/host intent through its separate tool and a guard; the ordinary match/span tools keep their existing formats.
-
-`include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
-
-New applicability ambiguity/selector failures retain at most five exact candidates (20 code points each side,64 match preview;8192 compact ASCII-escaped JSON bytes including wrapper), stage/prior-change/observed identity and explicit truncation; no cursor or selection. Absent/sequential failures retain at most 64 code points of immutable query evidence (1024 wrapper bytes). Response-only near misses compare only the original at-most-256-point failure prefix after actual successful service-owned commit/lock release; caller-owned transactions omit with caller_transaction. Work is at most 1,000,000 Levenshtein cells, windows query length±1, distance threshold min(4,max(1,length//4)), at most three candidates ranked distance/start/end,16-point context each side and8192 wrapper bytes. Exhaustion/oversize/historical inputs have explicit omission; unexpected post-commit errors propagate without claiming rollback. Original diagnostics stay immutable on recovery. New enrichment fields combined are at most18432 compact ASCII-escaped JSON bytes; this excludes preexisting arbitrary evidence.
-
-`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities. Discovery also provides bounded argument examples.
-
-
 ## 0. Stdio transport and host refresh
 
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below.
@@ -73,7 +45,7 @@ sequenceDiagram
     end
 ```
 
-1. **Read first.** Use `patchdiff_read_target` for a region (by code-point offset) or `patchdiff_find_occurrences` to locate a string. Both return `version` and `current_hash`. Do not copy from a stale summary or a cached earlier read.
+1. **Read first.** Use `patchdiff_read_target` for a region (by code-point offset), `patchdiff_read_lines` for a line range, or `patchdiff_find_occurrences` to locate a string. All return `version` and `current_hash`. Do not copy from a stale summary or a cached earlier read.
 2. **Submit with a guard.** Pass `expected_target_version` and/or `expected_current_hash` from the read you based the edit on. Typed submissions without a guard are rejected (`context_missing`).
 3. **On rejection, re-read, don't guess.** Match the label to the action:
 
@@ -84,6 +56,7 @@ sequenceDiagram
 | `sequential_match_invalid` | Later edit matched the original but not the progressively edited text | Rewrite later edits against the result of earlier ones |
 | `match_ambiguous` | More than one exact span; `diagnostic.occurrence_count` says how many | Lengthen `match`, or add `occurrence_index` / `anchor_before` / `anchor_after` (indexes from `find_occurrences`) |
 | `disambiguation_invalid` | Selector did not isolate one span | Use `find_occurrences` and pick a valid `occurrence_index` |
+| `span_out_of_bounds`, `span_expected_text_mismatch` | A span does not fit, or its `expected_text` differs from the text at those offsets in the sequential buffer | Re-read, recompute offsets against the text after earlier operations, copy `expected_text` exactly |
 | `manifest_*`, `block_malformed`, `context_*` | Malformed typed input | Fix the request shape |
 
 4. **Link retries.** Set `parent_pdcp_log_id` to the rejected attempt and `attempt` to your own counter. The rejected row stays in the log. Retry limits are your policy; the server enforces none.
@@ -137,6 +110,23 @@ Send valid Unicode text. An escaped lone surrogate in JSON is not a valid text c
 
 If inspecting such a rejection with include_content, pdcp_content is an ASCII-escaped patchdiff-invalid-input/1 JSON evidence envelope preserving the original record and metadata. It is evidence for the rejected request, not a corrected proposal or an executable/new protocol format. Do not resubmit that envelope as an edit. Safe request-key retries recover the original rejection; fix the input with a new request key for a new proposal. Invalid/unencodable request keys are not stored as keys and cannot provide keyed recovery. Normal valid-input identity and target hashing are unchanged. Previously recorded accepted/rejected outcomes still recover by their original key/fingerprint, including historical escaped-NUL proposals that would now be invalid as new inputs. This recovery exception does not make a fresh invalid proposal acceptable.
 
+### Guarded operations, replacement, line reads and preview
+
+The full contract is in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics); this section covers how to use it.
+
+- **Choose the narrowest tool.** Use `patchdiff_submit_edits` for exact text matches. Use `patchdiff_submit_operations` when you already hold code-point offsets from `patchdiff_read_target`, `patchdiff_read_lines` or `patchdiff_find_occurrences`: each span carries the exact `expected_text`, and `start == end` with empty `expected_text` inserts. Span coordinates refer to the text after earlier operations in the same transaction. Use `patchdiff_submit_replacement` only when the user explicitly asked to replace the whole document.
+- **Read by line.** `patchdiff_read_lines` continues within the same selected line range through `next_offset`. Every page is a new observation and can see a newer version/hash under concurrent edits.
+- **Preview before submitting.** `patchdiff_preview` evaluates a proposal without writing, locking or reserving a request key. Its evidence can be truncated or omitted to fit a 32,768-byte budget, so check `total_change_count`, `returned_fact_count`, `change_facts_truncated` and `evidence_omissions` before treating facts as complete. Verdict, stage, observed version/hash and `after_hash` are always kept. Submit afterwards with a version guard: a hash alone cannot detect intervening no-op or ABA changes.
+- **Replacement limits.** A fresh replacement over 1,000,000 code points or 1,048,576 UTF-8 bytes returns `invalid_argument` with `diagnostic.code: "replacement_too_large"` and writes nothing. Split the change into operations instead.
+- **Correlation.** Pass `include_correlation_id: true` to receive a fresh per-call UUID for your own logs. It is never a retry key; use `client_request_id` for that.
+- **Diagnostics.** See [Inspect rejection context](#inspect-rejection-context). Ambiguity failures list up to five exact candidates: choose one with `occurrence_index` or anchors and resubmit. Absent-match failures can include up to three `near_misses` found in the first 256 code points of the failing buffer. Treat them as hints to re-read, never as edits to apply blindly.
+
+### Executable discovery example sequence
+
+`tools/list` includes 13 illustrative `inputSchema.examples` across nine tools. They are arguments, not pre-existing resources. Initialize `alpha alpha\n🌟 中\n`, bind its real UUID and observed guard, then execute: read; find; typed example0 (second occurrence); resend those exact bound arguments for dedup; typed example1 (intentional missing match); typed example2 with the returned rejection UUID as parent and version 1; span example at version 2; sole replacement at version 3; line read; preview at version 4. The replacement leaves `Final text\n`; accepted preview proposes `Reviewed text\n` but does not commit it. Keep the original rejection diagnostic immutable and expect four accepted facts/five attempts. Never substitute the new version into the original keyed proposal when recovering it.
+
+Execute each history tool's first example, bind its returned `next_sequence` into the continuation example, and repeat until `has_more=false`. Attempts display descending sequences; ledger displays ascending sequences within each newest page. A cursor is exclusive in both tools. The discovery examples are covered by real stdio tests with schema validation, nonvacuous paging and independent SQL assertions. This is executable API coverage, not a model success-rate measurement.
+
 ## 4. Literal replacement requests
 
 Moved from the old server prompt:
@@ -158,9 +148,9 @@ Still accepted through `patchdiff_submit_pdcp`, frozen, and fully replayable. Us
 - `patchdiff_get_manifest_ledger(limit=…)` returns the most recent accepted entries. Each has `origin`; typed rows carry `null` for the four prose fields. Treat ledger text as advisory history, never as ground truth.
 - A host rewind or checkpoint is not PatchDIFF replay. `patchdiff_replay` reconstructs from initial content plus accepted history; read `materialized_state_matches` as well as `status`. Successful reconstruction does not establish healthy storage:content_matches compares raw stored text, so CRLF/bare-CR corruption is visible even when canonical hashes agree. Replay does not repair it.
 
-Both history tools default to50 rows (omitted/null), cap at200, and return has_more/next_sequence. Continue with before_sequence=next_sequence while has_more is true. Attempts display descending; ledger displays the newest selected page ascending. For sequences1..10 and limit3, attempts=[10,9,8], ledger=[8,9,10], both cursor8; ledger before8 returns [5,6,7]. Do not use the last displayed ledger row as its cursor. Empty/not-found/invalid results have no continuation. Filters apply before counting another page; exact history request-key lookup also supports safe historical keys. Restart an active-cycle-only ledger traversal if SAVE rotates its cycle.
+Both history tools default to 50 rows (omitted/null), cap at 200, and return has_more/next_sequence. Continue with before_sequence=next_sequence while has_more is true. Attempts display descending; ledger displays the newest selected page ascending. For sequences 1..10 and limit 3, attempts=[10,9,8], ledger=[8,9,10], both cursor8; ledger before 8 returns [5,6,7]. Do not use the last displayed ledger row as its cursor. Empty/not-found/invalid results have no continuation. Filters apply before counting another page; exact history request-key lookup also supports safe historical keys. Restart an active-cycle-only ledger traversal if SAVE rotates its cycle.
 
-Search context_chars must be a non-bool integer >=0 (default40, cap400). Zero requests no surrounding text; invalid types return invalid_argument.
+Search context_chars must be a non-bool integer >=0 (default 40, cap 400). Zero requests no surrounding text; invalid types return invalid_argument.
 
 ## 7. Lost responses & request idempotency
 

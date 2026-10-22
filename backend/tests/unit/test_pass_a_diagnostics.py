@@ -1,5 +1,6 @@
 """Deterministic bounded supplementary diagnostic policies."""
 import json
+import random
 import sys
 
 import pytest
@@ -70,7 +71,43 @@ def test_exact_overlap_candidates_and_actual_worst_case_json_caps():
     assert len(json.dumps(enrichment, ensure_ascii=True, separators=(",", ":")).encode("ascii")) <= 18432
 
 
-def test_real_work_limit_omits_incomplete_ranking():
-    result = near_misses(diagnostic("b" * 256, "a" * 64), caller_owned=False)
-    assert result["status"] == "omitted" and result["omission_reason"] == "work_budget_exhausted"
-    assert result["candidates"] == []
+def _reference_ranking(buffer, needle):
+    """Unbanded full-matrix Levenshtein over every length-1/0/+1 window (the PASS-A definition)."""
+    threshold = min(4, max(1, len(needle)//4))
+    ranked = []
+    for width in (len(needle)-1, len(needle), len(needle)+1):
+        for start in range(len(buffer)-width+1) if width > 0 else ():
+            text = buffer[start:start+width]
+            previous = list(range(width+1))
+            for index, char in enumerate(needle, 1):
+                current = [index]
+                for offset, other in enumerate(text, 1):
+                    current.append(min(current[-1]+1, previous[offset]+1, previous[offset-1]+(char != other)))
+                previous = current
+            if 0 < previous[-1] <= threshold:
+                ranked.append((previous[-1], start, start+width))
+    return sorted(ranked)
+
+
+def test_banded_ranking_equals_unbanded_reference():
+    rng = random.Random(20261022)
+    for _ in range(300):
+        buffer = "".join(rng.choice("ab c\n") for _ in range(rng.randint(0, 80)))
+        needle = "".join(rng.choice("ab c") for _ in range(rng.randint(1, 20)))
+        result = near_misses(diagnostic(buffer, needle), caller_owned=False)
+        expected = _reference_ranking(buffer, needle)
+        assert result["status"] == "computed"
+        assert [(c["distance"], c["start"], c["end"]) for c in result["candidates"]] == expected[:3]
+        assert result["truncated"] is (len(expected) > 3)
+
+
+def test_full_prefix_64_point_query_is_served_within_budget():
+    sentence = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+    buffer = sentence * 6
+    needle = (sentence * 2)[1:65].replace("o", "0", 1)
+    result = near_misses(diagnostic(buffer, needle), caller_owned=False)
+    assert result["status"] == "computed" and result["candidates"]
+    assert result["candidates"][0]["distance"] == 1
+    assert result["comparison_cells"] <= 256 * 64 * 9 < near_miss_service.MAX_COMPARISON_CELLS
+    unrelated = near_misses(diagnostic("b" * 256, "a" * 64), caller_owned=False)
+    assert unrelated["status"] == "computed" and unrelated["candidates"] == []

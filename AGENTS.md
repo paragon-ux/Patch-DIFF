@@ -1,14 +1,5 @@
 # AGENTS.md
 
-## Goal F Pass B contract
-
-The [Pass B decision](docs/usability/PASS-B-decision.md) defines F09/F10/F11/F12 before implementation. New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
-
-patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
-
-Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. V02/V04 remain limited to local synthetic evidence because no representative sanitized dataset/benchmark threshold was supplied.
-
-
 ## Project
 
 PatchDIFF is an MCP-first, server-side deterministic document transaction service.
@@ -34,7 +25,7 @@ Read project artifacts in this order:
 
 1. `AGENTS.md` (locked invariants)
 2. `docs/MODERNIZATION_ARCHITECTURE.md` (architecture decisions A1–A8 and contracts C1–C6)
-3. `docs/MODERNIZATION_CHANGE_DOC.md` (as-built record, reconciliation table, verification evidence)
+3. `docs/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/MCP_TOOLS.md` (MCP tool schemas and request/response contracts)
 5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic runtime, validation stages, replay profiles)
 6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001` + `0002`)
@@ -43,11 +34,11 @@ Read project artifacts in this order:
 9. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop and usage guide)
 10. `docs/TEST_MATRIX.md` & `docs/CODEX_BUILD_PLAN.md`
 
-Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/`, `docs/Archive/`) are preserved untouched for historical context.
+Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/`, `docs/Archive/`) are preserved untouched for historical context. Goal F decision records, accepted plans, verification captures and the earlier as-built reconciliation record (`docs/usability/`, including `docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md`) and review reports (`docs/reviews/`) are likewise preserved at their recorded revisions.
 
 If ambiguity remains, preserve PatchDIFF’s locked invariants and choose the simplest deterministic behavior.
 
-## Transaction Input Formats (`patchdiff-tx/1` Edits, `patchdiff-tx/2` Operations, Frozen Legacy `.pdcp`)
+## Transaction Input Formats (`patchdiff-tx/1` Edits, `patchdiff-tx/2` Operations, `patchdiff-tx/3` Replacement, Frozen Legacy `.pdcp`)
 
 PatchDIFF supports four declarative, non-executable transaction input formats that lower into the same `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 
@@ -64,12 +55,12 @@ PatchDIFF supports four declarative, non-executable transaction input formats th
 Keep this boundary:
 
 ```text
-patchdiff-tx/1 or .pdcp = declarative, non-executable transaction artifact
+patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3 or .pdcp = declarative, non-executable transaction artifact
 backend/app/*.py = trusted deterministic runtime and service implementation
 target file = Markdown / Python / YAML / JSON / prose / etc.
 ```
 
-Neither `patchdiff-tx/1` nor `.pdcp` is executable code.
+None of `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or `.pdcp` is executable code.
 
 Submitted edit-string values and nested metadata must be valid UTF-8/PostgreSQL text before normal hashing/storage. Known-target invalid text is durably rejected through the shared locked path using reversible ASCII-escaped evidence in existing TEXT fields and safe JSONB markers. Never silently repair it or store decoded surrogate/NUL text. Valid hashes and historical fingerprints remain unchanged.
 
@@ -114,16 +105,21 @@ The PatchDIFF MCP service provides:
 
 ```text
 1. User uploads or initializes document -> patchdiff_initialize_target.
-2. Host reads relevant slices or searches occurrences -> patchdiff_read_target / patchdiff_find_occurrences.
-3. Host/model submits guarded edits -> patchdiff_submit_edits (with expected_target_version/expected_current_hash and optional client_request_id).
+2. Host reads relevant slices or searches occurrences -> patchdiff_read_target / patchdiff_read_lines / patchdiff_find_occurrences.
+3. Host/model optionally previews, then submits guarded edits -> patchdiff_preview, then patchdiff_submit_edits / patchdiff_submit_operations (or patchdiff_submit_replacement for an explicit whole-document rewrite), with expected_target_version/expected_current_hash and optional client_request_id.
 4. PatchDIFF validates deterministically and commits atomically (or logs rejection with format-specific diagnostics and stage validity).
 5. On rejection, host inspects diagnostics, re-reads via patchdiff_read_target / patchdiff_find_occurrences, and resubmits with parent_pdcp_log_id.
 6. Host checkpoints cycles with patchdiff_save, verifies integrity with patchdiff_replay, and exports via patchdiff_export_target.
 ```
 
-## Pass A response diagnostics and ownership
+## Goal F diagnostics, preview and admission
 
-See docs/usability/PASS-A-decision.md and current architecture/tool/core contracts for F03/F05/F06/F07. Submission correlation is opt-in UUID invocation metadata, never request identity. Exact candidates are bounded immutable failure evidence; near misses are bounded response-only comparisons after successful service-owned commit/lock release, explicitly omitted for caller-owned transactions. No fuzzy application or automatic choice is permitted.
+Recorded decisions: `docs/usability/F01-decision.md`, `docs/usability/PASS-A-decision.md`, `docs/usability/PASS-B-decision.md`. Normative contract: `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
+
+- Rejection evidence is bounded: immutable `diagnostic.failure_context` (at most 256 code points of the actual failing buffer), bounded exact candidates and the near-miss query. `current_context` and near misses are response-only; near misses run after a service-owned commit releases the lock and are omitted for caller-owned transactions. No fuzzy application or automatic choice is permitted.
+- Submission correlation is opt-in UUID invocation metadata, never request identity.
+- `patchdiff_preview` and `patchdiff_read_lines` are advisory, read-only observations; submission always re-locks and rechecks guards.
+- tx/3 fresh admission (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) runs after request-key recovery/conflict and never during replay.
 
 ## Non-Negotiable Invariants
 

@@ -176,7 +176,7 @@ Read in order of precedence:
 
 1. `AGENTS.md` (locked architectural invariants)
 2. `docs/MODERNIZATION_ARCHITECTURE.md` (architectural decisions A1–A8 and contracts C1–C6)
-3. `docs/MODERNIZATION_CHANGE_DOC.md` (as-built record, verification evidence, reconciliation table)
+3. `docs/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/MCP_TOOLS.md` (MCP tool contracts and schemas)
 5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic core runtime specification)
 6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001` + `0002`)

@@ -21,22 +21,29 @@ def near_misses(diagnostic: dict, *, caller_owned: bool) -> dict:
     cells = 0
     ranked = []
     threshold = min(4, max(1, len(needle)//4))
-    for width in sorted({length for length in (len(needle)-1, len(needle), len(needle)+1) if length > 0}):
-        for start in range(len(buffer)-width+1):
-            text = buffer[start:start+width]
-            previous = list(range(width+1))
-            for index, char in enumerate(needle, 1):
-                if cells + width > MAX_COMPARISON_CELLS:
-                    return omitted("work_budget_exhausted")
-                cells += width
-                current = [index]
-                for offset, other in enumerate(text, 1):
-                    current.append(min(current[-1]+1, previous[offset]+1, previous[offset-1]+(char != other)))
-                previous = current
-            distance = previous[-1]
-            if 0 < distance <= threshold:
+    widths = [length for length in (len(needle)-1, len(needle), len(needle)+1) if length > 0]
+    # Ukkonen band: a cell more than `threshold` off the diagonal already costs more than
+    # `threshold`, so values are capped at threshold+1 and only banded cells are computed.
+    # Every distance <= threshold stays exact; one row per start serves all three widths.
+    cap = threshold + 1
+    for start in range(len(buffer)-widths[0]+1):
+        text = buffer[start:start+widths[-1]]
+        previous = [min(offset, cap) for offset in range(len(text)+1)]
+        for index, char in enumerate(needle, 1):
+            low, high = max(1, index-threshold), min(len(text), index+threshold)
+            band = max(0, high-low+1)
+            if cells + band > MAX_COMPARISON_CELLS:
+                return omitted("work_budget_exhausted")
+            cells += band
+            current = [min(index, cap)] + [cap] * len(text)
+            for offset in range(low, high+1):
+                current[offset] = min(current[offset-1]+1, previous[offset]+1,
+                                      previous[offset-1]+(char != text[offset-1]), cap)
+            previous = current
+        for width in widths:
+            if width <= len(text) and 0 < previous[width] <= threshold:
                 end = start+width
-                ranked.append({"distance": distance, "start": start, "end": end, "text": text,
+                ranked.append({"distance": previous[width], "start": start, "end": end, "text": buffer[start:end],
                                "before": buffer[max(0, start-16):start], "after": buffer[end:end+16]})
     ranked.sort(key=lambda item: (item["distance"], item["start"], item["end"]))
     result = {"kind": "near_miss", "status": "computed", "omission_reason": None,

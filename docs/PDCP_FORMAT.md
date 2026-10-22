@@ -1,19 +1,10 @@
 # PDCP_FORMAT.md
 
-## Guarded replacement, line reads and preview
-
-New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
-
-patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
-
-Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. Dataset and performance evidence is limited to local synthetic cases because no representative sanitized dataset or production benchmark threshold was supplied.
-
-
 ## Scope
 
 This document defines the transaction formats supported by PatchDIFF:
 1. **`patchdiff-tx/1` (Primary Typed Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content`. Delimiter-collision free, with reduced mandatory prose overhead.
-2. **`patchdiff-tx/2` (Guarded Operations)**: canonical JSON with required intent and guard plus ordered `operations` carrying explicit `op:match` or `op:span`. Span records require start/end/expected_text/replace, use sequential canonical code-point coordinates and allow empty-span insertion. See [MCP_TOOLS.md](MCP_TOOLS.md) for complete fields and immutable 0.3.0 profile.
+2. **`patchdiff-tx/2` (Guarded Operations)**: canonical JSON with required intent and guard plus ordered `operations` carrying explicit `op:match` or `op:span`. Span records require start/end/expected_text/replace, use sequential canonical code-point coordinates and allow empty-span insertion. See [MCP_TOOLS.md](MCP_TOOLS.md#patchdiff_submit_operations-patchdiff-tx2) for complete fields and immutable profile `patchdiff-mvp-0.3.0`. Example canonical record: `{"expected_current_hash":null,"expected_target_version":2,"format":"patchdiff-tx/2","intent":"Insert a note","operations":[{"end":0,"expected_text":"","op":"span","replace":"Note: ","start":0},{"match":"alpha","op":"match","replace":"beta"}],"target_file_id":"<UUID>"}`.
 
 3. **`patchdiff-tx/3` (Sole Replacement)**: A separate sole replacement record: `{"format":"patchdiff-tx/3","target_file_id":"<UUID>","intent":"explicit replacement","operations":[{"op":"replace_all","replace":"new text"}],"expected_target_version":0,"expected_current_hash":null}`. Exactly one operation with exactly `op,replace` is permitted. No match/span/selectors or mixed transaction in tx/3; tx/2 continues refusing replace_all. Both top-level guard keys are persisted with raw values, including null, through the same canonical JSON identity rule. At least one valid guard is required. Default change ID is chg_001; risk is low. Profile0.4.0 enables replacement without modifying0.3.0. Fresh size admission is a service rule, not decoding/replay grammar.
 4. **`.pdcp` v0.2.3 (Frozen Legacy Text Format)**: The declarative text format with `PDCP 0.2.3` header, 7 required manifest fields per change, and `MATCH/REPLACE` delimiters, retained for backward compatibility and historical replay.
@@ -146,6 +137,7 @@ The applier `apply_pdcp_transaction(target_content, parsed)`:
    - Locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.2`).
    - Resolves disambiguation to exactly one span.
    - Slices buffer and splices `replace` immediately.
+   - For a tx/2 span, checks `0 <= start <= end <= len(buffer)` and `buffer[start:end] == expected_text` instead of matching; for the tx/3 sole `replace_all`, the span is the whole buffer.
    - Computes `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests).
 4. Computes final `after_hash`.
 5. Emits `AcceptedCoreResult` on full success or `RejectedCoreResult` on any failure.

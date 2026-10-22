@@ -38,8 +38,8 @@ PatchDIFF provides 20 tools across five functional areas:
 3. **Guarded Edit Submission**:
    - `patchdiff_submit_edits`: primary typed edit submission (`patchdiff-tx/1`). Requires `expected_target_version` and/or `expected_current_hash`. Supports `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage.
    - `patchdiff_submit_pdcp`: legacy `.pdcp` text submission (frozen v0.2.3 format).
-   - `patchdiff_submit_operations`: guarded match/span transactions (tx/2, profile0.3.0).
-   - `patchdiff_submit_replacement`: guarded sole replace_all (tx/3, profile0.4.0); valid fresh oversize is a structured no-attempt admission error.
+   - `patchdiff_submit_operations`: guarded match/span transactions (tx/2, profile 0.3.0).
+   - `patchdiff_submit_replacement`: guarded sole replace_all (tx/3, profile 0.4.0); valid fresh oversize is a structured no-attempt admission error.
 4. **Checkpoints, Replay & History**:
    - `patchdiff_save`: snapshots target and rotates editing cycle.
    - `patchdiff_replay`: deterministically reconstructs target from initial state and accepted history.
@@ -107,18 +107,13 @@ Do not let MCP orchestration:
 
 ## Bounded search and history
 
-Validate context_chars as a non-bool integer >=0, default40 and cap400. Both history tools use positive non-bool integer limits (null/omitted50,cap200) and exclusive positive integer cursors. Attempts fetch limit+1 after filters and render descending; ledger selects newest eligible rows then renders its page ascending. Return entries/has_more/next_sequence on every response; cursor is the smallest returned sequence only when more rows remain. Keep safe exact historical request-key filters, not new-submission syntax. Include flags are boolean; no generic handler errors for invalid argument types.
+Validate context_chars as a non-bool integer >=0, default 40 and cap 400. Both history tools use positive non-bool integer limits (null/omitted50,cap 200) and exclusive positive integer cursors. Attempts fetch limit+1 after filters and render descending; ledger selects newest eligible rows then renders its page ascending. Return entries/has_more/next_sequence on every response; cursor is the smallest returned sequence only when more rows remain. Keep safe exact historical request-key filters, not new-submission syntax. Include flags are boolean; no generic handler errors for invalid argument types.
 
-## F01 rejection context
+## Goal F additions
 
-Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most 256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
-
-## Pass A additions
-
-Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.
-
-## Pass B additions
-
-Preview-only output projection follows PASS-B-decision.md:32768compact ASCII-escaped payload bytes; accepted facts prefix32/perfact2048/wrapper16384; text1024code points/8192wrapper and diagnostic16384. Expose total/returned/truncation/omission metadata. Keep verdict/stage/coherent state/hash, omit oversized identity rather than shortening it, and preserve all submit/core/history facts.
-
-Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.
+- Tools: `patchdiff_submit_operations` (tx/2), `patchdiff_submit_replacement` (tx/3), `patchdiff_read_lines` and `patchdiff_preview`. Discovery advertises 20 tools, 13 examples across nine tools, and `x-patchdiff-capabilities` built from the runtime constants.
+- Submissions accept boolean `include_correlation_id`; the UUID is response-only and never part of request identity.
+- Rejections return immutable `diagnostic.failure_context` and fresh, response-only `current_context`; exact recovery keeps the original diagnostic. Near misses are computed only after a service-owned commit releases the lock (banded exact Levenshtein within the 1,000,000-cell cap) and are omitted for caller-owned transactions.
+- Preview is advisory: no writes, locks or request keys; a payload bounded to 32,768 bytes with explicit omission metadata; submission always rechecks guards.
+- tx/3 fresh admission (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) runs after request-key recovery/conflict and returns `invalid_argument` / `replacement_too_large` with no row.
+- Contract: `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics"); decisions in `docs/usability/F01-decision.md`, `PASS-A-decision.md` and `PASS-B-decision.md`.

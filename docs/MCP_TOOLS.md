@@ -5,42 +5,6 @@ Unicode boundary: edit-submission strings and metadata must be valid UTF-8/Postg
 Conflicting-key submissions return context_invalid plus a fresh durable rejection log ID. The rejected row uses a NULL key and submitted fingerprint, with original-log linkage and a bounded submitted-key preview. The response continues to echo the submitted key. Exact recovery of the original request remains deduplicated:true without a new row; repeated conflicts each append an immutable attempt.
 
 
-Bounded rejection contexts apply to all submission tools. A new rejection has immutable `diagnostic.failure_context` and top-level response-only `current_context`. Each available object has `available: true`, `selection: "prefix"`, `buffer_stage: "canonical_target" | "intermediate_buffer"`, `prior_changes`, `start: 0`, end-exclusive `end`, `total_chars`, `text`, `truncated`, `observed_target_version` and `observed_target_hash`. The observed identity names canonical target state at transaction start. First-change and service/precondition/protocol/lineage errors use canonical context (`prior_changes: 0`); later application errors use the actual intermediate buffer and count already simulated edits. Current context always describes the refreshed locked canonical target.
-
-Select the longest prefix of at most 256 Unicode code points that fits the actual JSON byte budgets, with `end = len(text)` and `truncated = end < total_chars`. Offsets/counts are code points, not UTF-8 bytes or UTF-16 units. Each complete context is at most 4,096 bytes of compact ASCII-escaped JSON (`ensure_ascii=True`, `separators=(",", ":")`); the combined `{failure_context, current_context}` enrichment including wrapper keys is at most 8,192 such bytes. Reserve combined wrapper overhead in each context budget. Normal valid SHA-256 identities retain the full min(256, total_chars) prefix; corrupted non-ASCII stored hashes can shorten the prefix without truncating identity. Context includes no arbitrary proposer strings or duplicated failed-change ID. Prefix selection never claims an exact failed span or nearest candidate.
-
-Unavailable objects have `available: false`, `unavailable_reason: "invalid_target_id" | "target_not_found" | "unlocked_local_state"`, and null values for every other field above. Available objects have `unavailable_reason: null`. An available empty target has empty text, zero spans/count, and `truncated: false`. Dirty local ORM state is unavailable even if compatibility version/hash fields expose local values.
-
-Exact keyed recovery returns the original stored diagnostic unchanged and separately captures fresh current context; older rows lacking failure context stay unchanged. Accepted responses gain no context field. Context capture does not commit caller-owned transactions or release locks, and their observed state can remain provisional until caller commit. Use authoritative reads/search and a new linked proposal for correction.
-
-## Guarded replacement, line reads and preview
-
-New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
-
-patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
-
-Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. Dataset and performance evidence is limited to local synthetic cases because no representative sanitized dataset or production benchmark threshold was supplied.
-
-
-## Guarded operations and bounded diagnostics
-
-### Replacement, line-read and preview reference
-
-- `patchdiff_submit_replacement(target_file_id, intent, replacement, expected_target_version?, expected_current_hash?, source="model_response", parent_pdcp_log_id?, attempt?, client_request_id?, include_correlation_id=false)`: at least one guard, checked alongside every supplied guard. Uses normal submit terminal response. Valid fresh oversize returns `status=invalid_argument`, `pdcp_log_id=null`, `diagnostic.code=replacement_too_large` and a `limit_exceeded` domain; no attempt/current-PDCP row is created. Limits apply before normalization to raw text and also to the canonical result, never to old-format requests/history replay. Invalid text is classified through the audited Unicode path before size/guard/decode; existing keys are handled before fresh admission.
-- `patchdiff_read_lines(target_file_id, start_line=1, end_line=null, offset=0, max_chars=null)`: returns `status=ok`, `target_file_id`, `version`, `current_hash`, `total_chars`, `total_lines`, selected `start_line/end_line`, absolute `range_start/range_end` and page `start/end`, exact `text`, `truncated` and range-relative `next_offset`. End-line is inclusive; page and range ends are exclusive code-point offsets. Empty/final trailing-LF line is valid. Omitted/null max defaults4000, positive values cap8000; booleans/nonintegers/nonpositive line/size and out-of-range coordinates reject. Offset equal to range length returns an empty final page. No normalization of corrupt storage or local ORM flush/refresh is performed.
-- `patchdiff_preview(target_file_id, format, expected_target_version?, expected_current_hash?, <proposal>)`: format `0.2.3` uses only `pdcp_content`; `patchdiff-tx/1` uses `intent,edits`; tx/2 uses `intent,operations`; tx/3 uses `intent,replacement`. Irrelevant proposal fields reject even if explicitly null. Typed formats require a guard. No request key, lineage, audit or correlation option. Returns `preview=true`, `advisory=true`, status, stage/validity, `current_version/current_hash` and `before_version/before_hash` from one observation; accepted includes `after_hash,change_facts`, rejected includes bounded original diagnostics and no partial facts. Pending local target changes return unavailable context without flushing; no managed row, lock, commit or rollback is produced. Oversize valid replacement preview uses the same no-attempt admission classification. Preview describes a fresh proposal, not any historical keyed outcome.
-
-Discovery examples are deep-copied per result. Complete `{tools:[...]}` compact ASCII-escaped JSON is capped65536bytes excluding the JSON-RPC envelope/id, and complete examples map8192bytes. Hosts must bind illustrative IDs/guards/parents/cursors to actual observations; see the host guide's executable sequence.
-
-Preview's complete returned payload is at most32768compact ASCII-escaped JSON bytes (excluding transport envelopes). Accepted evidence is a prefix of at most32whole facts, at most2048bytes each and16384bytes including the change_facts wrapper. `total_change_count`, `returned_fact_count`, `change_facts_truncated`, `change_facts_omission_reason` and `evidence_omissions` expose omitted evidence. Verdict/stage/observed identity/after_hash remain authoritative for that observation; rejected previews never return partial facts. Textual evidence is at most1024code points/8192wrapper bytes per field; oversized failed-change identity or invalid-target echo is omitted as null, never shortened to a different identity. Diagnostic wrapper caps16384bytes, retaining bounded failure context where possible; whole-response pressure omits optional evidence in the documented deterministic order. When the diagnostic wrapper exceeds its cap, retain bounded failure_context when possible and omit arbitrary evidence with an explicit reason. If the complete payload still exceeds its cap, omit diagnostic evidence, failure_detail, failed_change_id, then an invalid-target echo and current_context in that order; if needed, drop trailing whole accepted facts, recording each omission. Retain verdict/stage/validity, valid target UUID, observed version/hash and accepted after_hash; never return full proposed target text. Full submission/recovery facts and stored diagnostics are unchanged.
-
-`include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
-
-New applicability ambiguity/selector failures retain at most five exact candidates (20 code points each side,64 match preview;8192 compact ASCII-escaped JSON bytes including wrapper), stage/prior-change/observed identity and explicit truncation; no cursor or selection. Absent/sequential failures retain at most 64 code points of immutable query evidence (1024 wrapper bytes). Response-only near misses compare only the original at-most-256-point failure prefix after actual successful service-owned commit/lock release; caller-owned transactions omit with caller_transaction. Work is at most 1,000,000 Levenshtein cells, windows query length±1, distance threshold min(4,max(1,length//4)), at most three candidates ranked distance/start/end,16-point context each side and8192 wrapper bytes. Exhaustion/oversize/historical inputs have explicit omission; unexpected post-commit errors propagate without claiming rollback. Original diagnostics stay immutable on recovery. New enrichment fields combined are at most18432 compact ASCII-escaped JSON bytes; this excludes preexisting arbitrary evidence.
-
-`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities. Discovery also provides bounded argument examples.
-
-
 ## Purpose
 
 This document defines the complete MCP tool surface for PatchDIFF.
@@ -79,16 +43,83 @@ The 20 registered MCP tools are organized into five functional groups:
 
 ---
 
-## Guarded operations and response options
+## Guarded editing, reads, preview and diagnostics
 
-`patchdiff_submit_operations(target_file_id, intent, operations, expected_target_version=null, expected_current_hash=null, source="model_response", parent_pdcp_log_id=null, attempt=null, client_request_id=null, include_correlation_id=false)` uses the same guard, lineage, audited rejection, acceptance, ledger and recovery response contract as typed edits. At leastone guard is required and every supplied guard is checked. Missing/invalid guard syntax follows the existing PROTOCOL_VALIDATION path; stale valid guards reject at PRECONDITION_GUARD.
+This section is the normative contract for guarded operations (`patchdiff-tx/2`), sole replacement (`patchdiff-tx/3`), line reads, preview, response options and bounded rejection evidence. Other documents summarize it and link here. Recorded decisions: [F01](usability/F01-decision.md), [Pass A](usability/PASS-A-decision.md) and [Pass B](usability/PASS-B-decision.md).
+
+Byte budgets below count compact ASCII-escaped JSON (`ensure_ascii=True`, `separators=(",", ":")`) and exclude the JSON-RPC envelope. Offsets and counts are Unicode code points, not UTF-8 bytes or UTF-16 units.
+
+### `patchdiff_submit_operations` (`patchdiff-tx/2`)
+
+`patchdiff_submit_operations(target_file_id, intent, operations, expected_target_version=null, expected_current_hash=null, source="model_response", parent_pdcp_log_id=null, attempt=null, client_request_id=null, include_correlation_id=false)` uses the same guard, lineage, audited rejection, acceptance, ledger and recovery response contract as typed edits. At least one guard is required, and every supplied guard is checked. Missing or invalid guard syntax follows the existing `PROTOCOL_VALIDATION` path; stale valid guards reject at `PRECONDITION_GUARD`.
 
 Each operation is one of:
 
-- Match: `{op:"match",match,replace,change_id?,rationale?,risk?,occurrence_index?,anchor_before?,anchor_after?}` with unchanged exact-match selector rules.
-- Span: `{op:"span",start,end,expected_text,replace,change_id?,rationale?,risk?}`. Unknown fields and selectors reject. Coordinates are sequential canonical code points; start/end are non-bool integers 0..2^63-1, end>=start. Explicit insertion uses start=end and empty expected_text. Expected/replacement newlines canonicalize before application. Span bounds or expected-text mismatch reject the entire transaction without partial facts or ledger rows.
+- Match: `{op: "match", match, replace, change_id?, rationale?, risk?, occurrence_index?, anchor_before?, anchor_after?}`, with the unchanged exact-match selector rules.
+- Span: `{op: "span", start, end, expected_text, replace, change_id?, rationale?, risk?}`. `start` and `end` are non-bool integers in `0..2^63-1`, `end` is exclusive and `end >= start`. Selectors and unknown fields reject. Coordinates refer to the sequential canonical buffer, that is, the text after earlier operations in the same transaction. The canonical `expected_text` must equal that span exactly; newlines in `expected_text` and `replace` are canonicalized before application. Explicit insertion uses `start == end` with an empty `expected_text`.
 
-All submission tools accept the optional boolean response flag. UUID correlation is invocation-only, including on dedup; false/omitted preserves correlation omission. Invalid types return invalid_argument before admission with no attempt. Exact diagnostic candidates name all exact occurrences, not candidates certified to satisfy failed selectors. Near misses are response-only suggestions within original bounded context and do not change the verdict. See the diagnostic bounds above. Discovery's x-patchdiff-capabilities names the tx/2 format, immutable profile, allowed operation names, sequential-code-point coordinates and insertion support. Discovery examples are described above and in the host guide.
+Mixed match/span transactions are atomic. Span applicability failures are `span_out_of_bounds` and `span_expected_text_mismatch`; either rejects the whole transaction with no partial facts or ledger rows. New records use immutable runtime `patchdiff-mvp-0.3.0`, which enables spans but not `replace_all`. Typed-match and legacy records keep `patchdiff-mvp-0.2.2` with unchanged records, fingerprints and profiles. Replay refuses unsupported profile/operation pairs. Span facts add `operation: "span"` to the existing runtime-derived spans, counts and hashes, and the ledger `origin` stays `typed`. No migration is required.
+
+### `patchdiff_submit_replacement` (`patchdiff-tx/3`)
+
+`patchdiff_submit_replacement(target_file_id, intent, replacement, expected_target_version?, expected_current_hash?, source="model_response", parent_pdcp_log_id?, attempt?, client_request_id?, include_correlation_id=false)` records exactly one guarded `replace_all` through the existing locked pipeline under immutable runtime `patchdiff-mvp-0.4.0`; tx/2 and `0.3.0` are unchanged. At least one guard is required, every supplied guard is checked, and the tool returns the normal submission response. An empty replacement is valid. One typed ledger row records the full original span with `operation: "replace_all"`.
+
+Fresh admission limits apply to the raw replacement and to its canonical result: at most 1,000,000 code points and at most 1,048,576 UTF-8 bytes each, inclusive, checked in the order raw code points, raw bytes, canonical code points, canonical bytes. A valid oversized fresh replacement returns `status: "invalid_argument"`, `pdcp_log_id: null`, `diagnostic.code: "replacement_too_large"` and a `limit_exceeded` domain; no attempt or current-PDCP row is written.
+
+Ordering: invalid text is classified first, through the audited Unicode path. An existing `client_request_id` is then recovered (same fingerprint) or audited as a conflict (different fingerprint) before fresh admission runs. A conflict audit row therefore stores the complete submitted record even when it exceeds the fresh limits, as every tx/1 and tx/2 attempt does; the limits bound what can be admitted as a new replacement, not the size of audit evidence. Replay never applies admission limits.
+
+### `patchdiff_read_lines`
+
+`patchdiff_read_lines(target_file_id, start_line=1, end_line=null, offset=0, max_chars=null)` returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `total_chars`, `total_lines`, the selected `start_line`/`end_line`, absolute `range_start`/`range_end`, page `start`/`end`, exact `text`, `truncated` and range-relative `next_offset`.
+
+- Lines are one-based and LF-only. `end_line` is inclusive (default: last line), and each line includes its trailing LF. A trailing LF creates a final empty line; an empty target has one empty line.
+- Page and range ends are exclusive code-point offsets. Omitted or null `max_chars` defaults to 4,000; larger values cap at 8,000. An `offset` equal to the range length returns an empty final page.
+- Booleans, non-integers, non-positive line numbers or sizes, a negative offset and out-of-range coordinates return `invalid_argument`; an unknown target returns `not_found`.
+- The read is one ordinary column observation under `no_autoflush`. It never flushes, refreshes or edits local ORM state and never normalizes corrupt storage. Each continuation page is a new observation and can see a newer version.
+
+### `patchdiff_preview`
+
+`patchdiff_preview(target_file_id, format, expected_target_version?, expected_current_hash?, <proposal>)` evaluates a fresh proposal with the same read-only guard/decode/apply evaluator as submission, from one coherent observation. Format `0.2.3` uses only `pdcp_content`; `patchdiff-tx/1` uses `intent` and `edits`; `patchdiff-tx/2` uses `intent` and `operations`; `patchdiff-tx/3` uses `intent` and `replacement`. Fields that belong to another format reject even when explicitly null. Typed formats require a guard. There is no request key, lineage, audit or correlation option.
+
+Preview writes no row, takes no lock, and never commits or rolls back. It returns `preview: true`, `advisory: true`, status, stage and validity, plus `current_version`/`current_hash` and `before_version`/`before_hash` from the same observation. Accepted previews include `after_hash` and `change_facts`; rejected previews include bounded original diagnostics and never partial facts. Pending local ORM changes to the target return unavailable context without flushing. A valid oversized replacement receives the same no-attempt `replacement_too_large` classification as submission. Preview never computes near misses and never reflects a historical keyed outcome. Submission always re-locks and rechecks guards; prefer a version guard, because a hash alone cannot detect intervening no-op or ABA changes.
+
+Preview evidence is bounded:
+
+- The complete returned payload is at most 32,768 bytes.
+- Accepted evidence is a prefix of at most 32 whole facts, each at most 2,048 bytes, and at most 16,384 bytes including the `change_facts` wrapper. `total_change_count`, `returned_fact_count`, `change_facts_truncated`, `change_facts_omission_reason` and `evidence_omissions` report what was omitted.
+- Each textual evidence field is at most 1,024 code points and 8,192 wrapper bytes. An oversized failed-change ID or invalid-target echo is omitted as null, never shortened into a different identity.
+- The diagnostic wrapper is at most 16,384 bytes. When it is exceeded, bounded `failure_context` is kept if it fits and other evidence is omitted with an explicit reason.
+- If the complete payload still exceeds its cap, diagnostic evidence, `failure_detail`, `failed_change_id`, an invalid-target echo and `current_context` are omitted in that order, then trailing whole accepted facts are dropped. Each omission is recorded.
+
+Verdict, stage, validity, a valid target UUID, observed version/hash and accepted `after_hash` are always retained. Preview never returns full proposed target text. This projection does not change full submission or recovery facts or stored diagnostics.
+
+### Response option: `include_correlation_id`
+
+All submission tools accept `include_correlation_id` (boolean, default `false`). When `true`, each invocation, including exact recovery, returns a fresh UUIDv4 `correlation_id`. It is never stored and never enters request keys or fingerprints. A non-boolean value returns `invalid_argument` before admission, with no attempt row.
+
+### Bounded rejection context
+
+A new rejection carries immutable `diagnostic.failure_context` and top-level, response-only `current_context`. Each available object has `available: true`, `unavailable_reason: null`, `selection: "prefix"`, `buffer_stage: "canonical_target" | "intermediate_buffer"`, `prior_changes`, `start: 0`, end-exclusive `end`, `total_chars`, `text`, `truncated`, `observed_target_version` and `observed_target_hash`.
+
+- The observed identity names canonical target state at transaction start. First-change, service, precondition, protocol and lineage errors use canonical context (`prior_changes: 0`). Later application errors use the actual intermediate buffer and count the edits already simulated; those edits were not committed, so never apply intermediate offsets to committed content. `current_context` always describes the refreshed, locked canonical target.
+- Each context is the longest prefix of at most 256 code points that fits the byte budgets, with `end = len(text)` and `truncated = end < total_chars`. Each complete context is at most 4,096 bytes, and the combined `{failure_context, current_context}` enrichment, wrapper keys included, is at most 8,192 bytes. Normal SHA-256 identities keep the full `min(256, total_chars)` prefix; a corrupted non-ASCII stored hash can shorten the prefix but never the identity. Context contains no proposer strings or duplicated failed-change ID, and does not claim to locate the failed span.
+- Unavailable objects have `available: false`, `unavailable_reason: "invalid_target_id" | "target_not_found" | "unlocked_local_state"`, and null for every other field. An available empty target has empty text, zero offsets and `truncated: false`. Dirty local ORM state is unavailable even when compatibility version/hash fields expose local values.
+- Exact keyed recovery returns the original stored diagnostic unchanged and captures a fresh `current_context`; older rows without failure context are not retrofitted. Accepted responses carry no context. Context capture never commits caller-owned transactions or releases their locks, so their observed state can remain provisional until the caller commits. Use reads, search and a new linked proposal to correct a rejection.
+
+### Exact candidates and near misses
+
+- `match_ambiguous` and `disambiguation_invalid` failures retain at most five exact candidates (occurrence index, span, 20 code points of context per side and a match preview of at most 64 code points) within 8,192 bytes including the wrapper, plus stage, prior-change count, observed identity and explicit truncation. Candidates list exact occurrences; they are not certified to satisfy the failed selectors, and there is no cursor or automatic selection.
+- `match_absent` and `sequential_match_invalid` failures persist `diagnostic.near_miss_query`: the canonical query when its raw length is at most 64 code points, otherwise `omission_reason: "match_too_large"`, within 1,024 wrapper bytes.
+- Response-only `near_misses` are computed only after a service-owned transaction has committed and released its lock, and only from the stored failure prefix (at most 256 code points) and query. Caller-owned transactions return `omission_reason: "caller_transaction"`.
+- Windows have the query length minus one, the query length and the query length plus one (positive lengths only). Distance is code-point Levenshtein, accepted when nonzero and at most `min(4, max(1, len(query) // 4))`. At most three candidates are returned, ranked by `(distance, start, end)`, each with 16 code points of context per side, within 8,192 wrapper bytes.
+- Distances come from an exact Ukkonen-banded dynamic program: cells farther than the threshold from the diagonal are not evaluated, so `comparison_cells` counts banded cells only. A 64-point query over a full 256-point prefix needs at most 147,456 cells, well under the 1,000,000-cell work cap. Exhausting the cap returns `work_budget_exhausted` with no partial ranking; historical outcomes without stored inputs return `historical_context_unavailable`.
+- `truncated` reflects prefix omission or candidate-count truncation. Near misses never promise distant matches and never change the verdict. Unexpected post-commit errors propagate without claiming rollback. All newly added enrichment fields together are at most 18,432 bytes; this excludes preexisting arbitrary evidence.
+
+### Discovery capabilities and examples
+
+`tools/list` advertises the tx/2 operation schema and, for both new submission tools, `x-patchdiff-capabilities` derived from the runtime constants (protocol, immutable runtime, allowed operations, and either coordinate/insertion support or size limits). It also publishes 13 schema-conforming `inputSchema.examples` across nine tools, deep-copied per result. The complete `{tools: [...]}` payload is at most 65,536 bytes and the complete examples map at most 8,192 bytes. Examples are illustrative arguments: hosts must bind real target IDs, guards, parents and cursors (see the host guide's executable sequence). Every advertised example runs over real stdio and PostgreSQL in the test suite; this is API coverage, not a model-success or production-performance claim.
+
+---
 
 ## 1. Target Lifecycle Tools
 
@@ -149,7 +180,7 @@ Lists exact occurrences of `text` (overlapping spans counted) with bounded conte
 - **Arguments**:
   - `target_file_id` (`string`, required).
   - `text` (`string`, required): exact string to locate.
-  - `context_chars` (non-bool integer >=0, default40): context window before/after each match, clamped to400. Negative, boolean, null, string and float values return invalid_argument.
+  - `context_chars` (non-bool integer >=0, default 40): context window before/after each match, clamped to 400. Negative, boolean, null, string and float values return invalid_argument.
   - `start_occurrence` (`integer >= 1`, default `1`): 1-based occurrence index to start from.
   - `max_results` (`integer >= 1`, default `200`): maximum occurrences to return.
 - **Returns**:
@@ -309,7 +340,7 @@ Replays accepted logs against the initial snapshot, dispatching on `(protocol_ve
 Returns a bounded, newest-first page of append-only attempts (accepted and rejected).
 - **Arguments**:
   - `target_file_id` (`string`, required).
-  - `limit` (positive non-bool integer or null, default50): omitted/null selects50; values above200 clamp to200.
+  - `limit` (positive non-bool integer or null, default 50): omitted/null selects 50; values above 200 clamp to 200.
   - `before_sequence` (`integer >= 1 | null`, optional): exclusive positive non-bool integer continuation token.
   - `status` (`"accepted" | "rejected" | null`, optional).
   - `content_hash` (`string | null`, optional): filter by `pdcp_content_hash`.
@@ -322,7 +353,7 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 - **Arguments**:
   - `target_file_id` (`string`, required): target UUID.
   - `include_previous_cycles` (`boolean`, optional, default `false`): include entries from closed editing cycles.
-  - `limit` (positive non-bool integer or null, optional): default50, cap200. Omitted/null selects50; zero/negative/boolean/float/string values return invalid_argument.
+  - `limit` (positive non-bool integer or null, optional): default 50, cap 200. Omitted/null selects 50; zero/negative/boolean/float/string values return invalid_argument.
   - `before_sequence` (`integer >= 1 | null`, optional): exclusive upper bound on `ledger_sequence` for paging backward.
 - **Returns**:
   ```json
@@ -353,7 +384,7 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
     "next_sequence": null
   }
   ```
-- **Ordering and cursor example**: For sequences1..10 with limit3, attempts return [10,9,8], ledger [8,9,10], both next_sequence=8. A ledger call with before_sequence=8 returns [5,6,7]. Both cursors are exclusive; ledger reverses only the selected newest page for display. Newer inserted rows are excluded from continuation below a previous cursor. Both history tools return the same empty continuation fields; include flags must be boolean.
+- **Ordering and cursor example**: For sequences 1..10 with limit 3, attempts return [10,9,8], ledger [8,9,10], both next_sequence=8. A ledger call with before_sequence=8 returns [5,6,7]. Both cursors are exclusive; ledger reverses only the selected newest page for display. Newer inserted rows are excluded from continuation below a previous cursor. Both history tools return the same empty continuation fields; include flags must be boolean.
 - **Caller Note**: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal. Callers migrating from the legacy unbounded behavior must page via `before_sequence`.
 
 ---

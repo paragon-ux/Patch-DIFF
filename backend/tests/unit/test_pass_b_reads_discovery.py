@@ -71,3 +71,20 @@ def test_structured_admission_survives_mcp_serialization():
     payload = _submit_result_to_payload(result)
     assert payload["pdcp_log_id"] is None and payload["diagnostic"] == result.diagnostic
     assert payload["correlation_id"] == result.correlation_id and payload["status"] == "invalid_argument"
+
+
+def test_capability_metadata_and_descriptions_derive_from_runtime_constants():
+    import re
+
+    from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION
+    from app.mcp.external_adapter import TOOL_DESCRIPTIONS, _input_schema_for
+    from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
+
+    assert _input_schema_for("patchdiff_submit_replacement")["x-patchdiff-capabilities"] == {
+        "protocol_version": REPLACEMENT_PROTOCOL_VERSION, "runtime_version": REPLACEMENT_RUNTIME_VERSION,
+        "operations": ["replace_all"], "max_code_points": MAX_REPLACEMENT_CHARS, "max_utf8_bytes": MAX_REPLACEMENT_BYTES,
+    }
+    assert f"runtime {OPERATIONS_RUNTIME_VERSION};" in TOOL_DESCRIPTIONS["patchdiff_submit_operations"]
+    assert f"runtime {REPLACEMENT_RUNTIME_VERSION}." in TOOL_DESCRIPTIONS["patchdiff_submit_replacement"]
+    assert f"{MAX_REPLACEMENT_CHARS:,} code points" in TOOL_DESCRIPTIONS["patchdiff_submit_replacement"]
+    assert not [text for text in TOOL_DESCRIPTIONS.values() if re.search(r"\b(runtime|immutable|profile)\d", text)]

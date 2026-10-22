@@ -17,7 +17,8 @@ from app.mcp import tools as _registered_tools  # noqa: F401 - imports register 
 from app.mcp.server import registry
 from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
-from app.core.versions import OPERATIONS_RUNTIME_VERSION
+from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
+from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION
 
 
 PROTOCOL_VERSION = "2024-11-05"
@@ -30,10 +31,14 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_initialize_target": "Initialize a canonical PatchDIFF target.",
     "patchdiff_build_prompt_context": "Convenience: build prompt context (bounded target PREFIX, not retrieval; see context_truncated). Prefer patchdiff_read_target / patchdiff_find_occurrences.",
     "patchdiff_submit_pdcp": "Submit untrusted legacy .pdcp (v0.2.3) content through deterministic validation and commit services.",
-    "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. Uses immutable runtime0.3.0; no replace_all.",
+    "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. "
+                                   f"Uses immutable runtime {OPERATIONS_RUNTIME_VERSION}; no replace_all.",
     "patchdiff_submit_edits": "Submit a typed edit transaction (exact match/replace strings as fields). Requires expected_target_version and/or expected_current_hash. Supports optional client_request_id idempotency. Same validation, atomic commit and logging as .pdcp.",
     "patchdiff_read_target": "Authoritative bounded read of canonical target text by code-point offset, with version, hash, and next_start continuation.",
-    "patchdiff_submit_replacement": "Submit a sole guarded replace_all as patchdiff-tx/3, frozen runtime 0.4.0. Fresh raw and canonical replacement limits: 1,000,000 code points and 1,048,576 UTF-8 bytes, inclusive. Empty text allowed. Existing-key recovery precedes admission.",
+    "patchdiff_submit_replacement": f"Submit a sole guarded replace_all as {REPLACEMENT_PROTOCOL_VERSION}, immutable runtime "
+                                    f"{REPLACEMENT_RUNTIME_VERSION}. Fresh raw and canonical replacement limits: "
+                                    f"{MAX_REPLACEMENT_CHARS:,} code points and {MAX_REPLACEMENT_BYTES:,} UTF-8 bytes, inclusive. "
+                                    "Empty text allowed. Existing-key recovery precedes admission.",
     "patchdiff_read_lines": "Read an inclusive one-based LF line range from one observed version/hash. Trailing LF creates a final empty line. offset/next_offset are code points within the selected range; text defaults to 4000 and caps at 8000. Each page is a new observation.",
     "patchdiff_preview": "Advisory fresh-proposal evaluation without audit, request keys, writes or row locks. Explicit format 0.2.3, patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3; submit must recheck guards. Prefer version guards to detect ABA changes.",
     "patchdiff_find_occurrences": "List exact occurrences of a string (overlapping counted) with offsets, bounded context, 1-based occurrence_index, and start_occurrence/max_results pagination.",
@@ -255,8 +260,8 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         }
     if name == "patchdiff_submit_replacement":
         schema["x-patchdiff-capabilities"] = {
-            "protocol_version": "patchdiff-tx/3", "runtime_version": "patchdiff-mvp-0.4.0",
-            "operations": ["replace_all"], "max_code_points": 1_000_000, "max_utf8_bytes": 1_048_576,
+            "protocol_version": REPLACEMENT_PROTOCOL_VERSION, "runtime_version": REPLACEMENT_RUNTIME_VERSION,
+            "operations": ["replace_all"], "max_code_points": MAX_REPLACEMENT_CHARS, "max_utf8_bytes": MAX_REPLACEMENT_BYTES,
         }
     if name == "patchdiff_preview":
         schema["allOf"] = []

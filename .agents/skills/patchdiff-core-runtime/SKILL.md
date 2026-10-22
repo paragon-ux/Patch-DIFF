@@ -9,11 +9,11 @@ description: "Use when implementing or reviewing the deterministic PatchDIFF cor
 
 The PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`) is pure and deterministic.
 
-It receives declarative transactions (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations or `0.2.3` legacy `.pdcp` text) and validates them against canonical target state.
+It receives declarative transactions (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement or `0.2.3` legacy `.pdcp` text) and validates them against canonical target state.
 
 The core runtime may:
 
-- parse `patchdiff-tx/1`, `patchdiff-tx/2` and `0.2.3` transaction formats
+- parse `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` and `0.2.3` transaction formats
 - validate protocol structure and transaction applicability
 - enumerate exact `MATCH` occurrences (including overlapping spans in `patchdiff-mvp-0.2.2`)
 - resolve explicit disambiguation (`occurrence_index`, `anchor_before`, `anchor_after`, and legacy `region_hint`)
@@ -44,7 +44,7 @@ PatchDIFF supports four declarative transaction input formats:
    - Each edit contains required `match` and `replace`, plus optional advisory `change_id`, `rationale`, `risk`, and disambiguation fields (`occurrence_index`, `anchor_before`, `anchor_after`).
    - Parsed by `backend/app/pdcp/typed.py`. Delimiter-collision-free; minimal mandatory prose overhead.
 2. **Guarded operations (`patchdiff-tx/2`)**: explicit ordered match/span records via patchdiff_submit_operations; mandatory guard, exact expected_text, sequential canonical code-point spans and explicit empty-span insertion on immutable 0.3.0.
-3. **Sole replacement (`patchdiff-tx/3`)** via patchdiff_submit_replacement, mandatory guards and immutable0.4.0. It supports exactly one explicit replace_all, never a mixed transaction. Fresh service size limits are not replay/parser restrictions.
+3. **Sole replacement (`patchdiff-tx/3`)** via patchdiff_submit_replacement, mandatory guards and immutable 0.4.0. It supports exactly one explicit replace_all, never a mixed transaction. Fresh service size limits are not replay/parser restrictions.
 4. **Legacy `.pdcp` (v0.2.3, frozen)**:
    - Declarative plain text with `PDCP 0.2.3` header, 7 required manifest fields per block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters.
    - Parsed by `backend/app/pdcp/parser.py`. Retained for backward compatibility and historical replay.
@@ -139,14 +139,10 @@ The transaction is the smallest atomic unit:
 - If all edits apply successfully: target advances to `new_version`, `new_hash` is computed, and `change_facts` are emitted.
 - If any edit fails: target remains unchanged, failure reason and diagnostic are surfaced, and `after_hash = null`.
 
-## F01 rejection context
+## Goal F additions
 
-Keep immutable `diagnostic.failure_context` separate from response-only fresh `current_context`. Capture only the actual failing buffer prefix (at most 256 code points), counts and prior simulated changes; label canonical versus intermediate state and use transaction-start canonical observed hash/version. Do not retain an unbounded failed buffer, alter verdicts/profiles/fingerprints, retrofit old diagnostics, commit caller transactions or release their locks. Explicit unavailable contexts cover malformed/missing targets and unlocked local state. MCP_TOOLS specifies fields and actual compact ASCII-escaped JSON byte caps:4096 per context and8192 combined including wrapper keys. Tests must cover non-BMP/escapes, sequential buffers, refreshed recovery after later edits, audit/ledger nonmutation and caller rollback.
-
-## Pass A additions
-
-Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.
-
-## Pass B additions
-
-Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.
+- tx/2 span operations and the tx/3 sole `replace_all` run in the shared applier under immutable profiles `patchdiff-mvp-0.3.0` and `patchdiff-mvp-0.4.0`. tx/2 never accepts `replace_all`; tx/3 accepts exactly one `replace_all` and nothing else; historical profiles and 0.2.2 reject both operation kinds.
+- Spans use sequential canonical code-point coordinates and require `buffer[start:end] == canonicalize_text(expected_text)`; failures are `span_out_of_bounds` and `span_expected_text_mismatch`.
+- On rejection, capture only the actual failing buffer prefix (at most 256 code points), its total length and the prior simulated-change count (`FailureBufferContext`), plus bounded exact candidates or the bounded near-miss query. Never retain an unbounded buffer.
+- Fresh tx/3 size admission, preview, near-miss ranking and correlation IDs are service/MCP concerns and stay out of the core runtime.
+- Contract: `docs/PATCHDIFF_CORE_SPEC.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
