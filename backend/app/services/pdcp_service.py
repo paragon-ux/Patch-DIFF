@@ -46,6 +46,7 @@ from app.pdcp.typed import (
 )
 from app.services.rejection_context import available_context, unavailable_context, bound_candidates, context_identity
 from app.services.near_miss_service import near_misses
+from app.services.preview_evidence import bound_preview
 from app.storage.models import (
     AppendOnlyManifestLedger,
     AppendOnlyPdcpLogs,
@@ -304,6 +305,11 @@ def submit_replacement(
 
 
 def preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, **proposal) -> dict:
+    """Return bounded advisory evidence without changing submit or durable facts."""
+    return bound_preview(_preview(session, target_file_id=target_file_id, format=format, **proposal))
+
+
+def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, **proposal) -> dict:
     """Observe and evaluate a fresh proposal without writes, locks or identity reservation."""
     from app.services.read_service import observe_target
 
