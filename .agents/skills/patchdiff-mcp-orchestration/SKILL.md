@@ -119,4 +119,6 @@ Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered m
 
 ## Pass B additions
 
+Preview-only output projection follows PASS-B-decision.md:32768compact ASCII-escaped payload bytes; accepted facts prefix32/perfact2048/wrapper16384; text1024code points/8192wrapper and diagnostic16384. Expose total/returned/truncation/omission metadata. Keep verdict/stage/coherent state/hash, omit oversized identity rather than shortening it, and preserve all submit/core/history facts.
+
 Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.
