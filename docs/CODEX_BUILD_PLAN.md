@@ -30,7 +30,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
    - Robust UUID and lineage validation: malformed `target_file_id` returns `CONTEXT_INVALID`; missing target returns `TARGET_NOT_FOUND`; invalid parent log ID logs a `CONTEXT_INVALID` rejection on the target with `parent_pdcp_log_id = null`.
 4. **Matcher Overlap Fix, Explicit Profile Dispatch & Component Checks**:
    - Fixed `matcher.py` to count all exact matches including overlaps (`overlapping=True`).
-   - Implemented `SUPPORTED_RUNTIME_PROFILES` with explicit dispatch for `"patchdiff-mvp-0.2.2"` (current) and historical profiles `"patchdiff-mvp-0.2.1"` / `"patchdiff-mvp-0.2.0"` (overlapping, singleton selectors ignored) and `"patchdiff-mvp-0.1.0"` (legacy non-overlapping replay).
+   - Implemented `SUPPORTED_RUNTIME_PROFILES` with explicit dispatch for `"patchdiff-mvp-0.2.2"` (new typed-match/legacy submissions), `"patchdiff-mvp-0.3.0"` (match/span operations) and `"patchdiff-mvp-0.4.0"` (sole replacement). Historical `"patchdiff-mvp-0.2.1"` / `"patchdiff-mvp-0.2.0"` retain overlapping matching with ignored singleton selectors; `"patchdiff-mvp-0.1.0"` retains non-overlapping replay.
    - `patchdiff_replay` validates initial snapshot hash, contiguous version chains, before/after hashes, and reports component-level `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`).
 5. **Request Idempotency & Lost-Response Recovery**:
    - Migration `20261020_0002` added `client_request_id`, `request_fingerprint`, and partial unique index `uq_pdcp_logs_target_client_request_id`.
