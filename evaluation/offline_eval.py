@@ -1,4 +1,4 @@
-"""Offline payload accounting for PDCP v0.2.3 vs typed patchdiff-tx/1 proposals.
+"""Offline payload accounting for PDCP v0.2.3, tx/1 and guarded tx/3 proposals.
 
 Deterministic; no model, no network, no database. It answers ONLY:
   * how many UTF-8 bytes does an equivalent proposal take in each serialization,
@@ -14,6 +14,13 @@ Three proposal variants are compared per scenario:
   2. Typed patchdiff-tx/1 with matched advisory prose (intent + per-edit change_id,
      rationale carrying the equivalent prose description, and risk="low")
   3. Minimal typed patchdiff-tx/1 (intent + {match, replace} only)
+
+A separate tx/3 section measures the same admitted, guarded whole-target replacement
+as its persisted canonical record and complete tools/call request line. The latter
+uses fixed JSON-RPC id=1, compact UTF-8 JSON and one LF; it is a deterministic
+serialization measurement, not a captured network/database run. Its accepted result
+and hash are checked against explicit content oracles through the frozen 0.4.0
+applier. It makes no cross-format verdict-equivalence claim for replacement.
 
 It does NOT measure tokens, model validity rates, task success, latency, or recovery
 turns. Those require a live-model study (see docs/MODERNIZATION_CHANGE_DOC.md),
@@ -31,9 +38,13 @@ from typing import Any
 
 from app.core.hashing import canonical_sha256
 from app.core.result import AcceptedCoreResult
+from app.core.versions import REPLACEMENT_RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
 from app.pdcp.parser import PDCPParseError, parse_pdcp
 from app.pdcp.protocol_validator import ProtocolValidationError, validate_pdcp
+from app.pdcp.replacement import (
+    build_replacement_record, decode_replacement_record, replacement_size_error, to_parsed_replacement,
+)
 from app.pdcp.typed import build_record, canonical_record_json, parse_typed_record, to_parsed_transaction
 
 TARGET_ID = "11111111-1111-1111-1111-111111111111"
@@ -90,6 +101,14 @@ SCENARIOS = [
         "accepted",
         canonical_sha256("a\nb"),
     ),
+]
+
+REPLACEMENT_SCENARIOS = [
+    ("guarded whole-target rewrite", "old", "new", "new"),
+    ("empty target", "", "new", "new"),
+    ("empty replacement", "old", "", ""),
+    ("unicode, quotes, CRLF", "\u00e9 \u4e2d \U0001f31f", 'say "hi" \\\r\n\U0001f31f', 'say "hi" \\\n\U0001f31f'),
+    ("whole-target 2 KB rewrite", LONG_BODY, LONG_BODY.replace("fox", "cat"), LONG_BODY.replace("fox", "cat")),
 ]
 
 
@@ -164,6 +183,46 @@ def run_pdcp(target: str, edits: list[tuple[str, str]]) -> tuple[str, str | None
 def run_typed(target: str, persisted_json: str) -> tuple[str, str | None]:
     typed = parse_typed_record(json.loads(persisted_json))
     return _verdict(apply_pdcp_transaction(target, to_parsed_transaction(typed, target_type="text/plain")))
+
+
+def replacement_payloads(target: str, replacement: str) -> tuple[str, str]:
+    """Serialize one guarded proposal in storage and complete stdio request forms."""
+    arguments = {
+        "target_file_id": TARGET_ID, "intent": "Replace complete target.", "replacement": replacement,
+        "expected_target_version": 0, "expected_current_hash": canonical_sha256(target),
+    }
+    persisted = canonical_record_json(build_replacement_record(
+        target_file_id=TARGET_ID, intent=arguments["intent"], replacement=replacement,
+        expected_target_version=arguments["expected_target_version"],
+        expected_current_hash=arguments["expected_current_hash"],
+    ))
+    request = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+               "params": {"name": "patchdiff_submit_replacement", "arguments": arguments}}
+    wire_line = json.dumps(request, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n"
+    return persisted, wire_line
+
+
+def replacement_matches_oracle(target: str, persisted_json: str, expected: str) -> bool:
+    """Check fresh admission and accepted replacement execution, without persistence."""
+    record = json.loads(persisted_json)
+    replacement = record["operations"][0]["replace"]
+    if replacement_size_error(replacement) is not None:
+        return False
+    # This section models the known initial version=0 and both matching guards.
+    if record["expected_target_version"] != 0 or record["expected_current_hash"] != canonical_sha256(target):
+        return False
+    transaction = decode_replacement_record(persisted_json, runtime_version=REPLACEMENT_RUNTIME_VERSION)
+    profile = resolve_runtime_profile(REPLACEMENT_RUNTIME_VERSION)
+    result = apply_pdcp_transaction(
+        target, to_parsed_replacement(transaction, target_type="text/plain"),
+        overlapping_matches=profile.overlapping_matches,
+        enforce_singleton_selectors=profile.enforce_singleton_selectors,
+        allow_span_operations=profile.span_operations,
+        allow_replace_all_operations=profile.replace_all_operations,
+    )
+    return (isinstance(result, AcceptedCoreResult) and result.target_content == expected
+            and result.after_hash == canonical_sha256(expected) and result.change_count == 1
+            and result.change_facts[0]["operation"] == "replace_all")
 
 
 def _verdict(result: Any) -> tuple[str, str | None]:
@@ -242,14 +301,29 @@ def main() -> int:
         )
 
     print()
+    print("=== 3. Guarded tx/3 Replacement UTF-8 Bytes (same proposal, storage vs complete request) ===")
+    print(f"{'scenario':30} {'tx/3 record B':>14} {'tools/call line B':>18}  accepted content/hash oracle")
+    all_replacements = True
+    for name, target, replacement, expected in REPLACEMENT_SCENARIOS:
+        persisted, wire_line = replacement_payloads(target, replacement)
+        matches = replacement_matches_oracle(target, persisted, expected)
+        all_replacements &= matches
+        print(f"{name:30} {len(persisted.encode('utf-8')):14d} {len(wire_line.encode('utf-8')):18d}  "
+              f"{'OK' if matches else 'MISMATCH'}")
+    print("  tx/3 request = compact UTF-8 JSON-RPC tools/call, fixed id=1, including one terminal LF.")
+    print("  Counts are serialized bytes; no live transport, persistence, timing or representative workload is measured.")
+
+    print()
     print("Accounting separation:")
     print("  - pdcp vs typed_match isolates serialization/framing difference with matched advisory prose.")
     print("  - typed_match vs typed_min isolates byte savings from dropping mandatory prose manifest fields.")
-    print("  - Persisted record bytes include schema_version='patchdiff-tx/1' and canonical edit defaults.")
+    print("  - tx/1 persisted bytes include format='patchdiff-tx/1' and nullable guard fields; omitted edit defaults stay omitted.")
     print("  - MCP request payload bytes measure the JSON arguments sent over tools/call.")
     print("Bytes only. Not tokens, not model validity, not task success. Live-model study: NOT RUN.")
     print("Verdict equivalence on the shared applier:", "OK" if all_equivalent else "MISMATCH")
-    return 0 if all_equivalent else 1
+    print("  Historical equivalence permits only the named PDCP delimiter-collision expressibility exception.")
+    print("Accepted guarded replacement content/hash oracles:", "OK" if all_replacements else "MISMATCH")
+    return 0 if all_equivalent and all_replacements else 1
 
 
 if __name__ == "__main__":

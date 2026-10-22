@@ -1,21 +1,32 @@
 # PATCHDIFF_CORE_SPEC.md
 
-F01 bounded rejection evidence: the pure applier returns only a prefix of at most 256 code points and its total length/prior simulated-change count for the actual failing buffer, never an unbounded failed buffer. The service adds canonical observed identity and persists `diagnostic.failure_context` once. A later sequential failure is labeled `intermediate_buffer`; it does not imply a partial commit. Service/protocol failures use locked canonical state. Response-only `current_context` is fresh on every rejected call, including exact keyed recovery, while the original diagnostic is immutable and old rows are not retrofitted. MCP_TOOLS defines the complete fields, unavailable states and 4,096/8,192 ASCII-escaped JSON byte budgets. Verdicts, accepted facts, hashes, fingerprints and execution profiles remain unchanged.
+Bounded rejection evidence: the pure applier returns only a prefix of at most 256 code points and its total length/prior simulated-change count for the actual failing buffer, never an unbounded failed buffer. The service adds canonical observed identity and persists `diagnostic.failure_context` once. A later sequential failure is labeled `intermediate_buffer`; it does not imply a partial commit. Service/protocol failures use locked canonical state. Response-only `current_context` is fresh on every rejected call, including exact keyed recovery, while the original diagnostic is immutable and old rows are not retrofitted. MCP_TOOLS defines the complete fields, unavailable states and 4,096/8,192 ASCII-escaped JSON byte budgets. Verdicts, accepted facts, hashes, fingerprints and execution profiles remain unchanged.
 
-## Goal F Pass A contract
+## Guarded replacement, line reads and preview
 
-The normative [Pass A decision](usability/PASS-A-decision.md) defines F03/F05/F06/F07 fields, bounds, omission states, ownership and compatibility before implementation. `include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
+Preview response evidence is projected after the shared evaluator: at most32768compact ASCII-escaped JSON bytes,32whole accepted facts/perfact2048/wrapped16384bytes, explicit total/returned/truncation/omission metadata. Text evidence caps1024code points/8192wrapper bytes and diagnostic wrapper16384bytes with deterministic evidence omission. This projection never changes shared core results, failed verdicts/stages, valid target/observed state/accepted hash, stored audit or full submit/recovery facts; rejected previews still have no staged facts. Oversized identities are omitted, never rewritten. The complete omission policy is in [MCP_TOOLS.md](MCP_TOOLS.md).
+
+New patchdiff_submit_replacement records guarded tx/3 sole replace_all on immutable0.4.0 through the existing locked pipeline; tx/2/0.3.0 remain unchanged. Fresh replacement raw/result limits are1,000,000 code points and1,048,576 UTF-8 bytes each (inclusive). Invalid Unicode keeps audited classification; existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return pre-admission invalid_argument/replacement_too_large without writes; replay bypasses admission limits. Empty replacement is valid; one typed ledger row records full original span and operation=replace_all.
+
+patchdiff_read_lines uses one ordinary column observation under no_autoflush, one-based inclusive LF-only line ranges, trailing newline inclusion and final empty line, range-relative offset continuation, default4000/cap8000 code points. It never edits or flushes local state. patchdiff_preview uses the same fresh read-only guard/decode/apply evaluator as submit with coherent ordinary observation, explicit format and pending-local-target rejection. Preview has no request-key/audit/lineage parameter, writes/locks/commit/rollback; accepted previews return facts/hash, rejected previews no partial facts. It never invokes post-commit near misses. Submission always re-locks/rechecks.
+
+Discovery publishes bounded schema-conforming examples, copied per result, at most65,536 compact ASCII-escaped JSON bytes overall and8192 for the complete examples map. Every advertised(tool,index) is bound to real returned IDs/guards/parents/cursors and executed over stdio/PostgreSQL, including exact dedup and complete attempt-descending/ledger-page-ascending traversal. No migration, optional typed guards, normalized identity, editing adapter, model-success or representative production-performance claim. Dataset and performance evidence is limited to local synthetic cases because no representative sanitized dataset or production benchmark threshold was supplied.
+
+
+## Guarded operations and bounded diagnostics
+
+`include_correlation_id=false` is a boolean response option on submissions; true emits a fresh UUIDv4 even on exact recovery. Invalid types return pre-admission invalid_argument with no attempt. Correlation never enters durable records, request keys or fingerprints.
 
 New applicability ambiguity/selector failures retain at most five exact candidates (20 code points each side,64 match preview;8192 compact ASCII-escaped JSON bytes including wrapper), stage/prior-change/observed identity and explicit truncation; no cursor or selection. Absent/sequential failures retain at most 64 code points of immutable query evidence (1024 wrapper bytes). Response-only near misses compare only the original at-most-256-point failure prefix after actual successful service-owned commit/lock release; caller-owned transactions omit with caller_transaction. Work is at most 1,000,000 Levenshtein cells, windows query length±1, distance threshold min(4,max(1,length//4)), at most three candidates ranked distance/start/end,16-point context each side and8192 wrapper bytes. Exhaustion/oversize/historical inputs have explicit omission; unexpected post-commit errors propagate without claiming rollback. Original diagnostics stay immutable on recovery. New enrichment fields combined are at most18432 compact ASCII-escaped JSON bytes; this excludes preexisting arbitrary evidence.
 
-`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities; worked discovery examples remain Pass B.
+`patchdiff_submit_operations` records `patchdiff-tx/2`: intent, mandatory guard and ordered explicit match/span operations. Span start/end are non-bool integers 0..2^63-1, end exclusive and end>=start; expected_text/replace are required strings. Coordinates describe each sequential canonical buffer; exact canonical expected text must equal that span. Empty-span insertion is allowed with empty expected text; selectors on span and unknown fields/operations reject. Mixed match/span edits are atomic. Applicability errors are span_out_of_bounds and span_expected_text_mismatch. Both forms use the existing locked submit/rejection/ledger path. New records use immutable patchdiff-mvp-0.3.0 enabling span operations; old forms keep 0.2.2 and unchanged records/fingerprints/profiles. Replay refuses unsupported profile/operation pairs. Span facts include operation=span and existing runtime-derived hashes/spans/counts; ledger origin remains typed. No migration or replace_all in 0.3.0. Discovery advertises operation schema and x-patchdiff-capabilities. Discovery also provides bounded argument examples.
 
 
 ## Purpose
 
 This document defines the deterministic PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`).
 
-The core runtime accepts declarative, non-executable edit transactions—typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`) and frozen legacy `.pdcp` (v0.2.3) files—and canonical target text. It validates protocol structure, validates transaction applicability, applies exact `MATCH/REPLACE` operations sequentially in memory, computes runtime-derived change facts, commits atomically per target, logs all accepted and rejected attempts with retry lineage and idempotency, supports SAVE checkpointing, and executes deterministic replay.
+The core runtime accepts declarative, non-executable edit transactions—typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), sole guarded replacement (`patchdiff-tx/3`) and frozen legacy `.pdcp` (v0.2.3) files—and canonical target text. It validates protocol structure, validates transaction applicability, applies exact `MATCH/REPLACE` operations sequentially in memory, computes runtime-derived change facts, commits atomically per target, logs all accepted and rejected attempts with retry lineage and idempotency, supports SAVE checkpointing, and executes deterministic replay.
 
 The core runtime is deterministic, pure, and trusted.
 
@@ -28,7 +39,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ```text
 canonical UTF-8 target text
-+ declarative non-executable transaction (patchdiff-tx/1, patchdiff-tx/2 or .pdcp 0.2.3)
++ declarative non-executable transaction (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3 or .pdcp 0.2.3)
 -> lowering into ParsedPDCP representation
 -> exact deterministic MATCH (all exact spans counted)
 -> immediate sequential REPLACE simulation in memory
@@ -40,11 +51,13 @@ canonical UTF-8 target text
 -> deterministic replay dispatching on (protocol_version, runtime_version)
 ```
 
-Both input formats lower into the same internal `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
+All four input formats lower into the same internal `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 - **`patchdiff-tx/1` (primary typed)**: Structured JSON with required `intent`, required state guard (`expected_target_version` and/or `expected_current_hash`), ordered `edits[]` (`match`, `replace`, optional `change_id`, `rationale`, `risk`, `occurrence_index`, `anchor_before`, `anchor_after`), optional `client_request_id`, `parent_pdcp_log_id`, and `attempt`. Persisted in `append_only_pdcp_logs.pdcp_content` as deterministic canonical JSON.
+- **`patchdiff-tx/2` (guarded operations)**: Ordered explicit match/span operations, required intent and state guard, sequential canonical code-point spans with exact expected text; immutable profile 0.3.0.
+- **`patchdiff-tx/3` (sole replacement)**: Exactly one guarded `replace_all`, immutable profile 0.4.0; fresh size admission is a service boundary, not a replay grammar constraint.
 - **`.pdcp` v0.2.3 (frozen legacy/import)**: Declarative text with `PDCP 0.2.3` header, 7 required manifest fields per change block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters. Persisted as raw text.
 
-Neither format is executable code.
+None of these formats is executable code.
 
 ## Canonicalization
 
@@ -131,7 +144,7 @@ Historical logs accepted under runtime `patchdiff-mvp-0.1.0` (which advanced the
 
 ## Disambiguation
 
-In current runtime 0.2.2, supplied selecting fields are conjunctive constraints for every match count, including a singleton. With multiple occurrences, selecting fields must resolve exactly one span:
+In match-capable runtime profiles 0.2.2 and later, supplied selecting fields are conjunctive constraints for every match count, including a singleton. With multiple occurrences, selecting fields must resolve exactly one span:
 1. `occurrence_index`: 1-based index over the global list of exact occurrences in left-to-right order.
 2. `anchor_before`: exact substring that must appear before the candidate span.
 3. `anchor_after`: exact substring that must appear after the candidate span.
@@ -238,7 +251,7 @@ Replay reconstructs canonical target state from the `initial_upload` snapshot pl
 1. Verify initial snapshot content against `initial_snapshot.content_hash`.
 2. For each accepted log row in sequence:
    - Verify `log.target_file_id == target.target_file_id`.
-   - Dispatch parser on `log.protocol_version` (`"0.2.3"`, `"patchdiff-tx/1"` or span-capable `"patchdiff-tx/2"`).
+   - Dispatch parser on `log.protocol_version` (`"0.2.3"`, `"patchdiff-tx/1"`, span-capable `"patchdiff-tx/2"` or sole replacement `"patchdiff-tx/3"`). tx/3 requires replacement-capable profile0.4.0; replay bypasses fresh service admission size limits.
    - Resolve matcher profile via `SUPPORTED_RUNTIME_PROFILES[log.runtime_version]`.
    - Verify contiguous version chain (`before_version == expected_version`, `after_version == expected_version + 1`).
    - Verify `before_hash == canonical_sha256(replay_buffer)`.
@@ -251,4 +264,4 @@ Replay reconstructs canonical target state from the `initial_upload` snapshot pl
    - `recomputed_hash_matches`: `canonical_sha256(target.current_content) == reconstructed_hash`
    - `version_matches`: `target.version == expected_version`
 
-DEV-DB-001 changes only materialized content health:canonical_sha256 and historical hashes remain unchanged. Successful history reconstruction is independent of materialized_state_matches; replay never repairs storage. CRLF/bare-CR storage divergence is visible even when its canonical hash agrees.
+Materialized content health: canonical_sha256 and historical hashes remain unchanged. Successful history reconstruction is independent of materialized_state_matches; replay never repairs storage. CRLF/bare-CR storage divergence is visible even when its canonical hash agrees.

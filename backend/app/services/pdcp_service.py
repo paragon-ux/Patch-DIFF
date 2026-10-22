@@ -8,6 +8,7 @@ import uuid
 from functools import wraps
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from types import SimpleNamespace
 from typing import Any
 
 from sqlalchemy import select
@@ -18,9 +19,11 @@ from app.core.hashing import canonical_sha256
 from app.core.input_text import invalid_text_paths, is_persistable_text, safe_input_text
 from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
 from app.core.validity import ValidationStage, validity_levels
-from app.core.versions import OPERATIONS_RUNTIME_VERSION, RUNTIME_VERSION, resolve_runtime_profile
+from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
 from app.pdcp.operations import (OPERATIONS_PROTOCOL_VERSION, build_operations_record, parse_operations_record, to_parsed_operations)
+from app.pdcp.replacement import (REPLACEMENT_PROTOCOL_VERSION, build_replacement_record, parse_replacement_record,
+                                 to_parsed_replacement, replacement_size_error)
 from app.pdcp.models import (
     REQUIRED_MANIFEST_FIELDS,
     SUPPORTED_MANIFEST_FIELDS,
@@ -43,6 +46,7 @@ from app.pdcp.typed import (
 )
 from app.services.rejection_context import available_context, unavailable_context, bound_candidates, context_identity
 from app.services.near_miss_service import near_misses
+from app.services.preview_evidence import bound_preview
 from app.storage.models import (
     AppendOnlyManifestLedger,
     AppendOnlyPdcpLogs,
@@ -274,6 +278,151 @@ def submit_operations(
                    client_request_id=client_request_id, _before_final_guard=_before_final_guard)
 
 
+@_submission_response
+def submit_replacement(
+    session: Session, *, target_file_id: uuid.UUID | str, intent: Any, replacement: Any,
+    expected_target_version: int | None = None, expected_current_hash: str | None = None,
+    submission_source: str = "model_response", parent_pdcp_log_id: uuid.UUID | str | None = None,
+    attempt: int | None = None, client_request_id: str | None = None,
+    include_correlation_id: bool = False, _before_final_guard=None,
+) -> SubmitPDCPResult:
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return _invalid_target_uuid_result(target_file_id)
+    record = build_replacement_record(target_file_id=str(target_uuid), intent=intent, replacement=replacement,
+                                     expected_target_version=expected_target_version, expected_current_hash=expected_current_hash)
+    def decode(target):
+        typed = parse_replacement_record(record)
+        return to_parsed_replacement(typed, target_type=target.target_type), typed
+    return _submit(session, target_uuid=target_uuid, submitted_target_id=target_file_id,
+                   record_content=canonical_record_json(record), raw_record=record, decode=decode,
+                   protocol_version=REPLACEMENT_PROTOCOL_VERSION, guard_required=True,
+                   expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+                   submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
+                   regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
+                   client_request_id=client_request_id, _before_final_guard=_before_final_guard,
+                   _fresh_admission=lambda: replacement_size_error(replacement))
+
+
+def preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, **proposal) -> dict:
+    """Return bounded advisory evidence without changing submit or durable facts."""
+    return bound_preview(_preview(session, target_file_id=target_file_id, format=format, **proposal))
+
+
+def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, **proposal) -> dict:
+    """Observe and evaluate a fresh proposal without writes, locks or identity reservation."""
+    from app.services.read_service import observe_target
+
+    fields = {
+        SUPPORTED_PROTOCOL_VERSION: {"pdcp_content"},
+        TYPED_PROTOCOL_VERSION: {"intent", "edits"},
+        OPERATIONS_PROTOCOL_VERSION: {"intent", "operations"},
+        REPLACEMENT_PROTOCOL_VERSION: {"intent", "replacement"},
+    }
+    common = {"preview": True, "advisory": True, "target_file_id": safe_input_text(target_file_id)}
+    if not isinstance(format, str) or format not in fields:
+        return {**common, "status": "invalid_argument", "code": "invalid_format", "detail": "Unsupported preview format."}
+    if set(proposal) - fields[format] - {"expected_target_version", "expected_current_hash"}:
+        return {**common, "status": "invalid_argument", "code": "irrelevant_proposal_fields",
+                "detail": "Preview fields must belong to the explicit format."}
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        result = _invalid_target_uuid_result(target_file_id)
+        return {**common, "status": result.status, "failure_reason": result.failure_reason.value,
+                "failure_detail": result.failure_detail, "failed_change_id": None,
+                "validation_stage": result.validation_stage.value,
+                "validity": validity_levels(result.status, result.failure_reason, stage=result.validation_stage),
+                "diagnostic": result.diagnostic, "current_context": result.current_context,
+                "current_hash": None, "current_version": None, "before_hash": None, "before_version": None,
+                "after_hash": None}
+    local = session.identity_map.get(session.identity_key(CloudTargetFiles, target_uuid))
+    pending = (local is not None and (local in session.dirty or local in session.deleted or session.is_modified(local)))
+    pending = pending or any(isinstance(item, CloudTargetFiles) and item.target_file_id == target_uuid for item in session.new)
+    if pending:
+        context = unavailable_context("unlocked_local_state")
+        return {**common, "status": "rejected", "failure_reason": FailureReason.CONTEXT_INVALID.value,
+                "failure_detail": "Pending local direct modifications on target are not permitted.",
+                "failed_change_id": None, "validation_stage": ValidationStage.PRECONDITION_GUARD.value,
+                "validity": validity_levels("rejected", stage=ValidationStage.PRECONDITION_GUARD),
+                "diagnostic": {"failure_context": context}, "current_context": context,
+                "current_hash": None, "current_version": None, "before_hash": None, "before_version": None,
+                "after_hash": None}
+    observation = observe_target(session, target_uuid)
+    if observation is None:
+        context = unavailable_context("target_not_found")
+        return {**common, "status": "rejected", "failure_reason": FailureReason.TARGET_NOT_FOUND.value,
+                "failure_detail": "Target file was not found.", "failed_change_id": None,
+                "validation_stage": ValidationStage.PRECONDITION_GUARD.value,
+                "validity": validity_levels("rejected", stage=ValidationStage.PRECONDITION_GUARD),
+                "diagnostic": {"failure_context": context}, "current_context": context,
+                "current_hash": None, "current_version": None, "before_hash": None, "before_version": None,
+                "after_hash": None}
+    target = SimpleNamespace(target_file_id=observation.target_file_id, target_type=observation.target_type,
+                             current_content=observation.current_content, current_hash=observation.current_hash,
+                             version=observation.current_version)
+    version, digest = proposal.get("expected_target_version"), proposal.get("expected_current_hash")
+    record_args = {"target_file_id": str(target_uuid), "intent": proposal.get("intent"),
+                   "expected_target_version": version, "expected_current_hash": digest}
+    if format == SUPPORTED_PROTOCOL_VERSION:
+        record = proposal.get("pdcp_content")
+        def decode(target):
+            if not isinstance(record, str):
+                raise ProtocolValidationError(FailureReason.CONTEXT_INVALID, "pdcp_content must be a string.")
+            parsed = parse_pdcp(record)
+            validate_pdcp(parsed)
+            if parsed.header.target_file_id != str(target_uuid):
+                raise ProtocolValidationError(FailureReason.CONTEXT_INVALID, "PDCP target_file_id does not match the submitted target.")
+            if parsed.header.target_hash is not None and parsed.header.target_hash != target.current_hash:
+                raise TargetHashApplicabilityError(FailureReason.TARGET_HASH_MISMATCH,
+                                                   "PDCP target_hash does not match the current target hash.")
+            return parsed, None
+    elif format == TYPED_PROTOCOL_VERSION:
+        record = build_record(**record_args, edits=proposal.get("edits"))
+        def decode(target):
+            typed = parse_typed_record(record)
+            return to_parsed_transaction(typed, target_type=target.target_type), typed
+    elif format == OPERATIONS_PROTOCOL_VERSION:
+        record = build_operations_record(**record_args, operations=proposal.get("operations"))
+        def decode(target):
+            typed = parse_operations_record(record)
+            return to_parsed_operations(typed, target_type=target.target_type), typed
+    else:
+        record = build_replacement_record(**record_args, replacement=proposal.get("replacement"))
+        def decode(target):
+            typed = parse_replacement_record(record)
+            return to_parsed_replacement(typed, target_type=target.target_type), typed
+    encoding_paths = invalid_text_paths({"record": record, "expected_target_version": version, "expected_current_hash": digest})
+    encoding = None
+    if encoding_paths:
+        encoding = {"evidence_format": "patchdiff-invalid-input/1",
+                    "invalid_input_paths": [path[:256] for path in encoding_paths[:20]],
+                    "invalid_input_paths_truncated": len(encoding_paths) > 20 or any(len(path) > 256 for path in encoding_paths[:20])}
+    if format == REPLACEMENT_PROTOCOL_VERSION and not encoding_paths:
+        size_error = replacement_size_error(proposal.get("replacement"))
+        if size_error is not None:
+            return {**common, "status": "invalid_argument", "code": "replacement_too_large",
+                    "diagnostic": {"code": "replacement_too_large", "limit_exceeded": size_error}}
+    _, _, result, stage = _evaluate_proposal(
+        target=target, decode=decode, protocol_version=format, guard_required=format != SUPPORTED_PROTOCOL_VERSION,
+        expected_target_version=version, expected_current_hash=digest, encoding_diagnostic=encoding)
+    common.update(status=result.status, current_hash=target.current_hash, current_version=target.version,
+                  before_hash=target.current_hash, before_version=target.version, after_hash=result.after_hash,
+                  validation_stage=(ValidationStage.ACCEPTED if result.status == "accepted" else stage).value,
+                  validity=validity_levels(result.status, stage=ValidationStage.ACCEPTED if result.status == "accepted" else stage),
+                  failed_change_id=None)
+    if isinstance(result, AcceptedCoreResult):
+        return {**common, "change_facts": list(result.change_facts)}
+    diagnostic = dict(result.diagnostic or {})
+    diagnostic["failure_context"] = available_context(
+        result.failure_buffer or FailureBufferContext.capture(target.current_content),
+        observed_target_version=target.version, observed_target_hash=target.current_hash)
+    if "exact_candidates" in diagnostic:
+        diagnostic["exact_candidates"] = bound_candidates("exact_candidates", {
+            **diagnostic["exact_candidates"], **context_identity(diagnostic["failure_context"])})
+    return {**common, "failure_reason": result.failure_reason.value, "failure_detail": result.failure_detail,
+            "failed_change_id": result.failed_change_id, "diagnostic": diagnostic, "current_context": _target_context(target)}
+
+
 def _submit(
     session: Session,
     *,
@@ -292,6 +441,7 @@ def _submit(
     regeneration_source: str | None,
     client_request_id: str | None = None,
     _before_final_guard=None,
+    _fresh_admission: Callable[[], str | None] | None = None,
 ) -> SubmitPDCPResult:
     """Shared locked validate/apply/commit path for every submission format."""
 
@@ -385,16 +535,17 @@ def _submit(
 
         # Existing keys keep exact outcome recovery across stricter validation versions.
         # Only already-persisted keys bypass new-key syntax checks, under the target lock.
-        existing_log = (
-            session.scalar(
-                select(AppendOnlyPdcpLogs).where(
-                    AppendOnlyPdcpLogs.target_file_id == target.target_file_id,
-                    AppendOnlyPdcpLogs.client_request_id == client_request_id,
+        with session.no_autoflush:
+            existing_log = (
+                session.scalar(
+                    select(AppendOnlyPdcpLogs).where(
+                        AppendOnlyPdcpLogs.target_file_id == target.target_file_id,
+                        AppendOnlyPdcpLogs.client_request_id == client_request_id,
+                    )
                 )
+                if isinstance(client_request_id, str) and is_persistable_text(client_request_id)
+                else None
             )
-            if isinstance(client_request_id, str) and is_persistable_text(client_request_id)
-            else None
-        )
         try:
             validated_req_id = (
                 existing_log.client_request_id
@@ -528,6 +679,17 @@ def _submit(
                 return replace(result, client_request_id=validated_req_id)
 
 
+        if not encoding_paths and _fresh_admission is not None:
+            size_error = _fresh_admission()
+            if size_error is not None:
+                return SubmitPDCPResult(
+                    status="invalid_argument", target_file_id=target_uuid, pdcp_log_id=None,
+                    before_hash=before_hash, after_hash=None, before_version=before_version, after_version=None,
+                    current_hash=before_hash, current_version=before_version,
+                    failure_detail="Replacement exceeds fresh admission limits.",
+                    diagnostic={"code": "replacement_too_large", "limit_exceeded": size_error},
+                    client_request_id=validated_req_id)
+
         current_pdcp = _upsert_current_pdcp(
             session,
             target=target,
@@ -542,14 +704,10 @@ def _submit(
         )
 
         if encoding_paths:
-            rejection = _core_rejection(
-                FailureReason.TARGET_ENCODING_INVALID,
-                "Input strings must be UTF-8 without NUL.",
-                before_hash,
-                protocol_version=protocol_version,
-                stage=ValidationStage.PROTOCOL_VALIDATION,
-                diagnostic_extra=encoding_diagnostic,
-            )
+            _, _, rejection, _ = _evaluate_proposal(
+                target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
+                expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+                encoding_diagnostic=encoding_diagnostic)
             return _persist_rejection(
                 session, target=target, current_pdcp=current_pdcp,
                 pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
@@ -625,85 +783,9 @@ def _submit(
                 request_fingerprint=fingerprint,
             )
 
-        guard_rejection, guard_stage = _guard_rejection(
-            target=target,
-            expected_target_version=expected_target_version,
-            expected_current_hash=expected_current_hash,
-            guard_required=guard_required,
-            protocol_version=protocol_version,
-        )
-        if guard_rejection is not None and guard_stage is not None:
-            return _persist_rejection(
-                session,
-                target=target,
-                current_pdcp=current_pdcp,
-                pdcp_content=pdcp_content,
-                pdcp_content_hash=pdcp_content_hash,
-                expected_target_version=expected_target_version,
-                expected_current_hash=expected_current_hash,
-                submission_source=submission_source,
-                parent_pdcp_log_id=parent_uuid,
-                regeneration_attempt=regeneration_attempt,
-                regeneration_source=regeneration_source,
-                protocol_version=protocol_version,
-                parsed=None,
-                rejection=guard_rejection,
-                before_hash=before_hash,
-                before_version=before_version,
-                stage=guard_stage,
-                client_request_id=validated_req_id,
-                request_fingerprint=fingerprint,
-            )
-
-        parsed: ParsedPDCP | None = None
-        typed: TypedTransaction | None = None
-        stage = ValidationStage.TRANSACTION_APPLICABILITY
-        try:
-            parsed, typed = decode(target)
-            profile = resolve_runtime_profile(_runtime_version(protocol_version))
-            core_result = apply_pdcp_transaction(
-                target.current_content,
-                parsed,
-                overlapping_matches=profile.overlapping_matches,
-                enforce_singleton_selectors=profile.enforce_singleton_selectors,
-                allow_span_operations=profile.span_operations,
-            )
-            if isinstance(core_result, RejectedCoreResult):
-                core_result = _enrich_diagnostic(
-                    core_result,
-                    protocol_version=protocol_version,
-                    stage=ValidationStage.TRANSACTION_APPLICABILITY,
-                )
-        except PDCPParseError as exc:
-            stage = ValidationStage.PROTOCOL_VALIDATION
-            core_result = _core_rejection(
-                exc.failure_reason,
-                exc.failure_detail,
-                before_hash,
-                exc.failed_change_id,
-                protocol_version=protocol_version,
-                stage=stage,
-            )
-        except TargetHashApplicabilityError as exc:
-            stage = ValidationStage.TRANSACTION_APPLICABILITY
-            core_result = _core_rejection(
-                exc.failure_reason,
-                exc.failure_detail,
-                before_hash,
-                exc.failed_change_id,
-                protocol_version=protocol_version,
-                stage=stage,
-            )
-        except ProtocolValidationError as exc:
-            stage = ValidationStage.PROTOCOL_VALIDATION
-            core_result = _core_rejection(
-                exc.failure_reason,
-                exc.failure_detail,
-                before_hash,
-                exc.failed_change_id,
-                protocol_version=protocol_version,
-                stage=stage,
-            )
+        parsed, typed, core_result, stage = _evaluate_proposal(
+            target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
+            expected_target_version=expected_target_version, expected_current_hash=expected_current_hash)
 
         if isinstance(core_result, RejectedCoreResult):
             return _persist_rejection(
@@ -783,6 +865,74 @@ def _submit(
             client_request_id=validated_req_id,
             request_fingerprint=fingerprint,
         )
+
+
+def _evaluate_proposal(
+    *, target, decode, protocol_version: str, guard_required: bool,
+    expected_target_version, expected_current_hash, encoding_diagnostic: dict | None = None,
+) -> tuple[ParsedPDCP | None, TypedTransaction | None, AcceptedCoreResult | RejectedCoreResult, ValidationStage]:
+    """Read-only fresh-proposal evaluator shared by locked submit and advisory preview."""
+    if encoding_diagnostic is not None:
+        return None, None, _core_rejection(
+            FailureReason.TARGET_ENCODING_INVALID, "Input strings must be UTF-8 without NUL.", target.current_hash,
+            protocol_version=protocol_version, stage=ValidationStage.PROTOCOL_VALIDATION,
+            diagnostic_extra=encoding_diagnostic), ValidationStage.PROTOCOL_VALIDATION
+    guard_rejection, guard_stage = _guard_rejection(
+        target=target, expected_target_version=expected_target_version,
+        expected_current_hash=expected_current_hash, guard_required=guard_required, protocol_version=protocol_version)
+    if guard_rejection is not None:
+        return None, None, guard_rejection, guard_stage
+    parsed: ParsedPDCP | None = None
+    typed: TypedTransaction | None = None
+    stage = ValidationStage.TRANSACTION_APPLICABILITY
+    try:
+        parsed, typed = decode(target)
+        profile = resolve_runtime_profile(_runtime_version(protocol_version))
+        core_result = apply_pdcp_transaction(
+            target.current_content,
+            parsed,
+            overlapping_matches=profile.overlapping_matches,
+            enforce_singleton_selectors=profile.enforce_singleton_selectors,
+            allow_span_operations=profile.span_operations,
+            allow_replace_all_operations=profile.replace_all_operations,
+        )
+        if isinstance(core_result, RejectedCoreResult):
+            core_result = _enrich_diagnostic(
+                core_result,
+                protocol_version=protocol_version,
+                stage=ValidationStage.TRANSACTION_APPLICABILITY,
+            )
+    except PDCPParseError as exc:
+        stage = ValidationStage.PROTOCOL_VALIDATION
+        core_result = _core_rejection(
+            exc.failure_reason,
+            exc.failure_detail,
+            target.current_hash,
+            exc.failed_change_id,
+            protocol_version=protocol_version,
+            stage=stage,
+        )
+    except TargetHashApplicabilityError as exc:
+        stage = ValidationStage.TRANSACTION_APPLICABILITY
+        core_result = _core_rejection(
+            exc.failure_reason,
+            exc.failure_detail,
+            target.current_hash,
+            exc.failed_change_id,
+            protocol_version=protocol_version,
+            stage=stage,
+        )
+    except ProtocolValidationError as exc:
+        stage = ValidationStage.PROTOCOL_VALIDATION
+        core_result = _core_rejection(
+            exc.failure_reason,
+            exc.failure_detail,
+            target.current_hash,
+            exc.failed_change_id,
+            protocol_version=protocol_version,
+            stage=stage,
+        )
+    return parsed, typed, core_result, stage
 
 
 def _guard_rejection(
@@ -1127,6 +1277,8 @@ def _reconstruct_deduplicated_result(
 
 
 def _runtime_version(protocol_version: str) -> str:
+    if protocol_version == REPLACEMENT_PROTOCOL_VERSION:
+        return REPLACEMENT_RUNTIME_VERSION
     return OPERATIONS_RUNTIME_VERSION if protocol_version == OPERATIONS_PROTOCOL_VERSION else RUNTIME_VERSION
 
 
@@ -1194,7 +1346,7 @@ def _core_rejection(
     stage: ValidationStage = ValidationStage.PROTOCOL_VALIDATION,
     diagnostic_extra: dict[str, Any] | None = None,
 ) -> RejectedCoreResult:
-    is_typed = protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION)
+    is_typed = protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION)
     diagnostic: dict[str, Any] = {
         "format": protocol_version,
         "retryable": reason
@@ -1213,7 +1365,10 @@ def _core_rejection(
         diagnostic["requires_new_pdcp"] = True
 
     if reason in {FailureReason.MANIFEST_INVALID, FailureReason.MANIFEST_MISSING}:
-        if protocol_version == OPERATIONS_PROTOCOL_VERSION:
+        if protocol_version == REPLACEMENT_PROTOCOL_VERSION:
+            diagnostic.update({"allowed_operations": ["replace_all"], "sole_operation": True,
+                               "required_operation_fields": ["op", "replace"]})
+        elif protocol_version == OPERATIONS_PROTOCOL_VERSION:
             diagnostic.update({"allowed_operations": ["match", "span"],
                                "required_span_fields": ["op", "start", "end", "expected_text", "replace"],
                                "required_match_fields": ["op", "match", "replace"],
@@ -1256,7 +1411,7 @@ def _enrich_diagnostic(
     diag["format"] = protocol_version
     diag["validation_stage"] = stage.value
     diag["requires_new_submission"] = True
-    if protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION):
+    if protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION):
         diag.pop("requires_new_pdcp", None)
     else:
         diag["requires_new_pdcp"] = True
@@ -1296,7 +1451,8 @@ def _resolve_parent_log(
     parent_uuid = _try_coerce_uuid(parent_pdcp_log_id)
     if parent_uuid is None:
         return None, "parent_pdcp_log_id must be a valid UUID."
-    parent = session.get(AppendOnlyPdcpLogs, parent_uuid)
+    with session.no_autoflush:
+        parent = session.get(AppendOnlyPdcpLogs, parent_uuid)
     if parent is None:
         return None, "parent_pdcp_log_id does not exist."
     if parent.target_file_id != target_uuid:

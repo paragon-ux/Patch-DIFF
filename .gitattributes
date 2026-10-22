@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Accepted authority snapshots must retain the exact bytes hashed in AUTHORITY.json.
+docs/usability/accepted/DEVIN_CHANGE_PLAN-b33faaf-v2.md -text
+docs/usability/accepted/Devin-Goal-F.md -text
+docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md -text
+# Verification captures retain the exact bytes identified in their manifest.
+docs/usability/release/* -text

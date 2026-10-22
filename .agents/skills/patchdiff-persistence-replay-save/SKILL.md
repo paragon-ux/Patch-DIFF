@@ -57,8 +57,8 @@ $env:PYTHONPATH = "backend"
 New admitted submissions on known targets append a terminal row in the submission transaction. Exact keyed recovery appends none. Unknown/malformed targets, pre-admission option errors and disallowed pending local changes have no linked row; caller rollback and infrastructure failures can prevent persistence.
 - `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
 - `target_file_id`: foreign key to `cloud_target_files`.
-- `protocol_version`: `'patchdiff-tx/1'`, `'patchdiff-tx/2'` or `'0.2.3'`.
-- `runtime_version`: `'patchdiff-mvp-0.3.0'` for `patchdiff-tx/2`; current legacy and `patchdiff-tx/1` submissions retain `'patchdiff-mvp-0.2.2'`. Historical `0.1.0`, `0.2.0` and `0.2.1` profiles remain supported under their recorded identifiers.
+- `protocol_version`: `'patchdiff-tx/1'`, `'patchdiff-tx/2'`, `'patchdiff-tx/3'` or `'0.2.3'`.
+- `runtime_version`: `'patchdiff-mvp-0.4.0'` for `patchdiff-tx/3`, `'patchdiff-mvp-0.3.0'` for `patchdiff-tx/2`; current legacy and `patchdiff-tx/1` submissions retain `'patchdiff-mvp-0.2.2'`. Historical `0.1.0`, `0.2.0` and `0.2.1` profiles remain supported under their recorded identifiers.
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
 - `client_request_id`: client-supplied TEXT key for idempotency (1–128 printable ASCII characters without whitespace; `req-001` is valid, a UUID is optional).
@@ -66,7 +66,7 @@ New admitted submissions on known targets append a terminal row in the submissio
 - `parent_pdcp_log_id`: link to predecessor log in retry lineage.
 - `before_version`, `after_version`: target version progression.
 - `before_hash`, `after_hash`: target SHA-256 progression.
-- `pdcp_content`: canonical JSON for `patchdiff-tx/1` or `patchdiff-tx/2`; raw valid legacy text for `0.2.3`. Invalid-text rejections use the reversible ASCII evidence envelope.
+- `pdcp_content`: canonical JSON for `patchdiff-tx/1`, `patchdiff-tx/2` or `patchdiff-tx/3`; raw valid legacy text for `0.2.3`. Invalid-text rejections use the reversible ASCII evidence envelope.
 - `pdcp_content_hash`: SHA-256 of `pdcp_content`.
 
 For rejected invalid Unicode, pdcp_content contains a deterministic ASCII-escaped patchdiff-invalid-input/1 evidence envelope of the original input, not an accepted transaction. JSONB holds safe marker/path strings only. A safe request key recovers its original rejection with a domain-separated invalid-evidence fingerprint; unencodable keys remain NULL on the row and are preserved in evidence. Never write decoded surrogate/NUL text to PostgreSQL or change valid-input fingerprints. Caller-owned commit/rollback and target locks retain their usual semantics.
@@ -135,3 +135,7 @@ Keep immutable `diagnostic.failure_context` separate from response-only fresh `c
 ## Pass A additions
 
 Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.
+
+## Pass B additions
+
+Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.

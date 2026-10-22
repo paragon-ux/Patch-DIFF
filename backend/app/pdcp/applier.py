@@ -19,6 +19,7 @@ def apply_pdcp_transaction(
     overlapping_matches: bool = True,
     enforce_singleton_selectors: bool = True,
     allow_span_operations: bool = False,
+    allow_replace_all_operations: bool = False,
 ) -> AcceptedCoreResult | RejectedCoreResult:
     """Apply a parsed+validated transaction to an in-memory buffer.
 
@@ -42,7 +43,12 @@ def apply_pdcp_transaction(
     change_facts: list[dict] = []
     for change in parsed.changes:
         change_id = change.manifest.change_id
-        if change.operation != "match":
+        if change.operation == "replace_all":
+            if not allow_replace_all_operations or len(parsed.changes) != 1:
+                return _rejected(FailureReason.BLOCK_MALFORMED, "Sole replacement is unsupported by this runtime profile.",
+                                 before_hash, change_id, buffer=current, prior_changes=len(change_facts))
+            span = MatchSpan(0, len(current))
+        elif change.operation != "match":
             if change.operation != "span" or not allow_span_operations:
                 return _rejected(FailureReason.BLOCK_MALFORMED, "Operation is unsupported by this runtime profile.",
                                  before_hash, change_id, buffer=current, prior_changes=len(change_facts))
@@ -119,8 +125,8 @@ def apply_pdcp_transaction(
                 "replacement_sha256": canonical_sha256(replacement),
             }
         )
-        if change.operation == "span":
-            change_facts[-1]["operation"] = "span"
+        if change.operation != "match":
+            change_facts[-1]["operation"] = change.operation
 
     return AcceptedCoreResult(
         before_hash=before_hash,

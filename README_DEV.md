@@ -5,7 +5,8 @@
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test]"
+python -m pip install -r requirements.lock
+python -m pip install --no-deps -e .
 docker compose up -d postgres
 alembic -c backend/app/migrations/alembic.ini upgrade head
 uvicorn app.main:app --app-dir backend --reload

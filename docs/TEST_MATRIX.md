@@ -18,7 +18,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ---
 
-Test counts are recorded with each exact executed revision in docs/remediation evidence; the matrix below describes coverage rather than a permanent total.
+Test counts are recorded with each exact executed revision in verification evidence; the matrix below describes coverage rather than a permanent total.
 
 ## 1. Pure Unit Test Matrix (`backend/tests/unit/`)
 
@@ -32,10 +32,10 @@ Run with: `pytest backend/tests/unit -q`
 | `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.2`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
 | `test_parser.py` | Protocol header parsing; manifest line format; delimiter enforcement (`<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`); delimiter collision rejection (`FailureReason.BLOCK_MALFORMED`). |
 | `test_protocol_validator.py` | 7 required manifest fields (v0.2.3); risk value validation; structural purity (rejection of executable logic outside payloads). |
-| `test_mcp_arguments_paging.py` | DEV-MCP-001/002: service context type/bounds, discovery/routing, filtered limit+1 continuation, defaults/caps, error shapes and invalid argument types. |
-| `test_conflict_audit.py` | DEV-SVC-001: bounded submitted-key diagnostic, NULL persisted key versus response echo, submitted fingerprint policy. |
-| `test_invalid_input_unicode.py` | DEV-RUN-002: all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
-| `test_selector_profiles.py` | DEV-RUN-001: singleton/multiple/overlapping/absent selectors across typed, legacy and sequential buffers; historical profile compatibility. |
+| `test_mcp_arguments_paging.py` | service context type/bounds, discovery/routing, filtered limit+1 continuation, defaults/caps, error shapes and invalid argument types. |
+| `test_conflict_audit.py` | bounded submitted-key diagnostic, NULL persisted key versus response echo, submitted fingerprint policy. |
+| `test_invalid_input_unicode.py` | all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
+| `test_selector_profiles.py` | singleton/multiple/overlapping/absent selectors across typed, legacy and sequential buffers; historical profile compatibility. |
 | `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, `anchor_after`, and `region_hint`. |
 | `test_applier.py` | Sequential in-memory simulation; immediate buffer replacement; deletion (`replace=""`); sequential match invalidation; calculation of runtime-derived `change_facts`. |
 | `test_typed_transaction.py` | **C1, C4**: `patchdiff-tx/1` parsing; `build_record` and `canonical_record_json` determinism; default `change_id` generation; `validate_client_request_id` (ASCII printable, no whitespace, 1..128 chars); `TYPED_EDIT_JSON_SCHEMA` conformance; delimiter collision immunity; verdict equivalence with PDCP across test corpus. |
@@ -51,16 +51,16 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 
 | Module | Requirements / Capabilities Tested |
 | --- | --- |
-| `test_conflict_audit_live.py` | DEV-SVC-001/V01/V06/V07/V09: distinct repeated conflict attempts; controlled real lock waits at READ COMMITTED; commit/rollback visibility; original full terminal recovery after later edits; actual stdio. |
-| `test_invalid_input_unicode_live.py` | DEV-RUN-002/V07: actual PostgreSQL persistence/recovery, old accepted/rejected fingerprint compatibility, outer commit/rollback and deprecated wrapper ownership, real stdio readable evidence. |
-| `test_selector_profiles_live.py` | DEV-RUN-001: durable rejection without materialization, all supported historical selector profiles in typed/legacy mixed history, actual stdio rejection and replay. |
+| `test_conflict_audit_live.py` | distinct repeated conflict attempts; controlled real lock waits at READ COMMITTED; commit/rollback visibility; original full terminal recovery after later edits; actual stdio. |
+| `test_invalid_input_unicode_live.py` | actual PostgreSQL persistence/recovery, old accepted/rejected fingerprint compatibility, outer commit/rollback and deprecated wrapper ownership, real stdio readable evidence. |
+| `test_selector_profiles_live.py` | durable rejection without materialization, all supported historical selector profiles in typed/legacy mixed history, actual stdio rejection and replay. |
 | `test_migrations_reachable.py` | **C5**: Alembic config presence; schema verification for migration `0001` and `0002`; live Postgres column nullability and partial unique index `uq_pdcp_logs_target_client_request_id` verification. |
 | `test_typed_submit_flow.py` | **C1–C6**: Typed accept writes `append_only_pdcp_logs` (`protocol_version="patchdiff-tx/1"`) and `append_only_manifest_ledger` (`origin="typed"`, `derived_json`); format-specific diagnostics (no PDCP manifest leakage on typed rejections); stage-based validity across all 5 stages; safe UUID and parent-lineage error handling; `client_request_id` idempotency, lost-response outcome recovery, ABA sequence recovery, no-op edit recovery, and conflicting reuse rejection; mixed PDCP/typed replay; component-level `materialized_state_checks`; unknown profile rejection; read/search pagination. |
 | `test_pdcp_submit_flow.py` | Legacy `.pdcp` submission; atomic rollback on applicability failure; optimistic concurrency guards (`expected_target_version`, `expected_current_hash`); row locking independence across targets. |
 | `test_save.py` | `patchdiff_save` creates snapshots and cycle rotation without mutating target content; ledger reads filter to active cycle. |
-| `test_mcp_history_paging_live.py` | DEV-MCP-002: actual PostgreSQL multi-page attempt/ledger traversal, filters/gaps, inserted newer rows, empty/not-found targets and real stdio history. |
+| `test_mcp_history_paging_live.py` | actual PostgreSQL multi-page attempt/ledger traversal, filters/gaps, inserted newer rows, empty/not-found targets and real stdio history. |
 | `test_replay.py` | Reconstructs state from initial upload snapshot + accepted logs; detects tampered logs and broken version chains. |
-| `integration/test_replay_materialized_integrity_live.py` | DEV-DB-001:healthy,CRLF,bareCR,Unicode,hash-only,version-only storage; exact four checks/aggregate; reconstruction success; no target/history mutation; caller rollback and fresh healthy observer. |
+| `integration/test_replay_materialized_integrity_live.py` | healthy,CRLF,bareCR,Unicode,hash-only,version-only storage; exact four checks/aggregate; reconstruction success; no target/history mutation; caller rollback and fresh healthy observer. |
 | `test_mcp_tool_contract.py` & `test_mcp_tools.py` | Tool wrappers route exclusively through services; tools do not mutate storage directly. |
 | `test_mcp_e2e_flows.py` | End-to-end upload -> context -> submit -> get -> save -> replay -> export workflows. |
 | `test_external_mcp_adapter.py` | External MCP stdio adapter JSON-RPC handling; tool discovery; argument routing. |
@@ -72,7 +72,7 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 
 Run with: `$env:PYTHONPATH="backend"; python evaluation/offline_eval.py`
 
-Evaluates 5 scenarios across 3 proposal variants:
+The original comparison evaluates 5 scenarios across 3 proposal variants:
 1. `pdcp`: PDCP v0.2.3 with 7 mandatory manifest fields per edit.
 2. `typed_match`: typed `patchdiff-tx/1` with matched advisory prose (`intent` + per-edit `change_id`, `rationale`, `risk`).
 3. `typed_min`: minimal typed `patchdiff-tx/1` (`intent` + `{match, replace}`).
@@ -83,6 +83,12 @@ Checks:
 - MCP tool request JSON wire byte accounting (`tools/call` arguments).
 - Strict separation of serialization framing overhead from reduced-manifest prose savings.
 
-## PR #3 regression additions
+Five additional guarded `patchdiff-tx/3` scenarios measure canonical record bytes and complete UTF-8 JSON-RPC request lines (fixed id=1 and one LF): whole-target rewrite, empty target, empty replacement, Unicode/quotes/CRLF and 2 KB rewrite. Accepted content/hash oracles use immutable 0.4.0; no cross-format replacement equivalence, live transport, persistence, timing or representative workload is measured. Only the named `payload has a delimiter line` scenario permits the legacy `block_malformed` versus typed acceptance exception.
+
+## Guarded replacement and advisory tool coverage
+
+Unit and live PostgreSQL/stdio coverage includes inclusive raw/result byte/code-point limits, invalid Unicode precedence, existing-key recovery before fresh admission, empty replacement, immutable profiles/replay, coherent LF line observations and continuation, pending local-state rejection, preview/submit parity and nonmutation of every managed table/caller transaction. Discovery executes every advertised example using returned IDs/guards/parents/cursors, including deduplication and complete history traversal. Preview evidence tests cover serialized per-field/whole-response budgets and complete identity retention or explicit omission.
+
+## Schema and migration regression coverage
 
 The submission schema domain tests validate actual tools/list schemas against live service results and durable audit rows, including null guards, whitespace prose, integer boundaries and newline-suffixed IDs/hashes. The migration tests independently create owned schemas for populated legacy preservation and typed-history downgrade refusal, including unchanged rows/revision and replay after refusal.

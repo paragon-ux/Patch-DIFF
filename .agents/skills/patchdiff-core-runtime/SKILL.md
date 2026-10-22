@@ -37,14 +37,15 @@ Every transaction, however produced, is untrusted until validated by the determi
 
 ## Transaction Input Formats
 
-PatchDIFF supports three declarative transaction input formats:
+PatchDIFF supports four declarative transaction input formats:
 
 1. **Typed transaction (`patchdiff-tx/1`, primary)**:
    - Structured JSON: `target_file_id`, required guard (`expected_target_version` and/or `expected_current_hash`), top-level `intent`, ordered `edits[]`.
    - Each edit contains required `match` and `replace`, plus optional advisory `change_id`, `rationale`, `risk`, and disambiguation fields (`occurrence_index`, `anchor_before`, `anchor_after`).
    - Parsed by `backend/app/pdcp/typed.py`. Delimiter-collision-free; minimal mandatory prose overhead.
 2. **Guarded operations (`patchdiff-tx/2`)**: explicit ordered match/span records via patchdiff_submit_operations; mandatory guard, exact expected_text, sequential canonical code-point spans and explicit empty-span insertion on immutable 0.3.0.
-3. **Legacy `.pdcp` (v0.2.3, frozen)**:
+3. **Sole replacement (`patchdiff-tx/3`)** via patchdiff_submit_replacement, mandatory guards and immutable0.4.0. It supports exactly one explicit replace_all, never a mixed transaction. Fresh service size limits are not replay/parser restrictions.
+4. **Legacy `.pdcp` (v0.2.3, frozen)**:
    - Declarative plain text with `PDCP 0.2.3` header, 7 required manifest fields per block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters.
    - Parsed by `backend/app/pdcp/parser.py`. Retained for backward compatibility and historical replay.
 
@@ -145,3 +146,7 @@ Keep immutable `diagnostic.failure_context` separate from response-only fresh `c
 ## Pass A additions
 
 Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.
+
+## Pass B additions
+
+Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.

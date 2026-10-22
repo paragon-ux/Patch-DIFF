@@ -8,8 +8,10 @@ only: they never mutate state and never replace guards on submit.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.canonicalization import canonicalize_text
@@ -23,6 +25,73 @@ MAX_OCCURRENCES = 200
 MAX_CONTEXT_CHARS = 400
 MAX_HISTORY_LIMIT = 200
 DEFAULT_HISTORY_LIMIT = 50
+
+
+@dataclass(frozen=True, slots=True)
+class TargetObservation:
+    target_file_id: uuid.UUID
+    target_type: str
+    current_content: str
+    current_version: int
+    current_hash: str
+
+
+def observe_target(session: Session, target_file_id: uuid.UUID) -> TargetObservation | None:
+    """Observe one database row without flushing or refreshing local ORM objects."""
+    with session.no_autoflush:
+        row = session.execute(select(
+            CloudTargetFiles.target_file_id, CloudTargetFiles.target_type,
+            CloudTargetFiles.current_content, CloudTargetFiles.version,
+            CloudTargetFiles.current_hash,
+        ).where(CloudTargetFiles.target_file_id == target_file_id)).one_or_none()
+    return TargetObservation(*row) if row is not None else None
+
+
+def line_slice(content: str, *, start_line: int = 1, end_line: int | None = None,
+               offset: int = 0, max_chars: int | None = None) -> dict[str, Any]:
+    """LF-only line ranges, bounded in code points without normalizing storage."""
+    for name, value, minimum in (("start_line", start_line, 1), ("offset", offset, 0),
+                                 ("end_line", end_line, 1), ("max_chars", max_chars, 1)):
+        if value is None and name in {"end_line", "max_chars"}:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ValueError(f"{name} must be an integer >= {minimum}.")
+    # Retaining EOF as a line start gives an empty target/final trailing-LF line.
+    starts = [0] + [index + 1 for index, char in enumerate(content) if char == "\n"]
+    total_lines = len(starts)
+    last = total_lines if end_line is None else end_line
+    if start_line > total_lines or last > total_lines or last < start_line:
+        raise ValueError("Line range must be ordered and within total_lines.")
+    begin = starts[start_line - 1]
+    stop = starts[last] if last < total_lines else len(content)
+    if offset > stop - begin:
+        raise ValueError("offset exceeds the selected range length.")
+    size = DEFAULT_READ_CHARS if max_chars is None else min(max_chars, MAX_READ_CHARS)
+    page_start = begin + offset
+    page_end = min(stop, page_start + size)
+    truncated = page_end < stop
+    return {"total_chars": len(content), "total_lines": total_lines,
+            "start_line": start_line, "end_line": last, "range_start": begin, "range_end": stop,
+            "start": page_start, "end": page_end, "text": content[page_start:page_end],
+            "truncated": truncated, "next_offset": offset + page_end - page_start if truncated else None}
+
+
+def read_lines(session: Session, *, target_file_id: uuid.UUID | str, start_line: int = 1,
+               end_line: int | None = None, offset: int = 0, max_chars: int | None = None) -> dict[str, Any]:
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return {"status": "invalid_argument", "target_file_id": safe_input_text(target_file_id),
+                "failure_detail": "target_file_id must be a valid UUID."}
+    target = observe_target(session, target_uuid)
+    if target is None:
+        return {"status": "not_found", "target_file_id": str(target_uuid)}
+    try:
+        page = line_slice(target.current_content, start_line=start_line, end_line=end_line,
+                          offset=offset, max_chars=max_chars)
+    except ValueError as exc:
+        return {"status": "invalid_argument", "target_file_id": str(target_uuid), "failure_detail": str(exc)}
+    return {"status": "ok", "target_file_id": str(target_uuid), "version": target.current_version,
+            "current_hash": target.current_hash, **page}
 
 
 def clamp_limit(limit: int | None, *, default: int = DEFAULT_HISTORY_LIMIT, maximum: int = MAX_HISTORY_LIMIT) -> int:

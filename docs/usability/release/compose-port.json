@@ -1,0 +1,7 @@
+{
+  "mode": "ingress",
+  "host_ip": "127.0.0.1",
+  "target": 5432,
+  "published": "5432",
+  "protocol": "tcp"
+}

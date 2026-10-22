@@ -24,7 +24,7 @@ The PatchDIFF MCP service provides deterministic validation, authoritative bound
 
 ## Tool Surface Overview
 
-PatchDIFF provides 17 tools across five functional areas:
+PatchDIFF provides 20 tools across five functional areas:
 
 1. **Target Lifecycle**:
    - `patchdiff_handle_upload`: register uploaded file content as a target.
@@ -33,16 +33,20 @@ PatchDIFF provides 17 tools across five functional areas:
    - `patchdiff_export_target`: retrieve current full text for saving/export.
 2. **Authoritative Reads & Exact Search**:
    - `patchdiff_read_target`: bounded slice reading with code-point offset `start`, `length`, and `next_start` pagination.
+   - `patchdiff_read_lines`: bounded inclusive LF line ranges with range-relative continuation and one coherent version/hash observation.
    - `patchdiff_find_occurrences`: exact string search returning all occurrence code-point spans, snippet context, `start_occurrence`, `max_results`, and `next_occurrence_index`.
 3. **Guarded Edit Submission**:
    - `patchdiff_submit_edits`: primary typed edit submission (`patchdiff-tx/1`). Requires `expected_target_version` and/or `expected_current_hash`. Supports `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage.
    - `patchdiff_submit_pdcp`: legacy `.pdcp` text submission (frozen v0.2.3 format).
+   - `patchdiff_submit_operations`: guarded match/span transactions (tx/2, profile0.3.0).
+   - `patchdiff_submit_replacement`: guarded sole replace_all (tx/3, profile0.4.0); valid fresh oversize is a structured no-attempt admission error.
 4. **Checkpoints, Replay & History**:
    - `patchdiff_save`: snapshots target and rotates editing cycle.
    - `patchdiff_replay`: deterministically reconstructs target from initial state and accepted history.
    - `patchdiff_get_pdcp_log`: bounded newest-first inspection of attempt history.
    - `patchdiff_get_manifest_ledger`: bounded inspection of accepted changes with runtime facts.
 5. **Bounded Preview & Deprecated Wrappers**:
+   - `patchdiff_preview`: advisory zero-audit/keyless evaluation of a fresh proposal through the shared read-only evaluator; later submission rechecks guards.
    - `patchdiff_build_prompt_context`: convenience bounded prefix preview (`context_truncated`).
    - `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`: deprecated server-prompt wrappers preserved for compatibility.
 
@@ -112,3 +116,9 @@ Keep immutable `diagnostic.failure_context` separate from response-only fresh `c
 ## Pass A additions
 
 Follow docs/usability/PASS-A-decision.md and normative contracts: tx/2 ordered match/span operations use mandatory guards, exact expected text, sequential canonical code-point spans and explicit empty-span insertion through the shared applier/profile 0.3.0. Old formats/profiles/fingerprints remain unchanged; no replace_all yet. Correlation is opt-in response-only UUID metadata. Persist bounded exact failure candidates/query once; compute response-only bounded near misses only after service-owned commit/lock release, or explicitly omit for caller ownership. Preserve all original recovered diagnostics and actual byte/work budgets. Run focused PG/stdio matrices while iterating; root runs one consolidated full verification/review per user-authorized pass.
+
+## Pass B additions
+
+Preview-only output projection follows PASS-B-decision.md:32768compact ASCII-escaped payload bytes; accepted facts prefix32/perfact2048/wrapper16384; text1024code points/8192wrapper and diagnostic16384. Expose total/returned/truncation/omission metadata. Keep verdict/stage/coherent state/hash, omit oversized identity rather than shortening it, and preserve all submit/core/history facts.
+
+Follow docs/usability/PASS-B-decision.md: explicit tx/3 sole whole-target replacement uses immutable0.4.0, mandatory guards, inclusive raw/result byte/code-point admission limits and existing-key recovery before stricter fresh admission; old formats/profiles/identity remain unchanged. Read-only LF line ranges use coherent column observations and bounded offset continuation. Zero-audit advisory preview shares submit's evaluator and preserves every managed table/caller transaction, with no request-key option or submit-rollback. Publish bounded discovery examples and execute every advertised pair over actual stdio/PG. Implement the whole batch before root's final suite/manual/review; avoid routine intermediate test loops. Data/performance evidence is local synthetic only.

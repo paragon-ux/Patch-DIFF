@@ -33,6 +33,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. Uses immutable runtime0.3.0; no replace_all.",
     "patchdiff_submit_edits": "Submit a typed edit transaction (exact match/replace strings as fields). Requires expected_target_version and/or expected_current_hash. Supports optional client_request_id idempotency. Same validation, atomic commit and logging as .pdcp.",
     "patchdiff_read_target": "Authoritative bounded read of canonical target text by code-point offset, with version, hash, and next_start continuation.",
+    "patchdiff_submit_replacement": "Submit a sole guarded replace_all as patchdiff-tx/3, frozen runtime 0.4.0. Fresh raw and canonical replacement limits: 1,000,000 code points and 1,048,576 UTF-8 bytes, inclusive. Empty text allowed. Existing-key recovery precedes admission.",
+    "patchdiff_read_lines": "Read an inclusive one-based LF line range from one observed version/hash. Trailing LF creates a final empty line. offset/next_offset are code points within the selected range; text defaults to 4000 and caps at 8000. Each page is a new observation.",
+    "patchdiff_preview": "Advisory fresh-proposal evaluation without audit, request keys, writes or row locks. Explicit format 0.2.3, patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3; submit must recheck guards. Prefer version guards to detect ABA changes.",
     "patchdiff_find_occurrences": "List exact occurrences of a string (overlapping counted) with offsets, bounded context, 1-based occurrence_index, and start_occurrence/max_results pagination.",
     "patchdiff_get_regeneration_context": "DEPRECATED: host-owned retry replaces this. Return regeneration context for a rejected attempt.",
     "patchdiff_build_regeneration_prompt": "DEPRECATED: host-owned retry replaces this. Build a regeneration prompt from a rejected attempt.",
@@ -43,6 +46,35 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_get_target": "Return the current canonical target state.",
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
     "patchdiff_get_manifest_ledger": "Return the newest bounded ledger page displayed oldest-first, with has_more/next_sequence for backward traversal.",
+}
+
+# Illustrative resources; hosts bind real IDs, guards, parents and returned cursors.
+_EXAMPLE_TARGET = "11111111-1111-4111-8111-111111111111"
+TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
+    "patchdiff_submit_edits": [
+        {"target_file_id": _EXAMPLE_TARGET, "intent": "Rename the second alpha", "expected_target_version": 0,
+         "client_request_id": "example-accept", "edits": [{"match": "alpha", "replace": "beta", "occurrence_index": 2}]},
+        {"target_file_id": _EXAMPLE_TARGET, "intent": "Demonstrate a missing match", "expected_target_version": 1,
+         "edits": [{"match": "missing phrase", "replace": "present"}]},
+        {"target_file_id": _EXAMPLE_TARGET, "intent": "Retry using observed exact text", "expected_target_version": 1,
+         "parent_pdcp_log_id": "22222222-2222-4222-8222-222222222222", "attempt": 1,
+         "edits": [{"match": "beta", "replace": "gamma"}]},
+    ],
+    "patchdiff_read_target": [{"target_file_id": _EXAMPLE_TARGET, "start": 0, "length": 120}],
+    "patchdiff_find_occurrences": [{"target_file_id": _EXAMPLE_TARGET, "text": "alpha", "context_chars": 20,
+                                    "start_occurrence": 1, "max_results": 5}],
+    "patchdiff_get_pdcp_log": [{"target_file_id": _EXAMPLE_TARGET, "limit": 2},
+                               {"target_file_id": _EXAMPLE_TARGET, "limit": 2, "before_sequence": 3}],
+    "patchdiff_get_manifest_ledger": [{"target_file_id": _EXAMPLE_TARGET, "limit": 2},
+                                      {"target_file_id": _EXAMPLE_TARGET, "limit": 2, "before_sequence": 3}],
+    "patchdiff_submit_operations": [{"target_file_id": _EXAMPLE_TARGET, "intent": "Insert at the beginning",
+                                     "expected_target_version": 2,
+                                     "operations": [{"op": "span", "start": 0, "end": 0, "expected_text": "", "replace": "Note: "}]}],
+    "patchdiff_submit_replacement": [{"target_file_id": _EXAMPLE_TARGET, "intent": "Replace the whole target explicitly",
+                                      "expected_target_version": 3, "replacement": "Final text\n"}],
+    "patchdiff_read_lines": [{"target_file_id": _EXAMPLE_TARGET, "start_line": 1, "end_line": 1, "max_chars": 120}],
+    "patchdiff_preview": [{"target_file_id": _EXAMPLE_TARGET, "format": "patchdiff-tx/1", "intent": "Preview an exact edit",
+                           "expected_target_version": 4, "edits": [{"match": "Final", "replace": "Reviewed"}]}],
 }
 
 
@@ -145,13 +177,13 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     properties: dict[str, Any] = {}
     required: list[str] = []
     for parameter_name, parameter in signature.parameters.items():
-        if name == "patchdiff_submit_edits" and parameter_name == "edits":
+        if name in {"patchdiff_submit_edits", "patchdiff_preview"} and parameter_name == "edits":
             properties[parameter_name] = {
                 "type": "array",
                 "minItems": 1,
                 "items": copy.deepcopy(TYPED_EDIT_JSON_SCHEMA),
             }
-        elif name == "patchdiff_submit_operations" and parameter_name == "operations":
+        elif name in {"patchdiff_submit_operations", "patchdiff_preview"} and parameter_name == "operations":
             properties[parameter_name] = {"type": "array", "minItems": 1, "items": copy.deepcopy(OPERATION_JSON_SCHEMA)}
         else:
             properties[parameter_name] = _schema_for_annotation(type_hints.get(parameter_name, parameter.annotation))
@@ -187,7 +219,14 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["client_request_id"]["description"] = "Exact stored request key; historical syntax is accepted."
     if name == "patchdiff_get_manifest_ledger":
         properties["include_previous_cycles"]["default"] = False
-    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations"}:
+    if name == "patchdiff_read_lines":
+        for field, minimum in (("start_line", 1), ("end_line", 1), ("offset", 0), ("max_chars", 1)):
+            properties[field]["minimum"] = minimum
+        properties["start_line"]["default"] = 1
+        properties["offset"]["default"] = 0
+    if name == "patchdiff_preview":
+        properties["format"]["enum"] = ["0.2.3", "patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
+    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_replacement"}:
         properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {
         "type": "object",
@@ -196,7 +235,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     }
     if required:
         schema["required"] = required
-    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations"}:
+    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_replacement"}:
         schema["anyOf"] = [
             {
                 "required": ["expected_target_version"],
@@ -214,6 +253,30 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
             "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
         }
+    if name == "patchdiff_submit_replacement":
+        schema["x-patchdiff-capabilities"] = {
+            "protocol_version": "patchdiff-tx/3", "runtime_version": "patchdiff-mvp-0.4.0",
+            "operations": ["replace_all"], "max_code_points": 1_000_000, "max_utf8_bytes": 1_048_576,
+        }
+    if name == "patchdiff_preview":
+        schema["allOf"] = []
+        for format_, field in (("0.2.3", "pdcp_content"), ("patchdiff-tx/1", "edits"),
+                               ("patchdiff-tx/2", "operations"), ("patchdiff-tx/3", "replacement")):
+            branch = {"required": [field], "properties": {field: {"type": "array" if field in {"edits", "operations"} else "string"}}}
+            if format_ != "0.2.3":
+                branch["required"].append("intent")
+                branch["properties"]["intent"] = {"type": "string", "minLength": 1, "pattern": r"\S"}
+                branch["anyOf"] = [
+                    {"required": ["expected_target_version"], "properties": {"expected_target_version": {"type": "integer"}}},
+                    {"required": ["expected_current_hash"], "properties": {"expected_current_hash": {"type": "string"}}},
+                ]
+            irrelevant = {"intent", "edits", "operations", "replacement", "pdcp_content"} - {field}
+            if format_ != "0.2.3":
+                irrelevant.remove("intent")
+            branch["not"] = {"anyOf": [{"required": [other]} for other in sorted(irrelevant)]}
+            schema["allOf"].append({"if": {"properties": {"format": {"const": format_}}}, "then": branch})
+    if name in TOOL_EXAMPLES:
+        schema["examples"] = copy.deepcopy(TOOL_EXAMPLES[name])
     return schema
 
 
