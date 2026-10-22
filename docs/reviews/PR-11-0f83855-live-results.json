@@ -1,0 +1,3510 @@
+{
+ "pr": 11,
+ "head": "0f838557b17d32139d25d429a9c563cdb9025ca6",
+ "base": "2ee7ce46461598d71f0f9b2570ad7d9d3aa03d10",
+ "run_date": "2026-10-22",
+ "transport": "real stdio subprocess: python -m app.mcp.external_adapter (PYTHONIOENCODING=cp1252 inherited)",
+ "database": "isolated postgres:16.3-alpine database patchdiff_pr11_live, Alembic head 20261020_0002",
+ "python": "3.11.9, fresh venv from PR requirements.lock (40 pins, pip check clean)",
+ "summary": {
+  "checks": 136,
+  "passed": 135
+ },
+ "checks": [
+  {
+   "check": "initialize returns serverInfo",
+   "ok": true,
+   "detail": {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+     "capabilities": {
+      "tools": {}
+     },
+     "protocolVersion": "2024-11-05",
+     "serverInfo": {
+      "name": "patchdiff-mvp",
+      "version": "0.2.2"
+     }
+    }
+   }
+  },
+  {
+   "check": "tools/list advertises 20 tools",
+   "ok": true,
+   "detail": [
+    "patchdiff_build_prompt_context",
+    "patchdiff_build_regeneration_prompt",
+    "patchdiff_export_target",
+    "patchdiff_find_occurrences",
+    "patchdiff_get_manifest_ledger",
+    "patchdiff_get_pdcp_log",
+    "patchdiff_get_regeneration_context",
+    "patchdiff_get_target",
+    "patchdiff_handle_upload",
+    "patchdiff_initialize_target",
+    "patchdiff_preview",
+    "patchdiff_read_lines",
+    "patchdiff_read_target",
+    "patchdiff_replay",
+    "patchdiff_request_regeneration",
+    "patchdiff_save",
+    "patchdiff_submit_edits",
+    "patchdiff_submit_operations",
+    "patchdiff_submit_pdcp",
+    "patchdiff_submit_replacement"
+   ]
+  },
+  {
+   "check": "tools/list includes patchdiff_submit_operations",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "tools/list includes patchdiff_submit_replacement",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "tools/list includes patchdiff_read_lines",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "tools/list includes patchdiff_preview",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "13 examples across 9 tools",
+   "ok": true,
+   "detail": {
+    "patchdiff_find_occurrences": 1,
+    "patchdiff_get_manifest_ledger": 2,
+    "patchdiff_get_pdcp_log": 2,
+    "patchdiff_preview": 1,
+    "patchdiff_read_lines": 1,
+    "patchdiff_read_target": 1,
+    "patchdiff_submit_edits": 3,
+    "patchdiff_submit_operations": 1,
+    "patchdiff_submit_replacement": 1
+   }
+  },
+  {
+   "check": "tools/list <= 65536 compact bytes",
+   "ok": true,
+   "detail": 23492
+  },
+  {
+   "check": "examples map <= 8192 compact bytes",
+   "ok": true,
+   "detail": 2096
+  },
+  {
+   "check": "example patchdiff_find_occurrences[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_get_manifest_ledger[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_get_manifest_ledger[1] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_get_pdcp_log[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_get_pdcp_log[1] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_preview[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_read_lines[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_read_target[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_submit_edits[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_submit_edits[1] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_submit_edits[2] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_submit_operations[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "example patchdiff_submit_replacement[0] conforms to its inputSchema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_build_prompt_context is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_build_regeneration_prompt is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_export_target is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_find_occurrences is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_get_manifest_ledger is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_get_pdcp_log is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_get_regeneration_context is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_get_target is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_handle_upload is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_initialize_target is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_preview is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_read_lines is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_read_target is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_replay is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_request_regeneration is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_save is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_submit_edits is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_submit_operations is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_submit_pdcp is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "inputSchema of patchdiff_submit_replacement is a valid JSON Schema",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "submit_operations description spacing ('runtime0.3.0')",
+   "ok": false,
+   "detail": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. Uses immutable runtime0.3.0; no replace_all."
+  },
+  {
+   "check": "preview schema enumerates 4 formats",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "handle_upload initializes LF-normalized target",
+   "ok": true,
+   "detail": {
+    "active_editing_cycle_id": "41a17a5d-c12b-4328-ac3b-33f0f3588aa9",
+    "current_hash": "65076082fc853c28257657629a7fb0abf7779bef37b3517965170b50373382db",
+    "filename": "upload.md",
+    "target_file_id": "5d2d6ef3-302d-42f3-98b6-38ecfb33563b",
+    "target_type": "text/markdown",
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "initialize_target returns version 0 and canonical hash",
+   "ok": true,
+   "detail": {
+    "active_editing_cycle_id": "933525c2-6618-49f5-9667-24485bae212d",
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "filename": "doc.txt",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "target_type": "text/plain",
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "get_target matches DB",
+   "ok": true,
+   "detail": {
+    "active_editing_cycle_id": "933525c2-6618-49f5-9667-24485bae212d",
+    "current_content": "alpha alpha\n🌟 中\nThe quick brown fox jumps over the lazy dog.\n",
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "filename": "doc.txt",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "target_type": "text/plain",
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_target code-point slicing over astral char",
+   "ok": true,
+   "detail": {
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "end": 16,
+    "next_start": 16,
+    "start": 12,
+    "status": "ok",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "text": "🌟 中\n",
+    "total_chars": 61,
+    "truncated": true,
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines default = whole doc, 4 lines (trailing LF -> final empty line)",
+   "ok": true,
+   "detail": {
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "end": 61,
+    "end_line": 4,
+    "next_offset": null,
+    "range_end": 61,
+    "range_start": 0,
+    "start": 0,
+    "start_line": 1,
+    "status": "ok",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "text": "alpha alpha\n🌟 中\nThe quick brown fox jumps over the lazy dog.\n",
+    "total_chars": 61,
+    "total_lines": 4,
+    "truncated": false,
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines line 2 inclusive of LF with absolute range offsets",
+   "ok": true,
+   "detail": {
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "end": 16,
+    "end_line": 2,
+    "next_offset": null,
+    "range_end": 16,
+    "range_start": 12,
+    "start": 12,
+    "start_line": 2,
+    "status": "ok",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "text": "🌟 中\n",
+    "total_chars": 61,
+    "total_lines": 4,
+    "truncated": false,
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines final empty line is addressable",
+   "ok": true,
+   "detail": {
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "end": 61,
+    "end_line": 4,
+    "next_offset": null,
+    "range_end": 61,
+    "range_start": 61,
+    "start": 61,
+    "start_line": 4,
+    "status": "ok",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "text": "",
+    "total_chars": 61,
+    "total_lines": 4,
+    "truncated": false,
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines paging reassembles line 3 exactly",
+   "ok": true,
+   "detail": [
+    "The quick ",
+    "brown fox ",
+    "jumps over",
+    " the lazy ",
+    "dog.\n"
+   ]
+  },
+  {
+   "check": "read_lines rejects start_line 0",
+   "ok": true,
+   "detail": {
+    "failure_detail": "start_line must be an integer >= 1.",
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines rejects start_line > total",
+   "ok": true,
+   "detail": {
+    "failure_detail": "Line range must be ordered and within total_lines.",
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines rejects reversed",
+   "ok": true,
+   "detail": {
+    "failure_detail": "Line range must be ordered and within total_lines.",
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines rejects max_chars 0",
+   "ok": true,
+   "detail": {
+    "failure_detail": "max_chars must be an integer >= 1.",
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines rejects bool start_line",
+   "ok": true,
+   "detail": {
+    "failure_detail": "start_line must be an integer >= 1.",
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines rejects offset beyond range",
+   "ok": true,
+   "detail": {
+    "failure_detail": "offset exceeds the selected range length.",
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines caps max_chars at 8000 (no error)",
+   "ok": true,
+   "detail": {
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "end": 61,
+    "end_line": 4,
+    "next_offset": null,
+    "range_end": 61,
+    "range_start": 0,
+    "start": 0,
+    "start_line": 1,
+    "status": "ok",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "text": "alpha alpha\n🌟 中\nThe quick brown fox jumps over the lazy dog.\n",
+    "total_chars": 61,
+    "total_lines": 4,
+    "truncated": false,
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "read_lines unknown target -> not_found",
+   "ok": true,
+   "detail": {
+    "status": "not_found",
+    "target_file_id": "00000000-0000-4000-8000-000000000000",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "find_occurrences lists 2 alpha occurrences",
+   "ok": true,
+   "detail": {
+    "current_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "next_occurrence_index": null,
+    "occurrence_count": 2,
+    "occurrences": [
+     {
+      "after": " alph",
+      "before": "",
+      "end": 5,
+      "occurrence_index": 1,
+      "start": 0
+     },
+     {
+      "after": "\n🌟 中\n",
+      "before": "lpha ",
+      "end": 11,
+      "occurrence_index": 2,
+      "start": 6
+     }
+    ],
+    "returned_count": 2,
+    "start_occurrence": 1,
+    "status": "ok",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "truncated": false,
+    "version": 0,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/1 accept with selector",
+   "ok": true,
+   "detail": {
+    "after_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "before_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "client_request_id": "k-accept",
+    "correlation_id": "5a9f0a11-1871-41dd-88d2-7ee6afb7cca9",
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 5,
+       "matched_sha256": "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8",
+       "replacement_chars": 4,
+       "replacement_sha256": "f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753",
+       "span_end": 11,
+       "span_start": 6
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "aafcb37e-3e6e-4da5-ac82-79594371b622",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 1,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "correlation_id is a UUID4 on accept",
+   "ok": true,
+   "detail": "5a9f0a11-1871-41dd-88d2-7ee6afb7cca9"
+  },
+  {
+   "check": "exact key replay deduplicates to original accept",
+   "ok": true,
+   "detail": {
+    "after_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "before_hash": "1d56c832a18ea66ae7e6ddefdf9c9efb06d5a3208ccfecc90de8c8ecfaa9c19f",
+    "client_request_id": "k-accept",
+    "correlation_id": "b6dbc4a8-74f1-4e6f-86de-05255936ca53",
+    "deduplicated": true,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 5,
+       "matched_sha256": "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8",
+       "replacement_chars": 4,
+       "replacement_sha256": "f44e64e75f3948e9f73f8dfa94721c4ce8cbb4f265c4790c702b2d41cfbf2753",
+       "span_end": 11,
+       "span_start": 6
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "aafcb37e-3e6e-4da5-ac82-79594371b622",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 1,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "fresh correlation_id on dedup",
+   "ok": true,
+   "detail": "b6dbc4a8-74f1-4e6f-86de-05255936ca53"
+  },
+  {
+   "check": "correlation never persisted",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "non-bool include_correlation_id -> invalid_argument/schema error, no attempt",
+   "ok": true,
+   "detail": {
+    "failure_detail": "include_correlation_id must be a boolean.",
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "no log written for invalid correlation flag",
+   "ok": true,
+   "detail": [
+    [
+     "1",
+     "accepted",
+     "patchdiff-tx/1",
+     "patchdiff-mvp-0.2.2",
+     "",
+     "1",
+     "k-accept",
+     "230"
+    ]
+   ]
+  },
+  {
+   "check": "tx/1 absent match rejected",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 60,
+     "observed_target_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+     "observed_target_version": 1,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n🌟 中\nThe quick brown fox jumps over the lazy dog.\n",
+     "total_chars": 60,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "current_version": 1,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 60,
+      "observed_target_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+      "observed_target_version": 1,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n🌟 中\nThe quick brown fox jumps over the lazy dog.\n",
+      "total_chars": 60,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "near_miss_query": {
+      "omission_reason": null,
+      "text": "quick brwn fox"
+     },
+     "requires_new_submission": true,
+     "retryable": true,
+     "validation_stage": "transaction_applicability"
+    },
+    "failed_change_id": "chg_001",
+    "failure_detail": "MATCH text was not found.",
+    "failure_reason": "match_absent",
+    "near_misses": {
+     "buffer_stage": "canonical_target",
+     "candidates": [
+      {
+       "after": " jumps over the ",
+       "before": "ha beta\n🌟 中\nThe ",
+       "distance": 1,
+       "end": 34,
+       "start": 19,
+       "text": "quick brown fox"
+      },
+      {
+       "after": "x jumps over the",
+       "before": "ha beta\n🌟 中\nThe ",
+       "distance": 2,
+       "end": 33,
+       "start": 19,
+       "text": "quick brown fo"
+      },
+      {
+       "after": " jumps over the ",
+       "before": "a beta\n🌟 中\nThe q",
+       "distance": 2,
+       "end": 34,
+       "start": 20,
+       "text": "uick brown fox"
+      }
+     ],
+     "comparison_cells": 27608,
+     "kind": "near_miss",
+     "observed_target_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+     "observed_target_version": 1,
+     "omission_reason": null,
+     "prior_changes": 0,
+     "returned_count": 3,
+     "status": "computed",
+     "truncated": true
+    },
+    "pdcp_log_id": "190fdb76-39c1-41b6-b967-aef121fd95d7",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": false
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "failure_context available prefix, canonical_target",
+   "ok": true,
+   "detail": {
+    "available": true,
+    "buffer_stage": "canonical_target",
+    "end": 60,
+    "observed_target_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "observed_target_version": 1,
+    "prior_changes": 0,
+    "selection": "prefix",
+    "start": 0,
+    "text": "alpha beta\n🌟 中\nThe quick brown fox jumps over the lazy dog.\n",
+    "total_chars": 60,
+    "truncated": false,
+    "unavailable_reason": null
+   }
+  },
+  {
+   "check": "current_context present on rejection",
+   "ok": true,
+   "detail": {
+    "available": true,
+    "buffer_stage": "canonical_target",
+    "end": 60,
+    "observed_target_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "observed_target_version": 1,
+    "prior_changes": 0,
+    "selection": "prefix",
+    "start": 0,
+    "text": "alpha beta\n🌟 中\nThe quick brown fox jumps over the lazy dog.\n",
+    "total_chars": 60,
+    "truncated": false,
+    "unavailable_reason": null
+   }
+  },
+  {
+   "check": "near_misses computed and finds 'quick brown fox'",
+   "ok": true,
+   "detail": {
+    "buffer_stage": "canonical_target",
+    "candidates": [
+     {
+      "after": " jumps over the ",
+      "before": "ha beta\n🌟 中\nThe ",
+      "distance": 1,
+      "end": 34,
+      "start": 19,
+      "text": "quick brown fox"
+     },
+     {
+      "after": "x jumps over the",
+      "before": "ha beta\n🌟 中\nThe ",
+      "distance": 2,
+      "end": 33,
+      "start": 19,
+      "text": "quick brown fo"
+     },
+     {
+      "after": " jumps over the ",
+      "before": "a beta\n🌟 中\nThe q",
+      "distance": 2,
+      "end": 34,
+      "start": 20,
+      "text": "uick brown fox"
+     }
+    ],
+    "comparison_cells": 27608,
+    "kind": "near_miss",
+    "observed_target_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "observed_target_version": 1,
+    "omission_reason": null,
+    "prior_changes": 0,
+    "returned_count": 3,
+    "status": "computed",
+    "truncated": true
+   }
+  },
+  {
+   "check": "near_misses not persisted",
+   "ok": true,
+   "detail": null
+  },
+  {
+   "check": "retry with parent lineage accepted",
+   "ok": true,
+   "detail": {
+    "after_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "before_hash": "8ee1d9ae36accbe1ac188cae2263b02c8227a3765352d09f3197456ee2a56e26",
+    "client_request_id": null,
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 15,
+       "matched_sha256": "8700be3b2fe64bd5f36be0b194f838c3aa475cbee660601f5acf19c99498d264",
+       "replacement_chars": 13,
+       "replacement_sha256": "7c01dd97db686e39bac18729eacebb29a7c4c2493edefdaac625365e3d129835",
+       "span_end": 34,
+       "span_start": 19
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "89ea5d4c-5285-4005-b526-783a3f6fe954",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 2,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "ambiguous -> exact_candidates bounded to 5 with truncation",
+   "ok": true,
+   "detail": {
+    "buffer_stage": "canonical_target",
+    "candidates": [
+     {
+      "after": " o o o o o o o o \n",
+      "before": "",
+      "end": 1,
+      "match_preview": "o",
+      "match_truncated": false,
+      "occurrence_index": 1,
+      "start": 0
+     },
+     {
+      "after": " o o o o o o o \n",
+      "before": "o ",
+      "end": 3,
+      "match_preview": "o",
+      "match_truncated": false,
+      "occurrence_index": 2,
+      "start": 2
+     },
+     {
+      "after": " o o o o o o \n",
+      "before": "o o ",
+      "end": 5,
+      "match_preview": "o",
+      "match_truncated": false,
+      "occurrence_index": 3,
+      "start": 4
+     },
+     {
+      "after": " o o o o o \n",
+      "before": "o o o ",
+      "end": 7,
+      "match_preview": "o",
+      "match_truncated": false,
+      "occurrence_index": 4,
+      "start": 6
+     },
+     {
+      "after": " o o o o \n",
+      "before": "o o o o ",
+      "end": 9,
+      "match_preview": "o",
+      "match_truncated": false,
+      "occurrence_index": 5,
+      "start": 8
+     }
+    ],
+    "kind": "exact_occurrences",
+    "observed_target_hash": "246d0f83fac6662244111152df3f95b6ed3fbcff4ec7e72c1278838d1802102e",
+    "observed_target_version": 0,
+    "occurrence_count": 9,
+    "prior_changes": 0,
+    "returned_count": 5,
+    "truncated": true
+   }
+  },
+  {
+   "check": "key reuse with different proposal -> audited conflict, target unchanged",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "client_request_id": "k-accept",
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 58,
+     "observed_target_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+     "observed_target_version": 2,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n🌟 中\nThe quick red fox jumps over the lazy dog.\n",
+     "total_chars": 58,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "current_version": 2,
+    "deduplicated": false,
+    "diagnostic": {
+     "existing_pdcp_log_id": "aafcb37e-3e6e-4da5-ac82-79594371b622",
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 58,
+      "observed_target_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+      "observed_target_version": 2,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n🌟 中\nThe quick red fox jumps over the lazy dog.\n",
+      "total_chars": 58,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "requires_new_submission": true,
+     "retryable": false,
+     "submitted_client_request_id": "k-accept",
+     "submitted_client_request_id_truncated": false,
+     "validation_stage": "precondition_guard"
+    },
+    "failed_change_id": null,
+    "failure_detail": "client_request_id was already used for a different proposal on this target.",
+    "failure_reason": "context_invalid",
+    "pdcp_log_id": "fdb4a9ae-5fd5-430a-b0b7-64ec73a91680",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": null,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "stale version -> target_version_mismatch at precondition_guard",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 58,
+     "observed_target_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+     "observed_target_version": 2,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n🌟 中\nThe quick red fox jumps over the lazy dog.\n",
+     "total_chars": 58,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "current_version": 2,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 58,
+      "observed_target_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+      "observed_target_version": 2,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n🌟 中\nThe quick red fox jumps over the lazy dog.\n",
+      "total_chars": 58,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "requires_new_submission": true,
+     "retryable": true,
+     "validation_stage": "precondition_guard"
+    },
+    "failed_change_id": null,
+    "failure_detail": "expected_target_version does not match the current target version.",
+    "failure_reason": "target_version_mismatch",
+    "pdcp_log_id": "3cde86c2-0fa0-4e54-9336-a1fbae07e323",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": null,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/1 without guard rejected (schema or context_missing)",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 58,
+     "observed_target_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+     "observed_target_version": 2,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n🌟 中\nThe quick red fox jumps over the lazy dog.\n",
+     "total_chars": 58,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "current_version": 2,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 58,
+      "observed_target_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+      "observed_target_version": 2,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n🌟 中\nThe quick red fox jumps over the lazy dog.\n",
+      "total_chars": 58,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "requires_new_submission": true,
+     "retryable": false,
+     "validation_stage": "protocol_validation"
+    },
+    "failed_change_id": null,
+    "failure_detail": "At least one of expected_target_version or expected_current_hash is required.",
+    "failure_reason": "context_missing",
+    "pdcp_log_id": "d2d8a8d6-cc6f-4a21-8381-fb492f5e37db",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": false,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "legacy PDCP accepted on runtime 0.2.2",
+   "ok": true,
+   "detail": {
+    "after_hash": "556ae0f8cbebf33e2d81e54175192a73e44835dbf1a77c38eee33d3f068e153b",
+    "before_hash": "8772548df85e38d30c6b745f7c128af323c67b5e06d5ffc3f63a78dc1cae3dce",
+    "client_request_id": null,
+    "correlation_id": "513d6a35-e464-49b8-930c-8b350000e472",
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 8,
+       "matched_sha256": "1d0dbfec4057c21de5ca61fa47354dc6d811e3bf45ed7c7f00a6d31c13c8a75b",
+       "replacement_chars": 10,
+       "replacement_sha256": "1753d0b8f0879fe6993b6cf13f97a303a5ed42660705580fc1a5d51cd90b4d49",
+       "span_end": 56,
+       "span_start": 48
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "884cbfc1-39ad-4743-9caf-bbceac3ec656",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 3,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 zero-length insertion accepted",
+   "ok": true,
+   "detail": {
+    "after_hash": "2c3afe8344a77730d92be7135f4ebd8b1c1bcbf8af59760012b42bdd61826ff9",
+    "before_hash": "556ae0f8cbebf33e2d81e54175192a73e44835dbf1a77c38eee33d3f068e153b",
+    "client_request_id": null,
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 0,
+       "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+       "operation": "span",
+       "replacement_chars": 6,
+       "replacement_sha256": "4ced86a0426f95e8b6109284d1690ff0d18542c98624f8091d26f9ea544e434d",
+       "span_end": 0,
+       "span_start": 0
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "96624228-fe03-40d3-b356-3bd4e5303262",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 4,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 log on immutable runtime 0.3.0",
+   "ok": true,
+   "detail": [
+    "9",
+    "accepted",
+    "patchdiff-tx/2",
+    "patchdiff-mvp-0.3.0",
+    "",
+    "1",
+    "",
+    "256"
+   ]
+  },
+  {
+   "check": "tx/2 mixed span/match with sequential code-point coordinates accepted",
+   "ok": true,
+   "detail": {
+    "after_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "before_hash": "2c3afe8344a77730d92be7135f4ebd8b1c1bcbf8af59760012b42bdd61826ff9",
+    "client_request_id": null,
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 6,
+       "matched_sha256": "4ced86a0426f95e8b6109284d1690ff0d18542c98624f8091d26f9ea544e434d",
+       "operation": "span",
+       "replacement_chars": 0,
+       "replacement_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+       "span_end": 6,
+       "span_start": 0
+      },
+      {
+       "change_id": "chg_002",
+       "change_index": 2,
+       "matched_chars": 1,
+       "matched_sha256": "85f13d5957ddc956574ba4a18e2aa329aae9fbd3816a917819d1452139a00fd9",
+       "operation": "span",
+       "replacement_chars": 1,
+       "replacement_sha256": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+       "span_end": 12,
+       "span_start": 11
+      },
+      {
+       "change_id": "chg_003",
+       "change_index": 3,
+       "matched_chars": 1,
+       "matched_sha256": "a567bdaa11367f260f0708391f4d10766b5962f565d9e432f17981a3584fe1e2",
+       "replacement_chars": 2,
+       "replacement_sha256": "60cae1d01739facc4543771db2e8fbc4d1ebe5fc66284a5b8b4bd1ed585f452e",
+       "span_end": 14,
+       "span_start": 13
+      }
+     ]
+    },
+    "manifest_entries_added": 3,
+    "pdcp_log_id": "318fff28-b8fe-4b1c-9bf6-2fbf55e3c7fc",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 5,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 result text exact",
+   "ok": true,
+   "detail": "alpha beta\n* zh\nThe quick red "
+  },
+  {
+   "check": "tx/2 span expected_text mismatch on intermediate buffer rejects whole tx",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 61,
+     "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+     "observed_target_version": 5,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+     "total_chars": 61,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "current_version": 5,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "intermediate_buffer",
+      "end": 61,
+      "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+      "observed_target_version": 5,
+      "prior_changes": 1,
+      "selection": "prefix",
+      "start": 0,
+      "text": "ALPHA beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+      "total_chars": 61,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/2",
+     "requires_new_submission": true,
+     "retryable": false,
+     "validation_stage": "transaction_applicability"
+    },
+    "failed_change_id": "chg_002",
+    "failure_detail": "Span expected_text does not match the sequential buffer.",
+    "failure_reason": "span_expected_text_mismatch",
+    "pdcp_log_id": "1c012c46-2c09-4a36-9f38-fba4b857e277",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": false
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "failure_context names intermediate_buffer with prior_changes=1",
+   "ok": true,
+   "detail": {
+    "available": true,
+    "buffer_stage": "intermediate_buffer",
+    "end": 61,
+    "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "observed_target_version": 5,
+    "prior_changes": 1,
+    "selection": "prefix",
+    "start": 0,
+    "text": "ALPHA beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+    "total_chars": 61,
+    "truncated": false,
+    "unavailable_reason": null
+   }
+  },
+  {
+   "check": "current_context names canonical state",
+   "ok": true,
+   "detail": {
+    "available": true,
+    "buffer_stage": "canonical_target",
+    "end": 61,
+    "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "observed_target_version": 5,
+    "prior_changes": 0,
+    "selection": "prefix",
+    "start": 0,
+    "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+    "total_chars": 61,
+    "truncated": false,
+    "unavailable_reason": null
+   }
+  },
+  {
+   "check": "tx/2 span out of bounds -> span_out_of_bounds (transaction stage)",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 61,
+     "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+     "observed_target_version": 5,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+     "total_chars": 61,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "current_version": 5,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 61,
+      "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+      "observed_target_version": 5,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+      "total_chars": 61,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/2",
+     "requires_new_submission": true,
+     "retryable": false,
+     "validation_stage": "transaction_applicability"
+    },
+    "failed_change_id": "chg_001",
+    "failure_detail": "Span is outside the sequential buffer.",
+    "failure_reason": "span_out_of_bounds",
+    "pdcp_log_id": "717b98c1-df5f-4845-83b7-e28d16bb7c61",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": false
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 selector on span rejected",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 61,
+     "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+     "observed_target_version": 5,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+     "total_chars": 61,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "current_version": 5,
+    "deduplicated": false,
+    "diagnostic": {
+     "allowed_operations": [
+      "match",
+      "span"
+     ],
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 61,
+      "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+      "observed_target_version": 5,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+      "total_chars": 61,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/2",
+     "required_match_fields": [
+      "op",
+      "match",
+      "replace"
+     ],
+     "required_span_fields": [
+      "op",
+      "start",
+      "end",
+      "expected_text",
+      "replace"
+     ],
+     "requires_new_submission": true,
+     "retryable": false,
+     "valid_risk_values": [
+      "high",
+      "low",
+      "medium"
+     ],
+     "validation_stage": "protocol_validation"
+    },
+    "failed_change_id": null,
+    "failure_detail": "Unknown span fields; selectors are not allowed.",
+    "failure_reason": "manifest_invalid",
+    "pdcp_log_id": "4b7d4850-1b8e-483d-b2a6-c8cac4a71370",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": false,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 end<start rejected",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 61,
+     "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+     "observed_target_version": 5,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+     "total_chars": 61,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "current_version": 5,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 61,
+      "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+      "observed_target_version": 5,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+      "total_chars": 61,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/2",
+     "requires_new_submission": true,
+     "retryable": false,
+     "validation_stage": "protocol_validation"
+    },
+    "failed_change_id": null,
+    "failure_detail": "Span start/end must be non-negative integers with end>=start.",
+    "failure_reason": "block_malformed",
+    "pdcp_log_id": "e465ea92-1c09-443d-80f3-023423227660",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": false,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 boolean coordinates rejected",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 61,
+     "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+     "observed_target_version": 5,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+     "total_chars": 61,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "current_version": 5,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 61,
+      "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+      "observed_target_version": 5,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+      "total_chars": 61,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/2",
+     "requires_new_submission": true,
+     "retryable": false,
+     "validation_stage": "protocol_validation"
+    },
+    "failed_change_id": null,
+    "failure_detail": "Span start/end must be non-negative integers with end>=start.",
+    "failure_reason": "block_malformed",
+    "pdcp_log_id": "4c419f13-9f0a-4bd6-89ad-e5d15f862dea",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": false,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 CRLF expected_text canonicalizes before compare",
+   "ok": true,
+   "detail": {
+    "after_hash": "1896a0cb5a747031d2b82129f31e9f4b8a2022d9409d401e8350780a445c6270",
+    "before_hash": "880553fca8fcea94e325ee2cfb48e5a985cc797f39a14cc6d3cedecfeb2ae4d2",
+    "client_request_id": null,
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 4,
+       "matched_sha256": "911169ddaaf146aff539f58c26c489af3b892dff0fe283c1c264c65ae5aa59a2",
+       "operation": "span",
+       "replacement_chars": 2,
+       "replacement_sha256": "7058299627365fc7a3dd7840fd3d56f29306cd30c0f2c13cb500fe79617290ff",
+       "span_end": 4,
+       "span_start": 0
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "18f556c7-a894-421b-89d9-d4df360fcbe8",
+    "status": "accepted",
+    "target_file_id": "37a1db3c-641d-482b-8454-3d61e66a664c",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 1,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "lone surrogate in tx/2 -> durable target_encoding_invalid, unchanged target",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 61,
+     "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+     "observed_target_version": 5,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+     "total_chars": 61,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "current_version": 5,
+    "deduplicated": false,
+    "diagnostic": {
+     "evidence_format": "patchdiff-invalid-input/1",
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 61,
+      "observed_target_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+      "observed_target_version": 5,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha beta\n* zh\nThe quick red fox jumps over the sleepy dog.\n",
+      "total_chars": 61,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/2",
+     "invalid_input_paths": [
+      "$[\"record\"][\"operations\"][0][\"replace\"]"
+     ],
+     "invalid_input_paths_truncated": false,
+     "requires_new_submission": true,
+     "retryable": false,
+     "validation_stage": "protocol_validation"
+    },
+    "failed_change_id": null,
+    "failure_detail": "Input strings must be UTF-8 without NUL.",
+    "failure_reason": "target_encoding_invalid",
+    "pdcp_log_id": "08952d27-f9fc-4bbd-bf9f-b23173e00365",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": false,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    }
+   }
+  },
+  {
+   "check": "tx/3 replacement accepted with canonical LF",
+   "ok": true,
+   "detail": {
+    "after_hash": "b3861cff2034b6c048e4a35b94e4d3256995019ebfd28060fd24ff7f1fd33f92",
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": "k-repl",
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 61,
+       "matched_sha256": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+       "operation": "replace_all",
+       "replacement_chars": 11,
+       "replacement_sha256": "b3861cff2034b6c048e4a35b94e4d3256995019ebfd28060fd24ff7f1fd33f92",
+       "span_end": 61,
+       "span_start": 0
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "604ff82f-9e36-4273-b1de-b155f9f080b4",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 6,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/3 on immutable runtime 0.4.0",
+   "ok": true,
+   "detail": [
+    "18",
+    "accepted",
+    "patchdiff-tx/3",
+    "patchdiff-mvp-0.4.0",
+    "",
+    "1",
+    "k-repl",
+    "228"
+   ]
+  },
+  {
+   "check": "tx/3 single typed ledger row with operation=replace_all",
+   "ok": true,
+   "detail": [
+    "1",
+    "chg_001",
+    "typed",
+    "{\"span_end\": 61, \"change_id\": \"chg_001\", \"operation\": \"replace_all\", \"span_start\": 0, \"change_index\": 1, \"matched_chars\": 61, \"matched_sha256\": \"264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a\", \"replacement_chars\": 11, \"replacement_sha256\": \"b3861cff2034b6c048e4a35b94e4d3256995019ebfd28060fd24ff7f1fd33f92\"}"
+   ]
+  },
+  {
+   "check": "tx/3 > 1,000,000 code points -> invalid_argument, no writes",
+   "ok": true,
+   "detail": {
+    "diagnostic": {
+     "code": "replacement_too_large",
+     "limit_exceeded": "raw_code_points"
+    },
+    "failure_detail": "Replacement exceeds fresh admission limits.",
+    "pdcp_log_id": null,
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/3 > 1,048,576 UTF-8 bytes -> raw_utf8_bytes",
+   "ok": true,
+   "detail": {
+    "diagnostic": {
+     "code": "replacement_too_large",
+     "limit_exceeded": "raw_utf8_bytes"
+    },
+    "failure_detail": "Replacement exceeds fresh admission limits.",
+    "pdcp_log_id": null,
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/3 exactly 1,000,000 code points accepted (inclusive)",
+   "ok": true,
+   "detail": {
+    "status": "accepted",
+    "failure_reason": null,
+    "diagnostic": null
+   }
+  },
+  {
+   "check": "tx/3 exact-key recovery after later edit",
+   "ok": true,
+   "detail": {
+    "after_hash": "b3861cff2034b6c048e4a35b94e4d3256995019ebfd28060fd24ff7f1fd33f92",
+    "before_hash": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+    "client_request_id": "k-repl",
+    "deduplicated": true,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 61,
+       "matched_sha256": "264c049d72583e8415f5b325592a007d32828e609860c069a1db6b73324cbd2a",
+       "operation": "replace_all",
+       "replacement_chars": 11,
+       "replacement_sha256": "b3861cff2034b6c048e4a35b94e4d3256995019ebfd28060fd24ff7f1fd33f92",
+       "span_end": 61,
+       "span_start": 0
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "604ff82f-9e36-4273-b1de-b155f9f080b4",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 6,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "existing-key conflict precedes admission (documented)",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+    "client_request_id": "k-repl",
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 256,
+     "observed_target_hash": "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+     "observed_target_version": 7,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "total_chars": 1000000,
+     "truncated": true,
+     "unavailable_reason": null
+    },
+    "current_hash": "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+    "current_version": 7,
+    "deduplicated": false,
+    "diagnostic": {
+     "existing_pdcp_log_id": "604ff82f-9e36-4273-b1de-b155f9f080b4",
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 256,
+      "observed_target_hash": "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+      "observed_target_version": 7,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "total_chars": 1000000,
+      "truncated": true,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/3",
+     "requires_new_submission": true,
+     "retryable": false,
+     "submitted_client_request_id": "k-repl",
+     "submitted_client_request_id_truncated": false,
+     "validation_stage": "precondition_guard"
+    },
+    "failed_change_id": null,
+    "failure_detail": "client_request_id was already used for a different proposal on this target.",
+    "failure_reason": "context_invalid",
+    "pdcp_log_id": "a244cbe4-be4d-4f2c-88a0-21b5b8f8b60c",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": null,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/3 empty replacement accepted",
+   "ok": true,
+   "detail": {
+    "after_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "before_hash": "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+    "client_request_id": null,
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 1000000,
+       "matched_sha256": "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+       "operation": "replace_all",
+       "replacement_chars": 0,
+       "replacement_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+       "span_end": 1000000,
+       "span_start": 0
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "5946e8f6-bff5-4865-be0f-2bd0dbc3a5cb",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 8,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/3 restore accepted",
+   "ok": true,
+   "detail": {
+    "after_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "client_request_id": null,
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 0,
+       "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+       "operation": "replace_all",
+       "replacement_chars": 564,
+       "replacement_sha256": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+       "span_end": 0,
+       "span_start": 0
+      }
+     ]
+    },
+    "manifest_entries_added": 1,
+    "pdcp_log_id": "f5bebbfa-2b44-4bd3-9f21-6513a5f8061d",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 9,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/3 without guard rejected",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 256,
+     "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+     "observed_target_version": 9,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+     "total_chars": 564,
+     "truncated": true,
+     "unavailable_reason": null
+    },
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "current_version": 9,
+    "deduplicated": false,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 256,
+      "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+      "observed_target_version": 9,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+      "total_chars": 564,
+      "truncated": true,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/3",
+     "requires_new_submission": true,
+     "retryable": false,
+     "validation_stage": "protocol_validation"
+    },
+    "failed_change_id": null,
+    "failure_detail": "At least one of expected_target_version or expected_current_hash is required.",
+    "failure_reason": "context_missing",
+    "pdcp_log_id": "cbe2b215-dd13-45a7-9cf4-484b1cd6d615",
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": false,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "near-miss beyond the 256-point prefix is not found (documented limitation; recorded)",
+   "ok": true,
+   "detail": {
+    "buffer_stage": "canonical_target",
+    "candidates": [],
+    "comparison_cells": 123682,
+    "kind": "near_miss",
+    "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "observed_target_version": 9,
+    "omission_reason": null,
+    "prior_changes": 0,
+    "returned_count": 0,
+    "status": "computed",
+    "truncated": true
+   }
+  },
+  {
+   "check": "45-char typo within prefix: near-miss status recorded",
+   "ok": true,
+   "detail": "omitted"
+  },
+  {
+   "check": "preview tx/1 accepted, advisory, has after_hash",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "after_hash": "93a52de71a9dfa26fe6abc53f5b3bdb57dc3b0fa19d00a170dc156ba915b9e5d",
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "before_version": 9,
+    "change_facts": [
+     {
+      "change_id": "chg_001",
+      "change_index": 1,
+      "matched_chars": 4,
+      "matched_sha256": "81fd67d02f679b818a4df6a50139958aa857eddc4d8f3561630dfb905e6d3c24",
+      "replacement_chars": 4,
+      "replacement_sha256": "c9bc072f4fa8189466c2a8f2c36a56a4ef1e60a2ffa4986ba2f155cd176c128b",
+      "span_end": 51,
+      "span_start": 47
+     }
+    ],
+    "change_facts_omission_reason": null,
+    "change_facts_truncated": false,
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "current_version": 9,
+    "failed_change_id": null,
+    "preview": true,
+    "returned_fact_count": 1,
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "total_change_count": 1,
+    "validation_stage": "accepted",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview tx/2 accepted",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "after_hash": "558d714d7066123ba08c289a38a9fe49534111ef6606c5e6d0b7cbe26d9ceee3",
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "before_version": 9,
+    "change_facts": [
+     {
+      "change_id": "chg_001",
+      "change_index": 1,
+      "matched_chars": 5,
+      "matched_sha256": "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8",
+      "operation": "span",
+      "replacement_chars": 1,
+      "replacement_sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+      "span_end": 5,
+      "span_start": 0
+     }
+    ],
+    "change_facts_omission_reason": null,
+    "change_facts_truncated": false,
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "current_version": 9,
+    "failed_change_id": null,
+    "preview": true,
+    "returned_fact_count": 1,
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "total_change_count": 1,
+    "validation_stage": "accepted",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview tx/3 accepted with after_hash == sha('z')",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "after_hash": "594e519ae499312b29433b7dd8a97ff068defcba9755b6d5d00e84c524d67b06",
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "before_version": 9,
+    "change_facts": [
+     {
+      "change_id": "chg_001",
+      "change_index": 1,
+      "matched_chars": 564,
+      "matched_sha256": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+      "operation": "replace_all",
+      "replacement_chars": 1,
+      "replacement_sha256": "594e519ae499312b29433b7dd8a97ff068defcba9755b6d5d00e84c524d67b06",
+      "span_end": 564,
+      "span_start": 0
+     }
+    ],
+    "change_facts_omission_reason": null,
+    "change_facts_truncated": false,
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "current_version": 9,
+    "failed_change_id": null,
+    "preview": true,
+    "returned_fact_count": 1,
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "total_change_count": 1,
+    "validation_stage": "accepted",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview legacy 0.2.3 evaluated",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "after_hash": "27dcde4b3ee5b4584bf4640dbb062ca95bfde52861604f4bda93547bf159d93d",
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "before_version": 9,
+    "change_facts": [
+     {
+      "change_id": "chg_001",
+      "change_index": 1,
+      "matched_chars": 9,
+      "matched_sha256": "0a429130302aa542adc6996e5f127b0e9b5779636eed4623069ae4b54af1cbc9",
+      "replacement_chars": 4,
+      "replacement_sha256": "f86c7472c6bceb157e672ea837d5c1647ddd08a1cead3d7d94a2f2f7acd4fbe9",
+      "span_end": 56,
+      "span_start": 47
+     }
+    ],
+    "change_facts_omission_reason": null,
+    "change_facts_truncated": false,
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "current_version": 9,
+    "failed_change_id": null,
+    "preview": true,
+    "returned_fact_count": 1,
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "total_change_count": 1,
+    "validation_stage": "accepted",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview rejection carries failure_context and no partial facts",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "after_hash": null,
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "before_version": 9,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 256,
+     "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+     "observed_target_version": 9,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+     "total_chars": 564,
+     "truncated": true,
+     "unavailable_reason": null
+    },
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "current_version": 9,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 256,
+      "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+      "observed_target_version": 9,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+      "total_chars": 564,
+      "truncated": true,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "near_miss_query": {
+      "omission_reason": null,
+      "text": "nope nope"
+     },
+     "requires_new_submission": true,
+     "retryable": true,
+     "validation_stage": "transaction_applicability"
+    },
+    "failed_change_id": "chg_001",
+    "failure_detail": "MATCH text was not found.",
+    "failure_reason": "match_absent",
+    "preview": true,
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validation_stage": "transaction_applicability",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": false
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview rejects irrelevant proposal fields",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "code": "irrelevant_proposal_fields",
+    "detail": "Preview fields must belong to the explicit format.",
+    "preview": true,
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview rejects unknown format",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "code": "invalid_format",
+    "detail": "Unsupported preview format.",
+    "preview": true,
+    "status": "invalid_argument",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview stale guard -> target_version_mismatch",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "after_hash": null,
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "before_version": 9,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 256,
+     "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+     "observed_target_version": 9,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+     "total_chars": 564,
+     "truncated": true,
+     "unavailable_reason": null
+    },
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "current_version": 9,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 256,
+      "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+      "observed_target_version": 9,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+      "total_chars": 564,
+      "truncated": true,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "requires_new_submission": true,
+     "retryable": true,
+     "validation_stage": "precondition_guard"
+    },
+    "failed_change_id": null,
+    "failure_detail": "expected_target_version does not match the current target version.",
+    "failure_reason": "target_version_mismatch",
+    "preview": true,
+    "status": "rejected",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validation_stage": "precondition_guard",
+    "validity": {
+     "protocol_valid": null,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "preview with 40 facts bounded to 32 with explicit truncation, <= 32768 bytes",
+   "ok": true,
+   "detail": {
+    "status": "accepted",
+    "failure_reason": null,
+    "returned_fact_count": 32,
+    "total_change_count": 40,
+    "change_facts_truncated": true,
+    "change_facts_omission_reason": "fact_count_limit",
+    "bytes": 9908
+   }
+  },
+  {
+   "check": "preview wrote nothing (logs/ledger/target/current_pdcp unchanged)",
+   "ok": true,
+   "detail": {
+    "before": [
+     23,
+     11,
+     [
+      "9",
+      "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+      "564"
+     ],
+     [
+      [
+       "rejected",
+       "9e73b32f016fa5561500186e32365d4ecfc6c84bccc819108774a491f87b14f1"
+      ]
+     ]
+    ],
+    "after": [
+     23,
+     11,
+     [
+      "9",
+      "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+      "564"
+     ],
+     [
+      [
+       "rejected",
+       "9e73b32f016fa5561500186e32365d4ecfc6c84bccc819108774a491f87b14f1"
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "check": "preview completes while another session holds FOR UPDATE (no lock)",
+   "ok": true,
+   "detail": {
+    "seconds": 0.0
+   }
+  },
+  {
+   "check": "submit blocks on the row lock, then rejects on advanced version (no lost update)",
+   "ok": true,
+   "detail": {
+    "dt": 3.0983786582946777,
+    "r": {
+     "after_hash": null,
+     "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+     "client_request_id": null,
+     "current_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 256,
+      "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+      "observed_target_version": 10,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+      "total_chars": 564,
+      "truncated": true,
+      "unavailable_reason": null
+     },
+     "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+     "current_version": 10,
+     "deduplicated": false,
+     "diagnostic": {
+      "failure_context": {
+       "available": true,
+       "buffer_stage": "canonical_target",
+       "end": 256,
+       "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+       "observed_target_version": 10,
+       "prior_changes": 0,
+       "selection": "prefix",
+       "start": 0,
+       "text": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller ",
+       "total_chars": 564,
+       "truncated": true,
+       "unavailable_reason": null
+      },
+      "format": "patchdiff-tx/2",
+      "requires_new_submission": true,
+      "retryable": true,
+      "validation_stage": "precondition_guard"
+     },
+     "failed_change_id": null,
+     "failure_detail": "expected_target_version does not match the current target version.",
+     "failure_reason": "target_version_mismatch",
+     "pdcp_log_id": "4be09e65-1db0-40ed-b4d0-2784d5ae6aaa",
+     "status": "rejected",
+     "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+     "validity": {
+      "protocol_valid": null,
+      "semantic": "not_evaluated",
+      "task_correct": "not_evaluated",
+      "transaction_valid": null
+     },
+     "__isError__": false
+    }
+   }
+  },
+  {
+   "check": "save succeeds",
+   "ok": true,
+   "detail": {
+    "closed_editing_cycle_id": "933525c2-6618-49f5-9667-24485bae212d",
+    "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "export": {
+     "content": "alpha alpha\nThe quick brown fox jumps over the lazy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\ntail marker zebra crossing\n",
+     "content_type": "text/plain",
+     "current_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+     "filename": "doc.txt",
+     "format": "original_text",
+     "hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+     "target_type": "text/plain",
+     "version": 10
+    },
+    "failure_detail": null,
+    "failure_reason": null,
+    "new_editing_cycle_id": "6da1da47-9233-4173-8531-5c5c04107a26",
+    "snapshot_id": "64db55cc-df73-4a85-acb9-dab37f09d72c",
+    "status": "saved",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "version": 10,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "tx/2 accepted in new cycle",
+   "ok": true,
+   "detail": {
+    "after_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+    "before_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "client_request_id": null,
+    "deduplicated": false,
+    "evidence": {
+     "changes": [
+      {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 4,
+       "matched_sha256": "81fd67d02f679b818a4df6a50139958aa857eddc4d8f3561630dfb905e6d3c24",
+       "replacement_chars": 4,
+       "replacement_sha256": "c9bc072f4fa8189466c2a8f2c36a56a4ef1e60a2ffa4986ba2f155cd176c128b",
+       "span_end": 51,
+       "span_start": 47
+      },
+      {
+       "change_id": "chg_002",
+       "change_index": 2,
+       "matched_chars": 0,
+       "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+       "operation": "span",
+       "replacement_chars": 1,
+       "replacement_sha256": "62b67e1f685b7fef51102005dddd27774be3fee38c42965c53aab035d0b6b221",
+       "span_end": 0,
+       "span_start": 0
+      }
+     ]
+    },
+    "manifest_entries_added": 2,
+    "pdcp_log_id": "fbec682a-6eb1-4c8f-98dc-8bbf15953c3e",
+    "status": "accepted",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "validity": {
+     "protocol_valid": true,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": true
+    },
+    "version": 11,
+    "warnings": [],
+    "__isError__": false
+   }
+  },
+  {
+   "check": "replay detects the out-of-band SQL version bump made by this harness (tamper detection)",
+   "ok": true,
+   "detail": {
+    "accepted_transactions_replayed": 9,
+    "current_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+    "current_version": 11,
+    "failure_detail": "Logged version chain is not contiguous with the replay buffer.",
+    "failure_reason": "replay_protocol_invalid",
+    "materialized_state_checks": null,
+    "materialized_state_matches": null,
+    "pdcp_log_id": "fbec682a-6eb1-4c8f-98dc-8bbf15953c3e",
+    "reconstructed_hash": null,
+    "reconstructed_version": null,
+    "status": "failed",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "export returns canonical current content",
+   "ok": true,
+   "detail": {
+    "content_type": "text/plain",
+    "current_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+    "filename": "doc.txt",
+    "format": "original_text",
+    "hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+    "target_type": "text/plain",
+    "version": 11,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "replay of tx/2 CRLF target verifies",
+   "ok": true,
+   "detail": {
+    "accepted_transactions_replayed": 1,
+    "current_hash": "1896a0cb5a747031d2b82129f31e9f4b8a2022d9409d401e8350780a445c6270",
+    "current_version": 1,
+    "failure_detail": null,
+    "failure_reason": null,
+    "materialized_state_checks": {
+     "content_matches": true,
+     "recomputed_hash_matches": true,
+     "stored_hash_matches": true,
+     "version_matches": true
+    },
+    "materialized_state_matches": true,
+    "pdcp_log_id": null,
+    "reconstructed_hash": "1896a0cb5a747031d2b82129f31e9f4b8a2022d9409d401e8350780a445c6270",
+    "reconstructed_version": 1,
+    "status": "success",
+    "target_file_id": "37a1db3c-641d-482b-8454-3d61e66a664c",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "mixed target: tx/1, 0.2.3, tx/2 (after rejected parent across SAVE), tx/3, tx/1 all accepted",
+   "ok": true,
+   "detail": [
+    [
+     "accepted",
+     null,
+     null
+    ],
+    [
+     "accepted",
+     null,
+     null
+    ],
+    [
+     "accepted",
+     null,
+     null
+    ],
+    [
+     "accepted",
+     null,
+     null
+    ],
+    [
+     "accepted",
+     null,
+     null
+    ]
+   ]
+  },
+  {
+   "check": "replay success over mixed protocols/runtimes across SAVE with component checks",
+   "ok": true,
+   "detail": {
+    "accepted_transactions_replayed": 5,
+    "current_hash": "006cc654efe433fb09a85d51ffaeeffb03834251c515d9e40fdbc17927cd549e",
+    "current_version": 5,
+    "failure_detail": null,
+    "failure_reason": null,
+    "materialized_state_checks": {
+     "content_matches": true,
+     "recomputed_hash_matches": true,
+     "stored_hash_matches": true,
+     "version_matches": true
+    },
+    "materialized_state_matches": true,
+    "pdcp_log_id": null,
+    "reconstructed_hash": "006cc654efe433fb09a85d51ffaeeffb03834251c515d9e40fdbc17927cd549e",
+    "reconstructed_version": 5,
+    "status": "success",
+    "target_file_id": "dd63b0e5-4814-4cd8-86c2-9a6eca2a3abb",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "mixed target runtime pairing in DB",
+   "ok": true,
+   "detail": [
+    [
+     "28",
+     "accepted",
+     "patchdiff-tx/1",
+     "patchdiff-mvp-0.2.2",
+     "",
+     "1",
+     "",
+     "195"
+    ],
+    [
+     "29",
+     "accepted",
+     "0.2.3",
+     "patchdiff-mvp-0.2.2",
+     "",
+     "1",
+     "",
+     "331"
+    ],
+    [
+     "30",
+     "rejected",
+     "patchdiff-tx/2",
+     "patchdiff-mvp-0.3.0",
+     "span_expected_text_mismatch",
+     "1",
+     "",
+     "243"
+    ],
+    [
+     "31",
+     "accepted",
+     "patchdiff-tx/2",
+     "patchdiff-mvp-0.3.0",
+     "",
+     "2",
+     "",
+     "282"
+    ],
+    [
+     "32",
+     "accepted",
+     "patchdiff-tx/3",
+     "patchdiff-mvp-0.4.0",
+     "",
+     "1",
+     "",
+     "224"
+    ],
+    [
+     "33",
+     "accepted",
+     "patchdiff-tx/1",
+     "patchdiff-mvp-0.2.2",
+     "",
+     "1",
+     "",
+     "207"
+    ]
+   ]
+  },
+  {
+   "check": "rejected exact-key recovery: original failure_context unchanged, current_context fresh, near-miss recomputed",
+   "ok": true,
+   "detail": {
+    "r1": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 12,
+      "observed_target_hash": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+      "observed_target_version": 0,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "hello world\n",
+      "total_chars": 12,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "near_miss_query": {
+      "omission_reason": null,
+      "text": "helo world"
+     },
+     "requires_new_submission": true,
+     "retryable": true,
+     "validation_stage": "transaction_applicability"
+    },
+    "r2cc": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 12,
+     "observed_target_hash": "9503b113645884285a8dd4f1478a8ace1f401d082ed3dff302a168bf1f29fd52",
+     "observed_target_version": 1,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "HELLO world\n",
+     "total_chars": 12,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "nm": {
+     "buffer_stage": "canonical_target",
+     "candidates": [
+      {
+       "after": "\n",
+       "before": "",
+       "distance": 1,
+       "end": 11,
+       "start": 0,
+       "text": "hello world"
+      },
+      {
+       "after": "d\n",
+       "before": "",
+       "distance": 2,
+       "end": 10,
+       "start": 0,
+       "text": "hello worl"
+      },
+      {
+       "after": "\n",
+       "before": "h",
+       "distance": 2,
+       "end": 11,
+       "start": 1,
+       "text": "ello world"
+      }
+     ],
+     "comparison_cells": 880,
+     "kind": "near_miss",
+     "observed_target_hash": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+     "observed_target_version": 0,
+     "omission_reason": null,
+     "prior_changes": 0,
+     "returned_count": 3,
+     "status": "computed",
+     "truncated": true
+    }
+   }
+  },
+  {
+   "check": "preview oversize replacement -> invalid_argument replacement_too_large",
+   "ok": true,
+   "detail": {
+    "advisory": true,
+    "code": "replacement_too_large",
+    "diagnostic": {
+     "code": "replacement_too_large",
+     "limit_exceeded": "raw_code_points"
+    },
+    "preview": true,
+    "status": "invalid_argument",
+    "target_file_id": "f187f874-aba4-4c36-8098-8fe359401ee1",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "near-miss timing recorded",
+   "ok": true,
+   "detail": {
+    "20": {
+     "seconds": 0.193,
+     "status": "computed",
+     "reason": null,
+     "found": 3
+    },
+    "30": {
+     "seconds": 0.291,
+     "status": "computed",
+     "reason": null,
+     "found": 3
+    },
+    "38": {
+     "seconds": 0.519,
+     "status": "computed",
+     "reason": null,
+     "found": 3
+    },
+    "40": {
+     "seconds": 0.562,
+     "status": "omitted",
+     "reason": "work_budget_exhausted",
+     "found": 0
+    },
+    "48": {
+     "seconds": 0.616,
+     "status": "omitted",
+     "reason": "work_budget_exhausted",
+     "found": 0
+    },
+    "64": {
+     "seconds": 0.518,
+     "status": "omitted",
+     "reason": "work_budget_exhausted",
+     "found": 0
+    }
+   }
+  },
+  {
+   "check": "tx/2 rejects replace_all operation",
+   "ok": true,
+   "detail": {
+    "after_hash": null,
+    "before_hash": "9503b113645884285a8dd4f1478a8ace1f401d082ed3dff302a168bf1f29fd52",
+    "client_request_id": null,
+    "current_context": {
+     "available": true,
+     "buffer_stage": "canonical_target",
+     "end": 12,
+     "observed_target_hash": "9503b113645884285a8dd4f1478a8ace1f401d082ed3dff302a168bf1f29fd52",
+     "observed_target_version": 1,
+     "prior_changes": 0,
+     "selection": "prefix",
+     "start": 0,
+     "text": "HELLO world\n",
+     "total_chars": 12,
+     "truncated": false,
+     "unavailable_reason": null
+    },
+    "current_hash": "9503b113645884285a8dd4f1478a8ace1f401d082ed3dff302a168bf1f29fd52",
+    "current_version": 1,
+    "deduplicated": false,
+    "diagnostic": {
+     "allowed_operations": [
+      "match",
+      "span"
+     ],
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 12,
+      "observed_target_hash": "9503b113645884285a8dd4f1478a8ace1f401d082ed3dff302a168bf1f29fd52",
+      "observed_target_version": 1,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": "HELLO world\n",
+      "total_chars": 12,
+      "truncated": false,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/2",
+     "required_match_fields": [
+      "op",
+      "match",
+      "replace"
+     ],
+     "required_span_fields": [
+      "op",
+      "start",
+      "end",
+      "expected_text",
+      "replace"
+     ],
+     "requires_new_submission": true,
+     "retryable": false,
+     "valid_risk_values": [
+      "high",
+      "low",
+      "medium"
+     ],
+     "validation_stage": "protocol_validation"
+    },
+    "failed_change_id": null,
+    "failure_detail": "Each operation requires op=match or op=span.",
+    "failure_reason": "manifest_invalid",
+    "pdcp_log_id": "215f84ca-0064-44ea-ad30-2458b393f6fb",
+    "status": "rejected",
+    "target_file_id": "f187f874-aba4-4c36-8098-8fe359401ee1",
+    "validity": {
+     "protocol_valid": false,
+     "semantic": "not_evaluated",
+     "task_correct": "not_evaluated",
+     "transaction_valid": null
+    },
+    "__isError__": false
+   }
+  },
+  {
+   "check": "pdcp_log paging traverses every attempt exactly once",
+   "ok": true,
+   "detail": {
+    "seen": 25,
+    "db": "25"
+   }
+  },
+  {
+   "check": "ledger paging traverses every row exactly once",
+   "ok": true,
+   "detail": {
+    "seen": 13,
+    "db": 13
+   }
+  },
+  {
+   "check": "build_prompt_context responds",
+   "ok": true,
+   "detail": {
+    "active_editing_cycle_id": "6da1da47-9233-4173-8531-5c5c04107a26",
+    "context_policy": "relevant_spans",
+    "context_truncated": false,
+    "current_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+    "manifest_summary": [
+     {
+      "affected_region": null,
+      "change_id": "chg_001",
+      "derived": {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 4,
+       "matched_sha256": "81fd67d02f679b818a4df6a50139958aa857eddc4d8f3561630dfb905e6d3c24",
+       "replacement_chars": 4,
+       "replacement_sha256": "c9bc072f4fa8189466c2a8f2c36a56a4ef1e60a2ffa4986ba2f155cd176c128b",
+       "span_end": 51,
+       "span_start": 47
+      },
+      "input_state": null,
+      "intent": "after save",
+      "origin": "typed",
+      "output_state": null,
+      "risk": null,
+      "user_visible_change": null
+     },
+     {
+      "affected_region": null,
+      "change_id": "chg_002",
+      "derived": {
+       "change_id": "chg_002",
+       "change_index": 2,
+       "matched_chars": 0,
+       "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+       "operation": "span",
+       "replacement_chars": 1,
+       "replacement_sha256": "62b67e1f685b7fef51102005dddd27774be3fee38c42965c53aab035d0b6b221",
+       "span_end": 0,
+       "span_start": 0
+      },
+      "input_state": null,
+      "intent": "after save",
+      "origin": "typed",
+      "output_state": null,
+      "risk": null,
+      "user_visible_change": null
+     }
+    ],
+    "pdcp_rules": "Emit exactly one raw declarative .pdcp transaction using PDCP 0.2.3.\n\nProtocol header format:\nPDCP 0.2.3\ntarget_file_id:...<3491 chars>",
+    "target_chars": 565,
+    "target_context": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<565 chars>",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "target_type": "text/plain",
+    "user_request": "fix typo",
+    "version": 11,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "deprecated get_regeneration_context still works for new rejection rows",
+   "ok": true,
+   "detail": {
+    "current_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+    "current_version": 11,
+    "diagnostic": {
+     "failure_context": {
+      "available": true,
+      "buffer_stage": "canonical_target",
+      "end": 256,
+      "observed_target_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+      "observed_target_version": 11,
+      "prior_changes": 0,
+      "selection": "prefix",
+      "start": 0,
+      "text": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<256 chars>",
+      "total_chars": 565,
+      "truncated": true,
+      "unavailable_reason": null
+     },
+     "format": "patchdiff-tx/1",
+     "near_miss_query": {
+      "omission_reason": null,
+      "text": "does-not-exist"
+     },
+     "requires_new_submission": true,
+     "retryable": true,
+     "validation_stage": "transaction_applicability"
+    },
+    "failed_change_id": "chg_001",
+    "failure_detail": "MATCH text was not found.",
+    "failure_reason": "match_absent",
+    "fresh_target_context": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<565 chars>",
+    "instruction": "Regenerate a fresh declarative .pdcp transaction from scratch and submit it for validation.",
+    "manifest_summary": [
+     {
+      "affected_region": null,
+      "change_id": "chg_001",
+      "derived": {
+       "change_id": "chg_001",
+       "change_index": 1,
+       "matched_chars": 4,
+       "matched_sha256": "81fd67d02f679b818a4df6a50139958aa857eddc4d8f3561630dfb905e6d3c24",
+       "replacement_chars": 4,
+       "replacement_sha256": "c9bc072f4fa8189466c2a8f2c36a56a4ef1e60a2ffa4986ba2f155cd176c128b",
+       "span_end": 51,
+       "span_start": 47
+      },
+      "input_state": null,
+      "intent": "after save",
+      "origin": "typed",
+      "output_state": null,
+      "risk": null,
+      "user_visible_change": null
+     },
+     {
+      "affected_region": null,
+      "change_id": "chg_002",
+      "derived": {
+       "change_id": "chg_002",
+       "change_index": 2,
+       "matched_chars": 0,
+       "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+       "operation": "span",
+       "replacement_chars": 1,
+       "replacement_sha256": "62b67e1f685b7fef51102005dddd27774be3fee38c42965c53aab035d0b6b221",
+       "span_end": 0,
+       "span_start": 0
+      },
+      "input_state": null,
+      "intent": "after save",
+      "origin": "typed",
+      "output_state": null,
+      "risk": null,
+      "user_visible_change": null
+     }
+    ],
+    "pdcp_log_id": "f5e5de59-7926-4e35-a85f-f0e141d29c0a",
+    "pdcp_rules": "Emit exactly one raw declarative .pdcp transaction using PDCP 0.2.3.\n\nProtocol header format:\nPDCP 0.2.3\ntarget_file_id:...<3491 chars>",
+    "rejected_pdcp_content": "{\"edits\":[{\"match\":\"does-not-exist\",\"replace\":\"x\"}],\"expected_current_hash\":null,\"expected_target_version\":11,\"format\":\"...<213 chars>",
+    "status": "ready",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "user_request": null,
+    "__isError__": false
+   }
+  },
+  {
+   "check": "deprecated build_regeneration_prompt still works",
+   "ok": true,
+   "detail": {
+    "context": {
+     "current_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+     "current_version": 11,
+     "diagnostic": {
+      "failure_context": {
+       "available": true,
+       "buffer_stage": "canonical_target",
+       "end": 256,
+       "observed_target_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+       "observed_target_version": 11,
+       "prior_changes": 0,
+       "selection": "prefix",
+       "start": 0,
+       "text": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<256 chars>",
+       "total_chars": 565,
+       "truncated": true,
+       "unavailable_reason": null
+      },
+      "format": "patchdiff-tx/1",
+      "near_miss_query": {
+       "omission_reason": null,
+       "text": "does-not-exist"
+      },
+      "requires_new_submission": true,
+      "retryable": true,
+      "validation_stage": "transaction_applicability"
+     },
+     "failed_change_id": "chg_001",
+     "failure_detail": "MATCH text was not found.",
+     "failure_reason": "match_absent",
+     "fresh_target_context": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<565 chars>",
+     "instruction": "Regenerate a fresh declarative .pdcp transaction from scratch and submit it for validation.",
+     "manifest_summary": [
+      {
+       "affected_region": null,
+       "change_id": "chg_001",
+       "derived": {
+        "change_id": "chg_001",
+        "change_index": 1,
+        "matched_chars": 4,
+        "matched_sha256": "81fd67d02f679b818a4df6a50139958aa857eddc4d8f3561630dfb905e6d3c24",
+        "replacement_chars": 4,
+        "replacement_sha256": "c9bc072f4fa8189466c2a8f2c36a56a4ef1e60a2ffa4986ba2f155cd176c128b",
+        "span_end": 51,
+        "span_start": 47
+       },
+       "input_state": null,
+       "intent": "after save",
+       "origin": "typed",
+       "output_state": null,
+       "risk": null,
+       "user_visible_change": null
+      },
+      {
+       "affected_region": null,
+       "change_id": "chg_002",
+       "derived": {
+        "change_id": "chg_002",
+        "change_index": 2,
+        "matched_chars": 0,
+        "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "operation": "span",
+        "replacement_chars": 1,
+        "replacement_sha256": "62b67e1f685b7fef51102005dddd27774be3fee38c42965c53aab035d0b6b221",
+        "span_end": 0,
+        "span_start": 0
+       },
+       "input_state": null,
+       "intent": "after save",
+       "origin": "typed",
+       "output_state": null,
+       "risk": null,
+       "user_visible_change": null
+      }
+     ],
+     "pdcp_log_id": "f5e5de59-7926-4e35-a85f-f0e141d29c0a",
+     "pdcp_rules": "Emit exactly one raw declarative .pdcp transaction using PDCP 0.2.3.\n\nProtocol header format:\nPDCP 0.2.3\ntarget_file_id:...<3491 chars>",
+     "rejected_pdcp_content": "{\"edits\":[{\"match\":\"does-not-exist\",\"replace\":\"x\"}],\"expected_current_hash\":null,\"expected_target_version\":11,\"format\":\"...<213 chars>",
+     "status": "ready",
+     "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+     "user_request": null
+    },
+    "pdcp_log_id": "f5e5de59-7926-4e35-a85f-f0e141d29c0a",
+    "prompt": "PatchDIFF regeneration request.\nOriginal user request: \nRejected PDCP log: f5e5de59-7926-4e35-a85f-f0e141d29c0a\nFailure ...<4519 chars>",
+    "status": "ready",
+    "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "deprecated request_regeneration still responds",
+   "ok": true,
+   "detail": {
+    "regeneration_context": {
+     "current_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+     "current_version": 11,
+     "diagnostic": {
+      "failure_context": {
+       "available": true,
+       "buffer_stage": "canonical_target",
+       "end": 256,
+       "observed_target_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+       "observed_target_version": 11,
+       "prior_changes": 0,
+       "selection": "prefix",
+       "start": 0,
+       "text": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<256 chars>",
+       "total_chars": 565,
+       "truncated": true,
+       "unavailable_reason": null
+      },
+      "format": "patchdiff-tx/1",
+      "near_miss_query": {
+       "omission_reason": null,
+       "text": "does-not-exist"
+      },
+      "requires_new_submission": true,
+      "retryable": true,
+      "validation_stage": "transaction_applicability"
+     },
+     "failed_change_id": "chg_001",
+     "failure_detail": "MATCH text was not found.",
+     "failure_reason": "match_absent",
+     "fresh_target_context": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<565 chars>",
+     "instruction": "Regenerate a fresh declarative .pdcp transaction from scratch and submit it for validation.",
+     "manifest_summary": [
+      {
+       "affected_region": null,
+       "change_id": "chg_001",
+       "derived": {
+        "change_id": "chg_001",
+        "change_index": 1,
+        "matched_chars": 4,
+        "matched_sha256": "81fd67d02f679b818a4df6a50139958aa857eddc4d8f3561630dfb905e6d3c24",
+        "replacement_chars": 4,
+        "replacement_sha256": "c9bc072f4fa8189466c2a8f2c36a56a4ef1e60a2ffa4986ba2f155cd176c128b",
+        "span_end": 51,
+        "span_start": 47
+       },
+       "input_state": null,
+       "intent": "after save",
+       "origin": "typed",
+       "output_state": null,
+       "risk": null,
+       "user_visible_change": null
+      },
+      {
+       "affected_region": null,
+       "change_id": "chg_002",
+       "derived": {
+        "change_id": "chg_002",
+        "change_index": 2,
+        "matched_chars": 0,
+        "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "operation": "span",
+        "replacement_chars": 1,
+        "replacement_sha256": "62b67e1f685b7fef51102005dddd27774be3fee38c42965c53aab035d0b6b221",
+        "span_end": 0,
+        "span_start": 0
+       },
+       "input_state": null,
+       "intent": "after save",
+       "origin": "typed",
+       "output_state": null,
+       "risk": null,
+       "user_visible_change": null
+      }
+     ],
+     "pdcp_log_id": "f5e5de59-7926-4e35-a85f-f0e141d29c0a",
+     "pdcp_rules": "Emit exactly one raw declarative .pdcp transaction using PDCP 0.2.3.\n\nProtocol header format:\nPDCP 0.2.3\ntarget_file_id:...<3491 chars>",
+     "rejected_pdcp_content": "{\"edits\":[{\"match\":\"does-not-exist\",\"replace\":\"x\"}],\"expected_current_hash\":null,\"expected_target_version\":11,\"format\":\"...<213 chars>",
+     "status": "ready",
+     "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+     "user_request": null
+    },
+    "regeneration_prompt": {
+     "context": {
+      "current_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+      "current_version": 11,
+      "diagnostic": {
+       "failure_context": {
+        "available": true,
+        "buffer_stage": "canonical_target",
+        "end": 256,
+        "observed_target_hash": "6f660f156a96afcb3f648ec1550620b20513619c73ece932ce688319b6291fc9",
+        "observed_target_version": 11,
+        "prior_changes": 0,
+        "selection": "prefix",
+        "start": 0,
+        "text": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<256 chars>",
+        "total_chars": 565,
+        "truncated": true,
+        "unavailable_reason": null
+       },
+       "format": "patchdiff-tx/1",
+       "near_miss_query": {
+        "omission_reason": null,
+        "text": "does-not-exist"
+       },
+       "requires_new_submission": true,
+       "retryable": true,
+       "validation_stage": "transaction_applicability"
+      },
+      "failed_change_id": "chg_001",
+      "failure_detail": "MATCH text was not found.",
+      "failure_reason": "match_absent",
+      "fresh_target_context": ">alpha alpha\nThe quick brown fox jumps over the busy dog.\nfiller line\nfiller line\nfiller line\nfiller line\nfiller line\nfi...<565 chars>",
+      "instruction": "Regenerate a fresh declarative .pdcp transaction from scratch and submit it for validation.",
+      "manifest_summary": [
+       {
+        "affected_region": null,
+        "change_id": "chg_001",
+        "derived": {
+         "change_id": "chg_001",
+         "change_index": 1,
+         "matched_chars": 4,
+         "matched_sha256": "81fd67d02f679b818a4df6a50139958aa857eddc4d8f3561630dfb905e6d3c24",
+         "replacement_chars": 4,
+         "replacement_sha256": "c9bc072f4fa8189466c2a8f2c36a56a4ef1e60a2ffa4986ba2f155cd176c128b",
+         "span_end": 51,
+         "span_start": 47
+        },
+        "input_state": null,
+        "intent": "after save",
+        "origin": "typed",
+        "output_state": null,
+        "risk": null,
+        "user_visible_change": null
+       },
+       {
+        "affected_region": null,
+        "change_id": "chg_002",
+        "derived": {
+         "change_id": "chg_002",
+         "change_index": 2,
+         "matched_chars": 0,
+         "matched_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "operation": "span",
+         "replacement_chars": 1,
+         "replacement_sha256": "62b67e1f685b7fef51102005dddd27774be3fee38c42965c53aab035d0b6b221",
+         "span_end": 0,
+         "span_start": 0
+        },
+        "input_state": null,
+        "intent": "after save",
+        "origin": "typed",
+        "output_state": null,
+        "risk": null,
+        "user_visible_change": null
+       }
+      ],
+      "pdcp_log_id": "f5e5de59-7926-4e35-a85f-f0e141d29c0a",
+      "pdcp_rules": "Emit exactly one raw declarative .pdcp transaction using PDCP 0.2.3.\n\nProtocol header format:\nPDCP 0.2.3\ntarget_file_id:...<3491 chars>",
+      "rejected_pdcp_content": "{\"edits\":[{\"match\":\"does-not-exist\",\"replace\":\"x\"}],\"expected_current_hash\":null,\"expected_target_version\":11,\"format\":\"...<213 chars>",
+      "status": "ready",
+      "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119",
+      "user_request": null
+     },
+     "pdcp_log_id": "f5e5de59-7926-4e35-a85f-f0e141d29c0a",
+     "prompt": "PatchDIFF regeneration request.\nOriginal user request: \nRejected PDCP log: f5e5de59-7926-4e35-a85f-f0e141d29c0a\nFailure ...<4519 chars>",
+     "status": "ready",
+     "target_file_id": "eda1823e-97b7-4edb-b02c-20a96ed1f119"
+    },
+    "status": "context_ready",
+    "__isError__": false
+   }
+  },
+  {
+   "check": "adapter stderr clean",
+   "ok": true,
+   "detail": ""
+  }
+ ],
+ "observations": [
+  {
+   "label": "OBSERVATION oversize replacement persisted via key-conflict path",
+   "log_row": [
+    "20",
+    "rejected",
+    "patchdiff-tx/3",
+    "patchdiff-mvp-0.4.0",
+    "context_invalid",
+    "0",
+    "",
+    "1200214"
+   ],
+   "logs_added": 1
+  },
+  {
+   "label": "OBSERVATION near-miss beyond 256-char prefix",
+   "near_misses": {
+    "buffer_stage": "canonical_target",
+    "candidates": [],
+    "comparison_cells": 123682,
+    "kind": "near_miss",
+    "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "observed_target_version": 9,
+    "omission_reason": null,
+    "prior_changes": 0,
+    "returned_count": 0,
+    "status": "computed",
+    "truncated": true
+   }
+  },
+  {
+   "label": "OBSERVATION 45-char near-miss query",
+   "near_misses": {
+    "buffer_stage": "canonical_target",
+    "candidates": [],
+    "kind": "near_miss",
+    "observed_target_hash": "7db33964a6f40f2287845b8202de630eb595a8056e7ba54955a28f5ccc5ca47e",
+    "observed_target_version": 9,
+    "omission_reason": "work_budget_exhausted",
+    "prior_changes": 0,
+    "returned_count": 0,
+    "status": "omitted",
+    "truncated": false
+   }
+  },
+  {
+   "label": "OBSERVATION near-miss by query length (256-pt prefix)",
+   "timing": {
+    "20": {
+     "seconds": 0.193,
+     "status": "computed",
+     "reason": null,
+     "found": 3
+    },
+    "30": {
+     "seconds": 0.291,
+     "status": "computed",
+     "reason": null,
+     "found": 3
+    },
+    "38": {
+     "seconds": 0.519,
+     "status": "computed",
+     "reason": null,
+     "found": 3
+    },
+    "40": {
+     "seconds": 0.562,
+     "status": "omitted",
+     "reason": "work_budget_exhausted",
+     "found": 0
+    },
+    "48": {
+     "seconds": 0.616,
+     "status": "omitted",
+     "reason": "work_budget_exhausted",
+     "found": 0
+    },
+    "64": {
+     "seconds": 0.518,
+     "status": "omitted",
+     "reason": "work_budget_exhausted",
+     "found": 0
+    }
+   }
+  }
+ ]
+}
