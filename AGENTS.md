@@ -104,8 +104,9 @@ The host/agent owns planning, context gathering, proposal generation, and retry 
 The PatchDIFF MCP service provides:
 
 - **Target initialization & retrieval**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
-- **Authoritative bounded reads & exact search**: `patchdiff_read_target` (`start`, `length`, `next_start`), `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`)
-- **Guarded atomic transaction submission**: `patchdiff_submit_edits` (typed matches), `patchdiff_submit_operations` (guarded match/span operations) and `patchdiff_submit_pdcp` (legacy `.pdcp`), both supporting `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage
+- **Authoritative bounded reads & exact search**: `patchdiff_read_target` (`start`, `length`, `next_start`), `patchdiff_read_lines` (inclusive LF ranges and range-relative `next_offset`), `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`)
+- **Guarded atomic transaction submission**: `patchdiff_submit_edits` (typed matches), `patchdiff_submit_operations` (guarded match/span), `patchdiff_submit_replacement` (sole explicit whole-target replacement) and `patchdiff_submit_pdcp` (legacy `.pdcp`), each supporting `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage
+- **Advisory evaluation**: `patchdiff_preview` uses a coherent observation and the shared read-only evaluator, with bounded facts/diagnostics and no audit, retry key or mutation; later submission rechecks its guards.
 - **Checkpointing, replay, and bounded history**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
 - **Convenience / deprecated compatibility wrappers**: `patchdiff_build_prompt_context` (convenience bounded prefix), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 

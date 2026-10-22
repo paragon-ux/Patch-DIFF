@@ -6,6 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "patchdiff-mvp"
 version = "0.1.0"
 description = "MCP-first PatchDIFF MVP backend"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.13,<2.0",
@@ -20,11 +22,19 @@ dependencies = [
 test = [
     "httpx>=0.27,<1.0",
     "jsonschema>=4,<5",
-    "pytest>=8.0,<9.0",
+    "pytest>=9.0.3,<10.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/paragon-ux/Patch-DIFF"
+Issues = "https://github.com/paragon-ux/Patch-DIFF/issues"
 
 [tool.setuptools.packages.find]
 where = ["backend"]
+include = ["app", "app.*"]
+
+[tool.setuptools.package-data]
+app = ["migrations/alembic.ini", "migrations/script.py.mako"]
 
 [tool.pytest.ini_options]
 pythonpath = ["backend", "."]

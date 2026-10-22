@@ -18,7 +18,7 @@ Do not connect Claude Desktop to `http://127.0.0.1:8000` for this setup. The Fas
 
 The adapter entry point configures stdin/stdout as strict UTF-8, including Windows pipes and environments with a different PYTHONIOENCODING value. Hosts must send UTF-8 JSON-RPC bytes. ASCII Unicode escapes remain supported; malformed UTF-8 wire bytes are not silently repaired. Escaped invalid edit strings still follow the audited domain-validation contract.
 
-When running an older revision without the G02 fix, add `"PYTHONIOENCODING": "utf-8"` to the MCP server environment. Without it, literal Unicode requests can be accepted with incorrectly decoded text; this was reproduced as input corruption rather than a stdout crash. The workaround remains compatible with fixed revisions.
+When running an older revision without the UTF-8 transport fix, add `"PYTHONIOENCODING": "utf-8"` to the MCP server environment. Without it, literal Unicode requests can be accepted with incorrectly decoded text; this was reproduced as input corruption rather than a stdout crash. The workaround remains compatible with fixed revisions.
 
 Restart or refresh the server through the host after command/environment changes, then verify the connection. Claude Desktop restart steps appear below; other hosts have their own refresh lifecycle.
 
@@ -89,13 +89,13 @@ Replace paths if your repo lives somewhere else:
   "mcpServers": {
     "patchdiff": {
       "type": "stdio",
-      "command": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\Patch-DIFF\\.venv\\Scripts\\python.exe",
       "args": [
         "-m",
         "app.mcp.external_adapter"
       ],
       "env": {
-        "PYTHONPATH": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\backend",
+        "PYTHONPATH": "C:\\path\\to\\Patch-DIFF\\backend",
         "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff"
       }
     }
@@ -120,10 +120,10 @@ Open a new chat and check the MCP/connectors UI:
 You should see `patchdiff` and the full modernized tool surface:
 
 - **Target lifecycle**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
-- **Authoritative reads & exact search**: `patchdiff_read_target`, `patchdiff_find_occurrences`
-- **Guarded edit submission**: `patchdiff_submit_edits` (primary typed transaction format, `patchdiff-tx/1`), `patchdiff_submit_pdcp` (legacy `.pdcp` format)
+- **Authoritative reads & exact search**: `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`
+- **Guarded edit submission**: `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (match/span, `patchdiff-tx/2`), `patchdiff_submit_replacement` (sole replace_all, `patchdiff-tx/3`), `patchdiff_submit_pdcp` (legacy `.pdcp`)
 - **Checkpoints, replay & audit**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
-- **Context preview & legacy wrappers**: `patchdiff_build_prompt_context` (bounded prefix preview), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
+- **Advisory preview & legacy wrappers**: `patchdiff_preview` (bounded keyless/no-audit evaluation), `patchdiff_build_prompt_context` (bounded prefix convenience), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 
 For guidance on how the host/model interacts with these tools (reading before proposing, supplying guards, handling rejections with retry lineage, and client request idempotency), see [HOST_INTEGRATION_GUIDE.md](HOST_INTEGRATION_GUIDE.md).
 
@@ -147,7 +147,7 @@ For this repo, dependencies are normally installed into:
 The safer Claude Desktop config is:
 
 ```json
-"command": "C:\\Users\\USER\\Desktop\\Frameworks\\Patch-DIFF\\.venv\\Scripts\\python.exe",
+"command": "C:\\path\\to\\Patch-DIFF\\.venv\\Scripts\\python.exe",
 "args": ["-m", "app.mcp.external_adapter"]
 ```
 
