@@ -57,8 +57,8 @@ $env:PYTHONPATH = "backend"
 New admitted submissions on known targets append a terminal row in the submission transaction. Exact keyed recovery appends none. Unknown/malformed targets, pre-admission option errors and disallowed pending local changes have no linked row; caller rollback and infrastructure failures can prevent persistence.
 - `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
 - `target_file_id`: foreign key to `cloud_target_files`.
-- `protocol_version`: `'patchdiff-tx/1'`, `'patchdiff-tx/2'` or `'0.2.3'`.
-- `runtime_version`: `'patchdiff-mvp-0.3.0'` for `patchdiff-tx/2`; current legacy and `patchdiff-tx/1` submissions retain `'patchdiff-mvp-0.2.2'`. Historical `0.1.0`, `0.2.0` and `0.2.1` profiles remain supported under their recorded identifiers.
+- `protocol_version`: `'patchdiff-tx/1'`, `'patchdiff-tx/2'`, `'patchdiff-tx/3'` or `'0.2.3'`.
+- `runtime_version`: `'patchdiff-mvp-0.4.0'` for `patchdiff-tx/3`, `'patchdiff-mvp-0.3.0'` for `patchdiff-tx/2`; current legacy and `patchdiff-tx/1` submissions retain `'patchdiff-mvp-0.2.2'`. Historical `0.1.0`, `0.2.0` and `0.2.1` profiles remain supported under their recorded identifiers.
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
 - `client_request_id`: client-supplied TEXT key for idempotency (1–128 printable ASCII characters without whitespace; `req-001` is valid, a UUID is optional).
