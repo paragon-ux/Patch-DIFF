@@ -65,6 +65,7 @@ def test_discovery_examples_are_valid_bounded_and_isolated():
 def test_structured_admission_survives_mcp_serialization():
     result = SubmitPDCPResult(status="invalid_argument", target_file_id=uuid.uuid4(), pdcp_log_id=None,
                              before_hash=None, after_hash=None, before_version=None, after_version=None,
+                             current_hash=None, current_version=None,
                              diagnostic={"code": "replacement_too_large", "limit_exceeded": "raw_code_points"},
                              correlation_id=str(uuid.uuid4()))
     payload = _submit_result_to_payload(result)
