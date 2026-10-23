@@ -1098,8 +1098,8 @@ def _persist_acceptance(
         pdcp_content=pdcp_content,
         pdcp_content_hash=pdcp_content_hash,
         status="accepted",
-        # Accepted rows without warnings keep diagnostic_json NULL, as before.
-        diagnostic_json=envelope if accepted.warnings else None,
+        # Accepted rows without warnings leave diagnostic_json unset: SQL NULL as before, never JSON null.
+        **({"diagnostic_json": envelope} if accepted.warnings else {}),
         expected_target_version=expected_target_version,
         expected_current_hash=expected_current_hash,
         before_version=before_version,

@@ -286,6 +286,17 @@ def test_budget_stop_keeps_the_exact_ranking_of_the_scanned_range(monkeypatch):
     assert [(c["distance"], c["start"], c["end"]) for c in result["candidates"]] == in_range[:3]
 
 
+def test_abandoned_starts_keep_the_exact_ranking_and_cut_work():
+    rng = random.Random(11)
+    buffer = "".join(rng.choice("abcdefgh ") for _ in range(800))
+    needle = buffer[500:520][:9] + "#" + buffer[500:520][10:]
+    result = near_misses(stored(buffer, needle), caller_owned=False, buffer=buffer)
+    assert [(c["distance"], c["start"], c["end"]) for c in result["candidates"]] == _reference(buffer, needle)[:3]
+    assert result["candidates"][0]["start"] == 500 and result["scope_truncated"] is False
+    # Without abandoning, every start evaluates about len(needle) banded rows.
+    assert result["comparison_cells"] < (len(buffer) - len(needle)) * len(needle) * 9 // 3
+
+
 def test_sequential_failures_name_the_consuming_change_and_suppress_near_misses():
     result = typed("# Calcly\nInstall Calcly", [{"match": "# Calcly", "replace": "# Numerix"},
                                                  {"match": "# Calcly", "replace": "# X"}])

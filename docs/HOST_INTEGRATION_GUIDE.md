@@ -6,7 +6,7 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 ## 0. Stdio transport and host refresh
 
-Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Responses carry literal UTF-8 text, so the model sees `🌍` and `中`, not `🌍` escapes.
+Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
 
 For older adapter revisions, set PYTHONIOENCODING=utf-8 in the server environment. Literal Unicode can otherwise be misdecoded and persisted even when the call succeeds; an ASCII-escaped request alone does not test this path. This setting remains compatible with the fixed adapter.
 
@@ -90,7 +90,7 @@ sequenceDiagram
 
 An `occurrence_index` selects among the exact occurrences in the text that edit sees, which is the text after every earlier edit in the same transaction. Indexes from `patchdiff_find_occurrences` or `exact_candidates` describe the target before the transaction, so they are only valid for the first edit, or when each transaction has one edit.
 
-Example: a README contains `Calcly` six times and the user wants the first three renamed. Sending three edits with `occurrence_index` 1, 2 and 3 renames originals 1, 3 and 5: after the first rename only five remain, and index 2 now means original 3. The transaction is accepted, because each instruction is well formed, but it carries `occurrence_index_basis_shift` warnings such as "chg_002 occurrence_index 2 selected the occurrence that was index 3 at transaction start". Treat that warning as a wrong edit and fix it with a follow-up proposal.
+Example: a README contains `Calcly` six times and the user wants the first three renamed. Sending three edits with `occurrence_index` 1, 2 and 3 renames originals 1, 3 and 5: after the first rename only five remain, and index 2 now means original 3. The transaction is accepted, because each instruction is well formed, but it carries `occurrence_index_basis_shift` warnings such as "chg_002 occurrence_index 2 selected the occurrence that was index 3 at transaction start". The warning reports the basis difference; it cannot know which basis you meant. If you meant each index to count after the earlier edits, the edit is what you asked for. If you took the indexes from `patchdiff_find_occurrences` or `exact_candidates`, a different occurrence was edited: compare `transaction_start_occurrence_index` with the index you read, and correct it with a follow-up proposal.
 
 To edit several occurrences of the same text, prefer one of:
 
@@ -231,7 +231,7 @@ PatchDIFF stores canonical LF text and hashes it that way. Line endings in the u
 3. For `mixed` uploads, `original_eol` is refused (`original_eol_unrecoverable`) because per-line endings were never stored. Choose `canonical_lf` or `crlf` explicitly, or restore line endings from version control in the host. Targets created before line endings were recorded return `source_line_endings: null`; `original_eol` is refused for them with `source_line_endings_unknown`.
 4. The default `format: "original_text"` returns canonical LF text, as it always has. Despite its name it never meant the original bytes.
 
-A git repository with `core.autocrlf=true` checks files out with CRLF; writing LF back produces a whole-file diff even when only one line changed. Exporting with `original_eol` avoids that.
+With `core.autocrlf=true`, git converts line endings on checkout and on commit, so writing LF back to a file stored with LF in the repository still shows only the edited lines in `git diff`. A file stored with CRLF in the repository (for example under a `-text` attribute) and any tool that compares working-tree bytes see every line change. Exporting with `original_eol` keeps the original style, so only the edited lines differ in every case.
 
 ## 9. What is outside the guarantee
 
@@ -239,4 +239,4 @@ PatchDIFF's guarantees cover the managed target in Postgres. An exported file ed
 
 ## 10. Host skill checklist
 
-A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; treat accepted-edit `warnings` as probable mistakes; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; do not treat a local copy as authoritative.
+A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; check each accepted-edit warning against what you meant before continuing; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; do not treat a local copy as authoritative.

@@ -175,7 +175,9 @@ def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.st
             else:
                 response = adapter.handle_request(request)
         if response is not None:
-            output_stream.write(_dumps(response, separators=(",", ":"), sort_keys=True) + "\n")
+            # The JSON-RPC line stays ASCII: hosts that mis-decode stdout cannot corrupt text, and
+            # U+2028/U+2029/U+0085 cannot split lines. Tool-result text inside it is literal.
+            output_stream.write(json.dumps(response, separators=(",", ":"), sort_keys=True) + "\n")
             output_stream.flush()
 
 
@@ -186,7 +188,7 @@ def main() -> None:
 
 
 def _dumps(value: Any, **options: Any) -> str:
-    """Literal UTF-8 JSON; fall back to ASCII escapes if strict UTF-8 cannot encode it."""
+    """Tool-result JSON with literal characters; ASCII escapes if strict UTF-8 cannot encode it."""
     text = json.dumps(value, ensure_ascii=False, **options)
     try:
         text.encode("utf-8")

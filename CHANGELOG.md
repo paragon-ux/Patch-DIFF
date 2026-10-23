@@ -15,12 +15,13 @@ Fixes for the 20 findings of the PR #11 agentic friction review. Decisions: [fri
 
 - `diagnostic.retryable` follows one shared definition and is now `true` for span failures, `target_version_mismatch` and `target_diverged`.
 - A known failure location beyond the start of the text gives `failure_context` a window around it. An MCP `current_context` identical to `diagnostic.failure_context` is returned as unavailable with `same_as_failure_context`.
-- Tool results are literal UTF-8 instead of `\uXXXX` escapes. Unknown or missing tool arguments return a structured `invalid_argument` payload. Unknown export formats are refused instead of echoed.
+- Tool-result text carries literal characters instead of `\uXXXX` escapes; the JSON-RPC line around it stays ASCII-escaped, as before. Unknown or missing tool arguments return a structured `invalid_argument` payload. Unknown export formats are refused instead of echoed.
 - `include_content` history pages are limited to about 1 MB of returned content; the first entry is always whole.
 
 ### Compatibility and operations
 
 - Migration `20261022_0003` adds nullable `cloud_target_files.source_line_endings`. Existing targets keep NULL (unknown). Downgrade refuses while recorded facts exist.
+- Host-visible response changes: a `current_context` identical to `diagnostic.failure_context` is returned as unavailable (`same_as_failure_context`), so hosts must check `available` before reading its `text`, as the contract already required; an unknown export `format` returns `invalid_argument`; unknown or missing tool arguments return a structured payload instead of Python error text.
 - Existing failure labels, request fingerprints, recorded runtime profiles and the records of every previously valid request are unchanged. Historical rows are not rewritten. Replay ignores warnings, diagnostics and line-ending metadata.
 
 ## Unreleased — guarded editing, bounded reads and advisory preview

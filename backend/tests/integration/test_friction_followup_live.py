@@ -5,6 +5,7 @@ import uuid
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy import text as sql_text
 
 from app.core.hashing import canonical_sha256
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, SPAN_CONTEXT_RUNTIME_VERSION
@@ -68,6 +69,12 @@ def test_fr1_fr17_warnings_are_persisted_recovered_and_listed():
     with SessionLocal() as session:
         plain = submit_edits(session, **edits(target_id, [{"match": "tiny", "replace": "small"}], version=1))
     assert plain.warnings == () and log_row(plain.pdcp_log_id).diagnostic_json is None
+    # SQL NULL, not a JSON null value: the ORM reads both as None.
+    with SessionLocal() as session:
+        stored_kind = session.execute(sql_text(
+            "SELECT diagnostic_json IS NULL, jsonb_typeof(diagnostic_json) FROM append_only_pdcp_logs "
+            "WHERE pdcp_log_id = :log_id"), {"log_id": plain.pdcp_log_id}).one()
+    assert tuple(stored_kind) == (True, None)
     with SessionLocal() as session:
         noop = submit_edits(session, **edits(target_id, [{"match": "small", "replace": "small"}], version=2))
     assert [item["code"] for item in noop.warning_details] == ["no_op_change", "no_op_transaction"]

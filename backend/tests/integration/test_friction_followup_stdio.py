@@ -60,7 +60,14 @@ def test_real_stdio_friction_followup_shapes():
         target_id = upload["target_file_id"]
         read = call("patchdiff_read_target", {"target_file_id": target_id})
         assert read["text"] == "# Intro \U0001f30d\nalpha\nbeta\n"
-        assert "\U0001f30d".encode("utf-8") in raw_lines[-1] and b"\\ud83c" not in raw_lines[-1]
+        # The JSON-RPC line is pure ASCII; the tool text inside it carries literal characters.
+        tool_text = json.loads(raw_lines[-1].decode("ascii"))["result"]["content"][0]["text"]
+        assert "\U0001f30d" in tool_text and "\\ud83c" not in tool_text
+        separators = call("patchdiff_initialize_target", {"filename": "seps.txt", "content": "a\u2028b\u2029c\x85d\n",
+                                                          "content_type": "text/plain"})
+        echoed = call("patchdiff_read_target", {"target_file_id": separators["target_file_id"]})
+        assert echoed["text"] == "a\u2028b\u2029c\x85d\n" and raw_lines[-1].isascii()
+        assert raw_lines[-1].count(b"\n") == 1 and len(raw_lines[-1].decode("ascii").splitlines()) == 1
         exported = call("patchdiff_export_target", {"target_file_id": target_id, "format": "original_eol"})
         assert exported["content"] == content and exported["content_eol"] == "crlf"
         assert exported["content_sha256"] == upload["source_line_endings"]["source_sha256"]

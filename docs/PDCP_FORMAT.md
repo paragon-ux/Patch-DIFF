@@ -22,7 +22,7 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 Submitted over MCP via `patchdiff_submit_edits`:
 ```json
 {
-  "target_file_id": "11111111-1111-1111-1111-111111111111",
+  "target_file_id": "11111111-1111-4111-8111-111111111111",
   "expected_target_version": 0,
   "expected_current_hash": null,
   "intent": "Update user settings label and default value.",
@@ -80,7 +80,7 @@ Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdi
 Submitted over MCP via `patchdiff_submit_pdcp`:
 ```text
 PDCP 0.2.3
-target_file_id: 11111111-1111-1111-1111-111111111111
+target_file_id: 11111111-1111-4111-8111-111111111111
 target_type: text/markdown
 target_hash: b8711cb73b5f382538f71019da43211d7e191622d0a865a8c1e5bf63ea1b58f2
 

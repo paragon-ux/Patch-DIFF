@@ -77,7 +77,7 @@ def near_misses(diagnostic: dict, *, caller_owned: bool, buffer: str | None = No
         window = text[start:start+widths[-1]]
         previous = [min(offset_, cap) for offset_ in range(len(window)+1)]
         used = 0
-        exhausted = False
+        exhausted = abandoned = False
         for index, char in enumerate(needle, 1):
             low, high = max(1, index-threshold), min(len(window), index+threshold)
             band = max(0, high-low+1)
@@ -90,10 +90,17 @@ def near_misses(diagnostic: dict, *, caller_owned: bool, buffer: str | None = No
                 current[column] = min(current[column-1]+1, previous[column]+1,
                                       previous[column-1]+(char != window[column-1]), cap)
             previous = current
+            # Row minima never decrease, so once a whole row exceeds the threshold no window
+            # from this start can qualify; abandoning the start keeps the ranking exact.
+            if current[0] > threshold and min(current[low:high+1], default=cap) > threshold:
+                abandoned = True
+                break
         if exhausted:
             break
         cells += used
         processed += 1
+        if abandoned:
+            continue
         for width in widths:
             if width <= len(window) and 0 < previous[width] <= threshold:
                 ranked.append((previous[width], start, start+width))

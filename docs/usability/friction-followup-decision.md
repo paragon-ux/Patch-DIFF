@@ -113,7 +113,7 @@ Ledger entries add `pdcp_log_id`, `change_index`, `editing_cycle_id`, `log_seque
 
 ### D14 (FR-14) Wire encoding and response envelope
 
-- Tool-result text and JSON-RPC lines are serialized with `ensure_ascii=False`. If a payload cannot be encoded as strict UTF-8, for example because a lone surrogate reached an echo, that one message falls back to ASCII escaping. The process never crashes on output. Parsed JSON values are identical.
+- Tool-result text is serialized with `ensure_ascii=False`. If it cannot be encoded as strict UTF-8, for example because a lone surrogate reached an echo, that one result falls back to ASCII escaping. The JSON-RPC line around it stays ASCII-escaped, as before (amended after the friction re-test; see below). The process never crashes on output. Parsed JSON values are identical.
 - Unknown or missing tool arguments return a structured JSON `invalid_argument` payload as the tool-result text, with `code: "unknown_argument"` or `"missing_argument"` and the argument names. The result keeps `isError: true`, because the call never reached the tool. Previously the text was a Python `TypeError` message.
 - `patchdiff_initialize_target`, `patchdiff_handle_upload`, `patchdiff_get_target` and `patchdiff_export_target` add `status: "ok"` on success. Preview `invalid_argument` adds `failure_detail` next to its existing `code`/`detail`. Submission `invalid_argument` adds a top-level `code`. Accepted responses gain `current_version`/`current_hash` (FR-9). Existing keys are kept.
 
@@ -142,6 +142,19 @@ Preview computes `near_misses` inline for `match_absent`, using the same functio
 ### FR-20 Version guard on SAVE
 
 `patchdiff_save` accepts optional `expected_target_version`. A mismatch returns `status: "rejected"`, `failure_reason: "target_version_mismatch"` and no snapshot. An invalid value returns `context_invalid`. Both guards are checked when supplied.
+
+## Amendments after the PR #13 friction re-test
+
+The independent re-test at `de6e7c2` ([report](../reviews/PR-13-de6e7c2-friction-review.md)) confirmed FR-1..FR-20 fixed and found no merge-blocking issue. It reported new friction from some fixes. Dispositions:
+
+- **NF-2, NF-6 (D14 amended):** literal JSON-RPC lines silently corrupted text for hosts that decode stdout with a locale code page, and U+2028/U+2029/U+0085 broke hosts that split lines with `str.splitlines()`. JSON-RPC lines are ASCII-escaped again, exactly as before PR #13. Only the tool-result text inside them is literal, which is what FR-14 needed: the model sees literal characters once the host parses the envelope.
+- **NF-3 (implementation bug):** accepted rows without warnings stored the JSON value `null` instead of SQL NULL, contrary to D11. They now leave the column unset. No released history contains such rows.
+- **NF-1 and NF-7 (guidance):** `occurrence_index_basis_shift` and `grapheme_boundary_split` report facts that are also true for deliberate edits. The runtime is unchanged; the guide and MCP_TOOLS no longer tell hosts to treat them as mistakes, and explain how to tell the cases apart.
+- **NF-4 (D8 kept):** an elided `current_context` breaks hosts that read `current_context.text` without checking `available`. Unavailable objects were already part of the documented contract (`invalid_target_id`, `target_not_found`, `unlocked_local_state`), and the elision removes the duplicate that FR-8 measured at 42% of rejection bytes. The CHANGELOG now lists it as a host-visible change.
+- **NF-5 (partly fixed, rest deferred):** a window start is now abandoned once a whole dynamic-programming row exceeds the threshold. Row minima never decrease, so rankings stay exact, and varied text is scanned to the full 65,536 code points. On highly repetitive text the bounds rarely cut work: the 1,000,000-cell cap still ends the scan early, and a rejection can spend up to about a second of CPU on near misses. MCP_TOOLS documents this. A faster filter or a smaller cap is a follow-up.
+- **NF-8 (deferred, = review MCP-001):** ledger and attempt pages decode stored records to expose intent and rationale. A cheaper extraction is a follow-up.
+- **NF-9, NF-10 (not addressed):** the remaining response-shape differences and legacy-format discoverability are outside this batch; NF-10 predates PR #11.
+- **Documentation mismatches:** the guide's escape example, its `core.autocrlf` claim, the legacy example UUIDs in PDCP_FORMAT and the CHANGELOG compatibility notes are corrected.
 
 ## Verification plan
 
