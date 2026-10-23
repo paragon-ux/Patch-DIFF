@@ -22,7 +22,7 @@ After changing a server command or environment, use the host-supported server re
 | Durable log of accepted **and** rejected attempts with failure labels and lineage | Judge whether an edit achieves the user's goal |
 | Deterministic replay from initial content plus accepted history | Track edits made to an exported copy outside PatchDIFF |
 
-Accepted means *protocol-valid and transaction-valid*. `validity.task_correct` and `validity.semantic` are always `"not_evaluated"`. Run tests, linters and review in the host. Read `warnings` on every acceptance: they flag accepted edits that are well formed but probably not what you meant.
+Accepted means *protocol-valid and transaction-valid*. `validity.task_correct` and `validity.semantic` are always `"not_evaluated"`. Run tests, linters and review in the host. Read `warnings` on every acceptance: each reports a fact about a well-formed edit (an unchanged replacement, a shifted index basis, a split grapheme cluster) to compare with what you meant.
 
 ## 2. The standard loop
 

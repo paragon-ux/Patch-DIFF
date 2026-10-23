@@ -53,7 +53,7 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 10. **PR #11 Friction Follow-Up** ([decisions](usability/friction-followup-decision.md)):
    - Span context guards under immutable runtime 0.5.0, advisory accepted-transaction warnings and one shared retryable set.
    - Migration `20261022_0003` records upload line endings; export formats are an honoured enum.
-   - Focused failure windows, consumed-match evidence, distinct near misses over a bounded failing-buffer copy, request-key conflict fields, joinable history, line-read offsets, literal UTF-8 tool results and a SAVE version guard.
+   - Focused failure windows, consumed-match evidence, distinct near misses over a bounded failing-buffer copy, request-key conflict fields, joinable history, line-read offsets, literal tool-result text inside ASCII JSON-RPC lines and a SAVE version guard.
 
 ## Verification boundaries
 
