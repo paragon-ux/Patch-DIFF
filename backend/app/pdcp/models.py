@@ -76,6 +76,9 @@ class PDCPChange:
     operation: str = "match"
     span_start: int | None = None
     span_end: int | None = None
+    # tx/2 span context guards (runtime patchdiff-mvp-0.5.0 only); exact adjacent text.
+    expected_before: str | None = None
+    expected_after: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

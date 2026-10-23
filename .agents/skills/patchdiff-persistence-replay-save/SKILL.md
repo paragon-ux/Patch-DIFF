@@ -45,6 +45,9 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
    - Makes `manifest_ledger` legacy prose columns nullable (`input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`).
    - Adds `origin` TEXT NOT NULL (default `'pdcp_manifest'`) and `derived_json` JSONB NULL to `append_only_manifest_ledger`.
    - Guarded downgrade: refuses to downgrade to `0001` if typed ledger rows exist (`origin = 'typed'`).
+3. `20261022_0003_source_line_endings.py`:
+   - Adds nullable JSONB `source_line_endings` to `cloud_target_files`, written at upload before LF canonicalization; existing targets keep NULL.
+   - Guarded downgrade: refuses while any target has recorded line endings.
 
 Migrations must always run cleanly on live Postgres:
 ```powershell
@@ -58,7 +61,7 @@ New admitted submissions on known targets append a terminal row in the submissio
 - `log_sequence`: strictly ascending BigInteger sequence number (`BIGSERIAL`).
 - `target_file_id`: foreign key to `cloud_target_files`.
 - `protocol_version`: `'patchdiff-tx/1'`, `'patchdiff-tx/2'`, `'patchdiff-tx/3'` or `'0.2.3'`.
-- `runtime_version`: `'patchdiff-mvp-0.4.0'` for `patchdiff-tx/3`, `'patchdiff-mvp-0.3.0'` for `patchdiff-tx/2`; current legacy and `patchdiff-tx/1` submissions retain `'patchdiff-mvp-0.2.2'`. Historical `0.1.0`, `0.2.0` and `0.2.1` profiles remain supported under their recorded identifiers.
+- `runtime_version`: `'patchdiff-mvp-0.4.0'` for `patchdiff-tx/3`, `'patchdiff-mvp-0.3.0'` for `patchdiff-tx/2` (`'patchdiff-mvp-0.5.0'` when a span carries `expected_before`/`expected_after`); current legacy and `patchdiff-tx/1` submissions retain `'patchdiff-mvp-0.2.2'`. Historical `0.1.0`, `0.2.0` and `0.2.1` profiles remain supported under their recorded identifiers.
 - `status`: `'accepted'` or `'rejected'`.
 - `failure_reason`: canonical failure string if rejected; `None` if accepted.
 - `client_request_id`: client-supplied TEXT key for idempotency (1–128 printable ASCII characters without whitespace; `req-001` is valid, a UUID is optional).
@@ -130,8 +133,9 @@ A successful reconstruction can report materialized_state_matches=false. CRLF/ba
 
 ## Goal F additions
 
-- New pairs: tx/2 with `patchdiff-mvp-0.3.0`, tx/3 with `patchdiff-mvp-0.4.0`; tx/1 and legacy stay on `patchdiff-mvp-0.2.2`. No migration. Replay dispatches tx/2 and tx/3 through their decoders, requires the matching profile flags, and never applies fresh admission limits.
-- Rejected rows persist bounded `failure_context`, `exact_candidates` and `near_miss_query`; `current_context`, `near_misses` and `correlation_id` are never stored. Exact recovery returns the stored diagnostic unchanged.
+- New pairs: tx/2 with `patchdiff-mvp-0.3.0`, tx/3 with `patchdiff-mvp-0.4.0`; tx/1 and legacy stay on `patchdiff-mvp-0.2.2`. These formats need no migration; span context (`patchdiff-mvp-0.5.0`) and line-ending metadata (migration `0003`) came later. Replay dispatches tx/2 and tx/3 through their decoders, requires the matching profile flags, and never applies fresh admission limits.
+- Rejected rows persist bounded `failure_context`, `exact_candidates`, span evidence, `original_occurrences` and `near_miss_query`; `current_context`, `near_misses`, the near-miss scan buffer and `correlation_id` are never stored. Exact recovery returns the stored diagnostic unchanged.
+- Accepted rows store `diagnostic_json = {warnings, warning_count, warnings_truncated}` only when warnings exist; exact recovery returns them. Ledger and attempt pages join through `pdcp_log_id`, and `include_content` pages carry a 1,048,576-byte content budget.
 - tx/3 writes one typed ledger row with `operation: "replace_all"`. A valid oversized fresh replacement writes nothing, while a key-conflict row stores the full submitted record.
 - `patchdiff_read_lines` and `patchdiff_preview` read one committed row under `no_autoflush`, with no lock and no write.
 - Contract: `docs/DATA_MODEL.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").

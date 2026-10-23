@@ -55,7 +55,7 @@ None of these formats is executable code. All lower into `ParsedPDCP` and execut
 
 Target text in memory and Postgres must always be LF-normalized UTF-8 (`\n`).
 
-Incoming CRLF (`\r\n`) and CR (`\r`) must be normalized to LF before processing.
+Incoming CRLF (`\r\n`) and CR (`\r`) must be normalized to LF before processing. The service records the upload's original line-ending facts separately (`app.core.line_endings`); they never affect matching, hashing or replay.
 
 Exact string matching operates on character code-points, case-sensitive and whitespace-sensitive.
 
@@ -143,6 +143,8 @@ The transaction is the smallest atomic unit:
 
 - tx/2 span operations and the tx/3 sole `replace_all` run in the shared applier under immutable profiles `patchdiff-mvp-0.3.0` and `patchdiff-mvp-0.4.0`. tx/2 never accepts `replace_all`; tx/3 accepts exactly one `replace_all` and nothing else; historical profiles and 0.2.2 reject both operation kinds.
 - Spans use sequential canonical code-point coordinates and require `buffer[start:end] == canonicalize_text(expected_text)`; failures are `span_out_of_bounds` and `span_expected_text_mismatch`.
-- On rejection, capture only the actual failing buffer prefix (at most 256 code points), its total length and the prior simulated-change count (`FailureBufferContext`), plus bounded exact candidates or the bounded near-miss query. Never retain an unbounded buffer.
+- On rejection, capture at most 256 code points of the actual failing buffer (a prefix, or a `failure_window` around a known location), its total length and the prior simulated-change count (`FailureBufferContext`), plus bounded exact candidates, consumed-occurrence evidence or the bounded near-miss query. For `match_absent`, `RejectedCoreResult.near_miss_buffer` holds at most 65,536 code points for response-only scanning. Never retain an unbounded buffer.
+- Span context (`expected_before`/`expected_after`) is gated by `RuntimeProfile.span_context` (only `patchdiff-mvp-0.5.0`). Span failures report `span_check`, `buffer_length` and bounded `actual_text`.
+- Accepted results carry advisory `warnings` (`app.core.advisories`): no-op change/transaction, `occurrence_index_basis_shift` and `grapheme_boundary_split`. They never change verdicts or facts; replay passes `collect_warnings=False`. `retryable` comes from `RETRYABLE_FAILURE_REASONS` in `app.core.failures`.
 - Fresh tx/3 size admission, preview, near-miss ranking and correlation IDs are service/MCP concerns and stay out of the core runtime.
 - Contract: `docs/PATCHDIFF_CORE_SPEC.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").

@@ -59,3 +59,21 @@ REPLAY_FAILURE_REASONS: frozenset[FailureReason] = frozenset(
         FailureReason.REPLAY_TRANSACTION_INVALID,
     }
 )
+
+
+# One advisory definition shared by the runtime and service layers: a new proposal
+# derived from a fresh read of the same target can succeed; the identical request
+# will not. Stored rows keep the value recorded when they were written.
+RETRYABLE_FAILURE_REASONS: frozenset[FailureReason] = frozenset(
+    {
+        FailureReason.MATCH_ABSENT,
+        FailureReason.MATCH_AMBIGUOUS,
+        FailureReason.DISAMBIGUATION_INVALID,
+        FailureReason.SEQUENTIAL_MATCH_INVALID,
+        FailureReason.SPAN_OUT_OF_BOUNDS,
+        FailureReason.SPAN_EXPECTED_TEXT_MISMATCH,
+        FailureReason.TARGET_HASH_MISMATCH,
+        FailureReason.TARGET_VERSION_MISMATCH,
+        FailureReason.TARGET_DIVERGED,
+    }
+)

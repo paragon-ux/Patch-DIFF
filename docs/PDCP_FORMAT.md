@@ -4,9 +4,9 @@
 
 This document defines the transaction formats supported by PatchDIFF:
 1. **`patchdiff-tx/1` (Primary Typed Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content`. Delimiter-collision free, with reduced mandatory prose overhead.
-2. **`patchdiff-tx/2` (Guarded Operations)**: canonical JSON with required intent and guard plus ordered `operations` carrying explicit `op:match` or `op:span`. Span records require start/end/expected_text/replace, use sequential canonical code-point coordinates and allow empty-span insertion. See [MCP_TOOLS.md](MCP_TOOLS.md#patchdiff_submit_operations-patchdiff-tx2) for complete fields and immutable profile `patchdiff-mvp-0.3.0`. Example canonical record: `{"expected_current_hash":null,"expected_target_version":2,"format":"patchdiff-tx/2","intent":"Insert a note","operations":[{"end":0,"expected_text":"","op":"span","replace":"Note: ","start":0},{"match":"alpha","op":"match","replace":"beta"}],"target_file_id":"<UUID>"}`.
+2. **`patchdiff-tx/2` (Guarded Operations)**: canonical JSON with required intent and guard plus ordered `operations` carrying explicit `op:match` or `op:span`. Span records require start/end/expected_text/replace, use sequential canonical code-point coordinates and allow empty-span insertion. Optional `expected_before`/`expected_after` check the exact adjacent text; a record that contains them is recorded under immutable runtime `patchdiff-mvp-0.5.0` instead of `0.3.0`. See [MCP_TOOLS.md](MCP_TOOLS.md#patchdiff_submit_operations-patchdiff-tx2) for complete fields and immutable profile `patchdiff-mvp-0.3.0`. Example canonical record: `{"expected_current_hash":null,"expected_target_version":2,"format":"patchdiff-tx/2","intent":"Insert a note","operations":[{"end":0,"expected_text":"","op":"span","replace":"Note: ","start":0},{"match":"alpha","op":"match","replace":"beta"}],"target_file_id":"<UUID>"}`.
 
-3. **`patchdiff-tx/3` (Sole Replacement)**: A separate sole replacement record: `{"format":"patchdiff-tx/3","target_file_id":"<UUID>","intent":"explicit replacement","operations":[{"op":"replace_all","replace":"new text"}],"expected_target_version":0,"expected_current_hash":null}`. Exactly one operation with exactly `op,replace` is permitted. No match/span/selectors or mixed transaction in tx/3; tx/2 continues refusing replace_all. Both top-level guard keys are persisted with raw values, including null, through the same canonical JSON identity rule. At least one valid guard is required. Default change ID is chg_001; risk is low. Profile0.4.0 enables replacement without modifying0.3.0. Fresh size admission is a service rule, not decoding/replay grammar.
+3. **`patchdiff-tx/3` (Sole Replacement)**: A separate sole replacement record: `{"format":"patchdiff-tx/3","target_file_id":"<UUID>","intent":"explicit replacement","operations":[{"op":"replace_all","replace":"new text"}],"expected_target_version":0,"expected_current_hash":null}`. Exactly one operation with exactly `op,replace` is permitted. No match/span/selectors or mixed transaction in tx/3; tx/2 continues refusing replace_all. Both top-level guard keys are persisted with raw values, including null, through the same canonical JSON identity rule. At least one valid guard is required. Default change ID is chg_001; risk is low. Profile 0.4.0 enables replacement without modifying 0.3.0. Fresh size admission is a service rule, not decoding/replay grammar.
 4. **`.pdcp` v0.2.3 (Frozen Legacy Text Format)**: The declarative text format with `PDCP 0.2.3` header, 7 required manifest fields per change, and `MATCH/REPLACE` delimiters, retained for backward compatibility and historical replay.
 
 None of these formats is executable code. All lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
@@ -22,7 +22,7 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 Submitted over MCP via `patchdiff_submit_edits`:
 ```json
 {
-  "target_file_id": "11111111-1111-1111-1111-111111111111",
+  "target_file_id": "11111111-1111-4111-8111-111111111111",
   "expected_target_version": 0,
   "expected_current_hash": null,
   "intent": "Update user settings label and default value.",
@@ -80,7 +80,7 @@ Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdi
 Submitted over MCP via `patchdiff_submit_pdcp`:
 ```text
 PDCP 0.2.3
-target_file_id: 11111111-1111-1111-1111-111111111111
+target_file_id: 11111111-1111-4111-8111-111111111111
 target_type: text/markdown
 target_hash: b8711cb73b5f382538f71019da43211d7e191622d0a865a8c1e5bf63ea1b58f2
 

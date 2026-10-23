@@ -31,6 +31,9 @@ class FakeSession:
     def scalars(self, query):
         self.queries.append(query)
         return SimpleNamespace(all=lambda: self.rows[:query._limit_clause.value])
+    def execute(self, query):
+        # Ledger pages join their attempt rows by pdcp_log_id.
+        return SimpleNamespace(all=lambda: list(self.rows))
 
 
 def row(sequence):
@@ -44,6 +47,7 @@ def row(sequence):
         diagnostic_json=None, created_at=datetime.now(timezone.utc), pdcp_content="record",
         change_id=f"change_{sequence}", intent="Change", input_state=None, output_state=None,
         affected_region=None, user_visible_change=None, risk=None, origin="typed", derived_json={},
+        editing_cycle_id=TARGET, change_index=1,
     )
 
 

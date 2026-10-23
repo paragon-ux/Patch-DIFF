@@ -212,7 +212,13 @@ def test_preview_matches_fresh_submit_verdict_stages_facts_without_any_managed_t
     with SessionLocal() as session:
         observed = preview(session, target_file_id=target_id, format=format_, **arguments)
     assert table_snapshot() == before and observed["preview"] and observed["advisory"]
-    assert "pdcp_log_id" not in observed and "near_misses" not in observed
+    assert "pdcp_log_id" not in observed
+    # Preview computes near misses inline only for absent matches (FR-19).
+    assert ("near_misses" in observed) is (observed.get("failure_reason") == "match_absent")
+    assert (observed.get("failure_reason") == "match_absent") is (case == "absent" and format_ != "patchdiff-tx/3")
+    if "near_misses" in observed:
+        assert observed["near_misses"]["status"] == "computed"
+        assert observed["near_misses"]["scan_source"] == "failing_buffer"
     with SessionLocal() as session:
         submitted = submit(session, target_file_id=target_id, **arguments)
     assert observed["status"] == submitted.status

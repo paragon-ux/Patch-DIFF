@@ -81,7 +81,8 @@ def bound_preview(payload: dict) -> dict:
 
     # Combined evidence can exceed the whole-payload budget even when individual
     # fields fit. Preserve core verdict/observed identity and omit optional evidence.
-    for field in ("diagnostic", "failure_detail", "failed_change_id", "target_file_id", "current_context"):
+    for field in ("near_misses", "warning_details", "warnings", "diagnostic", "failure_detail", "failed_change_id",
+                  "target_file_id", "current_context"):
         if json_bytes(result) <= MAX_PREVIEW_BYTES:
             break
         if field == "target_file_id" and target_uuid is not None:

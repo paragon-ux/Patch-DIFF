@@ -1,15 +1,17 @@
 # PATCHDIFF_CORE_SPEC.md
 
-Bounded rejection evidence: the pure applier returns only a prefix of at most 256 code points and its total length/prior simulated-change count for the actual failing buffer, never an unbounded failed buffer. The service adds canonical observed identity and persists `diagnostic.failure_context` once. A later sequential failure is labeled `intermediate_buffer`; it does not imply a partial commit. Service/protocol failures use locked canonical state. Response-only `current_context` is fresh on every rejected call, including exact keyed recovery, while the original diagnostic is immutable and old rows are not retrofitted. MCP_TOOLS defines the complete fields, unavailable states and 4,096/8,192 ASCII-escaped JSON byte budgets. Verdicts, accepted facts, hashes, fingerprints and execution profiles remain unchanged.
+Bounded rejection evidence: the pure applier returns at most 256 code points of the actual failing buffer (a prefix, or a window around a known failure location) with its total length and prior simulated-change count, never an unbounded failed buffer. For `match_absent` it also returns a response-only copy of at most the first 65,536 code points for near-miss scanning, which the service never persists. The service adds canonical observed identity and persists `diagnostic.failure_context` once. A later sequential failure is labeled `intermediate_buffer`; it does not imply a partial commit. Service/protocol failures use locked canonical state. Response-only `current_context` is fresh on every rejected call, including exact keyed recovery, while the original diagnostic is immutable and old rows are not retrofitted. MCP_TOOLS defines the complete fields, unavailable states and 4,096/8,192 ASCII-escaped JSON byte budgets. Verdicts, accepted facts, hashes, fingerprints and execution profiles remain unchanged.
 
 ## Guarded operations, sole replacement and failure evidence
 
 Tool fields and byte budgets are in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics); this section states the runtime rules.
 
-- **Span operations (`patchdiff-tx/2`, profile `patchdiff-mvp-0.3.0`).** A span carries non-bool integer `start`/`end` with `0 <= start <= end`, in code points of the sequential canonical buffer, plus the exact `expected_text` and `replace`. The applier rejects with `span_out_of_bounds` when `end` exceeds the buffer length, and with `span_expected_text_mismatch` unless `buffer[start:end] == canonicalize_text(expected_text)`. `start == end` with an empty `expected_text` inserts. Match operations keep the 0.2.2 exact-match and selector rules. Span facts add `operation: "span"`. Both span failures are transaction-applicability failures.
+- **Span operations (`patchdiff-tx/2`, profile `patchdiff-mvp-0.3.0`).** A span carries non-bool integer `start`/`end` with `0 <= start <= end`, in code points of the sequential canonical buffer, plus the exact `expected_text` and `replace`. The applier rejects with `span_out_of_bounds` when `end` exceeds the buffer length, and with `span_expected_text_mismatch` unless `buffer[start:end] == canonicalize_text(expected_text)`. `start == end` with an empty `expected_text` inserts. Match operations keep the 0.2.2 exact-match and selector rules. Span facts add `operation: "span"`. Both span failures are transaction-applicability failures, and their diagnostics report `span_check`, `buffer_length` and up to 64 code points of `actual_text`.
+- **Span context (`patchdiff-mvp-0.5.0`).** Optional `expected_before`/`expected_after` must equal `buffer[start-len(expected_before):start]` and `buffer[end:end+len(expected_after)]` after canonicalization; a mismatch is `span_expected_text_mismatch` with `span_check` naming the field. Only a profile with `span_context` accepts them; 0.3.0 rejects the fields at decoding and the applier refuses them under any other profile.
 - **Sole replacement (`patchdiff-tx/3`, profile `patchdiff-mvp-0.4.0`).** Exactly one `replace_all` replaces the whole buffer `[0, len(buffer))`; any other operation count or kind rejects. The single fact covers the full original span with `operation: "replace_all"`. Fresh size admission is enforced by the service, not by decoding or replay.
-- **Profile gates.** `RuntimeProfile.span_operations` and `RuntimeProfile.replace_all_operations` default to false, so every historical profile and 0.2.2 reject both operation kinds; 0.3.0 enables spans only, and 0.4.0 enables both. Profiles never change after they write history.
-- **Failure evidence.** For `match_ambiguous` and `disambiguation_invalid` the pure applier captures at most five exact candidates (20 code points of context per side, 64-point match preview). For `match_absent` and `sequential_match_invalid` it captures the near-miss query (the canonical query of at most 64 code points, otherwise `match_too_large`). Near-miss ranking itself is service-side and response-only.
+- **Profile gates.** `RuntimeProfile.span_operations` and `RuntimeProfile.replace_all_operations` default to false, so every historical profile and 0.2.2 reject both operation kinds; 0.3.0 enables spans only, 0.4.0 enables both, and 0.5.0 enables spans plus `RuntimeProfile.span_context`. Profiles never change after they write history.
+- **Failure evidence.** For `match_ambiguous` and `disambiguation_invalid` the pure applier captures at most five exact candidates (20 code points of context per side, 64-point match preview). When such a failure follows earlier simulated changes, `failure_detail` adds that selectors count the sequential buffer. For `match_absent` it captures the near-miss query (the canonical query of at most 64 code points, otherwise `match_too_large`). For `sequential_match_invalid` it instead records each original occurrence (up to five) with the earlier change that overlapped it, and no near-miss query. Near-miss ranking itself is service-side and response-only.
+- **Advisory warnings.** On acceptance the applier reports `no_op_change`, `no_op_transaction`, `occurrence_index_basis_shift` (a sequential `occurrence_index` mapped back through earlier change facts to a different, or no, transaction-start index) and `grapheme_boundary_split` (a conservative UAX #29 approximation). Warnings never change a verdict or a fact; replay calls the applier with `collect_warnings=False`.
 - Preview, line reads, correlation IDs and discovery are service/MCP features with no core-runtime effect.
 
 ## Purpose
@@ -43,7 +45,7 @@ canonical UTF-8 target text
 
 All four input formats lower into the same internal `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 - **`patchdiff-tx/1` (primary typed)**: Structured JSON with required `intent`, required state guard (`expected_target_version` and/or `expected_current_hash`), ordered `edits[]` (`match`, `replace`, optional `change_id`, `rationale`, `risk`, `occurrence_index`, `anchor_before`, `anchor_after`), optional `client_request_id`, `parent_pdcp_log_id`, and `attempt`. Persisted in `append_only_pdcp_logs.pdcp_content` as deterministic canonical JSON.
-- **`patchdiff-tx/2` (guarded operations)**: Ordered explicit match/span operations, required intent and state guard, sequential canonical code-point spans with exact expected text; immutable profile 0.3.0.
+- **`patchdiff-tx/2` (guarded operations)**: Ordered explicit match/span operations, required intent and state guard, sequential canonical code-point spans with exact expected text and optional adjacent-text guards; immutable profile 0.3.0, or 0.5.0 when the guards are used.
 - **`patchdiff-tx/3` (sole replacement)**: Exactly one guarded `replace_all`, immutable profile 0.4.0; fresh size admission is a service boundary, not a replay grammar constraint.
 - **`.pdcp` v0.2.3 (frozen legacy/import)**: Declarative text with `PDCP 0.2.3` header, 7 required manifest fields per change block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters. Persisted as raw text.
 
@@ -233,6 +235,7 @@ If any check or edit fails:
 - Closes the active `EditingCycles` row (`status = "closed"`, `save_snapshot_id`).
 - Creates a new `EditingCycles` row (`status = "active"`).
 - Target content, version, hash, logs, and ledger history remain intact.
+- Optional `expected_target_version` and `expected_current_hash` guards are both checked when supplied; a mismatch rejects without a snapshot.
 - By default, manifest ledger reads filter to the active editing cycle.
 
 ## Deterministic Replay
@@ -245,7 +248,7 @@ Replay reconstructs canonical target state from the `initial_upload` snapshot pl
    - Resolve matcher profile via `SUPPORTED_RUNTIME_PROFILES[log.runtime_version]`.
    - Verify contiguous version chain (`before_version == expected_version`, `after_version == expected_version + 1`).
    - Verify `before_hash == canonical_sha256(replay_buffer)`.
-   - Apply edits deterministically in memory.
+   - Apply edits deterministically in memory, without warning collection.
    - Verify `log.pdcp_content_hash == canonical_sha256(log.pdcp_content)`.
    - Verify `result.after_hash == log.after_hash`.
 3. Check reconstructed state against the materialized target and report `materialized_state_checks`:

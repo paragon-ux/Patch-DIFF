@@ -1,5 +1,29 @@
 # Release notes
 
+## Unreleased — PR #11 friction follow-up
+
+Fixes for the 20 findings of the PR #11 agentic friction review. Decisions: [friction follow-up](docs/usability/friction-followup-decision.md).
+
+### Added
+
+- Optional tx/2 span `expected_before`/`expected_after` checks of the exact adjacent text, so insertions can be verified. Records that use them run under the new immutable runtime `patchdiff-mvp-0.5.0`; records without them keep `patchdiff-mvp-0.3.0`.
+- Advisory accepted-transaction warnings: `no_op_change`, `no_op_transaction`, `occurrence_index_basis_shift` and `grapheme_boundary_split`. Warnings never change a verdict and are returned again on exact keyed recovery.
+- Upload line endings are recorded (`source_line_endings`) and `patchdiff_export_target(format)` is an honoured enum: `original_text` (default, canonical LF), `canonical_lf`, `crlf` and `original_eol`.
+- `current_version`/`current_hash` on accepted and deduplicated responses; `next_start` and opt-in `line_starts` on line reads; `expected_target_version` on SAVE; joinable ledger and attempt rows; request-key conflict codes with the differing fields; span failure evidence; consumed-match evidence; near misses over a bounded failing-buffer copy at distinct locations; preview near misses; parameter descriptions for every tool.
+
+### Changed
+
+- `diagnostic.retryable` follows one shared definition and is now `true` for span failures, `target_version_mismatch` and `target_diverged`.
+- A known failure location beyond the start of the text gives `failure_context` a window around it. An MCP `current_context` identical to `diagnostic.failure_context` is returned as unavailable with `same_as_failure_context`.
+- Tool-result text carries literal characters instead of `\uXXXX` escapes; the JSON-RPC line around it stays ASCII-escaped, as before. Unknown or missing tool arguments return a structured `invalid_argument` payload. Unknown export formats are refused instead of echoed.
+- `include_content` history pages are limited to about 1 MB of returned content; the first entry is always whole.
+
+### Compatibility and operations
+
+- Migration `20261022_0003` adds nullable `cloud_target_files.source_line_endings`. Existing targets keep NULL (unknown). Downgrade refuses while recorded facts exist.
+- Host-visible response changes: a `current_context` identical to `diagnostic.failure_context` is returned as unavailable (`same_as_failure_context`), so hosts must check `available` before reading its `text`, as the contract already required; an unknown export `format` returns `invalid_argument`; unknown or missing tool arguments return a structured payload instead of Python error text.
+- Existing failure labels, request fingerprints, recorded runtime profiles and the records of every previously valid request are unchanged. Historical rows are not rewritten. Replay ignores warnings, diagnostics and line-ending metadata.
+
 ## Unreleased — guarded editing, bounded reads and advisory preview
 
 This update extends the local MCP document transaction service. It has not been tagged or published as a release.

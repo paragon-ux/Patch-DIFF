@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
@@ -12,6 +13,7 @@ from app.core.validity import validity_levels
 from app.mcp.server import registry
 from app.services.export_service import export_target, get_target
 from app.services.pdcp_service import SubmitPDCPResult, submit_edits, submit_pdcp, submit_operations, submit_replacement, preview
+from app.services.rejection_context import response_current_context
 from app.services.prompt_context_service import build_prompt_context
 from app.services.regeneration_service import (
     build_regeneration_context,
@@ -37,6 +39,10 @@ from app.storage.models import (
 )
 
 _UNSET = object()
+# include_content pages: later entries stop carrying pdcp_content past this many UTF-8 bytes.
+MAX_CONTENT_PAGE_BYTES = 1_048_576
+MAX_ATTEMPT_INTENT_CHARS = 256
+_TYPED_PROTOCOLS = ("patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3")
 
 
 @registry.register("patchdiff_handle_upload")
@@ -81,12 +87,14 @@ def patchdiff_initialize_target(
             project_id=project_uuid,
         )
     return {
+        "status": "ok",
         "target_file_id": str(result.target_file_id),
         "filename": result.filename,
         "target_type": result.target_type,
         "version": result.version,
         "current_hash": result.current_hash,
         "active_editing_cycle_id": str(result.active_editing_cycle_id),
+        "source_line_endings": result.source_line_endings,
     }
 
 
@@ -192,10 +200,11 @@ def patchdiff_submit_replacement(
 
 @registry.register("patchdiff_read_lines")
 def patchdiff_read_lines(*, target_file_id: str, start_line: int = 1, end_line: int | None = None,
-                        offset: int = 0, max_chars: int | None = None) -> dict[str, Any]:
+                        offset: int = 0, max_chars: int | None = None, include_line_starts: bool = False) -> dict[str, Any]:
     with SessionLocal() as session:
         return read_lines(session, target_file_id=target_file_id, start_line=start_line,
-                          end_line=end_line, offset=offset, max_chars=max_chars)
+                          end_line=end_line, offset=offset, max_chars=max_chars,
+                          include_line_starts=include_line_starts)
 
 
 @registry.register("patchdiff_preview")
@@ -248,6 +257,7 @@ def patchdiff_save(
     *,
     target_file_id: str,
     expected_current_hash: str | None = None,
+    expected_target_version: int | None = None,
     export_after_save: bool = False,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
@@ -255,6 +265,7 @@ def patchdiff_save(
             session,
             target_file_id=target_file_id,
             expected_current_hash=expected_current_hash,
+            expected_target_version=expected_target_version,
         )
     payload = {
         "status": result.status,
@@ -346,6 +357,7 @@ def patchdiff_get_pdcp_log(
     page_rows = rows[:effective_limit]
     next_sequence = page_rows[-1].log_sequence if has_more and page_rows else None
     entries = []
+    content_bytes = 0
     for row in page_rows:
         entry = {
             "pdcp_log_id": str(row.pdcp_log_id),
@@ -364,14 +376,25 @@ def patchdiff_get_pdcp_log(
             "submission_source": row.submission_source,
             "parent_pdcp_log_id": str(row.parent_pdcp_log_id) if row.parent_pdcp_log_id else None,
             "regeneration_attempt": row.regeneration_attempt,
+            "attempt": row.regeneration_attempt,
             "regeneration_source": row.regeneration_source,
             "client_request_id": row.client_request_id,
             "request_fingerprint": row.request_fingerprint,
             "diagnostic": row.diagnostic_json,
             "created_at": row.created_at.isoformat(),
         }
+        intent = _record_field(row.protocol_version, row.pdcp_content, "intent")
+        entry["intent"] = intent[:MAX_ATTEMPT_INTENT_CHARS] if isinstance(intent, str) else None
+        entry["intent_truncated"] = isinstance(intent, str) and len(intent) > MAX_ATTEMPT_INTENT_CHARS
         if include_content:
-            entry["pdcp_content"] = row.pdcp_content
+            size = len(row.pdcp_content.encode("utf-8"))
+            if content_bytes and content_bytes + size > MAX_CONTENT_PAGE_BYTES:
+                entry["pdcp_content"] = None
+                entry["pdcp_content_omitted"] = "page_byte_budget"
+            else:
+                # The first entry with content is always whole, so limit=1 can fetch any row.
+                entry["pdcp_content"] = row.pdcp_content
+                content_bytes += size
         entries.append(entry)
     return {"entries": entries, "has_more": has_more, "next_sequence": next_sequence}
 
@@ -451,29 +474,50 @@ def patchdiff_get_manifest_ledger(
         rows = session.scalars(
             query.order_by(AppendOnlyManifestLedger.ledger_sequence.desc()).limit(effective_limit + 1)
         ).all()
+        log_ids = {row.pdcp_log_id for row in rows[:effective_limit]}
+        logs = {
+            log.pdcp_log_id: log
+            for log in (session.execute(select(
+                AppendOnlyPdcpLogs.pdcp_log_id, AppendOnlyPdcpLogs.log_sequence, AppendOnlyPdcpLogs.before_version,
+                AppendOnlyPdcpLogs.after_version, AppendOnlyPdcpLogs.protocol_version, AppendOnlyPdcpLogs.pdcp_content,
+            ).where(AppendOnlyPdcpLogs.pdcp_log_id.in_(log_ids))).all() if log_ids else ())
+        }
 
     has_more = len(rows) > effective_limit
     page_rows = rows[:effective_limit]
     next_sequence = page_rows[-1].ledger_sequence if has_more and page_rows else None
     ordered_rows = list(reversed(page_rows))
 
+    records = {log_id: _decoded_record(log.protocol_version, log.pdcp_content) for log_id, log in logs.items()}
+    entries = []
+    for row in ordered_rows:
+        log = logs.get(row.pdcp_log_id)
+        record = records.get(row.pdcp_log_id)
+        items = (record.get("edits") if "edits" in record else record.get("operations")) if record else None
+        item = items[row.change_index - 1] if isinstance(items, list) and 0 < row.change_index <= len(items) else None
+        entries.append({
+            "ledger_sequence": row.ledger_sequence,
+            "pdcp_log_id": str(row.pdcp_log_id),
+            "log_sequence": log.log_sequence if log else None,
+            "before_version": log.before_version if log else None,
+            "after_version": log.after_version if log else None,
+            "editing_cycle_id": str(row.editing_cycle_id),
+            "change_index": row.change_index,
+            "change_id": row.change_id,
+            "intent": row.intent,
+            "transaction_intent": record.get("intent") if record else None,
+            "rationale": item.get("rationale") if isinstance(item, dict) else None,
+            "input_state": row.input_state,
+            "output_state": row.output_state,
+            "affected_region": row.affected_region,
+            "user_visible_change": row.user_visible_change,
+            "risk": row.risk,
+            "origin": row.origin,
+            "derived": row.derived_json,
+            "created_at": row.created_at.isoformat(),
+        })
     return {
-        "entries": [
-            {
-                "ledger_sequence": row.ledger_sequence,
-                "change_id": row.change_id,
-                "intent": row.intent,
-                "input_state": row.input_state,
-                "output_state": row.output_state,
-                "affected_region": row.affected_region,
-                "user_visible_change": row.user_visible_change,
-                "risk": row.risk,
-                "origin": row.origin,
-                "derived": row.derived_json,
-                "created_at": row.created_at.isoformat(),
-            }
-            for row in ordered_rows
-        ],
+        "entries": entries,
         "has_more": has_more,
         "next_sequence": next_sequence,
     }
@@ -548,6 +592,7 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
     if result.status == "invalid_argument":
         return {"status": "invalid_argument", "target_file_id": str(result.target_file_id),
                 "failure_detail": result.failure_detail, **invocation,
+                **({"code": result.code} if result.code is not None else {}),
                 **({"pdcp_log_id": None, "diagnostic": result.diagnostic} if result.diagnostic is not None else {})}
     if result.status == "accepted":
         return {
@@ -557,9 +602,14 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
             "before_hash": result.before_hash,
             "after_hash": result.after_hash,
             "version": result.after_version,
+            "current_version": result.current_version,
+            "current_hash": result.current_hash,
             "pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
             "manifest_entries_added": result.manifest_entries_added,
             "warnings": list(result.warnings),
+            "warning_details": [dict(item) for item in result.warning_details],
+            "warning_count": result.warning_count,
+            "warnings_truncated": result.warnings_truncated,
             "validity": validity_levels("accepted", None, stage=result.validation_stage),
             "evidence": {"changes": list(result.change_facts)},
             "deduplicated": result.deduplicated,
@@ -579,11 +629,28 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
         "current_hash": result.current_hash,
         "pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
         "diagnostic": result.diagnostic,
-        "current_context": result.current_context,
+        "current_context": response_current_context(
+            result.current_context, (result.diagnostic or {}).get("failure_context")),
         "validity": validity_levels("rejected", result.failure_reason, stage=result.validation_stage),
         "deduplicated": result.deduplicated,
         "client_request_id": result.client_request_id,
     }
+
+
+def _decoded_record(protocol_version: str | None, content: str | None) -> dict | None:
+    """Stored typed record as an object; legacy PDCP and evidence envelopes give None."""
+    if protocol_version not in _TYPED_PROTOCOLS or not isinstance(content, str):
+        return None
+    try:
+        record = json.loads(content)
+    except ValueError:
+        return None
+    return record if isinstance(record, dict) and "evidence_format" not in record else None
+
+
+def _record_field(protocol_version: str | None, content: str | None, field: str) -> Any:
+    record = _decoded_record(protocol_version, content)
+    return record.get(field) if record else None
 
 
 def _history_error(

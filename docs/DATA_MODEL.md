@@ -2,17 +2,19 @@
 
 ## Storage effects of guarded operations, replacement and diagnostics
 
-No migration is added. The normative tool contract is [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
+Only migration `20261022_0003` adds storage (below); everything else uses existing columns. The normative tool contract is [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
 
-- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` and `0.2.3` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
+- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` and `0.2.3` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`, or `patchdiff-mvp-0.5.0` when a span operation contains `expected_before`/`expected_after`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
 - Accepted tx/2 and tx/3 transactions write `origin = 'typed'` ledger rows whose `derived_json` adds `operation` (`"span"` or `"replace_all"`). A tx/3 transaction writes exactly one row covering the full original span.
-- Rejected rows persist `diagnostic_json.failure_context` (a bounded prefix of the failing buffer, at most 256 code points) and, when applicable, `exact_candidates` or `near_miss_query`. Response-only `current_context`, `near_misses` and `correlation_id` are never stored.
+- Rejected rows persist `diagnostic_json.failure_context` (at most 256 code points of the failing buffer, as a prefix or a window around a known failure location) and, when applicable, `exact_candidates`, span evidence (`span_check`, `buffer_length`, `actual_text`), `original_occurrences` for consumed sequential matches, `near_miss_query` for absent matches, and `code` for request-key conflicts and invalid keys. Response-only `current_context`, `near_misses`, the near-miss scan buffer and `correlation_id` are never stored.
+- Accepted rows keep `diagnostic_json = NULL` unless the applier reported warnings; then it holds `{warnings, warning_count, warnings_truncated}` with at most 16 warning objects. Replay never reads it.
+- Migration `20261022_0003` adds nullable JSONB `cloud_target_files.source_line_endings`, written once at upload and read only by export. Existing targets keep NULL (unknown). Downgrade refuses while any target has recorded facts.
 - A valid oversized fresh tx/3 replacement writes no attempt or `current_pdcp_files` row. A key-conflict attempt is audited before fresh admission, so its row stores the complete submitted record even when it exceeds the fresh limits, the same as any tx/1 or tx/2 attempt.
 - `patchdiff_read_lines` and `patchdiff_preview` only read one committed `cloud_target_files` row; they write nothing and take no locks.
 
 ## Scope
 
-This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema` and `20261020_0002_typed_ledger`.
+This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema`, `20261020_0002_typed_ledger` and `20261022_0003_source_line_endings`.
 
 The schema supports:
 - canonical target storage in Postgres (`cloud_target_files`)
@@ -102,6 +104,7 @@ Authoritative current canonical target state.
 | `current_content` | TEXT | NOT NULL | Canonical UTF-8 target text (LF normalized) |
 | `current_hash` | CHAR(64) | NOT NULL | SHA-256 of canonical target text |
 | `version` | BIGINT | NOT NULL | Monotonically increasing version (0 on init) |
+| `source_line_endings` | JSONB | NULLABLE | Raw upload line-ending facts `{style, lf, crlf, cr, normalized, source_code_points, source_utf8_bytes, source_sha256}` recorded before LF canonicalization; NULL for targets created before Migration `0003` |
 | `active_editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Current active cycle |
 | `latest_accepted_pdcp_log_id` | UUID | FK -> `append_only_pdcp_logs.pdcp_log_id` NULLABLE | Last accepted attempt |
 | `initial_snapshot_id` | UUID | FK -> `target_snapshots.snapshot_id` NULLABLE | Initial upload snapshot |
@@ -150,7 +153,7 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `failure_reason` | TEXT | NULLABLE | Canonical failure label on rejection |
 | `failure_detail` | TEXT | NULLABLE | Diagnostic explanation |
 | `failed_change_id` | TEXT | NULLABLE | Failing change ID when applicable |
-| `diagnostic_json` | JSONB | NULLABLE | Structured diagnostics (`format`, `retryable`, `stage`, etc.) |
+| `diagnostic_json` | JSONB | NULLABLE | Rejected rows: structured diagnostics (`format`, `retryable`, `stage`, etc.). Accepted rows: advisory warnings when present, otherwise NULL |
 | `expected_target_version` | BIGINT | NULLABLE | Concurrency guard |
 | `expected_current_hash` | CHAR(64) | NULLABLE | Concurrency guard |
 | `before_version` | BIGINT | NULLABLE | Target version before transaction |
@@ -171,7 +174,7 @@ Indexes:
 
 #### Bounded rejected-buffer evidence
 
-New rejected attempts store `failure_context` within existing `diagnostic_json`; no column or migration is added. It contains only the bounded original failure prefix, code-point counts, canonical/intermediate stage, prior simulated-change count and transaction-start observed target identity, using the representation and JSON-byte limits in MCP_TOOLS. This evidence is immutable. Exact recovery returns the stored diagnostic unchanged; pre-feature rows remain without failure context. Top-level fresh `current_context` is response-only and is never written into the recovered row. Unknown targets and pending local state have no target-linked durable attempt; their contexts explicitly report unavailable. Qualified audit and caller commit/rollback ownership are unchanged.
+New rejected attempts store `failure_context` within existing `diagnostic_json`; no column or migration is added. It contains only the bounded original failure prefix or failure window, code-point counts, canonical/intermediate stage, prior simulated-change count and transaction-start observed target identity, using the representation and JSON-byte limits in MCP_TOOLS. This evidence is immutable. Exact recovery returns the stored diagnostic unchanged; pre-feature rows remain without failure context. Top-level fresh `current_context` is response-only and is never written into the recovered row. Unknown targets and pending local state have no target-linked durable attempt; their contexts explicitly report unavailable. Qualified audit and caller commit/rollback ownership are unchanged.
 
 #### Request identity
 

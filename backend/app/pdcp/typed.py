@@ -95,17 +95,17 @@ TYPED_EDIT_JSON_SCHEMA: dict[str, Any] = {
         "occurrence_index": {
             "type": ["integer", "null"],
             "minimum": 1,
-            "description": "Optional 1-based index into all exact occurrences (including overlaps).",
+            "description": "Optional 1-based index into all exact occurrences (overlaps counted) in the buffer this edit sees: after earlier edits in the same transaction, not transaction start.",
         },
         "anchor_before": {
             "type": ["string", "null"],
             "minLength": 1,
-            "description": "Optional exact substring that must precede the selected match.",
+            "description": "Optional exact substring that must occur anywhere before the selected match (not necessarily adjacent).",
         },
         "anchor_after": {
             "type": ["string", "null"],
             "minLength": 1,
-            "description": "Optional exact substring that must follow the selected match.",
+            "description": "Optional exact substring that must occur anywhere after the selected match (not necessarily adjacent).",
         },
     },
 }

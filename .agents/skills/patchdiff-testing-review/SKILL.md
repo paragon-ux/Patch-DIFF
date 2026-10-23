@@ -22,7 +22,7 @@ PatchDIFF verification spans four rigorous layers:
    - Full tool workflows via internal registry against live Postgres.
    - Concurrency guards, row-level locking (`SELECT ... FOR UPDATE`), and stale version/hash rejections.
    - Request idempotency via `client_request_id` (safe retry after commit, replay response caching, conflict rejection on changed parameters).
-   - Live Alembic migration verification: full `0001 -> 0002 -> 0001 -> 0002` upgrade/downgrade cycle, and data-loss prevention guard when typed ledger rows exist.
+   - Live Alembic migration verification: populated `0001 -> head -> 0001 -> head` and `0002 -> 0003 -> 0002 -> 0003` cycles, the 0002 guard when typed ledger rows exist, and the 0003 guard when recorded line endings exist.
    - Deterministic replay with `materialized_state_checks` verification.
 3. **External Stdio MCP Subprocess Tests (`backend/tests/integration/test_external_mcp_e2e.py`)**:
    - Launches `backend/app/mcp/external_adapter.py` as a real OS child process over stdin/stdout pipes.
@@ -100,3 +100,4 @@ When testing or reviewing Goal F behavior, cover:
 - Preview: verdicts identical to submission, zero managed-table changes, no blocking on a locked row, budget and omission metadata.
 - Diagnostics: failure versus current context, intermediate-buffer labeling, exact-key recovery, near misses only after a service-owned commit, banded near-miss results equal to an unbanded Levenshtein reference.
 - Discovery: every advertised example executed over real stdio and PostgreSQL; capability metadata equal to the runtime constants.
+- Friction follow-up: warnings persisted and recovered; 0.5.0 span context beside unchanged 0.3.0 records and replay; every export format; retryable values; near misses beyond 256 code points versus a pruned-equals-unpruned reference; key-conflict fields; history joins and content budget; literal tool text inside pure-ASCII JSON-RPC lines on the real stdio wire; SQL NULL for accepted rows without warnings.

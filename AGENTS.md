@@ -28,7 +28,7 @@ Read project artifacts in this order:
 3. `docs/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/MCP_TOOLS.md` (MCP tool schemas and request/response contracts)
 5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic runtime, validation stages, replay profiles)
-6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001` + `0002`)
+6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001`, `0002` and `0003`)
 7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations and frozen PDCP v0.2.3 format)
 8. `docs/MCP_FIRST_MVP.md` (system boundaries and workflows)
 9. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop and usage guide)
@@ -42,7 +42,7 @@ If ambiguity remains, preserve PatchDIFF’s locked invariants and choose the si
 
 PatchDIFF supports four declarative, non-executable transaction input formats that lower into the same `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 
-1. **Guarded operations (`patchdiff_submit_operations` / `patchdiff-tx/2`)**: ordered explicit match/span operations with intent and mandatory hash/version guard; sequential code-point spans require exact expected_text. Zero-length insertion is explicit span behavior, never empty MATCH. Shared applier and immutable 0.3.0 profile; tx/1 and legacy histories/profiles remain unchanged. No replace_all operation in 0.3.0.
+1. **Guarded operations (`patchdiff_submit_operations` / `patchdiff-tx/2`)**: ordered explicit match/span operations with intent and mandatory hash/version guard; sequential code-point spans require exact expected_text. Zero-length insertion is explicit span behavior, never empty MATCH. Shared applier and immutable 0.3.0 profile; tx/1 and legacy histories/profiles remain unchanged. No replace_all operation in 0.3.0. Optional span `expected_before`/`expected_after` adjacency guards record immutable 0.5.0; records without them keep 0.3.0.
 2. **Typed transaction (`patchdiff_submit_edits` / `protocol_version = "patchdiff-tx/1"`, preferred)**:
    - Structured JSON arguments (`target_file_id`, required `expected_target_version` and/or `expected_current_hash`, required transaction `intent`, ordered `edits[]` with `{match, replace, change_id?, rationale?, risk?, occurrence_index?, anchor_before?, anchor_after?}`, optional `client_request_id`, `parent_pdcp_log_id`, `attempt`).
    - Eliminates delimiter-collision failures and reduces mandatory prose overhead to top-level `intent`.
@@ -116,10 +116,11 @@ The PatchDIFF MCP service provides:
 
 Recorded decisions: `docs/usability/F01-decision.md`, `docs/usability/PASS-A-decision.md`, `docs/usability/PASS-B-decision.md`. Normative contract: `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
 
-- Rejection evidence is bounded: immutable `diagnostic.failure_context` (at most 256 code points of the actual failing buffer), bounded exact candidates and the near-miss query. `current_context` and near misses are response-only; near misses run after a service-owned commit releases the lock and are omitted for caller-owned transactions. No fuzzy application or automatic choice is permitted.
+- Rejection evidence is bounded: immutable `diagnostic.failure_context` (at most 256 code points of the actual failing buffer, as a prefix or a window around a known failure location), bounded exact candidates and the near-miss query. `current_context` and near misses are response-only; near misses run after a service-owned commit releases the lock and are omitted for caller-owned transactions. No fuzzy application or automatic choice is permitted.
 - Submission correlation is opt-in UUID invocation metadata, never request identity.
 - `patchdiff_preview` and `patchdiff_read_lines` are advisory, read-only observations; submission always re-locks and rechecks guards.
 - tx/3 fresh admission (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) runs after request-key recovery/conflict and never during replay.
+- PR #11 friction follow-up (`docs/usability/friction-followup-decision.md`): one shared `retryable` definition; advisory accepted-transaction warnings (no-op, `occurrence_index` basis shift, grapheme split) that never change a verdict and that replay ignores; source line endings recorded at upload (migration `0003`) with honoured export formats, while canonical LF storage and hashes stay unchanged.
 
 ## Non-Negotiable Invariants
 
@@ -145,7 +146,7 @@ Use:
 - FastAPI
 - Postgres (`postgres:16.3-alpine` via Docker Compose)
 - SQLAlchemy 2.x
-- Alembic migrations (`20260510_0001` and `20261020_0002`)
+- Alembic migrations (`20260510_0001`, `20261020_0002` and `20261022_0003`)
 - pytest
 - Stdio MCP JSON-RPC adapter (`backend/app/mcp/external_adapter.py`)
 
@@ -181,5 +182,5 @@ Use the workspace skills in `.agents/skills/`:
 
 - `.agents/skills/patchdiff-core-runtime/SKILL.md`: Deterministic core runtime (`patchdiff-tx/1` and `.pdcp` v0.2.3 parsing, protocol validation, overlapping match enumeration, disambiguation, sequential application, `ValidationStage`, and `change_facts`).
 - `.agents/skills/patchdiff-mcp-orchestration/SKILL.md`: MCP tool surface, stdio JSON-RPC adapter, `TYPED_EDIT_JSON_SCHEMA`, authoritative reads/search, host-owned retry, and deprecated wrapper maintenance.
-- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001` and `0002`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
+- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001`, `0002` and `0003`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
 - `.agents/skills/patchdiff-testing-review/SKILL.md`: Unit, live Postgres integration, stdio subprocess E2E testing, and documentation consistency review.

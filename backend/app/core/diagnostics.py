@@ -2,6 +2,9 @@
 from app.core.canonicalization import canonicalize_text
 from app.pdcp.matcher import MatchSpan
 
+# Fresh near-miss scans see at most this prefix of the failing buffer (response-only copy).
+NEAR_MISS_SCAN_CHARS = 65_536
+
 
 def exact_candidates(buffer: str, occurrences: tuple[MatchSpan, ...]) -> dict:
     items = [{"occurrence_index": index, "start": span.start, "end": span.end,
@@ -9,8 +12,10 @@ def exact_candidates(buffer: str, occurrences: tuple[MatchSpan, ...]) -> dict:
               "match_preview": buffer[span.start:min(span.end, span.start+64)],
               "match_truncated": span.end-span.start > 64, "after": buffer[span.end:span.end+20]}
              for index, span in enumerate(occurrences[:5], 1)]
+    truncated = len(occurrences) > len(items)
     return {"kind": "exact_occurrences", "occurrence_count": len(occurrences),
-            "returned_count": len(items), "candidates": items, "truncated": len(occurrences) > len(items)}
+            "returned_count": len(items), "candidates": items, "truncated": truncated,
+            "next_occurrence_index": len(items) + 1 if truncated else None}
 
 
 def near_miss_query(match: str) -> dict:

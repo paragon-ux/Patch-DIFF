@@ -29,18 +29,27 @@ def build_replacement_record(*, target_file_id: str, intent: Any, replacement: A
 
 def replacement_size_error(replacement: Any) -> str | None:
     """Call only after invalid-text classification; invalid shape goes to decoding."""
+    evidence = replacement_size_evidence(replacement)
+    return None if evidence is None else evidence["limit_exceeded"]
+
+
+def replacement_size_evidence(replacement: Any) -> dict | None:
+    """First exceeded limit (raw code points, raw bytes, canonical code points, canonical bytes)."""
     if not isinstance(replacement, str):
         return None
-    if len(replacement) > MAX_REPLACEMENT_CHARS:
-        return "raw_code_points"
-    if len(replacement.encode("utf-8")) > MAX_REPLACEMENT_BYTES:
-        return "raw_utf8_bytes"
     canonical = canonicalize_text(replacement)
-    if len(canonical) > MAX_REPLACEMENT_CHARS:
-        return "result_code_points"
-    if len(canonical.encode("utf-8")) > MAX_REPLACEMENT_BYTES:
-        return "result_utf8_bytes"
-    return None
+    sizes = {"raw_code_points": len(replacement), "raw_utf8_bytes": len(replacement.encode("utf-8")),
+             "result_code_points": len(canonical), "result_utf8_bytes": len(canonical.encode("utf-8"))}
+    limits = {"raw_code_points": MAX_REPLACEMENT_CHARS, "raw_utf8_bytes": MAX_REPLACEMENT_BYTES,
+              "result_code_points": MAX_REPLACEMENT_CHARS, "result_utf8_bytes": MAX_REPLACEMENT_BYTES}
+    exceeded = next((name for name in sizes if sizes[name] > limits[name]), None)
+    if exceeded is None:
+        return None
+    return {"code": "replacement_too_large", "limit_exceeded": exceeded, "actual": sizes[exceeded],
+            "limit": limits[exceeded], "canonical_code_points": sizes["result_code_points"],
+            "canonical_utf8_bytes": sizes["result_utf8_bytes"],
+            "canonical_would_fit": sizes["result_code_points"] <= MAX_REPLACEMENT_CHARS
+            and sizes["result_utf8_bytes"] <= MAX_REPLACEMENT_BYTES}
 
 
 def parse_replacement_record(record: Any) -> TypedTransaction:

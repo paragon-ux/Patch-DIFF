@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.canonicalization import canonicalize_text
 from app.core.hashing import canonical_sha256
+from app.core.line_endings import source_line_endings
 from app.storage.models import CloudTargetFiles, EditingCycles, Projects, TargetSnapshots
 
 
@@ -22,6 +23,7 @@ class InitializedTarget:
     current_hash: str
     active_editing_cycle_id: uuid.UUID
     initial_snapshot_id: uuid.UUID
+    source_line_endings: dict | None = None
 
 
 def initialize_target(
@@ -34,6 +36,7 @@ def initialize_target(
 ) -> InitializedTarget:
     """Create canonical target state, active editing cycle, and initial snapshot."""
 
+    line_endings = source_line_endings(content)
     canonical_content = canonicalize_text(content)
     current_hash = canonical_sha256(canonical_content)
     target_file_id = uuid.uuid4()
@@ -56,6 +59,7 @@ def initialize_target(
             current_hash=current_hash,
             version=0,
             active_editing_cycle_id=editing_cycle_id,
+            source_line_endings=line_endings,
         )
         cycle = EditingCycles(
             editing_cycle_id=editing_cycle_id,
@@ -88,6 +92,7 @@ def initialize_target(
         current_hash=current_hash,
         active_editing_cycle_id=editing_cycle_id,
         initial_snapshot_id=snapshot_id,
+        source_line_endings=line_endings,
     )
 
 

@@ -65,7 +65,7 @@ Start Postgres:
 docker compose up -d postgres
 ```
 
-Run migrations (`20260510_0001` and `20261020_0002`):
+Run migrations (`20260510_0001`, `20261020_0002` and `20261022_0003`):
 
 ```powershell
 $env:PYTHONPATH = "backend"
@@ -164,7 +164,7 @@ backend/app/pdcp         Declarative typed and PDCP parsers, matcher, disambigua
 backend/app/services     Authoritative services (submit, read, search, save, replay, export)
 backend/app/storage      SQLAlchemy models, database session management, migrations
 backend/app/mcp          MCP tool definitions, internal registry, and external stdio adapter
-backend/app/migrations   Alembic migration versions (0001 initial, 0002 typed ledger)
+backend/app/migrations   Alembic migration versions (0001 initial, 0002 typed ledger, 0003 source line endings)
 backend/tests            Unit tests and live Postgres integration tests
 evaluation               Offline payload and verdict equivalence evaluation harness
 docs                     Modernized architecture, core spec, data model, tool contracts, guides
@@ -179,7 +179,7 @@ Read in order of precedence:
 3. `docs/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/MCP_TOOLS.md` (MCP tool contracts and schemas)
 5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic core runtime specification)
-6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001` + `0002`)
+6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001`, `0002` and `0003`)
 7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1`, guarded operations `patchdiff-tx/2`, sole replacement `patchdiff-tx/3`, legacy `.pdcp`)
 8. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop, reads, guards, retries, and failure handling)
 9. `docs/TEST_MATRIX.md` & `docs/CODEX_BUILD_PLAN.md`
