@@ -32,7 +32,8 @@ def arguments(target_id, status="accepted"):
 
 def terminal(result):
     result = asdict(result)
-    for key in ("deduplicated", "current_hash", "current_version", "current_context", "near_misses", "correlation_id"):
+    for key in ("deduplicated", "current_hash", "current_version", "current_context", "near_misses", "correlation_id",
+                "near_miss_buffer"):
         result.pop(key)
     return result
 

@@ -187,6 +187,8 @@ def replay_target(
                 enforce_singleton_selectors=profile.enforce_singleton_selectors,
                 allow_span_operations=profile.span_operations,
                 allow_replace_all_operations=profile.replace_all_operations,
+                allow_span_context=profile.span_context,
+                collect_warnings=False,
             )
             if not isinstance(result, AcceptedCoreResult):
                 return _failed(

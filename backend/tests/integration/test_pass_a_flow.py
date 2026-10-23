@@ -224,13 +224,14 @@ def test_near_miss_comparison_starts_after_service_commit_and_real_lock_release(
     target_id = create_target("foo  bar")
     actual = pdcp_service.near_misses
     with SessionLocal() as service:
-        def check(diagnostic, *, caller_owned):
+        def check(diagnostic, *, caller_owned, **scan):
             assert caller_owned is False and not service.in_transaction()
+            assert scan["buffer"] == "foo  bar" and scan["failure_reason"] == "match_absent"
             with SessionLocal.begin() as independent:
                 independent.execute(text("SET LOCAL lock_timeout = '250ms'"))
                 assert independent.execute(select_target_for_update(str(target_id))).scalar_one().current_content == "foo  bar"
                 assert counts(independent, target_id) == (1, 0)
-            return actual(diagnostic, caller_owned=caller_owned)
+            return actual(diagnostic, caller_owned=caller_owned, **scan)
         monkeypatch.setattr(pdcp_service, "near_misses", check)
         result = submit_edits(service, target_file_id=target_id, expected_target_version=0, intent="space",
                               edits=[{"match": "foo bar", "replace": "x"}])
@@ -284,7 +285,11 @@ def test_original_near_miss_inputs_and_result_stay_separate_from_fresh_recovery(
         assert submit_operations(session, **args(target_id, [span(0, 8, "foo  bar", "later")])).status == "accepted"
     with SessionLocal() as session:
         recovered = submit_edits(session, **arguments, include_correlation_id=True)
-    assert recovered.diagnostic == first.diagnostic and recovered.near_misses == first.near_misses
+    # Fresh responses scan the bounded failing buffer; recovery recomputes from the stored context.
+    assert first.near_misses["scan_source"] == "failing_buffer"
+    assert recovered.near_misses["scan_source"] == "stored_failure_context"
+    unlabelled = lambda value: {key: item for key, item in value.items() if key != "scan_source"}
+    assert recovered.diagnostic == first.diagnostic and unlabelled(recovered.near_misses) == unlabelled(first.near_misses)
     assert recovered.current_context["text"] == "later" and recovered.current_context["observed_target_version"] == 1
     assert recovered.near_misses["observed_target_version"] == 0
     with SessionLocal() as session:

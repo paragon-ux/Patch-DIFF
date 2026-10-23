@@ -31,6 +31,7 @@ def save_target(
     *,
     target_file_id: uuid.UUID | str,
     expected_current_hash: str | None = None,
+    expected_target_version: int | None = None,
     _after_snapshot=None,
 ) -> SaveResult:
     target_uuid = _try_coerce_uuid(target_file_id)
@@ -45,6 +46,22 @@ def save_target(
             version=None,
             failure_reason=FailureReason.CONTEXT_INVALID,
             failure_detail="target_file_id is not a valid UUID.",
+        )
+
+    if expected_target_version is not None and (
+        isinstance(expected_target_version, bool) or not isinstance(expected_target_version, int)
+        or not 0 <= expected_target_version <= 2**63 - 1
+    ):
+        return SaveResult(
+            status="rejected",
+            target_file_id=target_uuid,
+            snapshot_id=None,
+            closed_editing_cycle_id=None,
+            new_editing_cycle_id=None,
+            current_hash=None,
+            version=None,
+            failure_reason=FailureReason.CONTEXT_INVALID,
+            failure_detail="expected_target_version must be a non-negative integer.",
         )
 
     with _transaction(session):
@@ -76,6 +93,19 @@ def save_target(
                 version=None,
                 failure_reason=FailureReason.TARGET_NOT_FOUND,
                 failure_detail="Target file was not found.",
+            )
+
+        if expected_target_version is not None and target.version != expected_target_version:
+            return SaveResult(
+                status="rejected",
+                target_file_id=target.target_file_id,
+                snapshot_id=None,
+                closed_editing_cycle_id=None,
+                new_editing_cycle_id=None,
+                current_hash=target.current_hash,
+                version=target.version,
+                failure_reason=FailureReason.TARGET_VERSION_MISMATCH,
+                failure_detail="expected_target_version does not match the current target version.",
             )
 
         if expected_current_hash is not None and target.current_hash != expected_current_hash:

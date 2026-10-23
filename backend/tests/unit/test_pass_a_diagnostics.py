@@ -37,9 +37,11 @@ def test_near_miss_whitespace_unicode_none_and_distant_prefix(buffer, query, fou
     assert len(json.dumps({"near_misses": result}, ensure_ascii=True, separators=(",", ":")).encode("ascii")) <= 8192
 
 
-def test_near_miss_ties_sort_by_position_and_end():
+def test_near_miss_ties_sort_by_position_and_keep_distinct_locations():
     result = near_misses(diagnostic("cat bat hat", "mat"), caller_owned=False)
-    assert [(item["start"], item["end"]) for item in result["candidates"]] == [(0, 3), (1, 3), (4, 7)]
+    # (1, 3) "at" ties with (0, 3) but overlaps it, so the next location is chosen instead.
+    assert [(item["start"], item["end"]) for item in result["candidates"]] == [(0, 3), (4, 7), (8, 11)]
+    assert result["candidates_truncated"] is False and result["scope_truncated"] is False
 
 
 def test_near_miss_omissions_are_explicit_and_no_partial_rank_on_exhaustion(monkeypatch):
@@ -86,7 +88,11 @@ def _reference_ranking(buffer, needle):
                 previous = current
             if 0 < previous[-1] <= threshold:
                 ranked.append((previous[-1], start, start+width))
-    return sorted(ranked)
+    chosen = []
+    for item in sorted(ranked):
+        if all(item[2] <= other[1] or item[1] >= other[2] for other in chosen):
+            chosen.append(item)
+    return chosen
 
 
 def test_banded_ranking_equals_unbanded_reference():
@@ -98,7 +104,9 @@ def test_banded_ranking_equals_unbanded_reference():
         expected = _reference_ranking(buffer, needle)
         assert result["status"] == "computed"
         assert [(c["distance"], c["start"], c["end"]) for c in result["candidates"]] == expected[:3]
+        assert result["candidates_truncated"] is (len(expected) > 3)
         assert result["truncated"] is (len(expected) > 3)
+        assert result["scope_truncated"] is False and result["scan_source"] == "stored_failure_context"
 
 
 def test_full_prefix_64_point_query_is_served_within_budget():

@@ -78,6 +78,8 @@ class CloudTargetFiles(TimestampMixin, Base):
     current_content: Mapped[str] = mapped_column(Text, nullable=False)
     current_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    # Raw upload line-ending facts recorded before LF canonicalization (0003); NULL = unknown.
+    source_line_endings: Mapped[dict | None] = mapped_column(JSONB)
     active_editing_cycle_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey(
             "editing_cycles.editing_cycle_id",

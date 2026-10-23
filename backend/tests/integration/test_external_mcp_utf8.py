@@ -78,7 +78,9 @@ def test_live_stdio_unicode_and_audit_survive_ambient_codepages(ambient_encoding
     accepted, recovered = _payload(results[2]), _payload(results[3])
     assert accepted["status"] == "accepted" and accepted["version"] == 1
     assert recovered["deduplicated"] is True and recovered["pdcp_log_id"] == accepted["pdcp_log_id"]
-    assert results[4]["isError"] is True and "unexpected keyword" in results[4]["content"][0]["text"]
+    unknown = json.loads(results[4]["content"][0]["text"])
+    assert results[4]["isError"] is True and unknown["status"] == "invalid_argument"
+    assert unknown["code"] == "unknown_argument" and unknown["unknown_arguments"] == ["version"]
     assert _payload(results[5])["current_content"] == replacement + "\n"
     assert _payload(results[6])["content"] == replacement + "\n"
     assert _payload(results[7])["status"] == "saved"

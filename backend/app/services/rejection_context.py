@@ -18,7 +18,7 @@ _CONTEXT_BYTES = min(4096, (8192 - _WRAPPER_BYTES) // 2)
 
 
 def unavailable_context(
-    reason: Literal["invalid_target_id", "target_not_found", "unlocked_local_state"],
+    reason: Literal["invalid_target_id", "target_not_found", "unlocked_local_state", "same_as_failure_context"],
 ) -> dict:
     return {
         "available": False,
@@ -42,29 +42,45 @@ def available_context(
     context = {
         "available": True,
         "unavailable_reason": None,
-        "selection": "prefix",
+        "selection": buffer.selection,
         "buffer_stage": "intermediate_buffer" if buffer.prior_changes else "canonical_target",
         "prior_changes": buffer.prior_changes,
-        "start": 0,
-        "end": len(buffer.text),
+        "start": buffer.start,
+        "end": buffer.start + len(buffer.text),
         "total_chars": buffer.total_chars,
         "text": buffer.text,
         "truncated": len(buffer.text) < buffer.total_chars,
         "observed_target_version": observed_target_version,
         "observed_target_hash": observed_target_hash,
     }
+
+    def fit(length: int) -> None:
+        # A prefix shrinks from its end; a failure window keeps its focus inside.
+        local = 0
+        if buffer.focus is not None:
+            local = max(0, min(buffer.focus - buffer.start - length // 2, len(buffer.text) - length))
+        context.update(text=buffer.text[local:local + length], start=buffer.start + local,
+                       end=buffer.start + local + length, truncated=length < buffer.total_chars)
+
     if _json_bytes(context) > _CONTEXT_BYTES:
         # A corrupted non-ASCII stored hash can consume more JSON bytes than a valid SHA-256.
         low, high = 0, len(buffer.text)
         while low < high:
-            end = (low + high + 1) // 2
-            context.update(text=buffer.text[:end], end=end, truncated=end < buffer.total_chars)
+            length = (low + high + 1) // 2
+            fit(length)
             if _json_bytes(context) <= _CONTEXT_BYTES:
-                low = end
+                low = length
             else:
-                high = end - 1
-        context.update(text=buffer.text[:low], end=low, truncated=low < buffer.total_chars)
+                high = length - 1
+        fit(low)
     return context
+
+
+def response_current_context(current: dict | None, failure: dict | None) -> dict | None:
+    """MCP responses elide a current context identical to the stored failure context."""
+    if current is not None and current.get("available") and current == failure:
+        return unavailable_context("same_as_failure_context")
+    return current
 
 
 def context_identity(context: dict) -> dict:
@@ -76,4 +92,6 @@ def bound_candidates(key: str, value: dict) -> dict:
         value["candidates"].pop()
         value["truncated"] = True
     value["returned_count"] = len(value["candidates"])
+    if "next_occurrence_index" in value:
+        value["next_occurrence_index"] = value["returned_count"] + 1 if value["truncated"] else None
     return value

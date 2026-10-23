@@ -8,6 +8,7 @@ only: they never mutate state and never replace guards on submit.
 from __future__ import annotations
 
 import uuid
+from bisect import bisect_left
 from dataclasses import dataclass
 from typing import Any
 
@@ -48,8 +49,10 @@ def observe_target(session: Session, target_file_id: uuid.UUID) -> TargetObserva
 
 
 def line_slice(content: str, *, start_line: int = 1, end_line: int | None = None,
-               offset: int = 0, max_chars: int | None = None) -> dict[str, Any]:
+               offset: int = 0, max_chars: int | None = None, include_line_starts: bool = False) -> dict[str, Any]:
     """LF-only line ranges, bounded in code points without normalizing storage."""
+    if not isinstance(include_line_starts, bool):
+        raise ValueError("include_line_starts must be a boolean.")
     for name, value, minimum in (("start_line", start_line, 1), ("offset", offset, 0),
                                  ("end_line", end_line, 1), ("max_chars", max_chars, 1)):
         if value is None and name in {"end_line", "max_chars"}:
@@ -70,14 +73,23 @@ def line_slice(content: str, *, start_line: int = 1, end_line: int | None = None
     page_start = begin + offset
     page_end = min(stop, page_start + size)
     truncated = page_end < stop
-    return {"total_chars": len(content), "total_lines": total_lines,
+    page = {"total_chars": len(content), "total_lines": total_lines,
             "start_line": start_line, "end_line": last, "range_start": begin, "range_end": stop,
             "start": page_start, "end": page_end, "text": content[page_start:page_end],
-            "truncated": truncated, "next_offset": offset + page_end - page_start if truncated else None}
+            "truncated": truncated, "next_offset": offset + page_end - page_start if truncated else None,
+            "next_start": page_end if truncated else None}
+    if include_line_starts:
+        # Absolute code-point starts of selected lines that begin inside this page.
+        first = bisect_left(starts, page_start, lo=start_line - 1, hi=last)
+        page["line_starts"] = [{"line": index + 1, "start": starts[index]}
+                               for index in range(first, last)
+                               if starts[index] < page_end or (starts[index] == page_start == page_end)]
+    return page
 
 
 def read_lines(session: Session, *, target_file_id: uuid.UUID | str, start_line: int = 1,
-               end_line: int | None = None, offset: int = 0, max_chars: int | None = None) -> dict[str, Any]:
+               end_line: int | None = None, offset: int = 0, max_chars: int | None = None,
+               include_line_starts: bool = False) -> dict[str, Any]:
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         return {"status": "invalid_argument", "target_file_id": safe_input_text(target_file_id),
@@ -87,7 +99,7 @@ def read_lines(session: Session, *, target_file_id: uuid.UUID | str, start_line:
         return {"status": "not_found", "target_file_id": str(target_uuid)}
     try:
         page = line_slice(target.current_content, start_line=start_line, end_line=end_line,
-                          offset=offset, max_chars=max_chars)
+                          offset=offset, max_chars=max_chars, include_line_starts=include_line_starts)
     except ValueError as exc:
         return {"status": "invalid_argument", "target_file_id": str(target_uuid), "failure_detail": str(exc)}
     return {"status": "ok", "target_file_id": str(target_uuid), "version": target.current_version,

@@ -14,16 +14,18 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.failures import FailureReason
+from app.core.advisories import bounded_warnings, warning_strings
+from app.core.failures import RETRYABLE_FAILURE_REASONS, FailureReason
 from app.core.hashing import canonical_sha256
 from app.core.input_text import invalid_text_paths, is_persistable_text, safe_input_text
 from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
 from app.core.validity import ValidationStage, validity_levels
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
-from app.pdcp.operations import (OPERATIONS_PROTOCOL_VERSION, build_operations_record, parse_operations_record, to_parsed_operations)
+from app.pdcp.operations import (OPERATIONS_PROTOCOL_VERSION, build_operations_record, operations_runtime_version,
+                                 parse_operations_record, to_parsed_operations)
 from app.pdcp.replacement import (REPLACEMENT_PROTOCOL_VERSION, build_replacement_record, parse_replacement_record,
-                                 to_parsed_replacement, replacement_size_error)
+                                 to_parsed_replacement, replacement_size_evidence)
 from app.pdcp.models import (
     REQUIRED_MANIFEST_FIELDS,
     SUPPORTED_MANIFEST_FIELDS,
@@ -44,7 +46,8 @@ from app.pdcp.typed import (
     to_parsed_transaction,
     validate_client_request_id,
 )
-from app.services.rejection_context import available_context, unavailable_context, bound_candidates, context_identity
+from app.services.rejection_context import (available_context, unavailable_context, bound_candidates, context_identity,
+                                            response_current_context)
 from app.services.near_miss_service import near_misses
 from app.services.preview_evidence import bound_preview
 from app.storage.models import (
@@ -115,6 +118,12 @@ class SubmitPDCPResult:
     current_context: dict | None = None
     near_misses: dict | None = None
     correlation_id: str | None = None
+    warning_details: tuple[dict, ...] = ()
+    warning_count: int = 0
+    warnings_truncated: bool = False
+    code: str | None = None
+    # Bounded, response-only failing-buffer copy for fresh near-miss scans; never stored.
+    near_miss_buffer: str | None = None
 
 
 
@@ -123,13 +132,16 @@ def _submission_response(submit):
     def call(session: Session, *, include_correlation_id=False, **kwargs):
         if not isinstance(include_correlation_id, bool):
             return replace(_invalid_target_uuid_result(kwargs.get("target_file_id")), status="invalid_argument",
-                           failure_detail="include_correlation_id must be a boolean.", diagnostic=None, current_context=None)
+                           failure_detail="include_correlation_id must be a boolean.", diagnostic=None, current_context=None,
+                           code="invalid_include_correlation_id")
         result = submit(session, **kwargs)
         # _submit's owned transaction has successfully exited (committed) before comparison.
         if result.status == "rejected" and result.failure_reason in {
             FailureReason.MATCH_ABSENT, FailureReason.SEQUENTIAL_MATCH_INVALID,
         }:
-            result = replace(result, near_misses=near_misses(result.diagnostic or {}, caller_owned=session.in_transaction()))
+            result = replace(result, near_misses=near_misses(
+                result.diagnostic or {}, caller_owned=session.in_transaction(), buffer=result.near_miss_buffer,
+                failure_reason=result.failure_reason.value))
         if include_correlation_id:
             result = replace(result, correlation_id=str(uuid.uuid4()))
         return result
@@ -271,7 +283,8 @@ def submit_operations(
         return to_parsed_operations(typed, target_type=target.target_type), typed
     return _submit(session, target_uuid=target_uuid, submitted_target_id=target_file_id,
                    record_content=canonical_record_json(record), raw_record=record, decode=decode,
-                   protocol_version=OPERATIONS_PROTOCOL_VERSION, guard_required=True,
+                   protocol_version=OPERATIONS_PROTOCOL_VERSION, runtime_version=operations_runtime_version(record),
+                   guard_required=True,
                    expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
                    submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
                    regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
@@ -301,12 +314,16 @@ def submit_replacement(
                    submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
                    regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
                    client_request_id=client_request_id, _before_final_guard=_before_final_guard,
-                   _fresh_admission=lambda: replacement_size_error(replacement))
+                   _fresh_admission=lambda: replacement_size_evidence(replacement))
 
 
 def preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, **proposal) -> dict:
     """Return bounded advisory evidence without changing submit or durable facts."""
-    return bound_preview(_preview(session, target_file_id=target_file_id, format=format, **proposal))
+    payload = _preview(session, target_file_id=target_file_id, format=format, **proposal)
+    if "current_context" in payload:
+        payload["current_context"] = response_current_context(
+            payload["current_context"], (payload.get("diagnostic") or {}).get("failure_context"))
+    return bound_preview(payload)
 
 
 def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, **proposal) -> dict:
@@ -321,10 +338,12 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
     }
     common = {"preview": True, "advisory": True, "target_file_id": safe_input_text(target_file_id)}
     if not isinstance(format, str) or format not in fields:
-        return {**common, "status": "invalid_argument", "code": "invalid_format", "detail": "Unsupported preview format."}
+        return {**common, "status": "invalid_argument", "code": "invalid_format", "detail": "Unsupported preview format.",
+                "failure_detail": "Unsupported preview format."}
     if set(proposal) - fields[format] - {"expected_target_version", "expected_current_hash"}:
         return {**common, "status": "invalid_argument", "code": "irrelevant_proposal_fields",
-                "detail": "Preview fields must belong to the explicit format."}
+                "detail": "Preview fields must belong to the explicit format.",
+                "failure_detail": "Preview fields must belong to the explicit format."}
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         result = _invalid_target_uuid_result(target_file_id)
@@ -383,6 +402,7 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
             return to_parsed_transaction(typed, target_type=target.target_type), typed
     elif format == OPERATIONS_PROTOCOL_VERSION:
         record = build_operations_record(**record_args, operations=proposal.get("operations"))
+        runtime_version = operations_runtime_version(record)
         def decode(target):
             typed = parse_operations_record(record)
             return to_parsed_operations(typed, target_type=target.target_type), typed
@@ -391,6 +411,8 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
         def decode(target):
             typed = parse_replacement_record(record)
             return to_parsed_replacement(typed, target_type=target.target_type), typed
+    if format != OPERATIONS_PROTOCOL_VERSION:
+        runtime_version = _runtime_version(format)
     encoding_paths = invalid_text_paths({"record": record, "expected_target_version": version, "expected_current_hash": digest})
     encoding = None
     if encoding_paths:
@@ -398,20 +420,24 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
                     "invalid_input_paths": [path[:256] for path in encoding_paths[:20]],
                     "invalid_input_paths_truncated": len(encoding_paths) > 20 or any(len(path) > 256 for path in encoding_paths[:20])}
     if format == REPLACEMENT_PROTOCOL_VERSION and not encoding_paths:
-        size_error = replacement_size_error(proposal.get("replacement"))
-        if size_error is not None:
+        size_evidence = replacement_size_evidence(proposal.get("replacement"))
+        if size_evidence is not None:
             return {**common, "status": "invalid_argument", "code": "replacement_too_large",
-                    "diagnostic": {"code": "replacement_too_large", "limit_exceeded": size_error}}
+                    "failure_detail": "Replacement exceeds fresh admission limits.", "diagnostic": size_evidence}
     _, _, result, stage = _evaluate_proposal(
         target=target, decode=decode, protocol_version=format, guard_required=format != SUPPORTED_PROTOCOL_VERSION,
-        expected_target_version=version, expected_current_hash=digest, encoding_diagnostic=encoding)
+        expected_target_version=version, expected_current_hash=digest, encoding_diagnostic=encoding,
+        runtime_version=runtime_version)
     common.update(status=result.status, current_hash=target.current_hash, current_version=target.version,
                   before_hash=target.current_hash, before_version=target.version, after_hash=result.after_hash,
                   validation_stage=(ValidationStage.ACCEPTED if result.status == "accepted" else stage).value,
                   validity=validity_levels(result.status, stage=ValidationStage.ACCEPTED if result.status == "accepted" else stage),
                   failed_change_id=None)
     if isinstance(result, AcceptedCoreResult):
-        return {**common, "change_facts": list(result.change_facts)}
+        envelope = bounded_warnings(result.warnings)
+        return {**common, "change_facts": list(result.change_facts), "warnings": warning_strings(envelope["warnings"]),
+                "warning_details": envelope["warnings"], "warning_count": envelope["warning_count"],
+                "warnings_truncated": envelope["warnings_truncated"]}
     diagnostic = dict(result.diagnostic or {})
     diagnostic["failure_context"] = available_context(
         result.failure_buffer or FailureBufferContext.capture(target.current_content),
@@ -419,8 +445,14 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
     if "exact_candidates" in diagnostic:
         diagnostic["exact_candidates"] = bound_candidates("exact_candidates", {
             **diagnostic["exact_candidates"], **context_identity(diagnostic["failure_context"])})
-    return {**common, "failure_reason": result.failure_reason.value, "failure_detail": result.failure_detail,
-            "failed_change_id": result.failed_change_id, "diagnostic": diagnostic, "current_context": _target_context(target)}
+    payload = {**common, "failure_reason": result.failure_reason.value, "failure_detail": result.failure_detail,
+               "failed_change_id": result.failed_change_id, "diagnostic": diagnostic,
+               "current_context": _target_context(target)}
+    if result.failure_reason in {FailureReason.MATCH_ABSENT, FailureReason.SEQUENTIAL_MATCH_INVALID}:
+        # Preview holds no lock, so near misses are computed inline under the same budget.
+        payload["near_misses"] = near_misses(diagnostic, caller_owned=False, buffer=result.near_miss_buffer,
+                                             failure_reason=result.failure_reason.value)
+    return payload
 
 
 def _submit(
@@ -440,10 +472,13 @@ def _submit(
     regeneration_attempt: int | None,
     regeneration_source: str | None,
     client_request_id: str | None = None,
+    runtime_version: str | None = None,
     _before_final_guard=None,
-    _fresh_admission: Callable[[], str | None] | None = None,
+    _fresh_admission: Callable[[], dict | None] | None = None,
 ) -> SubmitPDCPResult:
     """Shared locked validate/apply/commit path for every submission format."""
+
+    runtime_version = runtime_version or _runtime_version(protocol_version)
 
     original_inputs = {
         "target_file_id": submitted_target_id,
@@ -571,10 +606,11 @@ def _submit(
                 before_hash,
                 protocol_version=protocol_version,
                 stage=ValidationStage.PROTOCOL_VALIDATION,
-                diagnostic_extra=encoding_diagnostic,
+                diagnostic_extra=encoding_diagnostic or {"code": "invalid_client_request_id"},
             )
             return _persist_rejection(
                 session,
+                runtime_version=runtime_version,
                 target=target,
                 current_pdcp=current_pdcp,
                 pdcp_content=pdcp_content,
@@ -651,9 +687,16 @@ def _submit(
                     stage=ValidationStage.PRECONDITION_GUARD,
                     diagnostic_extra={
                         **encoding_diagnostic,
+                        "code": "request_key_conflict",
                         "existing_pdcp_log_id": str(existing_log.pdcp_log_id),
                         "submitted_client_request_id": validated_req_id[:256],
                         "submitted_client_request_id_truncated": len(validated_req_id) > 256,
+                        **_conflict_evidence(
+                            existing_log, protocol_version=protocol_version, pdcp_content_hash=pdcp_content_hash,
+                            expected_target_version=expected_target_version,
+                            expected_current_hash=expected_current_hash,
+                            parent=parent_uuid if parent_uuid else parent_pdcp_log_id,
+                            record_content=None if encoding_paths else record_content),
                     },
                 )
                 current_pdcp = _upsert_current_pdcp(
@@ -664,7 +707,7 @@ def _submit(
                     regeneration_attempt=regeneration_attempt, regeneration_source=regeneration_source,
                 )
                 result = _persist_rejection(
-                    session, target=target, current_pdcp=current_pdcp,
+                    session, runtime_version=runtime_version, target=target, current_pdcp=current_pdcp,
                     pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
                     expected_target_version=expected_target_version,
                     expected_current_hash=expected_current_hash,
@@ -680,14 +723,14 @@ def _submit(
 
 
         if not encoding_paths and _fresh_admission is not None:
-            size_error = _fresh_admission()
-            if size_error is not None:
+            size_evidence = _fresh_admission()
+            if size_evidence is not None:
                 return SubmitPDCPResult(
                     status="invalid_argument", target_file_id=target_uuid, pdcp_log_id=None,
                     before_hash=before_hash, after_hash=None, before_version=before_version, after_version=None,
                     current_hash=before_hash, current_version=before_version,
                     failure_detail="Replacement exceeds fresh admission limits.",
-                    diagnostic={"code": "replacement_too_large", "limit_exceeded": size_error},
+                    diagnostic=size_evidence, code=size_evidence["code"],
                     client_request_id=validated_req_id)
 
         current_pdcp = _upsert_current_pdcp(
@@ -707,9 +750,9 @@ def _submit(
             _, _, rejection, _ = _evaluate_proposal(
                 target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
                 expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
-                encoding_diagnostic=encoding_diagnostic)
+                encoding_diagnostic=encoding_diagnostic, runtime_version=runtime_version)
             return _persist_rejection(
-                session, target=target, current_pdcp=current_pdcp,
+                session, runtime_version=runtime_version, target=target, current_pdcp=current_pdcp,
                 pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
                 expected_target_version=expected_target_version,
                 expected_current_hash=expected_current_hash,
@@ -731,6 +774,7 @@ def _submit(
             )
             return _persist_rejection(
                 session,
+                runtime_version=runtime_version,
                 target=target,
                 current_pdcp=current_pdcp,
                 pdcp_content=pdcp_content,
@@ -763,6 +807,7 @@ def _submit(
             )
             return _persist_rejection(
                 session,
+                runtime_version=runtime_version,
                 target=target,
                 current_pdcp=current_pdcp,
                 pdcp_content=pdcp_content,
@@ -785,11 +830,13 @@ def _submit(
 
         parsed, typed, core_result, stage = _evaluate_proposal(
             target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
-            expected_target_version=expected_target_version, expected_current_hash=expected_current_hash)
+            expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+            runtime_version=runtime_version)
 
         if isinstance(core_result, RejectedCoreResult):
             return _persist_rejection(
                 session,
+                runtime_version=runtime_version,
                 target=target,
                 current_pdcp=current_pdcp,
                 pdcp_content=pdcp_content,
@@ -825,6 +872,7 @@ def _submit(
             )
             return _persist_rejection(
                 session,
+                runtime_version=runtime_version,
                 target=target,
                 current_pdcp=current_pdcp,
                 pdcp_content=pdcp_content,
@@ -847,6 +895,7 @@ def _submit(
 
         return _persist_acceptance(
             session,
+            runtime_version=runtime_version,
             target=target,
             current_pdcp=current_pdcp,
             pdcp_content=pdcp_content,
@@ -870,6 +919,7 @@ def _submit(
 def _evaluate_proposal(
     *, target, decode, protocol_version: str, guard_required: bool,
     expected_target_version, expected_current_hash, encoding_diagnostic: dict | None = None,
+    runtime_version: str | None = None,
 ) -> tuple[ParsedPDCP | None, TypedTransaction | None, AcceptedCoreResult | RejectedCoreResult, ValidationStage]:
     """Read-only fresh-proposal evaluator shared by locked submit and advisory preview."""
     if encoding_diagnostic is not None:
@@ -887,7 +937,7 @@ def _evaluate_proposal(
     stage = ValidationStage.TRANSACTION_APPLICABILITY
     try:
         parsed, typed = decode(target)
-        profile = resolve_runtime_profile(_runtime_version(protocol_version))
+        profile = resolve_runtime_profile(runtime_version or _runtime_version(protocol_version))
         core_result = apply_pdcp_transaction(
             target.current_content,
             parsed,
@@ -895,6 +945,7 @@ def _evaluate_proposal(
             enforce_singleton_selectors=profile.enforce_singleton_selectors,
             allow_span_operations=profile.span_operations,
             allow_replace_all_operations=profile.replace_all_operations,
+            allow_span_context=profile.span_context,
         )
         if isinstance(core_result, RejectedCoreResult):
             core_result = _enrich_diagnostic(
@@ -1031,8 +1082,10 @@ def _persist_acceptance(
     typed: TypedTransaction | None = None,
     client_request_id: str | None = None,
     request_fingerprint: str | None = None,
+    runtime_version: str | None = None,
 ) -> SubmitPDCPResult:
     after_version = before_version + 1
+    envelope = bounded_warnings(accepted.warnings)
     log = AppendOnlyPdcpLogs(
         target_file_id=target.target_file_id,
         editing_cycle_id=target.active_editing_cycle_id,
@@ -1041,10 +1094,12 @@ def _persist_acceptance(
         regeneration_source=regeneration_source,
         submission_source=submission_source,
         protocol_version=protocol_version,
-        runtime_version=_runtime_version(protocol_version),
+        runtime_version=runtime_version or _runtime_version(protocol_version),
         pdcp_content=pdcp_content,
         pdcp_content_hash=pdcp_content_hash,
         status="accepted",
+        # Accepted rows without warnings keep diagnostic_json NULL, as before.
+        diagnostic_json=envelope if accepted.warnings else None,
         expected_target_version=expected_target_version,
         expected_current_hash=expected_current_hash,
         before_version=before_version,
@@ -1122,6 +1177,7 @@ def _persist_acceptance(
         change_facts=accepted.change_facts,
         validation_stage=ValidationStage.ACCEPTED,
         client_request_id=client_request_id,
+        **_warning_fields(envelope),
     )
 
 
@@ -1146,6 +1202,7 @@ def _persist_rejection(
     stage: ValidationStage = ValidationStage.PROTOCOL_VALIDATION,
     client_request_id: str | None = None,
     request_fingerprint: str | None = None,
+    runtime_version: str | None = None,
 ) -> SubmitPDCPResult:
     sanitized_version, version_valid = sanitize_expected_target_version(expected_target_version)
     sanitized_hash, hash_valid = sanitize_expected_current_hash(expected_current_hash)
@@ -1176,7 +1233,7 @@ def _persist_rejection(
         regeneration_source=regeneration_source,
         submission_source=submission_source,
         protocol_version=protocol_version,
-        runtime_version=_runtime_version(protocol_version),
+        runtime_version=runtime_version or _runtime_version(protocol_version),
         pdcp_content=pdcp_content,
         pdcp_content_hash=pdcp_content_hash,
         status="rejected",
@@ -1217,7 +1274,13 @@ def _persist_rejection(
         validation_stage=stage,
         current_context=_target_context(target),
         client_request_id=client_request_id,
+        near_miss_buffer=rejection.near_miss_buffer,
     )
+
+
+def _warning_fields(envelope: dict) -> dict:
+    return {"warnings": tuple(warning_strings(envelope["warnings"])), "warning_details": tuple(envelope["warnings"]),
+            "warning_count": envelope["warning_count"], "warnings_truncated": envelope["warnings_truncated"]}
 
 
 def _reconstruct_deduplicated_result(
@@ -1249,6 +1312,7 @@ def _reconstruct_deduplicated_result(
             validation_stage=ValidationStage.ACCEPTED,
             deduplicated=True,
             client_request_id=log.client_request_id,
+            **_warning_fields(_stored_warnings(log.diagnostic_json)),
         )
 
     diag = dict(log.diagnostic_json or {})
@@ -1274,6 +1338,15 @@ def _reconstruct_deduplicated_result(
         deduplicated=True,
         client_request_id=log.client_request_id,
     )
+
+
+def _stored_warnings(diagnostic: Any) -> dict:
+    """Recorded accepted-row warnings; older rows have none."""
+    if isinstance(diagnostic, dict) and isinstance(diagnostic.get("warnings"), list):
+        return {"warnings": diagnostic["warnings"],
+                "warning_count": diagnostic.get("warning_count", len(diagnostic["warnings"])),
+                "warnings_truncated": bool(diagnostic.get("warnings_truncated", False))}
+    return bounded_warnings(())
 
 
 def _runtime_version(protocol_version: str) -> str:
@@ -1349,15 +1422,7 @@ def _core_rejection(
     is_typed = protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION)
     diagnostic: dict[str, Any] = {
         "format": protocol_version,
-        "retryable": reason
-        in {
-            FailureReason.MATCH_ABSENT,
-            FailureReason.MATCH_AMBIGUOUS,
-            FailureReason.DISAMBIGUATION_INVALID,
-            FailureReason.SEQUENTIAL_MATCH_INVALID,
-            FailureReason.TARGET_HASH_MISMATCH,
-            FailureReason.TARGET_VERSION_MISMATCH,
-        },
+        "retryable": reason in RETRYABLE_FAILURE_REASONS,
         "requires_new_submission": True,
         "validation_stage": stage.value,
     }
@@ -1416,6 +1481,73 @@ def _enrich_diagnostic(
     else:
         diag["requires_new_pdcp"] = True
     return replace(rejection, diagnostic=diag)
+
+
+MAX_DIFFERING_FIELDS = 10
+_TYPED_PROTOCOLS = (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION)
+
+
+def _conflict_evidence(existing_log, *, protocol_version, pdcp_content_hash, expected_target_version,
+                       expected_current_hash, parent, record_content) -> dict:
+    """Advisory comparison of a conflicting proposal with the stored keyed row."""
+    stored = {name: getattr(existing_log, name, None) for name in (
+        "protocol_version", "pdcp_content_hash", "expected_target_version", "expected_current_hash",
+        "parent_pdcp_log_id", "pdcp_content")}
+    stored_parent = str(stored["parent_pdcp_log_id"]) if stored["parent_pdcp_log_id"] else None
+    submitted_parent = str(_try_coerce_uuid(parent) or parent) if parent is not None else None
+    components = [name for name, old, new in (
+        ("protocol_version", stored["protocol_version"], protocol_version),
+        ("pdcp_content_hash", stored["pdcp_content_hash"], pdcp_content_hash),
+        ("expected_target_version", stored["expected_target_version"],
+         sanitize_expected_target_version(expected_target_version)[0]),
+        ("expected_current_hash", stored["expected_current_hash"],
+         sanitize_expected_current_hash(expected_current_hash)[0]),
+        ("parent_pdcp_log_id", stored_parent, submitted_parent),
+    ) if old != new]
+    fields: list[str] | None = None
+    if ("pdcp_content_hash" in components and record_content is not None
+            and protocol_version in _TYPED_PROTOCOLS and stored["protocol_version"] == protocol_version):
+        try:
+            old_record, new_record = json.loads(stored["pdcp_content"]), json.loads(record_content)
+        except (TypeError, ValueError):
+            old_record = new_record = None
+        if isinstance(old_record, dict) and isinstance(new_record, dict) and "evidence_format" not in old_record:
+            fields = []
+            _diff_paths(old_record, new_record, "", fields, depth=0)
+    elif "pdcp_content_hash" in components:
+        fields = ["pdcp_content"]
+    evidence: dict[str, Any] = {"differing_components": components}
+    if fields is not None:
+        evidence.update(differing_fields=fields[:MAX_DIFFERING_FIELDS],
+                        differing_fields_truncated=len(fields) > MAX_DIFFERING_FIELDS)
+    return evidence
+
+
+def _diff_paths(old: Any, new: Any, path: str, out: list[str], *, depth: int) -> None:
+    """Collect JSON paths where two decoded records differ (bounded, deterministic)."""
+    if len(out) > MAX_DIFFERING_FIELDS:
+        return
+    label = (path or "$")[:256]
+    if type(old) is not type(new) or depth >= 8:
+        if type(old) is not type(new) or old != new:
+            out.append(label)
+        return
+    if isinstance(old, dict):
+        for key in sorted(set(old) | set(new), key=str):
+            child = f"{path}.{key}" if path else str(key)
+            if key not in old or key not in new:
+                out.append(child[:256])
+            else:
+                _diff_paths(old[key], new[key], child, out, depth=depth + 1)
+    elif isinstance(old, list):
+        for index in range(max(len(old), len(new))):
+            child = f"{path}[{index}]"
+            if index >= len(old) or index >= len(new):
+                out.append(child[:256])
+            else:
+                _diff_paths(old[index], new[index], child, out, depth=depth + 1)
+    elif old != new:
+        out.append(label)
 
 
 def _compute_request_fingerprint(
