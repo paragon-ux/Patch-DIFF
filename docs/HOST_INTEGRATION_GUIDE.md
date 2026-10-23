@@ -6,7 +6,7 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 ## 0. Stdio transport and host refresh
 
-Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below.
+Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Responses carry literal UTF-8 text, so the model sees `🌍` and `中`, not `🌍` escapes.
 
 For older adapter revisions, set PYTHONIOENCODING=utf-8 in the server environment. Literal Unicode can otherwise be misdecoded and persisted even when the call succeeds; an ASCII-escaped request alone does not test this path. This setting remains compatible with the fixed adapter.
 
@@ -22,7 +22,7 @@ After changing a server command or environment, use the host-supported server re
 | Durable log of accepted **and** rejected attempts with failure labels and lineage | Judge whether an edit achieves the user's goal |
 | Deterministic replay from initial content plus accepted history | Track edits made to an exported copy outside PatchDIFF |
 
-Accepted means *protocol-valid and transaction-valid*. `validity.task_correct` and `validity.semantic` are always `"not_evaluated"`. Run tests, linters and review in the host.
+Accepted means *protocol-valid and transaction-valid*. `validity.task_correct` and `validity.semantic` are always `"not_evaluated"`. Run tests, linters and review in the host. Read `warnings` on every acceptance: they flag accepted edits that are well formed but probably not what you meant.
 
 ## 2. The standard loop
 
@@ -36,7 +36,7 @@ sequenceDiagram
     P-->>H: version, current_hash, exact spans
     H->>P: patchdiff_submit_edits (guard + edits)
     alt accepted
-        P-->>H: accepted, new version, evidence, validity
+        P-->>H: accepted, new version, evidence, warnings, validity
         H->>H: run tests / review (task correctness is the host's job)
     else rejected
         P-->>H: failure_reason, diagnostic, pdcp_log_id, current version/hash
@@ -45,19 +45,21 @@ sequenceDiagram
     end
 ```
 
-1. **Read first.** Use `patchdiff_read_target` for a region (by code-point offset), `patchdiff_read_lines` for a line range, or `patchdiff_find_occurrences` to locate a string. All return `version` and `current_hash`. Do not copy from a stale summary or a cached earlier read.
+1. **Read first.** Use `patchdiff_read_target` for a region (by code-point offset), `patchdiff_read_lines` for a line range, or `patchdiff_find_occurrences` to locate a string. All return `version` and `current_hash`. Do not copy from a stale summary or a cached earlier read. Offsets are Unicode code points: a JavaScript or TypeScript host must convert UTF-16 string indexes before sending them.
 2. **Submit with a guard.** Pass `expected_target_version` and/or `expected_current_hash` from the read you based the edit on. Typed submissions without a guard are rejected (`context_missing`).
-3. **On rejection, re-read, don't guess.** Match the label to the action:
+3. **On rejection, re-read, don't guess.** `diagnostic.retryable: true` means a new proposal derived from a fresh read can succeed; resending the same request will not. Match the label to the action:
 
 | `failure_reason` | Meaning | Host action |
 | --- | --- | --- |
 | `target_version_mismatch`, `target_hash_mismatch`, `target_diverged` | Target changed since your read | Re-read, re-derive the edit from fresh text |
-| `match_absent` | Text not present (exactly) | Re-read the region; check case, whitespace, line endings |
-| `sequential_match_invalid` | Later edit matched the original but not the progressively edited text | Rewrite later edits against the result of earlier ones |
-| `match_ambiguous` | More than one exact span; `diagnostic.occurrence_count` says how many | Lengthen `match`, or add `occurrence_index` / `anchor_before` / `anchor_after` (indexes from `find_occurrences`) |
-| `disambiguation_invalid` | Selector did not isolate one span | Use `find_occurrences` and pick a valid `occurrence_index` |
-| `span_out_of_bounds`, `span_expected_text_mismatch` | A span does not fit, or its `expected_text` differs from the text at those offsets in the sequential buffer | Re-read, recompute offsets against the text after earlier operations, copy `expected_text` exactly |
-| `manifest_*`, `block_malformed`, `context_*` | Malformed typed input | Fix the request shape |
+| `match_absent` | Text not present (exactly) | Check `near_misses`; re-read the region; check case, whitespace, line endings |
+| `sequential_match_invalid` | An earlier edit in the same transaction consumed this text; `diagnostic.original_occurrences` names the change | Rewrite later edits against the result of earlier ones, or merge them |
+| `match_ambiguous` | More than one exact span; `diagnostic.occurrence_count` says how many | Lengthen `match`, or add `anchor_before` / `anchor_after`, or `occurrence_index` counted in the buffer that edit sees (see §3) |
+| `disambiguation_invalid` | Selector did not isolate one span | Recount: indexes after earlier edits are renumbered. For several same-string edits, use descending tx/2 spans |
+| `span_out_of_bounds`, `span_expected_text_mismatch` | A span does not fit, or its `expected_text` or context differs from the text in the sequential buffer; `diagnostic.span_check` says which check and `actual_text` shows what is there | Re-read, recompute offsets against the text after earlier operations, copy `expected_text` exactly |
+| `context_invalid` with `diagnostic.code: "request_key_conflict"` | The `client_request_id` was already used for a different proposal; `differing_fields` names what changed | Resend the original proposal unchanged to recover it, or use a new key for the new proposal (§7) |
+| `context_invalid` with `diagnostic.code: "invalid_client_request_id"` | The key is not 1–128 printable ASCII characters without whitespace | Fix the key |
+| `manifest_*`, `block_malformed`, other `context_*` | Malformed typed input | Fix the request shape |
 
 4. **Link retries.** Set `parent_pdcp_log_id` to the rejected attempt and `attempt` to your own counter. The rejected row stays in the log. Retry limits are your policy; the server enforces none.
 5. **Do not ask the server for a regeneration prompt.** Those tools are deprecated.
@@ -84,21 +86,33 @@ sequenceDiagram
 - `intent`, `rationale` and `risk` are **advisory claims**. They are recorded but never used for matching, and the ledger never presents them as verified meaning.
 - What the runtime derived (spans, lengths, payload hashes) comes back under `evidence.changes[]` and is stored in the ledger's `derived` field. Trust that, not the prose, when reviewing.
 
+### `occurrence_index` counts the buffer each edit sees
+
+An `occurrence_index` selects among the exact occurrences in the text that edit sees, which is the text after every earlier edit in the same transaction. Indexes from `patchdiff_find_occurrences` or `exact_candidates` describe the target before the transaction, so they are only valid for the first edit, or when each transaction has one edit.
+
+Example: a README contains `Calcly` six times and the user wants the first three renamed. Sending three edits with `occurrence_index` 1, 2 and 3 renames originals 1, 3 and 5: after the first rename only five remain, and index 2 now means original 3. The transaction is accepted, because each instruction is well formed, but it carries `occurrence_index_basis_shift` warnings such as "chg_002 occurrence_index 2 selected the occurrence that was index 3 at transaction start". Treat that warning as a wrong edit and fix it with a follow-up proposal.
+
+To edit several occurrences of the same text, prefer one of:
+
+- tx/2 spans from one read, in descending `start` order, so earlier offsets stay valid;
+- one edit per transaction, each re-read;
+- matches long enough, or anchors, that select each occurrence without an index.
+
 ### Selector constraints on a single occurrence
 
-Typed-match (`patchdiff-tx/1`) and legacy PDCP submissions use runtime `patchdiff-mvp-0.2.2`. Guarded match/span operations (`patchdiff-tx/2`) use immutable `patchdiff-mvp-0.3.0`; sole whole-target replacement (`patchdiff-tx/3`) uses immutable `patchdiff-mvp-0.4.0`. Every supplied selector must hold, even if the match occurs only once. Anchors mean anywhere before or after the match, not necessarily adjacent. For target text hello, this typed request rejects with disambiguation_invalid and leaves the target unchanged:
+Typed-match (`patchdiff-tx/1`) and legacy PDCP submissions use runtime `patchdiff-mvp-0.2.2`. Guarded match/span operations (`patchdiff-tx/2`) use immutable `patchdiff-mvp-0.3.0`, or immutable `patchdiff-mvp-0.5.0` when a span uses context guards; sole whole-target replacement (`patchdiff-tx/3`) uses immutable `patchdiff-mvp-0.4.0`. Every supplied selector must hold, even if the match occurs only once. Anchors mean anywhere before or after the match, not necessarily adjacent. For target text hello, this typed request rejects with disambiguation_invalid and leaves the target unchanged:
 
 ```json
-{"target_file_id":"11111111-1111-1111-1111-111111111111","expected_target_version":0,"intent":"Replace greeting","edits":[{"match":"hello","replace":"goodbye","occurrence_index":2}]}
+{"target_file_id":"11111111-1111-4111-8111-111111111111","expected_target_version":0,"intent":"Replace greeting","edits":[{"match":"hello","replace":"goodbye","occurrence_index":2}]}
 ```
 
 The equivalent legacy proposal also rejects when submitted with the same target/version guard:
 
 ```json
 {
-  "target_file_id": "11111111-1111-1111-1111-111111111111",
+  "target_file_id": "11111111-1111-4111-8111-111111111111",
   "expected_target_version": 0,
-  "pdcp_content": "PDCP 0.2.3\ntarget_file_id: 11111111-1111-1111-1111-111111111111\ntarget_type: text/plain\n\n# MANIFEST\n# change_id: greeting\n# intent: Replace greeting.\n# input_state: hello exists.\n# output_state: goodbye should exist.\n# affected_region: greeting\n# user_visible_change: Greeting changes.\n# risk: low\n# occurrence_index: 2\n\n<<<<<<< MATCH\nhello\n=======\ngoodbye\n>>>>>>> REPLACE"
+  "pdcp_content": "PDCP 0.2.3\ntarget_file_id: 11111111-1111-4111-8111-111111111111\ntarget_type: text/plain\n\n# MANIFEST\n# change_id: greeting\n# intent: Replace greeting.\n# input_state: hello exists.\n# output_state: goodbye should exist.\n# affected_region: greeting\n# user_visible_change: Greeting changes.\n# risk: low\n# occurrence_index: 2\n\n<<<<<<< MATCH\nhello\n=======\ngoodbye\n>>>>>>> REPLACE"
 }
 ```
 
@@ -114,18 +128,32 @@ If inspecting such a rejection with include_content, pdcp_content is an ASCII-es
 
 The full contract is in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics); this section covers how to use it.
 
-- **Choose the narrowest tool.** Use `patchdiff_submit_edits` for exact text matches. Use `patchdiff_submit_operations` when you already hold code-point offsets from `patchdiff_read_target`, `patchdiff_read_lines` or `patchdiff_find_occurrences`: each span carries the exact `expected_text`, and `start == end` with empty `expected_text` inserts. Span coordinates refer to the text after earlier operations in the same transaction. Use `patchdiff_submit_replacement` only when the user explicitly asked to replace the whole document.
-- **Read by line.** `patchdiff_read_lines` continues within the same selected line range through `next_offset`. Every page is a new observation and can see a newer version/hash under concurrent edits.
-- **Preview before submitting.** `patchdiff_preview` evaluates a proposal without writing, locking or reserving a request key. Its evidence can be truncated or omitted to fit a 32,768-byte budget, so check `total_change_count`, `returned_fact_count`, `change_facts_truncated` and `evidence_omissions` before treating facts as complete. Verdict, stage, observed version/hash and `after_hash` are always kept. Submit afterwards with a version guard: a hash alone cannot detect intervening no-op or ABA changes.
-- **Replacement limits.** A fresh replacement over 1,000,000 code points or 1,048,576 UTF-8 bytes returns `invalid_argument` with `diagnostic.code: "replacement_too_large"` and writes nothing. Split the change into operations instead.
+- **Choose the narrowest tool.** Use `patchdiff_submit_edits` for exact text matches. Use `patchdiff_submit_operations` when you already hold code-point offsets from `patchdiff_read_target`, `patchdiff_read_lines` or `patchdiff_find_occurrences`: each span carries the exact `expected_text`, and `start == end` with empty `expected_text` inserts. Span coordinates refer to the text after earlier operations in the same transaction, so send several spans from one read in descending `start` order. Use `patchdiff_submit_replacement` only when the user explicitly asked to replace the whole document.
+- **Verify insertions.** An insertion has no `expected_text` to check, so an off-by-N offset (a UTF-16 index, a miscounted line, a stale read) would otherwise commit silently. Add `expected_before` and/or `expected_after`: the exact text immediately before `start` and after `end`, such as the end of the previous line and the start of the next. A mismatch rejects with `span_expected_text_mismatch` and shows the actual adjacent text. A `grapheme_boundary_split` warning on an accepted span means the offset landed inside a character cluster such as an emoji or a combining sequence.
+- **Read by line.** `patchdiff_read_lines` continues within the same selected line range through `next_offset`, or through the absolute `next_start`, which you can pass to `patchdiff_read_target`. Never pass `next_offset` as an absolute offset. `include_line_starts: true` returns the absolute start of each selected line on the page, so line 25's offset is one call away. Every page is a new observation and can see a newer version/hash under concurrent edits.
+- **Preview before submitting.** `patchdiff_preview` evaluates a proposal without writing, locking or reserving a request key, and returns the same warnings and near misses a submission would. Its evidence can be truncated or omitted to fit a 32,768-byte budget, so check `total_change_count`, `returned_fact_count`, `change_facts_truncated` and `evidence_omissions` before treating facts as complete. Verdict, stage, observed version/hash and `after_hash` are always kept. Submit afterwards with a version guard: a hash alone cannot detect intervening no-op or ABA changes.
+- **Replacement limits.** A fresh replacement over 1,000,000 code points or 1,048,576 UTF-8 bytes returns `invalid_argument` with `code: "replacement_too_large"` and writes nothing. The diagnostic gives `actual`, `limit` and `canonical_would_fit`; when that is `true`, the text only failed because of CRLF or CR line endings, so send it with LF. The limit applies to whole-document replacement only. If the change is really a set of edits, send them as edits or operations; do not split a rewrite to avoid the limit.
 - **Correlation.** Pass `include_correlation_id: true` to receive a fresh per-call UUID for your own logs. It is never a retry key; use `client_request_id` for that.
-- **Diagnostics.** See [Inspect rejection context](#inspect-rejection-context). Ambiguity failures list up to five exact candidates: choose one with `occurrence_index` or anchors and resubmit. Absent-match failures can include up to three `near_misses` found in the first 256 code points of the failing buffer. Treat them as hints to re-read, never as edits to apply blindly.
+- **Diagnostics.** See [Inspect rejection context](#inspect-rejection-context). Ambiguity failures list up to five exact candidates; when more exist, `next_occurrence_index` continues the list through `patchdiff_find_occurrences`. A candidate's `occurrence_index` can be used directly only when the failing edit is the first one (`prior_changes: 0`). Absent-match failures can include up to three `near_misses` at distinct locations, scanned over up to the first 65,536 code points of the failing buffer; `scanned_start`/`scanned_end` and `scope_truncated` say what was searched, and an empty list carries a `hint`. Treat near misses as hints to re-read, never as edits to apply blindly.
 
-### Executable discovery example sequence
+### Discovery example sequence
 
-`tools/list` includes 13 illustrative `inputSchema.examples` across nine tools. They are arguments, not pre-existing resources. Initialize `alpha alpha\n🌟 中\n`, bind its real UUID and observed guard, then execute: read; find; typed example0 (second occurrence); resend those exact bound arguments for dedup; typed example1 (intentional missing match); typed example2 with the returned rejection UUID as parent and version 1; span example at version 2; sole replacement at version 3; line read; preview at version 4. The replacement leaves `Final text\n`; accepted preview proposes `Reviewed text\n` but does not commit it. Keep the original rejection diagnostic immutable and expect four accepted facts/five attempts. Never substitute the new version into the original keyed proposal when recovering it.
+`tools/list` includes 13 illustrative `inputSchema.examples` across nine tools. They are arguments, not pre-existing resources. To execute them:
 
-Execute each history tool's first example, bind its returned `next_sequence` into the continuation example, and repeat until `has_more=false`. Attempts display descending sequences; ledger displays ascending sequences within each newest page. A cursor is exclusive in both tools. The discovery examples are covered by real stdio tests with schema validation, nonvacuous paging and independent SQL assertions. This is executable API coverage, not a model success-rate measurement.
+1. Initialize `alpha alpha\n🌟 中\n`, then bind its real UUID and the observed version guard into every example.
+2. Read the target, then find `alpha`.
+3. Submit typed example 0, which renames the second occurrence.
+4. Resend those exact bound arguments and expect `deduplicated: true`.
+5. Submit typed example 1, an intentional missing match, and keep its rejection UUID.
+6. Submit typed example 2 with that rejection UUID as parent and version 1.
+7. Submit the span example at version 2.
+8. Submit the sole replacement at version 3. The target becomes `Final text\n`.
+9. Read line 1.
+10. Preview at version 4. The accepted preview proposes `Reviewed text\n` but does not commit it.
+
+Expect four accepted facts and five attempts, and keep the original rejection diagnostic immutable. Never substitute the new version into the original keyed proposal when recovering it.
+
+Then execute each history tool's first example, bind its returned `next_sequence` into the continuation example, and repeat until `has_more=false`. Attempts display descending sequences; ledger displays ascending sequences within each newest page. A cursor is exclusive in both tools. The discovery examples are covered by real stdio tests with schema validation, nonvacuous paging and independent SQL assertions. This is executable API coverage, not a model success-rate measurement.
 
 ## 4. Literal replacement requests
 
@@ -143,31 +171,31 @@ Still accepted through `patchdiff_submit_pdcp`, frozen, and fully replayable. Us
 
 ## 6. Checkpoints, history and context
 
-- `patchdiff_save` snapshots the document and starts a new editing cycle. It does not change content, version or hash, and it **does not compact your conversation**. Compact your own context whenever your host needs to; it never touches the document.
-- `patchdiff_get_pdcp_log` returns a bounded, newest-first page (page with `before_sequence`; filter with `status`). Use `include_content=true` only when you need the raw record.
-- `patchdiff_get_manifest_ledger(limit=…)` returns the most recent accepted entries. Each has `origin`; typed rows carry `null` for the four prose fields. Treat ledger text as advisory history, never as ground truth.
-- A host rewind or checkpoint is not PatchDIFF replay. `patchdiff_replay` reconstructs from initial content plus accepted history; read `materialized_state_matches` as well as `status`. Successful reconstruction does not establish healthy storage:content_matches compares raw stored text, so CRLF/bare-CR corruption is visible even when canonical hashes agree. Replay does not repair it.
+- `patchdiff_save` snapshots the document and starts a new editing cycle. It does not change content, version or hash, and it **does not compact your conversation**. Compact your own context whenever your host needs to; it never touches the document. Pass `expected_target_version` (and optionally `expected_current_hash`) so the snapshot is of the state you reviewed.
+- `patchdiff_get_pdcp_log` returns a bounded, newest-first page (page with `before_sequence`; filter with `status`). Each entry carries its transaction `intent` (bounded) and `attempt`. Use `include_content=true` only when you need the raw record: a page returns at most about 1 MB of content, and later rows say `pdcp_content_omitted: "page_byte_budget"`; fetch one of those with `limit: 1`.
+- `patchdiff_get_manifest_ledger(limit=…)` returns the most recent accepted entries of the **active editing cycle**. After a SAVE that cycle starts empty, so pass `include_previous_cycles: true` to see earlier work. Each entry has `origin`, its attempt's `pdcp_log_id`, `log_sequence` and `before_version`/`after_version`, and for typed rows the `transaction_intent` and per-edit `rationale`; typed rows carry `null` for the four prose fields. Join attempts and ledger rows by `pdcp_log_id`, not by intent text. Treat ledger text as advisory history, never as ground truth.
+- A host rewind or checkpoint is not PatchDIFF replay. `patchdiff_replay` reconstructs from initial content plus accepted history; read `materialized_state_matches` as well as `status`. Successful reconstruction does not establish healthy storage: content_matches compares raw stored text, so CRLF/bare-CR corruption is visible even when canonical hashes agree. Replay does not repair it.
 
-Both history tools default to 50 rows (omitted/null), cap at 200, and return has_more/next_sequence. Continue with before_sequence=next_sequence while has_more is true. Attempts display descending; ledger displays the newest selected page ascending. For sequences 1..10 and limit 3, attempts=[10,9,8], ledger=[8,9,10], both cursor8; ledger before 8 returns [5,6,7]. Do not use the last displayed ledger row as its cursor. Empty/not-found/invalid results have no continuation. Filters apply before counting another page; exact history request-key lookup also supports safe historical keys. Restart an active-cycle-only ledger traversal if SAVE rotates its cycle.
+Both history tools default to 50 rows (omitted/null), cap at 200, and return has_more/next_sequence. Continue with before_sequence=next_sequence while has_more is true. Attempts display descending; ledger displays the newest selected page ascending. For sequences 1..10 and limit 3, attempts=[10,9,8], ledger=[8,9,10], both cursor 8; ledger before 8 returns [5,6,7]. Do not use the last displayed ledger row as its cursor. Sequences are global across all targets, so one target's sequences have gaps. Empty/not-found/invalid results have no continuation. Filters apply before counting another page; exact history request-key lookup also supports safe historical keys. Restart an active-cycle-only ledger traversal if SAVE rotates its cycle.
 
-Search context_chars must be a non-bool integer >=0 (default 40, cap 400). Zero requests no surrounding text; invalid types return invalid_argument.
+Search context_chars must be a non-bool integer >= 0 (default 40, cap 400). Zero requests no surrounding text; invalid types return invalid_argument.
 
 ## 7. Lost responses & request idempotency
 
 PatchDIFF distinguishes request identity from state guards (C4 / D5):
 - `client_request_id` identifies a proposal and recovers its recorded terminal outcome.
 - `expected_target_version` is monotonic: an old version rejects after another acceptance, without proving which request committed.
-- `expected_current_hash` checks state, not request identity. A no-op edit keeps the hash; an ABA sequence restores it. An unkeyed hash-only retry can therefore apply again.
+- `expected_current_hash` checks state, not request identity. A no-op edit keeps the hash; an ABA sequence restores it. An unkeyed hash-only retry can therefore apply again. PatchDIFF flags an accepted no-op with `no_op_change`/`no_op_transaction` warnings.
 
 ### Inspect rejection context
 
-`diagnostic.failure_context` describes the original failure; `current_context` separately describes the current locked canonical target. Both are bounded prefixes (at most 256 code points; 4,096 compact ASCII-escaped JSON bytes each, 8,192 combined with wrapper keys), not a guarantee that the failed match lies in the snippet. Read/search for additional context. See MCP_TOOLS for fields and unavailable reasons.
+`diagnostic.failure_context` describes the original failure; `current_context` separately describes the current locked canonical target. Both are bounded (at most 256 code points; 4,096 compact ASCII-escaped JSON bytes each, 8,192 combined with wrapper keys). When the failure location is known and lies beyond the start of the text, `failure_context` is a window around it (`selection: "failure_window"`, real `start`/`end`); otherwise both are prefixes. When the two would be identical, the MCP response returns `current_context` as unavailable with `unavailable_reason: "same_as_failure_context"`: read `diagnostic.failure_context` instead. Read/search for additional context. See MCP_TOOLS for fields and unavailable reasons.
 
 A later sequential failure can name `intermediate_buffer` with `prior_changes > 0`: earlier edits were simulated, not committed. Its observed hash/version still name transaction-start state. Current context always names canonical state. Do not apply intermediate indices to committed content. On exact keyed recovery after later edits, failure context and the entire original diagnostic stay unchanged while current context can differ. Old outcomes may lack failure context. Explicit unavailable state covers malformed/missing targets and pending local ORM modifications; empty text with `available: true` is a real empty target. Caller-owned transaction observations may remain provisional until commit.
 
 ### Preserve the original proposal for recovery
 
-Keep the decoded proposal structure and original guards when retrying a lost response. The fingerprint includes the full canonical typed record, including intent, ordered raw edits, selectors and advisory fields, plus the protocol/target/content-hash/guard/parent envelope. Equivalent wire JSON whitespace, object-key order or Unicode escape spelling is harmless. Rewording intent or rationale, changing risk/selectors/guards, reordering edits, replacing an omitted optional edit field with null, or supplying an otherwise default change_id creates a different proposal even if the resulting text would match. Omitted/null top-level guards both become null.
+Keep the decoded proposal structure and original guards when retrying a lost response. The fingerprint includes the full canonical typed record, including intent, ordered raw edits, selectors and advisory fields, plus the protocol/target/content-hash/guard/parent envelope. Equivalent wire JSON whitespace, object-key order or Unicode escape spelling is harmless. Rewording intent or rationale, changing risk/selectors/guards, reordering edits, replacing an omitted optional edit field with null, or supplying an otherwise default change_id creates a different proposal even if the resulting text would match. If your SDK fills omitted optional fields with null, keep doing so on retries too. Omitted/null top-level guards both become null.
 
 LF and CRLF inside typed match/replace/anchor/prose values produce different escaped JSON strings and different identities; the runtime may still normalize them for matching. Legacy raw PDCP content hashes instead normalize actual line endings. This release preserves both existing rules. Do not regenerate a supposedly equivalent proposal to recover an earlier response; resend the original structure with its original key. Normal submission source/attempt metadata is outside ordinary fingerprint identity; invalid-text evidence has its separately documented identity domain.
 
@@ -177,7 +205,7 @@ For parent_pdcp_log_id, an eligible same-target rejected parent UUID canonicaliz
 
 Choose a distinct `client_request_id`: 1–128 printable ASCII characters without whitespace, such as `req-001`. A UUID is an allowed choice, not a requirement.
 
-If a response is lost, resend the identical proposal with the same request ID and original guards. Under the target lock, the service returns the recorded outcome with `deduplicated: true`, without reapplying it, even if target state has since advanced. Reusing that ID for different proposal content rejects with `failure_reason: "context_invalid"` and `diagnostic.existing_pdcp_log_id`; it does not overwrite the original attempt.
+If a response is lost, resend the identical proposal with the same request ID and original guards. Under the target lock, the service returns the recorded outcome with `deduplicated: true`, without reapplying it, even if target state has since advanced. Its `version`/`after_hash` describe that recorded outcome, and `current_version`/`current_hash` describe the target now; continue from the current pair. Reusing that ID for different proposal content rejects with `failure_reason: "context_invalid"`, `diagnostic.code: "request_key_conflict"` and `diagnostic.existing_pdcp_log_id`; it does not overwrite the original attempt. `differing_components` and `differing_fields` (such as `edits[0].rationale`) show what changed. To inspect the original without resending, call `patchdiff_get_pdcp_log(client_request_id=…)`.
 
 A conflicting reuse returns a newly persisted rejection log ID. Its row has a NULL client key, links the original log, and retains the submitted fingerprint. Repeating the conflict creates another rejected attempt; it never replaces the original keyed result. Use the exact original proposal/key to recover that original outcome. The submitted-key diagnostic is a bounded preview, not a new normalized identity.
 
@@ -194,10 +222,21 @@ After an unkeyed timeout:
 2. Absence from one page does not mean the request never arrived. Even after traversal, a still-running original call may commit later; identical unkeyed proposals may be indistinguishable. Treat an ambiguous outcome as unknown. Read current state authoritatively and reconcile the requested effect before generating another proposal; do not infer permission to reapply from missing history alone.
 3. When a replacement proposal is warranted, derive it from a fresh read, assign a new request ID, and link `parent_pdcp_log_id` only to a known rejected attempt. If the earlier attempt is known accepted, continue from its result.
 
-## 8. What is outside the guarantee
+## 8. Round-tripping to files
+
+PatchDIFF stores canonical LF text and hashes it that way. Line endings in the uploaded file are recorded, not kept, so writing an export back to a Windows or CRLF repository needs one decision from the host:
+
+1. On upload, keep `source_line_endings` from the `patchdiff_initialize_target` response. `style` is `none`, `lf`, `crlf`, `cr` or `mixed`, and `source_sha256` is the SHA-256 of the exact bytes you uploaded, so you can confirm that your local file is the one PatchDIFF saw without canonicalizing it.
+2. To write back, export with `format: "original_eol"`. It restores a uniform recorded style for the whole file, including lines added by edits. Compare `content_sha256` with your own hash of the bytes you are about to write.
+3. For `mixed` uploads, `original_eol` is refused (`original_eol_unrecoverable`) because per-line endings were never stored. Choose `canonical_lf` or `crlf` explicitly, or restore line endings from version control in the host. Targets created before line endings were recorded return `source_line_endings: null`; `original_eol` is refused for them with `source_line_endings_unknown`.
+4. The default `format: "original_text"` returns canonical LF text, as it always has. Despite its name it never meant the original bytes.
+
+A git repository with `core.autocrlf=true` checks files out with CRLF; writing LF back produces a whole-file diff even when only one line changed. Exporting with `original_eol` avoids that.
+
+## 9. What is outside the guarantee
 
 PatchDIFF's guarantees cover the managed target in Postgres. An exported file edited elsewhere, a shell, another database writer, or another editor can change content PatchDIFF never sees. A skill or instruction asking the model to "use PatchDIFF" is guidance, not enforcement. Re-importing an edited export is a **new upload and a new target**; nothing is merged or synchronized.
 
-## 9. Host skill checklist
+## 10. Host skill checklist
 
-A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; do not treat a local copy as authoritative.
+A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; treat accepted-edit `warnings` as probable mistakes; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; do not treat a local copy as authoritative.

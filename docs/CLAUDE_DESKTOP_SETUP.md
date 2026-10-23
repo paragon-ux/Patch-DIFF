@@ -34,7 +34,7 @@ $env:PYTHONPATH = "backend"
 
 You do not need to run `uvicorn` for the Claude Desktop MCP tools. Claude Desktop launches `app.mcp.external_adapter` directly.
 
-Ensure migrations `20260510_0001` and `20261020_0002` are applied so the typed transaction ledger columns and request idempotency index exist.
+Ensure migrations `20260510_0001`, `20261020_0002` and `20261022_0003` are applied so the typed transaction ledger columns, request idempotency index and source line-ending column exist.
 
 ## 2. Smoke Test The Adapter
 

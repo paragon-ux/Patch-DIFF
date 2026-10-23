@@ -12,6 +12,7 @@ This checklist distinguishes reviewed code from a published release. Neither mer
 | Legacy transaction | `0.2.3` | Frozen declarative `.pdcp` format |
 | Typed matches | `patchdiff-tx/1` / runtime `patchdiff-mvp-0.2.2` | Existing guarded match submissions |
 | Match/span operations | `patchdiff-tx/2` / runtime `patchdiff-mvp-0.3.0` | Sequential span and match operations |
+| Span context | `patchdiff-tx/2` / runtime `patchdiff-mvp-0.5.0` | Span operations with `expected_before`/`expected_after` |
 | Sole replacement | `patchdiff-tx/3` / runtime `patchdiff-mvp-0.4.0` | Explicit whole-target replacement |
 
 These are independent version domains. Do not rename durable runtime profiles to match a marketing version. Existing historical runtime profiles `0.1.0`, `0.2.0` and `0.2.1` remain supported under their recorded identifiers.
