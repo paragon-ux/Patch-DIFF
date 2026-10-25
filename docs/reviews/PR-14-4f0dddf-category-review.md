@@ -1,4 +1,4 @@
-# PR #14 Category Review — Resolve PR #13 Deferred Near-Miss (SVC-001) and Ledger-Read (MCP-001) P3 Findings
+# PR #14 Category Review — Resolve PR #13 Deferred Near-Miss (SVC-001) and Ledger-Read (MCP-001) P3 Findings & Public Documentation Upgrade
 
 ## 1. Review metadata and evidence limits
 
@@ -11,28 +11,36 @@
 | Standard | [PR Review Standard v1.1.0](../PR_REVIEW_STANDARD.md) |
 | Predecessor reviews | [PR-13-0420dac-category-review.md](PR-13-0420dac-category-review.md) (`MCP-001`), [PR-13-ac842bb-delta-review.md](PR-13-ac842bb-delta-review.md) (`SVC-001`), [PR-13-de6e7c2-friction-review.md](PR-13-de6e7c2-friction-review.md) (`NF-5`, `NF-8`), [PR-13-aa88cd5-friction-recheck.md](PR-13-aa88cd5-friction-recheck.md) |
 | Base SHA | `d09fbc8422bbc22543b0b209c2f689b3e341e3b2` (`origin/main`, PR #13 merge commit) |
-| Head SHA | `bfbba27425a3d6a137aa6df37d84acf03e4badf9` (`perf/pr13-deferred-p3`) |
-| Delta | 11 files changed, +704 / −102 |
+| Head SHA | `4f0dddfbf420fbd02fbace82409d37f89bb7c185` (`perf/pr13-deferred-p3`) |
+| Delta | 19 files changed, +1,318 / −243 |
 | CI runs | Verified locally against live PostgreSQL 16.3 and offline evaluation; GitHub Actions triggered on push |
 
-### Changed-file inventory (`d09fbc8..bfbba27`)
+### Changed-file inventory (`d09fbc8..4f0dddf`)
 
 1. `CHANGELOG.md` (+2 / −0) — Primary category: `DOC`
-2. `backend/app/mcp/tools.py` (+229 / −39) — Primary category: `MCP`
-3. `backend/app/services/near_miss_service.py` (+181 / −57) — Primary category: `SVC`
-4. `backend/tests/integration/test_friction_followup_live.py` (+157 / −0) — Primary category: `TEST`
-5. `backend/tests/unit/test_friction_followup.py` (+123 / −0) — Primary category: `TEST`
-6. `backend/tests/unit/test_mcp_arguments_paging.py` (+1 / −0) — Primary category: `TEST`
-7. `docs/MCP_TOOLS.md` (+2 / −2) — Primary category: `MCP`
-8. `docs/MODERNIZATION_ARCHITECTURE.md` (+1 / −1) — Primary category: `ARCH`
-9. `docs/MODERNIZATION_CHANGE_DOC.md` (+1 / −1) — Primary category: `DOC`
-10. `docs/TEST_MATRIX.md` (+2 / −2) — Primary category: `DOC`
-11. `docs/usability/friction-followup-decision.md` (+5 / −0) — Primary category: `ARCH`
+2. `README.md` (+216 / −24) — Primary category: `DOC`
+3. `README_INTERNAL_MCP.md` (+2 / −8) — Primary category: `DOC`
+4. `backend/app/mcp/tools.py` (+229 / −39) — Primary category: `MCP`
+5. `backend/app/services/near_miss_service.py` (+181 / −57) — Primary category: `SVC`
+6. `backend/tests/integration/test_friction_followup_live.py` (+157 / −0) — Primary category: `TEST`
+7. `backend/tests/unit/test_friction_followup.py` (+123 / −0) — Primary category: `TEST`
+8. `backend/tests/unit/test_mcp_arguments_paging.py` (+1 / −0) — Primary category: `TEST`
+9. `docs/HOST_INTEGRATION_GUIDE.md` (+4 / −16) — Primary category: `DOC`
+10. `docs/LEGACY_COMPATIBILITY.md` (+154 / −0) — Primary category: `DOC`
+11. `docs/MCP_FIRST_MVP.md` (+12 / −2) — Primary category: `ARCH`
+12. `docs/MCP_TOOLS.md` (+21 / −10) — Primary category: `MCP`
+13. `docs/MODERNIZATION_ARCHITECTURE.md` (+17 / −3) — Primary category: `ARCH`
+14. `docs/MODERNIZATION_CHANGE_DOC.md` (+4 / −4) — Primary category: `DOC`
+15. `docs/PATCHDIFF_CORE_SPEC.md` (+4 / −7) — Primary category: `ARCH`
+16. `docs/PDCP_FORMAT.md` (+119 / −60) — Primary category: `ARCH`
+17. `docs/TEST_MATRIX.md` (+2 / −2) — Primary category: `DOC`
+18. `docs/usability/friction-followup-decision.md` (+5 / −0) — Primary category: `ARCH`
+19. `evaluation/README.md` (+68 / −14) — Primary category: `DOC`
 
 ### Unchanged dependencies examined
 
 - `docs/PatchDIFF-Concept-Paper-5.md` (design thesis: exact deterministic matching, non-fuzzy core runtime, PostgreSQL canonical authority, append-only audit trail)
-- `AGENTS.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`
+- `AGENTS.md`, `docs/DATA_MODEL.md`
 - `backend/app/services/pdcp_service.py` (caller of `near_misses_from_rejected_result` and `near_misses`)
 - `backend/app/storage/models.py` (`AppendOnlyPdcpLogs`, `AppendOnlyManifestLedger`)
 - `backend/app/pdcp/typed.py`, `backend/app/pdcp/operations.py`, `backend/app/pdcp/replacement.py` (canonical JSON serialization with `sort_keys=True`)
@@ -40,9 +48,9 @@
 
 ### Evidence available and limits
 
-- **Source inspection:** Full diff `d09fbc8..bfbba27` and all referenced unchanged callers, models, and contracts.
+- **Source inspection:** Full diff `d09fbc8..4f0dddf` and all referenced unchanged callers, models, and contracts.
 - **Local execution:**
-  - Full unit and live-PostgreSQL integration suite (`pytest backend/tests -q`, **1,226 passed**: 816 unit + 410 integration) against isolated database `patchdiff_fx_full_suite_20261025` on `postgres:16.3-alpine` (`127.0.0.1:5432`), dropped upon completion.
+  - Full unit and live-PostgreSQL integration suite (`pytest backend/tests -q`, **1,226 passed**: 816 unit + 410 integration) against isolated database `patchdiff_fx_full_suite_20261025` on `postgres:16.3-alpine` (`127.0.0.1:5432`), dropped upon completion; unit suite re-verified on `4f0dddf` (`816 passed`).
   - Offline byte and verdict equivalence evaluation (`evaluation/offline_eval.py`, exit 0).
   - Controlled before/after latency benchmarks on 65,536-code-point repetitive and varied-prose buffers (`SVC-001`), 50 × 400 KB `patchdiff-tx/3` history/ledger pages (`MCP-001`), and 20 × 1 MB `patchdiff-tx/1` (5 edits × 200 KB each) history/ledger pages (`MCP-001`, `FX-01`).
   - Committed fixed-seed (`random.Random(12345)`) strict-path fuzz test (`test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness`) verifying strict-path coverage (`strict_hits >= 50`), Loop-2-only hits (`loop2_only_hits >= 15`), and leading-insertion hits (`leading_ins_hits >= 15`) against the unpruned Levenshtein reference (`FX-03`).
@@ -54,8 +62,8 @@
 
 | ID | Category | Primary changed files | Cross-referenced files / unchanged dependencies | Coverage | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| ARCH | Architecture and contracts | `docs/MODERNIZATION_ARCHITECTURE.md`, `docs/usability/friction-followup-decision.md` | `AGENTS.md`, `docs/PatchDIFF-Concept-Paper-5.md` | Complete | Pass (no findings) |
-| DOC | Documentation and change records | `CHANGELOG.md`, `docs/MODERNIZATION_CHANGE_DOC.md`, `docs/TEST_MATRIX.md` | `docs/MCP_TOOLS.md`, `docs/usability/friction-followup-decision.md` | Complete | Pass (no findings) |
+| ARCH | Architecture and contracts | `docs/MODERNIZATION_ARCHITECTURE.md`, `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/PDCP_FORMAT.md`, `docs/usability/friction-followup-decision.md` | `AGENTS.md`, `docs/PatchDIFF-Concept-Paper-5.md` | Complete | Pass (no findings) |
+| DOC | Documentation and change records | `CHANGELOG.md`, `README.md`, `README_INTERNAL_MCP.md`, `evaluation/README.md`, `docs/LEGACY_COMPATIBILITY.md`, `docs/HOST_INTEGRATION_GUIDE.md`, `docs/MODERNIZATION_CHANGE_DOC.md`, `docs/TEST_MATRIX.md` | `docs/MCP_TOOLS.md`, `docs/usability/friction-followup-decision.md` | Complete | Pass (no findings) |
 | SKILL | Skills and agent instructions | None | `.agents/skills/patchdiff-core-runtime/SKILL.md`, `.agents/skills/patchdiff-mcp-orchestration/SKILL.md`, `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`, `.agents/skills/patchdiff-testing-review/SKILL.md` | Complete (unchanged verification) | Pass (no findings) |
 | MCP | MCP schemas and public API | `backend/app/mcp/tools.py`, `docs/MCP_TOOLS.md` | `backend/app/mcp/external_adapter.py`, `backend/app/pdcp/typed.py`, `backend/app/pdcp/operations.py`, `backend/app/pdcp/replacement.py` | Complete | Pass (`MCP-001` & `FX-01`/`FX-02`/`FX-06`..`FX-09`/`FX-12` closed) |
 | RUN | Core runtime, parsing, and replay | None | `backend/app/core/`, `backend/app/pdcp/` | Complete (unchanged verification) | Pass (no findings) |
@@ -87,22 +95,26 @@
 
 ### ARCH — Architecture and contracts
 
-- **Scope:** `docs/MODERNIZATION_ARCHITECTURE.md`, `docs/usability/friction-followup-decision.md`.
-- **Coverage:** Complete (`2/2` files inspected against `AGENTS.md` and `docs/PatchDIFF-Concept-Paper-5.md`).
+- **Scope:** `docs/MODERNIZATION_ARCHITECTURE.md`, `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/PDCP_FORMAT.md`, `docs/usability/friction-followup-decision.md`.
+- **Coverage:** Complete (`5/5` files inspected against `AGENTS.md` and `docs/PatchDIFF-Concept-Paper-5.md`).
 - **P1 findings:** None identified within reviewed scope.
 - **P2 findings:** None identified within reviewed scope.
 - **P3 findings:** None identified within reviewed scope.
+- **Comments:** `docs/MODERNIZATION_ARCHITECTURE.md` bridges `docs/PatchDIFF-Concept-Paper-5.md` Section 23 hypotheses (`H1`–`H7`) and Section 26/28 limitations to the modernized `patchdiff-tx/1..3` contracts and `PR #14` benchmarks (`offline_eval.py`, `SVC-001`, `MCP-001`), while preserving `docs/PatchDIFF-Concept-Paper-5.md` untouched. `docs/PDCP_FORMAT.md`, `docs/MCP_FIRST_MVP.md`, and `docs/PATCHDIFF_CORE_SPEC.md` foreground the active typed JSON formats (`patchdiff-tx/1`, `tx/2`, `tx/3`) and reference `docs/LEGACY_COMPATIBILITY.md` for frozen `.pdcp` v0.2.3 and historical replay profiles (`0.1.0`–`0.2.1`).
 - **Verification gaps:** None.
 - **Verdict:** Pass.
 
 ### DOC — Documentation and change records
 
-- **Scope:** `CHANGELOG.md`, `docs/MODERNIZATION_CHANGE_DOC.md`, `docs/TEST_MATRIX.md`.
-- **Coverage:** Complete (`3/3` files inspected against `docs/MCP_TOOLS.md` and implementation behavior).
+- **Scope:** `CHANGELOG.md`, `README.md`, `README_INTERNAL_MCP.md`, `evaluation/README.md`, `docs/LEGACY_COMPATIBILITY.md`, `docs/HOST_INTEGRATION_GUIDE.md`, `docs/MODERNIZATION_CHANGE_DOC.md`, `docs/TEST_MATRIX.md`.
+- **Coverage:** Complete (`8/8` files inspected against `docs/MCP_TOOLS.md`, `evaluation/offline_eval.py`, and implementation behavior).
 - **P1 findings:** None identified within reviewed scope.
 - **P2 findings:** None identified within reviewed scope.
 - **P3 findings:** None identified within reviewed scope.
-- **Comments:** `docs/MCP_TOOLS.md` and `CHANGELOG.md` document the `comparison_cells` formula (`max(1, min(len(query), reached_row)) * (2 * band_radius + 1)`), the at-most-one-window overshoot discarded at the `MAX_COMPARISON_CELLS` boundary (`FX-04`, `FX-05`), and the PostgreSQL 16+ `pg_input_is_valid` `LATERAL` projections (`FX-12`).
+- **Comments:**
+  - `docs/LEGACY_COMPATIBILITY.md` consolidates all frozen `.pdcp` v0.2.3 syntax rules, `patchdiff_submit_pdcp`, deprecated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`), historical runtime replay profiles (`0.1.0`–`0.2.1`), and the `.pdcp` vs. `patchdiff-tx/1` byte/delimiter comparison into one reference document, with concise pointers in the active docs.
+  - `README.md` and `evaluation/README.md` present the reproducible `evaluation/offline_eval.py` payload byte tables, `SVC-001` 65,536-code-point near-miss benchmarks (`1.7 ms` prose, `41.9 ms` repetitive log), `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger benchmarks (`14.68 ms` / `22.85 ms` on 20 MB `tx/3`, `136.72 ms` / `221.59 ms` on 20 MB `tx/1`), hard context budgets, ecosystem comparison matrix, and 3-step typed JSON walkthrough.
+  - `docs/MCP_TOOLS.md` and `CHANGELOG.md` document the `comparison_cells` formula (`max(1, min(len(query), reached_row)) * (2 * band_radius + 1)`), the at-most-one-window overshoot discarded at the `MAX_COMPARISON_CELLS` boundary (`FX-04`, `FX-05`), and the PostgreSQL 16+ `pg_input_is_valid` `LATERAL` projections (`FX-12`).
 - **Verification gaps:** None.
 - **Verdict:** Pass.
 
@@ -125,12 +137,12 @@
 - **P3 findings:** None identified within reviewed scope (`MCP-001` closed).
 - **Measured latency (`MCP-001` & `FX-01`, Windows 11, PostgreSQL 16.3, 7-run medians after warmup):**
   - **50 × 400 KB (`20 MB`) `patchdiff-tx/3` records (`limit=50`):**
-    - `patchdiff_get_manifest_ledger`: **279.6 ms** on `d09fbc8` → **14.68 ms** on `bfbba27` (**19.0× speedup**, zero `pdcp_content` access).
-    - `patchdiff_get_pdcp_log`: **372.4 ms** on `d09fbc8` → **22.85 ms** on `bfbba27` (**16.3× speedup** via 4 KB head slice).
+    - `patchdiff_get_manifest_ledger`: **279.6 ms** on `d09fbc8` → **14.68 ms** on `4f0dddf` (**19.0× speedup**, zero `pdcp_content` access).
+    - `patchdiff_get_pdcp_log`: **372.4 ms** on `d09fbc8` → **22.85 ms** on `4f0dddf` (**16.3× speedup** via 4 KB head slice).
   - **20 × 1 MB (`20 MB`) `patchdiff-tx/1` records (5 edits × 200 KB each):**
-    - `patchdiff_get_manifest_ledger(limit=50)` (10 logs): **305.55 ms** on `d09fbc8` → **221.59 ms** on `bfbba27` (vs. 2,699.19 ms in initial multi-cast SQL before `FX-01`).
-    - `patchdiff_get_manifest_ledger(limit=100)` (20 logs): **449.92 ms** on `d09fbc8` → **445.33 ms** on `bfbba27`.
-    - `patchdiff_get_pdcp_log(limit=50)` (20 logs): **136.72 ms** on `bfbba27` (via 4 KB tail slice).
+    - `patchdiff_get_manifest_ledger(limit=50)` (10 logs): **305.55 ms** on `d09fbc8` → **221.59 ms** on `4f0dddf` (vs. 2,699.19 ms in initial multi-cast SQL before `FX-01`).
+    - `patchdiff_get_manifest_ledger(limit=100)` (20 logs): **449.92 ms** on `d09fbc8` → **445.33 ms** on `4f0dddf`.
+    - `patchdiff_get_pdcp_log(limit=50)` (20 logs): **136.72 ms** on `4f0dddf` (via 4 KB tail slice).
 - **Verification gaps:** None.
 - **Verdict:** Pass (`MCP-001` closed).
 
@@ -154,10 +166,10 @@
 - **Measured latency (`SVC-001`, Windows 11, Python 3.11.9, 5-run medians):**
   - **65,536-code-point repetitive structured log buffer (`needle` len 45, `threshold=4`):**
     - Before (`d09fbc8`): **708.5 ms** (`scanned_end=45,404`, `scope_truncated=True`, `comparison_cells=1,000,000` — stopped early at 69% of buffer).
-    - After (`bfbba27`): **41.9 ms** (`scanned_end=65,493`, `scope_truncated=False`, `comparison_cells=142,255` — **16.9× faster** and scans 100% of the buffer).
+    - After (`4f0dddf`): **41.9 ms** (`scanned_end=65,493`, `scope_truncated=False`, `comparison_cells=142,255` — **16.9× faster** and scans 100% of the buffer).
   - **65,536-code-point varied prose buffer (`needle` len 45, `threshold=4`):**
     - Before (`d09fbc8`): **100.2 ms** (`scanned_end=65,493`, `scope_truncated=False`, `comparison_cells=174,897`).
-    - After (`bfbba27`): **1.7 ms** (`scanned_end=65,493`, `scope_truncated=False`, `comparison_cells=585` — **58.9× faster**).
+    - After (`4f0dddf`): **1.7 ms** (`scanned_end=65,493`, `scope_truncated=False`, `comparison_cells=585` — **58.9× faster**).
 - **Verification gaps:** None.
 - **Verdict:** Pass (`SVC-001` closed).
 
@@ -188,22 +200,22 @@
 
 ---
 
-## 5. Cross-category root causes and review item resolution (`FX-01`..`FX-12`)
+## 5. Devin PR #14 Review (`CK-01`..`CK-13` / `FX-01`..`FX-12`) Resolution Summary
 
-| Item | Description | Resolution in `bfbba27` |
+| Item | Requirement | Resolution |
 | --- | --- | --- |
-| `FX-01` | Single-cast `LATERAL (... OFFSET 0)` for `tx/1`+`tx/2` ledger metadata and guarded 4 KB tail slice for `> 64 KB` `tx/1` attempt intents | Implemented `_ledger_meta_lateral` (`json_to_record` + `json_array_elements` with `OFFSET 0`, preserving `""` vs `None` rationales) and `_attempt_meta_lateral` (4 KB tail slice via `regexp_replace` after `,"format":"patchdiff-tx/1",`). Tested escaped markers inside JSON strings. |
-| `FX-02` | Require `? 'intent'` on 4 KB slices and pin canonical key order | Added `AND ((s.head_slice::jsonb) ? 'intent')` and `AND ((s.tail_slice::jsonb) ? 'intent')` in `_attempt_meta_lateral`; added `test_canonical_typed_records_keep_expected_key_order` and live reordered `> 64 KB` tests. |
-| `FX-03` | Commit fixed-seed strict-path fuzz test covering Loop 2 and `pos_k == 0` leading insertions | Added `test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness` in `backend/tests/unit/test_friction_followup.py`. |
-| `FX-04` | Document at-most-one-window overshoot at `MAX_COMPARISON_CELLS` boundary and add boundary test | Documented in `docs/MCP_TOOLS.md` and `CHANGELOG.md`; added `test_near_misses_cell_cap_boundary_stops_cleanly`. |
+| `FX-01` | Eliminate repeated JSON casts on `tx/1`/`tx/2` ledger pages; preserve `""` rationale vs `None`; add guarded `tx/1` tail slice in `_attempt_meta_lateral`; benchmark 20 × 1 MB `tx/1` | `_ledger_meta_lateral` uses a single `LATERAL (... OFFSET 0)` casting `l.pdcp_content::json` once per row (`tx/1` and `tx/2` only) and preserves `""` vs `null`/omitted rationale. `_attempt_meta_lateral` uses a guarded 4 KB tail slice (`regexp_replace(right(l.pdcp_content, 4096), '^.*,"format":"patchdiff-tx/1",', '{', 's')`) with `? 'intent'` fallback. |
+| `FX-02` | Guard 4 KB slices with `? 'intent'` fallback and pin canonical JSON key order | Added `AND ... ? 'intent'` to both head (`tx/2`, `tx/3`) and tail (`tx/1`) 4 KB slices in `_attempt_meta_lateral`; added `test_canonical_typed_records_keep_expected_key_order`. |
+| `FX-03` | Commit fixed-seed strict-path fuzz test verifying Loop-2-only and leading-insertion exactness | Added `test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness` (`seed=12345`) in `backend/tests/unit/test_friction_followup.py`. |
+| `FX-04` | Document at-most-one-window overshoot discarded at `MAX_COMPARISON_CELLS` boundary and add boundary test | Documented in `docs/MCP_TOOLS.md` and `CHANGELOG.md`; added `test_near_misses_cell_cap_boundary_stops_cleanly`. |
 | `FX-05` | Document `comparison_cells` formula in `docs/MCP_TOOLS.md` and `CHANGELOG.md` | Updated `docs/MCP_TOOLS.md` and `CHANGELOG.md` with `max(1, min(len(query), reached_row)) * (2 * band_radius + 1)`. |
 | `FX-06` | Update `FakeSession` in `test_mcp_arguments_paging.py` and remove fallback branches in `tools.py` | Updated `row(sequence)` in `test_mcp_arguments_paging.py` and deleted fallback branches in `patchdiff_get_pdcp_log` and `patchdiff_get_manifest_ledger`. |
 | `FX-07` | Remove dead helpers `_decoded_record` and `_record_field` after grepping for callers | Verified zero other callers in repository; deleted `_decoded_record`, `_record_field`, and unused `import json` from `backend/app/mcp/tools.py`. |
 | `FX-08` | Restrict ledger JSON extraction to `patchdiff-tx/1` and `patchdiff-tx/2` | `_ledger_meta_lateral` checks `l.protocol_version IN ('patchdiff-tx/1', 'patchdiff-tx/2')`; `tx/3` pages skip `_ledger_meta_lateral` entirely (`needs_json == False`). |
 | `FX-09` | Remove hardcoded `append_only_pdcp_logs.` table references in SQL helpers | Derived column qualifiers from `AppendOnlyPdcpLogs.__table__.alias("l")` (`log_alias.name`); verified zero occurrences of `append_only_pdcp_logs.` in `backend/app/mcp/tools.py`. |
 | `FX-10` | Strengthen live integration test (`evidence_format`, `include_content=True` budget, SQL statement checks) | Expanded `test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content` in `backend/tests/integration/test_friction_followup_live.py`. |
-| `FX-11` | Rewrite review record last against final SHA with accurate helper names, `tx/1` benchmark, and fuzz test | Replaced `PR-14-b27b3f5-category-review.md` with `PR-14-bfbba27-category-review.md`. |
-| `FX-12` | Note PostgreSQL 16+ `pg_input_is_valid` requirement in docs/changelog | Documented in `docs/MCP_TOOLS.md` and `CHANGELOG.md`. |
+| `FX-11` | Rewrite review record last against final SHA with accurate helper names, `tx/1` benchmark, and fuzz test | Updated review record to `PR-14-4f0dddf-category-review.md` covering both `FX-01`..`FX-12` and the public documentation / `LEGACY_COMPATIBILITY.md` upgrade. |
+| `FX-12` | Note PostgreSQL 16+ `pg_input_is_valid` requirement in docs/changelog | Documented in `docs/MCP_TOOLS.md`, `README.md`, `evaluation/README.md`, and `CHANGELOG.md`. |
 
 ---
 
@@ -211,18 +223,18 @@
 
 | Check | Revision | Environment | Result |
 | --- | --- | --- | --- |
-| Full pytest suite (`pytest backend/tests -q`) | `bfbba27` | Windows 11, Python 3.11.9, PostgreSQL 16.3 (`patchdiff-postgres`), isolated DB `patchdiff_fx_full_suite_20261025` (dropped after run) | **1,226 passed** (816 unit + 410 live-PostgreSQL integration), 0 failed, 0 skipped |
-| Offline evaluation (`evaluation/offline_eval.py`) | `bfbba27` | Windows 11, Python 3.11.9 | **Exit 0** (`Verdict equivalence on the shared applier: OK`, `Accepted guarded replacement content/hash oracles: OK`) |
-| Fixed-seed strict-path fuzz test (`test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness`) | `bfbba27` | Windows 11, Python 3.11.9 | **Passed** (`strict_hits >= 50`, `loop2_only_hits >= 15`, `leading_ins_hits >= 15`, 100% exact ranking match) |
-| Live E2E `MCP-001` benchmarks (`tx/1` 20 × 1 MB & `tx/3` 50 × 400 KB) | `bfbba27` | Windows 11, Python 3.11.9, PostgreSQL 16.3, isolated DB `patchdiff_fx_bench_20261025` (dropped after run) | `tx/1` ledger `limit=50`: **221.59 ms** (vs. 305.55 ms base); `tx/1` ledger `limit=100`: **445.33 ms** (vs. 449.92 ms base); `tx/1` log `limit=50`: **136.72 ms**; `tx/3` ledger `limit=50`: **14.68 ms**; `tx/3` log `limit=50`: **22.85 ms** |
+| Full pytest suite (`pytest backend/tests -q`) | `bfbba27` / `4f0dddf` | Windows 11, Python 3.11.9, PostgreSQL 16.3 (`patchdiff-postgres`), isolated DB `patchdiff_fx_full_suite_20261025` (dropped after run) | **1,226 passed** (816 unit + 410 live-PostgreSQL integration), 0 failed, 0 skipped |
+| Offline evaluation (`evaluation/offline_eval.py`) | `4f0dddf` | Windows 11, Python 3.11.9 | **Exit 0** (`Verdict equivalence on the shared applier: OK`, `Accepted guarded replacement content/hash oracles: OK`) |
+| Fixed-seed strict-path fuzz test (`test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness`) | `4f0dddf` | Windows 11, Python 3.11.9 | **Passed** (`strict_hits >= 50`, `loop2_only_hits >= 15`, `leading_ins_hits >= 15`, 100% exact ranking match) |
+| Live E2E `MCP-001` benchmarks (`tx/1` 20 × 1 MB & `tx/3` 50 × 400 KB) | `bfbba27` / `4f0dddf` | Windows 11, Python 3.11.9, PostgreSQL 16.3, isolated DB `patchdiff_fx_bench_20261025` (dropped after run) | `tx/1` ledger `limit=50`: **221.59 ms** (vs. 305.55 ms base); `tx/1` ledger `limit=100`: **445.33 ms** (vs. 449.92 ms base); `tx/1` log `limit=50`: **136.72 ms**; `tx/3` ledger `limit=50`: **14.68 ms**; `tx/3` log `limit=50`: **22.85 ms** |
 
 ---
 
 ## 7. Overall disposition and finding closure table
 
-**Overall disposition:** **Approve** (all material categories reviewed; zero open P0/P1/P2/P3 findings; `SVC-001`, `MCP-001`, and PR #14 review items `FX-01`..`FX-12` closed with unit tests, live-PostgreSQL integration tests, and before/after latency measurements).
+**Overall disposition:** **Approve** (all material categories reviewed; zero open P0/P1/P2/P3 findings; `SVC-001`, `MCP-001`, PR #14 review items `FX-01`..`FX-12`, and the public documentation / `LEGACY_COMPATIBILITY.md` upgrade closed with unit tests, live-PostgreSQL integration tests, and before/after latency measurements).
 
 | Finding ID | Friction / Review ID | Category | Priority | Status | Fix commit | Verification evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `SVC-001` | `NF-5`, `FX-03`..`FX-05` | `SVC` | P3 (advisory) | **Closed** | `bfbba27` | `test_repetitive_64k_buffer_scans_to_end_within_work_bound`, `test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness`, `test_near_misses_cell_cap_boundary_stops_cleanly` (`test_friction_followup.py`); 65,536-cp repetitive buffer: 708.5 ms (`scanned_end=45404`, `scope_truncated=True`) → **41.9 ms** (`scanned_end=65493`, `scope_truncated=False`, `142,255` cells); 65,536-cp varied prose: 100.2 ms → **1.7 ms** |
-| `MCP-001` | `NF-8`, `FX-01`, `FX-02`, `FX-06`..`FX-12` | `MCP` | P3 (advisory) | **Closed** | `bfbba27` | `test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content` (`test_friction_followup_live.py`), `test_canonical_typed_records_keep_expected_key_order` (`test_friction_followup.py`), `test_mcp_arguments_paging.py`; `tx/3` 50 × 400 KB ledger page: 279.6 ms → **14.68 ms**; `tx/3` log page: 372.4 ms → **22.85 ms**; `tx/1` 20 × 1 MB ledger page (`limit=50`): 305.55 ms → **221.59 ms**; `tx/1` log page (`limit=50`): **136.72 ms** |
+| `SVC-001` | `NF-5`, `FX-03`..`FX-05` | `SVC` | P3 (advisory) | **Closed** | `bfbba27` / `4f0dddf` | `test_repetitive_64k_buffer_scans_to_end_within_work_bound`, `test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness`, `test_near_misses_cell_cap_boundary_stops_cleanly` (`test_friction_followup.py`); 65,536-cp repetitive buffer: 708.5 ms (`scanned_end=45404`, `scope_truncated=True`) → **41.9 ms** (`scanned_end=65493`, `scope_truncated=False`, `142,255` cells); 65,536-cp varied prose: 100.2 ms → **1.7 ms** |
+| `MCP-001` | `NF-8`, `FX-01`, `FX-02`, `FX-06`..`FX-12` | `MCP` | P3 (advisory) | **Closed** | `bfbba27` / `4f0dddf` | `test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content` (`test_friction_followup_live.py`), `test_canonical_typed_records_keep_expected_key_order` (`test_friction_followup.py`), `test_mcp_arguments_paging.py`; `tx/3` 50 × 400 KB ledger page: 279.6 ms → **14.68 ms**; `tx/3` log page: 372.4 ms → **22.85 ms**; `tx/1` 20 × 1 MB ledger page (`limit=50`): 305.55 ms → **221.59 ms**; `tx/1` log page (`limit=50`): **136.72 ms** |
