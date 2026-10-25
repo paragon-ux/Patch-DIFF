@@ -17,6 +17,8 @@ Fixes for the 20 findings of the PR #11 agentic friction review. Decisions: [fri
 - A known failure location beyond the start of the text gives `failure_context` a window around it. An MCP `current_context` identical to `diagnostic.failure_context` is returned as unavailable with `same_as_failure_context`.
 - Tool-result text carries literal characters instead of `\uXXXX` escapes; the JSON-RPC line around it stays ASCII-escaped, as before. Unknown or missing tool arguments return a structured `invalid_argument` payload. Unknown export formats are refused instead of echoed.
 - `include_content` history pages are limited to about 1 MB of returned content; the first entry is always whole.
+- Near-miss search (`SVC-001`) uses an exact positional pigeonhole filter over disjoint needle pieces and a Landau–Vishkin diagonal-wave banded DP; `comparison_cells` charges `max(1, min(len(query), reached_row)) * (2 * band_radius + 1)` cells per evaluated window start under the 1,000,000-cell cap (discarding at most one over-budget window at the boundary).
+- `patchdiff_get_pdcp_log` and `patchdiff_get_manifest_ledger` (`MCP-001`) project bounded `intent`, `intent_truncated`, `transaction_intent`, and `rationale` in PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` subqueries without transferring or decoding full `pdcp_content` records in Python.
 
 ### Compatibility and operations
 

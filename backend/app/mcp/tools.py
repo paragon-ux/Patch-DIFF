@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from typing import Any
 
-from sqlalchemy import func, literal_column, select
+from sqlalchemy import func, literal_column, select, text
 from sqlalchemy.orm import defer
 
 from app.core.input_text import invalid_text_paths, safe_input_text
@@ -363,30 +362,32 @@ def patchdiff_get_pdcp_log(
         meta_by_id: dict[uuid.UUID, Any] = {}
         contents_by_id: dict[uuid.UUID, str] = {}
         if page_rows:
+            log_alias = AppendOnlyPdcpLogs.__table__.alias("l")
+            attempt_meta = _attempt_meta_lateral(log_alias)
             meta_cols = [
-                AppendOnlyPdcpLogs.pdcp_log_id,
-                _sql_bounded_intent().label("intent"),
-                _sql_intent_truncated().label("intent_truncated"),
+                log_alias.c.pdcp_log_id,
+                attempt_meta.c.intent.label("intent"),
+                attempt_meta.c.intent_truncated.label("intent_truncated"),
             ]
             if include_content:
-                meta_cols.append(func.octet_length(AppendOnlyPdcpLogs.pdcp_content).label("content_bytes"))
+                meta_cols.append(func.octet_length(log_alias.c.pdcp_content).label("content_bytes"))
             page_ids = [row.pdcp_log_id for row in page_rows]
+            meta_stmt = (
+                select(*meta_cols)
+                .select_from(log_alias)
+                .join(attempt_meta, literal_column("TRUE"), isouter=True)
+                .where(log_alias.c.pdcp_log_id.in_(page_ids))
+            )
             meta_by_id = {
                 meta.pdcp_log_id: meta
-                for meta in session.execute(
-                    select(*meta_cols).where(AppendOnlyPdcpLogs.pdcp_log_id.in_(page_ids))
-                ).all()
+                for meta in session.execute(meta_stmt).all()
             }
             if include_content:
                 included_ids: list[uuid.UUID] = []
                 budget_used = 0
                 for row in page_rows:
                     meta = meta_by_id.get(row.pdcp_log_id)
-                    size = (
-                        (meta.content_bytes or 0)
-                        if (meta is not None and hasattr(meta, "content_bytes"))
-                        else len(row.pdcp_content.encode("utf-8"))
-                    )
+                    size = (meta.content_bytes or 0) if meta is not None else 0
                     if not budget_used or budget_used + size <= MAX_CONTENT_PAGE_BYTES:
                         included_ids.append(row.pdcp_log_id)
                         budget_used += size
@@ -400,13 +401,8 @@ def patchdiff_get_pdcp_log(
     entries = []
     for row in page_rows:
         meta = meta_by_id.get(row.pdcp_log_id)
-        if meta is not None and hasattr(meta, "intent_truncated"):
-            intent_val = meta.intent
-            intent_trunc = bool(meta.intent_truncated)
-        else:
-            raw_intent = _record_field(row.protocol_version, row.pdcp_content, "intent")
-            intent_val = raw_intent[:MAX_ATTEMPT_INTENT_CHARS] if isinstance(raw_intent, str) else None
-            intent_trunc = isinstance(raw_intent, str) and len(raw_intent) > MAX_ATTEMPT_INTENT_CHARS
+        intent_val = meta.intent if meta is not None else None
+        intent_trunc = bool(meta.intent_truncated) if meta is not None else False
         entry = {
             "pdcp_log_id": str(row.pdcp_log_id),
             "log_sequence": row.log_sequence,
@@ -525,24 +521,31 @@ def patchdiff_get_manifest_ledger(
             row.origin == "typed" and (row.derived_json or {}).get("operation") != "replace_all"
             for row in page_rows
         )
+        log_alias = AppendOnlyPdcpLogs.__table__.alias("l")
         log_cols = [
-            AppendOnlyPdcpLogs.pdcp_log_id,
-            AppendOnlyPdcpLogs.log_sequence,
-            AppendOnlyPdcpLogs.before_version,
-            AppendOnlyPdcpLogs.after_version,
-            AppendOnlyPdcpLogs.protocol_version,
+            log_alias.c.pdcp_log_id,
+            log_alias.c.log_sequence,
+            log_alias.c.before_version,
+            log_alias.c.after_version,
+            log_alias.c.protocol_version,
         ]
         if needs_json:
+            tx_meta = _ledger_meta_lateral(log_alias)
             log_cols.extend((
-                _sql_transaction_intent().label("transaction_intent"),
-                _sql_rationales().label("rationales"),
+                tx_meta.c.transaction_intent.label("transaction_intent"),
+                tx_meta.c.rationales.label("rationales"),
             ))
+            log_stmt = (
+                select(*log_cols)
+                .select_from(log_alias)
+                .join(tx_meta, literal_column("TRUE"), isouter=True)
+                .where(log_alias.c.pdcp_log_id.in_(log_ids))
+            )
+        else:
+            log_stmt = select(*log_cols).where(log_alias.c.pdcp_log_id.in_(log_ids))
         logs = {
             log.pdcp_log_id: log
-            for log in (
-                session.execute(select(*log_cols).where(AppendOnlyPdcpLogs.pdcp_log_id.in_(log_ids))).all()
-                if log_ids else ()
-            )
+            for log in (session.execute(log_stmt).all() if log_ids else ())
         }
 
     has_more = len(rows) > effective_limit
@@ -552,24 +555,18 @@ def patchdiff_get_manifest_ledger(
     entries = []
     for row in ordered_rows:
         log = logs.get(row.pdcp_log_id)
-        if not needs_json:
+        if not needs_json or log is None:
             tx_intent = row.intent if (row.origin == "typed" and log and log.protocol_version in _TYPED_PROTOCOLS) else None
             rationale = None
         else:
-            if log is not None and hasattr(log, "transaction_intent"):
-                tx_intent = (
-                    row.intent
-                    if (row.origin == "typed" and log.protocol_version == "patchdiff-tx/3")
-                    else log.transaction_intent
-                )
-                rats = log.rationales
-                rationale = rats[row.change_index - 1] if isinstance(rats, list) and 0 < row.change_index <= len(rats) else None
-            else:
-                record = _decoded_record(log.protocol_version, getattr(log, "pdcp_content", None)) if log else None
-                items = (record.get("edits") if "edits" in record else record.get("operations")) if record else None
-                item = items[row.change_index - 1] if isinstance(items, list) and 0 < row.change_index <= len(items) else None
-                tx_intent = record.get("intent") if record else None
-                rationale = item.get("rationale") if isinstance(item, dict) else None
+            tx_intent = (
+                row.intent
+                if (row.origin == "typed" and log.protocol_version == "patchdiff-tx/3")
+                else (log.transaction_intent if isinstance(log.transaction_intent, str) else None)
+            )
+            rats = log.rationales
+            raw_rat = rats[row.change_index - 1] if isinstance(rats, list) and 0 < row.change_index <= len(rats) else None
+            rationale = raw_rat if isinstance(raw_rat, str) else None
         entries.append({
             "ledger_sequence": row.ledger_sequence,
             "pdcp_log_id": str(row.pdcp_log_id),
@@ -712,94 +709,138 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
     }
 
 
-_PREFIX_SLICE = 'split_part(left(append_only_pdcp_logs.pdcp_content, 4096), \',"operations":[\', 1) || \'}\''
-_SAFE_DOC_SQL = f"""(
-    CASE
-      WHEN append_only_pdcp_logs.protocol_version IN ('patchdiff-tx/1', 'patchdiff-tx/2', 'patchdiff-tx/3') THEN
-        CASE
-          WHEN octet_length(append_only_pdcp_logs.pdcp_content) > 65536
-               AND strpos(left(append_only_pdcp_logs.pdcp_content, 4096), ',"operations":[') > 0
-               AND pg_input_is_valid({_PREFIX_SLICE}, 'jsonb')
-          THEN
-            CASE
-              WHEN jsonb_typeof(({_PREFIX_SLICE})::jsonb) = 'object'
-                   AND NOT ((({_PREFIX_SLICE})::jsonb) ? 'evidence_format')
-              THEN ({_PREFIX_SLICE})::jsonb
-            END
-          WHEN pg_input_is_valid(append_only_pdcp_logs.pdcp_content, 'jsonb') THEN
-            CASE
-              WHEN jsonb_typeof(append_only_pdcp_logs.pdcp_content::jsonb) = 'object'
-                   AND NOT ((append_only_pdcp_logs.pdcp_content::jsonb) ? 'evidence_format')
-              THEN append_only_pdcp_logs.pdcp_content::jsonb
-            END
-        END
-    END
-)"""
-_SAFE_TX12_DOC_SQL = """(
-    CASE
-      WHEN append_only_pdcp_logs.protocol_version IN ('patchdiff-tx/1', 'patchdiff-tx/2') THEN
-        CASE
-          WHEN pg_input_is_valid(append_only_pdcp_logs.pdcp_content, 'jsonb') THEN
-            CASE
-              WHEN jsonb_typeof(append_only_pdcp_logs.pdcp_content::jsonb) = 'object'
-                   AND NOT ((append_only_pdcp_logs.pdcp_content::jsonb) ? 'evidence_format')
-              THEN append_only_pdcp_logs.pdcp_content::jsonb
-            END
-        END
-    END
-)"""
-_ITEMS_SQL = f"""(
-    CASE
-      WHEN {_SAFE_TX12_DOC_SQL} IS NOT NULL THEN
-        CASE
-          WHEN {_SAFE_TX12_DOC_SQL} ? 'edits' THEN {_SAFE_TX12_DOC_SQL} -> 'edits'
-          ELSE {_SAFE_TX12_DOC_SQL} -> 'operations'
-        END
-    END
-)"""
-
-
-def _sql_bounded_intent():
-    return literal_column(
-        f"(CASE WHEN jsonb_typeof({_SAFE_DOC_SQL} -> 'intent') = 'string' "
-        f"THEN left({_SAFE_DOC_SQL} ->> 'intent', {MAX_ATTEMPT_INTENT_CHARS}) END)"
+def _attempt_meta_lateral(log_alias: Any):
+    """Single-evaluation LATERAL projection for bounded attempt intent and truncation flag."""
+    qual = log_alias.name
+    pv = f"{qual}.protocol_version"
+    content = f"{qual}.pdcp_content"
+    return (
+        text(f"""
+            SELECT CASE
+                     WHEN d.doc IS NOT NULL AND jsonb_typeof(d.doc -> 'intent') = 'string'
+                     THEN left(d.doc ->> 'intent', :max_intent)
+                   END AS intent,
+                   CASE
+                     WHEN d.doc IS NOT NULL AND jsonb_typeof(d.doc -> 'intent') = 'string'
+                     THEN char_length(d.doc ->> 'intent') > :max_intent
+                     ELSE FALSE
+                   END AS intent_truncated
+            FROM (
+                SELECT CASE
+                    WHEN s.head_pos > 0
+                         AND pg_input_is_valid(s.head_slice, 'jsonb')
+                         AND jsonb_typeof(s.head_slice::jsonb) = 'object'
+                         AND NOT ((s.head_slice::jsonb) ? 'evidence_format')
+                         AND ((s.head_slice::jsonb) ? 'intent')
+                    THEN s.head_slice::jsonb
+                    WHEN s.tail_pos > 0
+                         AND pg_input_is_valid(s.tail_slice, 'jsonb')
+                         AND jsonb_typeof(s.tail_slice::jsonb) = 'object'
+                         AND NOT ((s.tail_slice::jsonb) ? 'evidence_format')
+                         AND ((s.tail_slice::jsonb) ? 'intent')
+                    THEN s.tail_slice::jsonb
+                    WHEN {pv} IN ('patchdiff-tx/1', 'patchdiff-tx/2', 'patchdiff-tx/3')
+                         AND pg_input_is_valid({content}, 'jsonb')
+                    THEN (
+                        CASE
+                            WHEN jsonb_typeof(({content})::jsonb) = 'object'
+                                 AND NOT ((({content})::jsonb) ? 'evidence_format')
+                            THEN ({content})::jsonb
+                        END
+                    )
+                END AS doc
+                FROM (
+                    SELECT strpos(h.head, ',"operations":[') AS head_pos,
+                           split_part(h.head, ',"operations":[', 1) || '}}' AS head_slice,
+                           strpos(h.tail, ',"format":"patchdiff-tx/1",') AS tail_pos,
+                           regexp_replace(h.tail, '^.*,"format":"patchdiff-tx/1",', '{{', 's') AS tail_slice
+                    FROM (
+                        SELECT CASE
+                                 WHEN {pv} IN ('patchdiff-tx/2', 'patchdiff-tx/3')
+                                      AND octet_length({content}) > 65536
+                                 THEN left({content}, 4096)
+                                 ELSE ''
+                               END AS head,
+                               CASE
+                                 WHEN {pv} = 'patchdiff-tx/1'
+                                      AND octet_length({content}) > 65536
+                                 THEN right({content}, 4096)
+                                 ELSE ''
+                               END AS tail
+                        OFFSET 0
+                    ) AS h
+                    OFFSET 0
+                ) AS s
+                OFFSET 0
+            ) AS d
+            OFFSET 0
+        """)
+        .bindparams(max_intent=MAX_ATTEMPT_INTENT_CHARS)
+        .columns(
+            literal_column("intent"),
+            literal_column("intent_truncated"),
+        )
+        .lateral("attempt_meta")
     )
 
 
-def _sql_intent_truncated():
-    return literal_column(
-        f"coalesce(jsonb_typeof({_SAFE_DOC_SQL} -> 'intent') = 'string' "
-        f"AND char_length({_SAFE_DOC_SQL} ->> 'intent') > {MAX_ATTEMPT_INTENT_CHARS}, false)"
+def _ledger_meta_lateral(log_alias: Any):
+    """Single-evaluation LATERAL projection for tx/1 and tx/2 ledger transaction_intent and rationales."""
+    qual = log_alias.name
+    pv = f"{qual}.protocol_version"
+    content = f"{qual}.pdcp_content"
+    return (
+        text(f"""
+            SELECT CASE
+                     WHEN json_typeof(x.intent) = 'string'
+                     THEN x.intent #>> '{{}}'
+                   END AS transaction_intent,
+                   CASE
+                     WHEN json_typeof(d.items) = 'array' THEN (
+                       SELECT coalesce(
+                         json_agg(
+                           CASE
+                             WHEN json_typeof(elem) = 'object'
+                                  AND json_typeof(elem -> 'rationale') = 'string'
+                             THEN elem -> 'rationale'
+                             ELSE 'null'::json
+                           END
+                         ),
+                         '[]'::json
+                       )
+                       FROM json_array_elements(d.items) AS elem
+                     )
+                   END AS rationales
+            FROM (
+                SELECT CASE
+                    WHEN {pv} IN ('patchdiff-tx/1', 'patchdiff-tx/2')
+                         AND pg_input_is_valid({content}, 'json')
+                    THEN ({content})::json
+                END AS doc
+                OFFSET 0
+            ) AS raw
+            CROSS JOIN LATERAL json_to_record(
+                CASE
+                  WHEN raw.doc IS NOT NULL AND json_typeof(raw.doc) = 'object'
+                  THEN raw.doc
+                  ELSE '{{}}'::json
+                END
+            ) AS x(intent json, edits json, operations json, evidence_format text)
+            CROSS JOIN LATERAL (
+                SELECT CASE WHEN x.edits IS NOT NULL THEN x.edits ELSE x.operations END AS items
+                OFFSET 0
+            ) AS d
+            WHERE raw.doc IS NOT NULL
+              AND json_typeof(raw.doc) = 'object'
+              AND x.evidence_format IS NULL
+            OFFSET 0
+        """)
+        .columns(
+            literal_column("transaction_intent"),
+            literal_column("rationales"),
+        )
+        .lateral("tx_meta")
     )
-
-
-def _sql_transaction_intent():
-    return literal_column(f"({_SAFE_DOC_SQL} -> 'intent')")
-
-
-def _sql_rationales():
-    return literal_column(
-        f"(CASE WHEN jsonb_typeof({_ITEMS_SQL}) = 'array' THEN "
-        f"(SELECT coalesce(jsonb_agg(coalesce(CASE WHEN jsonb_typeof(elem) = 'object' "
-        f"THEN elem -> 'rationale' END, 'null'::jsonb)), '[]'::jsonb) "
-        f"FROM jsonb_array_elements({_ITEMS_SQL}) AS elem) END)"
-    )
-
-
-def _decoded_record(protocol_version: str | None, content: str | None) -> dict | None:
-    """Stored typed record as an object; legacy PDCP and evidence envelopes give None."""
-    if protocol_version not in _TYPED_PROTOCOLS or not isinstance(content, str):
-        return None
-    try:
-        record = json.loads(content)
-    except ValueError:
-        return None
-    return record if isinstance(record, dict) and "evidence_format" not in record else None
-
-
-def _record_field(protocol_version: str | None, content: str | None, field: str) -> Any:
-    record = _decoded_record(protocol_version, content)
-    return record.get(field) if record else None
 
 
 def _history_error(
