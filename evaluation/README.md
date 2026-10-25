@@ -71,7 +71,7 @@ Measured on Windows 11 (`Python 3.11.9`, `postgres:16.3-alpine` on `127.0.0.1:54
 
 Scans up to `65,536` Unicode code points (`MAX_SCAN_CODE_POINTS`) of the failing buffer after lock release for a `45`-code-point absent query (`threshold = min(4, max(1, len(query) // 4)) = 4`) under the `1,000,000`-cell cap (`MAX_COMPARISON_CELLS`).
 
-`PR #14` pairs an exact positional pigeonhole filter ($k + 1 = 5$ disjoint needle pieces) with a Landau–Vishkin diagonal-wave banded dynamic program, guaranteeing identical `(distance, start, end)` candidates and tie-breaking (`backend/tests/unit/test_friction_followup.py`, including 1,000-trial seeded differential fuzzing against the reference Ukkonen-banded DP):
+`PR #14` pairs an exact positional pigeonhole filter ($k + 1 = 5$ disjoint needle pieces) with an Ukkonen-banded Landau–Vishkin diagonal-wave dynamic program, guaranteeing identical `(distance, start, end)` candidates and tie-breaking (`backend/tests/unit/test_friction_followup.py`: verified by `test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness` over **120 seeded trials** (`random.Random(12345)`) covering strict-path, Loop-2-only, and leading-insertion windows, and by `test_bag_pruned_full_buffer_scan_equals_unpruned_reference` over **150 randomized cases** against the unpruned reference scan):
 
 | 65,536-Code-Point Buffer Workload | Baseline (`PR #13` Ukkonen Row DP, 5-run median) | Optimized (`PR #14` Pigeonhole + Landau–Vishkin, 5-run median) | Speedup & Scan Completeness |
 | --- | --- | --- | --- |

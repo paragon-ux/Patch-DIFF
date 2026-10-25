@@ -520,3 +520,24 @@ def test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content():
         ).one()
         assert tx_row.transaction_intent == "tx-intent"
         assert tx_row.rationales == ["", None, None, "ok"]
+        # Verify canonical > 64 KB tx/3 record takes the 4 KB head_slice fast path without parsing the body
+        fast_path_tx3 = (
+            '{"expected_current_hash":null,"expected_target_version":0,"format":"patchdiff-tx/3",'
+            '"intent":"tx3-head-slice-fast-path","operations":[NOT_VALID_JSON_IF_FULL_RECORD_PARSED_'
+            + ("z" * 70_000)
+        )
+        fast_sub = (
+            select(
+                literal_column("'patchdiff-tx/3'").label("protocol_version"),
+                literal_column(f"'{fast_path_tx3}'").label("pdcp_content"),
+            )
+            .offset(0)
+            .subquery("l")
+        )
+        fast_lat = tools._attempt_meta_lateral(fast_sub)
+        fast_row = session.execute(
+            select(fast_lat.c.intent, fast_lat.c.intent_truncated)
+            .select_from(fast_sub)
+            .join(fast_lat, literal_column("TRUE"), isouter=True)
+        ).one()
+        assert fast_row.intent == "tx3-head-slice-fast-path" and fast_row.intent_truncated is False
