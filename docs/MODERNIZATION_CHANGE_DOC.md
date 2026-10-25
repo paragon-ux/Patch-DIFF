@@ -2,7 +2,7 @@
 
 PatchDIFF provides four declarative transaction formats through one deterministic applier and locked PostgreSQL submission pipeline. Authoritative reads, advisory preview, durable outcome recovery and deterministic replay let hosts propose and verify changes without moving state authority into the host.
 
-Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP tools](MCP_TOOLS.md), [core runtime](PATCHDIFF_CORE_SPEC.md), [storage](DATA_MODEL.md), [transaction formats](PDCP_FORMAT.md), and [host guide](HOST_INTEGRATION_GUIDE.md).
+Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP tools](MCP_TOOLS.md), [core runtime](PATCHDIFF_CORE_SPEC.md), [storage](DATA_MODEL.md), [transaction formats](PDCP_FORMAT.md), [host guide](HOST_INTEGRATION_GUIDE.md), and [legacy compatibility](LEGACY_COMPATIBILITY.md).
 
 ## Transaction formats and compatibility
 
@@ -11,7 +11,7 @@ Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP 
 | `patchdiff_submit_edits` | `patchdiff-tx/1` | `patchdiff-mvp-0.2.2` | Typed exact matches with intent and required version/hash guard. |
 | `patchdiff_submit_operations` | `patchdiff-tx/2` | `patchdiff-mvp-0.3.0`; `patchdiff-mvp-0.5.0` when a span carries `expected_before`/`expected_after` | Ordered exact match/span operations; spans require exact expected text, can check the exact adjacent text, and use sequential code-point coordinates. Empty-span insertion is explicit. |
 | `patchdiff_submit_replacement` | `patchdiff-tx/3` | `patchdiff-mvp-0.4.0` | Exactly one guarded `replace_all`; empty replacement is valid. One typed ledger fact covers the full original span. |
-| `patchdiff_submit_pdcp` | `0.2.3` | `patchdiff-mvp-0.2.2` | Frozen legacy text format with seven required manifest fields; state guards remain optional for compatibility. |
+| `patchdiff_submit_pdcp` | `0.2.3` | `patchdiff-mvp-0.2.2` | Frozen legacy text format; see [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
 
 Fresh replacement raw text and canonical result each have inclusive limits of 1,000,000 code points and 1,048,576 UTF-8 bytes. Invalid Unicode follows the audited encoding-rejection path. Existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return `invalid_argument/replacement_too_large` without writes; replay does not reapply fresh admission limits. Runtime 0.3.0 continues to reject `replace_all`.
 
@@ -51,7 +51,7 @@ Migrations are `20260510_0001`, `20261020_0002` and `20261022_0003`. Migration 0
 
 ## Verification scope
 
-[TEST_MATRIX.md](TEST_MATRIX.md) maps unit, live PostgreSQL, populated migration preservation/refusal and real stdio workflows. [Evaluation documentation](../evaluation/README.md) explains deterministic byte accounting, explicit outcome/hash oracles and the named legacy delimiter-collision exception. Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
+[TEST_MATRIX.md](TEST_MATRIX.md) maps unit, live PostgreSQL, populated migration preservation/refusal and real stdio workflows (`1,226` automated tests: `816` unit + `410` live PostgreSQL/stdio integration, plus `235/235` live stdio friction checks at `PR #14`). [Evaluation documentation](../evaluation/README.md) records deterministic byte accounting (`151 B` wire for 1 minimal `tx/1` edit, `259 B` for 5 edits, `341 B` `tools/call` line for small `tx/3` replacement), `SVC-001` 65,536-code-point near-miss latency (`1.7 ms` on varied prose, `41.9 ms` with 100% scan coverage on repetitive logs), and `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger latency over 20 MB substrates (`14.68 ms` ledger / `22.85 ms` log on `50 × 400 KB` `tx/3`; `136.72 ms` log / `221.59 ms` ledger on `20 × 1 MB` `tx/1`). Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
 
 Offline replacement cases measure serialized bytes and accepted content/hash oracles, not live transport, persistence or timing. No live-model comparison, representative sanitized dataset or production performance threshold has been established. No editing adapter, optional typed guards or normalized request-identity behavior is introduced.
 

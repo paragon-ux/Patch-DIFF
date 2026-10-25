@@ -47,7 +47,7 @@ All four input formats lower into the same internal `ParsedPDCP` representation 
 - **`patchdiff-tx/1` (primary typed)**: Structured JSON with required `intent`, required state guard (`expected_target_version` and/or `expected_current_hash`), ordered `edits[]` (`match`, `replace`, optional `change_id`, `rationale`, `risk`, `occurrence_index`, `anchor_before`, `anchor_after`), optional `client_request_id`, `parent_pdcp_log_id`, and `attempt`. Persisted in `append_only_pdcp_logs.pdcp_content` as deterministic canonical JSON.
 - **`patchdiff-tx/2` (guarded operations)**: Ordered explicit match/span operations, required intent and state guard, sequential canonical code-point spans with exact expected text and optional adjacent-text guards; immutable profile 0.3.0, or 0.5.0 when the guards are used.
 - **`patchdiff-tx/3` (sole replacement)**: Exactly one guarded `replace_all`, immutable profile 0.4.0; fresh size admission is a service boundary, not a replay grammar constraint.
-- **`.pdcp` v0.2.3 (frozen legacy/import)**: Declarative text with `PDCP 0.2.3` header, 7 required manifest fields per change block, and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters. Persisted as raw text.
+- **Legacy `.pdcp` v0.2.3 & historical profiles (`0.1.0`–`0.2.1`)**: Frozen legacy text format and historical replay profiles are specified in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).
 
 None of these formats is executable code.
 
@@ -109,10 +109,7 @@ A conflicting reuse of an existing request key is a separately audited context_i
 - `change_id` defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate `change_id`s within a transaction reject with `FailureReason.MANIFEST_INVALID`.
 
 ### Legacy PDCP (v0.2.3) Rules
-- Protocol header: `PDCP 0.2.3`, required `target_file_id`, optional `target_type`, optional `target_hash`.
-- Exactly one `# MANIFEST` block immediately before each `MATCH/REPLACE` block.
-- 7 required manifest fields: `change_id`, `intent`, `input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`.
-- Delimiters `<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`. Payloads containing lines equal to a delimiter reject with `FailureReason.BLOCK_MALFORMED`.
+Frozen `.pdcp` v0.2.3 header, 7-field `# MANIFEST` grammar, and delimiter-collision (`FailureReason.BLOCK_MALFORMED`) rules are documented in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#1-frozen-pdcp-v023-wire-format).
 
 ### Executable Logic Rejection
 Reject obvious executable code outside payloads: imports, functions, classes, loops, conditionals, shell commands, dynamic evaluation, filesystem calls, network calls, tool calls (`FailureReason.EXECUTABLE_LOGIC_DETECTED`).
@@ -131,8 +128,8 @@ Matching is:
 ### Overlapping-Match Enumeration (`patchdiff-mvp-0.2.2`)
 All exact occurrences of `MATCH` across the buffer are enumerated, including overlapping occurrences (advancing the search index by 1 code point rather than `len(match)`). For example, matching `"aa"` in `"aaa"` yields 2 occurrences (spans `0..2` and `1..3`) and rejects with `FailureReason.MATCH_AMBIGUOUS` unless explicitly disambiguated.
 
-### Legacy Non-Overlapping Replay Mode (`patchdiff-mvp-0.1.0`)
-Historical logs accepted under runtime `patchdiff-mvp-0.1.0` (which advanced the search index by `len(match)`) are replayed using the recorded non-overlapping profile so that accepted history remains deterministically replayable.
+### Historical Replay Profiles (`patchdiff-mvp-0.1.0` through `0.2.1`)
+Historical logs accepted under `patchdiff-mvp-0.1.0`, `0.2.0`, or `0.2.1` are replayed using their recorded profile settings so that accepted history remains deterministically replayable. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#4-historical-runtime-replay-profiles).
 
 ## Disambiguation
 

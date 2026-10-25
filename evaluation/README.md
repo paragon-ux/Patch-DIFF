@@ -1,6 +1,8 @@
-# Evaluation
+# Evaluation & Benchmarks
 
-Three layers, kept strictly separate (`docs/MODERNIZATION_ARCHITECTURE.md` Decision A8).
+Four evaluation layers, kept strictly separate (`docs/MODERNIZATION_ARCHITECTURE.md` Decision A8).
+
+---
 
 ## 1. Deterministic Guarantee & Persistence Suite
 
@@ -11,30 +13,82 @@ $env:PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Covers pure core unit tests (`backend/tests/unit/`) and live Postgres + real stdio MCP subprocess integration tests (`backend/tests/integration/`): typed vs. PDCP equivalence, delimiter collision, overlapping-match enumeration, explicit replay profile dispatch (`0.2.3` vs `patchdiff-tx/1`, historical `patchdiff-mvp-0.1.0` through current immutable 0.2.2/0.3.0/0.4.0 profiles), component-level `materialized_state_checks`, `client_request_id` idempotency and lost-response outcome recovery, stage-aware `validity`, and full stdio MCP workflow.
+- **Current verified scale (`PR #14`)**: **1,226 passed** (`816` pure core unit tests in `backend/tests/unit/` + `410` live PostgreSQL & real stdio MCP subprocess integration tests in `backend/tests/integration/`), plus **235/235** live stdio friction harness checks.
+- Covers typed (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`) and legacy equivalence, delimiter-collision safety, overlapping-match enumeration, explicit replay profile dispatch (`0.1.0` through `0.5.0`), component-level `materialized_state_checks`, `client_request_id` idempotency and lost-response outcome recovery, stage-aware `validity`, populated Alembic migration `upgrade -> downgrade -> upgrade` checks, and full stdio MCP workflows.
 
-Results and counts must identify the executed revision; historical suite totals do not certify current source or CI.
+Results and counts identify the executed revision; historical suite totals do not certify later source changes.
 
-## 2. Offline Payload & Verdict Accounting
+---
+
+## 2. Offline Payload & Verdict Accounting (`evaluation/offline_eval.py`)
 
 ```powershell
 $env:PYTHONPATH="backend"; .\.venv\Scripts\python.exe evaluation/offline_eval.py
 ```
 
-Deterministic UTF-8 byte accounting and shared-applier verdict equivalence across 5 scenarios and 3 proposal variants:
-1. `pdcp`: PDCP v0.2.3 with its required 7 prose manifest fields per edit;
-2. `typed_match`: typed `patchdiff-tx/1` with matched advisory prose (`intent` + per-edit `change_id`, `rationale`, `risk="low"`);
-3. `typed_min`: minimal typed `patchdiff-tx/1` (`intent` + `{match, replace}`).
+Deterministic UTF-8 byte accounting and shared-applier verdict equivalence across 5 scenarios:
+1. `typed_min`: minimal typed `patchdiff-tx/1` (`intent` + `{match, replace}`).
+2. `typed_match`: typed `patchdiff-tx/1` with matched advisory prose (`intent` + per-edit `change_id`, `rationale`, `risk="low"`).
+3. *(Legacy baseline `pdcp` v0.2.3 is also verified by the script; see [docs/LEGACY_COMPATIBILITY.md](../docs/LEGACY_COMPATIBILITY.md#5-measured-comparison-legacy-pdcp-v023-vs-typed-patchdiff-tx1) for the legacy `.pdcp` byte and delimiter-collision comparison.)*
 
-The sole named legacy expressibility exception is `payload has a delimiter line`: PDCP must reject with `block_malformed`, while both typed variants must accept with the expected hash. Every scenario checks explicit verdict/hash oracles; arbitrary rejection differences do not count as equivalence.
+Reports both MCP tool request wire JSON bytes (`tools/call` arguments) and persisted record bytes (`append_only_pdcp_logs.pdcp_content`). Bytes measure wire/storage size, not LLM token cost or model validity rates.
 
-Reports both persisted record bytes (`append_only_pdcp_logs.pdcp_content`) and MCP tool request wire JSON bytes (`tools/call` arguments). Bytes measure wire/storage size, not LLM token cost or model validity rates.
+### Measured `patchdiff-tx/1` Payload Bytes (`evaluation/offline_eval.py`)
 
-### Guarded replacement accounting
+| Scenario | `typed_min` Wire Bytes (`tools/call` args) | `typed_min` Persisted Bytes (`pdcp_content`) | `typed_match` Wire Bytes (`tools/call` args) | `typed_match` Persisted Bytes (`pdcp_content`) | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| **1 tiny edit** | **`151 B`** | **`206 B`** | `327 B` | `382 B` | `accepted` |
+| **5 small edits** | **`259 B`** | **`314 B`** | `1,139 B` | `1,194 B` | `accepted` |
+| **1 edit, 2 KB span** | **`4,441 B`** | **`4,496 B`** | `4,617 B` | `4,672 B` | `accepted` |
+| **Quotes + backslashes + Unicode** | **`172 B`** | **`227 B`** | `348 B` | `403 B` | `accepted` |
+| **Payload has a delimiter line (`<<<<<<< MATCH`)** | **`162 B`** | **`217 B`** | `338 B` | `393 B` | `accepted` |
 
-Five `patchdiff-tx/3` cases separately check accepted content/hash oracles through immutable runtime 0.4.0: guarded whole-target rewrite, empty target, empty replacement, Unicode/quotes/CRLF, and whole-target 2 KB rewrite. Each measures its canonical persisted record and complete compact UTF-8 JSON-RPC `tools/call` request with fixed `id=1` and one terminal LF. These are deterministic serialization measurements; they do not execute live transport or persistence, measure timing, or establish representative workload results. No cross-format replacement equivalence is claimed.
+### Measured `patchdiff-tx/3` Guarded Replacement Bytes (`evaluation/offline_eval.py`)
 
-## 3. Live-Model, Host-Integrated Study (NOT RUN)
+Five `patchdiff-tx/3` (`patchdiff_submit_replacement`) cases separately check accepted content/hash oracles through immutable runtime `0.4.0`. Each measures its canonical persisted record and complete compact UTF-8 JSON-RPC `tools/call` request line with fixed `id=1` and one terminal LF:
+
+| `patchdiff-tx/3` Case | Persisted Record Bytes (`pdcp_content`) | Complete JSON-RPC `tools/call` Line Bytes | Verdict |
+| --- | --- | --- | --- |
+| **Guarded whole-target rewrite** | `290 B` | `341 B` | `accepted` |
+| **Empty target** | `290 B` | `341 B` | `accepted` |
+| **Empty replacement** | `287 B` | `338 B` | `accepted` |
+| **Unicode, quotes, CRLF** | `308 B` | `359 B` | `accepted` |
+| **Whole-target 2 KB rewrite** | `2,435 B` | `2,486 B` | `accepted` |
+
+These are deterministic serialization measurements; they do not execute live transport or persistence, measure timing, or establish representative workload results. No cross-format replacement equivalence is claimed.
+
+---
+
+## 3. Service & Database Latency Benchmarks (`SVC-001` & `MCP-001`)
+
+Measured on Windows 11 (`Python 3.11.9`, `postgres:16.3-alpine` on `127.0.0.1:5432`, isolated PostgreSQL database).
+
+### 3.1 Near-Miss Levenshtein Scan Latency (`SVC-001`, `backend/app/services/near_miss_service.py`)
+
+Scans up to `65,536` Unicode code points (`MAX_SCAN_CODE_POINTS`) of the failing buffer after lock release for a `45`-code-point absent query (`threshold = min(4, max(1, len(query) // 4)) = 4`) under the `1,000,000`-cell cap (`MAX_COMPARISON_CELLS`).
+
+`PR #14` pairs an exact positional pigeonhole filter ($k + 1 = 5$ disjoint needle pieces) with a Landau–Vishkin diagonal-wave banded dynamic program, guaranteeing identical `(distance, start, end)` candidates and tie-breaking (`backend/tests/unit/test_friction_followup.py`, including 1,000-trial seeded differential fuzzing against the reference Ukkonen-banded DP):
+
+| 65,536-Code-Point Buffer Workload | Baseline (`PR #13` Ukkonen Row DP, 5-run median) | Optimized (`PR #14` Pigeonhole + Landau–Vishkin, 5-run median) | Speedup & Scan Completeness |
+| --- | --- | --- | --- |
+| **Varied technical prose (`65,536` chars)** | `100.2 ms` (`174,897` cells, `scanned_end=65,493`, `scope_truncated=False`) | **`1.7 ms`** (`585` cells, `scanned_end=65,493`, `scope_truncated=False`) | **58.9× faster** (`99.7%` fewer DP cells) |
+| **Repetitive structured logs (`65,536` chars)** | `708.5 ms` (`1,000,000` cells, `scanned_end=45,404`, **`scope_truncated=True`**) | **`41.9 ms`** (`142,255` cells, `scanned_end=65,493`, **`scope_truncated=False`**) | **16.9× faster** + **scans 100% of buffer** (vs. `69%` before) |
+
+### 3.2 PostgreSQL 16+ `LATERAL` History & Ledger Read Latency (`MCP-001`, `backend/app/mcp/tools.py`)
+
+`patchdiff_get_manifest_ledger` and `patchdiff_get_pdcp_log` extract bounded `intent`, `intent_truncated`, `transaction_intent`, and per-edit `rationale` inside PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` SQL subqueries and guarded 4 KB head/tail slices rather than selecting and JSON-decoding full `pdcp_content` records in Python (`backend/tests/integration/test_friction_followup_live.py`):
+
+| Historical Substrate (`20 MB` total `pdcp_content`) | Tool & Page Size | Baseline Python Decode (`PR #13`, 7-run median) | Guarded SQL `LATERAL` (`PR #14`, 7-run median) | Speedup & I/O Behavior |
+| --- | --- | --- | --- | --- |
+| **`50 × 400 KB` (`20 MB`) `patchdiff-tx/3` history** | `patchdiff_get_manifest_ledger(limit=50)` | `279.6 ms` | **`14.68 ms`** | **19.0× faster** (`pdcp_content` never read) |
+| **`50 × 400 KB` (`20 MB`) `patchdiff-tx/3` history** | `patchdiff_get_pdcp_log(limit=50)` | `372.4 ms` | **`22.85 ms`** | **16.3× faster** (`left(pdcp_content, 4096)` fast path) |
+| **`20 × 1 MB` (`20 MB`) `patchdiff-tx/1` history (5 edits × 200 KB)** | `patchdiff_get_pdcp_log(limit=50)` | `305.55 ms` | **`136.72 ms`** | **2.2× faster** (`right(pdcp_content, 4096)` tail slice fast path) |
+| **`20 × 1 MB` (`20 MB`) `patchdiff-tx/1` history (5 edits × 200 KB)** | `patchdiff_get_manifest_ledger(limit=50)` (10 logs) | `305.55 ms` | **`221.59 ms`** | **1.38× faster** (single-cast `LATERAL ... OFFSET 0`) |
+| **`20 × 1 MB` (`20 MB`) `patchdiff-tx/1` history (5 edits × 200 KB)** | `patchdiff_get_manifest_ledger(limit=100)` (20 logs) | `449.92 ms` | **`445.33 ms`** | **1.01×** (at par; zero Python `pdcp_content` transfer) |
+
+---
+
+## 4. Live-Model, Host-Integrated Study (NOT RUN)
 
 Designed, not executed; no empirical model-performance claims are made.
 

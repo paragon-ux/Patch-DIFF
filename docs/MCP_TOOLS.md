@@ -36,10 +36,23 @@ The 20 registered MCP tools are organized into five functional groups:
 | | `patchdiff_replay` | Deterministically reconstruct target from initial snapshot + accepted logs, reporting component checks. |
 | | `patchdiff_get_pdcp_log` | Bounded newest-first page of append-only attempts (accepted/rejected), filtering by status, hash, or request ID. |
 | | `patchdiff_get_manifest_ledger` | Retrieve accepted-only manifest ledger entries with `origin`, `derived` facts and their attempt identity. |
-| **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). |
-| | `patchdiff_get_regeneration_context` | **Deprecated** compatibility wrapper. |
-| | `patchdiff_build_regeneration_prompt` | **Deprecated** compatibility wrapper. |
-| | `patchdiff_request_regeneration` | **Deprecated** compatibility wrapper. |
+| **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
+| | `patchdiff_get_regeneration_context` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
+| | `patchdiff_build_regeneration_prompt` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
+| | `patchdiff_request_regeneration` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
+
+### Bounded Wire & Context Budgets & Measured Service Latency
+
+| Surface / Operation | Hard Wire / Context Cap | Measured Performance / Scaling (`PR #14`) |
+| --- | --- | --- |
+| **Discovery (`tools/list`)** | `<= 65,536 B` total (`<= 8,192 B` for 13 executable examples across 9 tools) | Deterministic deep-copied schema |
+| **Authoritative Reads (`patchdiff_read_target`, `patchdiff_read_lines`)** | `4,000` default / `8,000` max Unicode code points per call | Single-row observation with `next_start` / `next_offset` |
+| **Exact Search (`patchdiff_find_occurrences`)** | `context_chars` default `40` / cap `400`; `max_results` cap `200` | Counts all overlapping occurrences (`patchdiff-mvp-0.2.2`) |
+| **Typed Submission (`patchdiff_submit_edits`, `tx/1`)** | $O(\text{delta})$ wire size | **`151 B`** wire (`206 B` stored) for 1 edit; **`259 B`** wire (`314 B` stored) for 5 edits |
+| **Whole-Target Replacement (`patchdiff_submit_replacement`, `tx/3`)** | Fresh admission `<= 1,000,000` code points and `<= 1,048,576 B` (raw & canonical) | **`341 B`** `tools/call` line (`290 B` stored) for small rewrite; `2,486 B` for 2 KB rewrite |
+| **Advisory Preview (`patchdiff_preview`)** | `<= 32,768 B` total (`<= 16,384 B` for up to 32 facts at `<= 2,048 B` each; `<= 16,384 B` diagnostics) | Keyless read-only evaluation without locks or audit writes |
+| **Rejection Enrichment (`exact_candidates`, `near_misses`, contexts)** | `<= 18,432 B` combined (`<= 8,192 B` candidates, `<= 8,192 B` near misses, `<= 256` chars `failure_context`) | Near-miss scan on 65,536-char buffer (`SVC-001`): **`1.7 ms`** prose (**58.9× faster**), **`41.9 ms`** repetitive logs (**16.9× faster**, 100% scanned) |
+| **History & Ledger Paging (`patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`)** | `limit` default `50` / cap `200`; `include_content=True` capped at `1,048,576 B` per page | Over 20 MB history (`MCP-001`): **`14.68 ms`** ledger / **`22.85 ms`** log on `50 × 400 KB` `tx/3` (**16–19× faster**); **`136.72 ms`** log / **`221.59 ms`** ledger on `20 × 1 MB` `tx/1` |
 
 ---
 
@@ -137,7 +150,7 @@ A new rejection carries immutable `diagnostic.failure_context` and top-level, re
 - `match_absent` failures persist `diagnostic.near_miss_query`: the canonical query when its raw length is at most 64 code points, otherwise `omission_reason: "match_too_large"`, within 1,024 wrapper bytes.
 - Response-only `near_misses` are computed only after a service-owned transaction has committed and released its lock. Caller-owned transactions return `omission_reason: "caller_transaction"`. A fresh rejection scans a bounded in-memory copy of the failing buffer, at most its first 65,536 code points, which is never persisted (`scan_source: "failing_buffer"`). Exact recovery scans only the stored failure context (`scan_source: "stored_failure_context"`), so recovered near misses can be narrower than the original response.
 - Windows have the query length minus one, the query length and the query length plus one (positive lengths only). Distance is code-point Levenshtein, accepted when nonzero and at most `min(4, max(1, len(query) // 4))`. Candidates are chosen in `(distance, start, end)` order, skipping any window that overlaps one already chosen, so up to three candidates name up to three distinct locations. Each has absolute `start`/`end` in failing-buffer coordinates and 16 code points of context per side, within 8,192 wrapper bytes.
-- Distances come from an exact Ukkonen-banded Landau–Vishkin diagonal-wave dynamic program (`band_radius = (threshold + 1) // 2`). An exact positional pigeonhole filter over disjoint needle pieces skips window starts that cannot hold a candidate within the threshold, so the ranking is identical to an unpruned search. `comparison_cells` counts banded cells evaluated (`max(1, min(len(query), reached_row)) * (2 * band_radius + 1)` per evaluated window start), with a 1,000,000-cell cap. Because the diagonal wave evaluates a window start as a unit before checking `comparison_cells + window_cells > 1_000_000`, at most one final window is evaluated and discarded when the cap is reached, while `comparison_cells` and `scanned_end` record only committed window starts (`comparison_cells <= 1_000_000`) and keep the exact ranking of the range scanned so far. Both varied prose and structured repetitive logs scan the full 65,536-code-point buffer in tens of milliseconds; only homogeneous inputs where every needle piece repeats across the buffer hit the cell cap early. `work_budget_exhausted` is returned only when not one window start could be evaluated; historical outcomes without stored inputs return `historical_context_unavailable`.
+- Distances come from an exact Ukkonen-banded Landau–Vishkin diagonal-wave dynamic program (`band_radius = (threshold + 1) // 2`). An exact positional pigeonhole filter over disjoint needle pieces skips window starts that cannot hold a candidate within the threshold, so the ranking is identical to an unpruned search. `comparison_cells` counts banded cells evaluated (`max(1, min(len(query), reached_row)) * (2 * band_radius + 1)` per evaluated window start), with a 1,000,000-cell cap. Because the diagonal wave evaluates a window start as a unit before checking `comparison_cells + window_cells > 1_000_000`, at most one final window is evaluated and discarded when the cap is reached, while `comparison_cells` and `scanned_end` record only committed window starts (`comparison_cells <= 1_000_000`) and keep the exact ranking of the range scanned so far. Both varied prose (`1.7 ms` median, `585` cells vs. `100.2 ms` before — **58.9× faster**) and structured repetitive logs (`41.9 ms` median, `142,255` cells, `100%` scanned vs. `708.5 ms` truncated at `69%` before — **16.9× faster**) scan the full 65,536-code-point buffer in tens of milliseconds; only homogeneous inputs where every needle piece repeats across the buffer hit the cell cap early. `work_budget_exhausted` is returned only when not one window start could be evaluated; historical outcomes without stored inputs return `historical_context_unavailable`.
 - `scanned_start`/`scanned_end` give the window-start range searched. `scope_truncated` is true when that range does not cover the whole failing buffer, and `candidates_truncated` when more distinct locations qualified than were returned; `truncated` is true when either is. An empty computed list includes a `hint` naming `patchdiff_find_occurrences`. Near misses never change the verdict. Unexpected post-commit errors propagate without claiming rollback. All newly added enrichment fields together are at most 18,432 bytes; this excludes preexisting arbitrary evidence.
 
 ### Request-key diagnostics
@@ -397,8 +410,7 @@ Live output for an unselected `alpha` on the same target; hashes and the repeate
 ```
 
 ### `patchdiff_submit_pdcp` (Frozen Legacy Input)
-Submits a raw declarative `.pdcp` v0.2.3 document. Shares the same applier, atomicity, logging, and response structure as `patchdiff_submit_edits`.
-- **Arguments**: `target_file_id`, `pdcp_content`, optional `expected_target_version`, `expected_current_hash`, `client_request_id`, `parent_pdcp_log_id`, `regeneration_attempt`, `regeneration_source`, `source`, `include_correlation_id`.
+Retained for backward compatibility with frozen `.pdcp` v0.2.3 text transactions. New integrations should use `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), or `patchdiff_submit_replacement` (`patchdiff-tx/3`). See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#2-legacy-mcp-submission-tool-patchdiff_submit_pdcp) for arguments and legacy format details.
 
 ---
 
@@ -499,5 +511,4 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 
 ## 5. Convenience & Deprecated Compatibility Wrappers
 
-- `patchdiff_build_prompt_context`: Convenience preview returning the first 4,000 characters (`content[:4000]`) with `context_truncated: true` and active manifest summary. Not a retrieval engine; hosts requiring authoritative spans must call `patchdiff_read_target` and `patchdiff_find_occurrences`.
-- `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`: **Deprecated** server-mediated retry tools retained only for backward compatibility. Hosts should inspect diagnostics from `patchdiff_submit_edits`, re-read via `patchdiff_read_target` / `patchdiff_find_occurrences`, and resubmit with `parent_pdcp_log_id`.
+`patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#3-deprecated-regeneration--prompt-prefix-wrappers) for legacy wrapper specifications.

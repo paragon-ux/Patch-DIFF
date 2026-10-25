@@ -2,12 +2,12 @@
 
 ## Scope
 
-This document defines the transaction formats supported by PatchDIFF:
-1. **`patchdiff-tx/1` (Primary Typed Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content`. Delimiter-collision free, with reduced mandatory prose overhead.
-2. **`patchdiff-tx/2` (Guarded Operations)**: canonical JSON with required intent and guard plus ordered `operations` carrying explicit `op:match` or `op:span`. Span records require start/end/expected_text/replace, use sequential canonical code-point coordinates and allow empty-span insertion. Optional `expected_before`/`expected_after` check the exact adjacent text; a record that contains them is recorded under immutable runtime `patchdiff-mvp-0.5.0` instead of `0.3.0`. See [MCP_TOOLS.md](MCP_TOOLS.md#patchdiff_submit_operations-patchdiff-tx2) for complete fields and immutable profile `patchdiff-mvp-0.3.0`. Example canonical record: `{"expected_current_hash":null,"expected_target_version":2,"format":"patchdiff-tx/2","intent":"Insert a note","operations":[{"end":0,"expected_text":"","op":"span","replace":"Note: ","start":0},{"match":"alpha","op":"match","replace":"beta"}],"target_file_id":"<UUID>"}`.
+This document defines the active declarative JSON transaction formats supported by PatchDIFF:
+1. **`patchdiff-tx/1` (Primary Typed Match Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content` under runtime profile `patchdiff-mvp-0.2.2`. Delimiter-collision free, with minimal mandatory prose overhead (`151 B` wire / `206 B` persisted for a 1-edit transaction; `259 B` wire / `314 B` persisted for 5 edits).
+2. **`patchdiff-tx/2` (Guarded Match & Span Operations)**: Canonical JSON passed through `patchdiff_submit_operations` with required `intent`, required state guard, and ordered `operations[]` carrying explicit `op: "match"` or `op: "span"`. Span records require `start`, `end`, `expected_text`, and `replace`, use sequential canonical Unicode code-point coordinates, and allow explicit empty-span insertion (`start == end`, `expected_text: ""`). Optional `expected_before` / `expected_after` verify exact adjacent text; records using them execute under immutable runtime profile `patchdiff-mvp-0.5.0` (otherwise `patchdiff-mvp-0.3.0`).
+3. **`patchdiff-tx/3` (Guarded Sole Whole-Target Replacement)**: Canonical JSON passed through `patchdiff_submit_replacement` with required `intent`, required state guard, and a single `{"op": "replace_all", "replace": "..."}` operation under immutable runtime profile `patchdiff-mvp-0.4.0` (`290 B` persisted record / `341 B` compact `tools/call` line for a small whole-target replacement).
 
-3. **`patchdiff-tx/3` (Sole Replacement)**: A separate sole replacement record: `{"format":"patchdiff-tx/3","target_file_id":"<UUID>","intent":"explicit replacement","operations":[{"op":"replace_all","replace":"new text"}],"expected_target_version":0,"expected_current_hash":null}`. Exactly one operation with exactly `op,replace` is permitted. No match/span/selectors or mixed transaction in tx/3; tx/2 continues refusing replace_all. Both top-level guard keys are persisted with raw values, including null, through the same canonical JSON identity rule. At least one valid guard is required. Default change ID is chg_001; risk is low. Profile 0.4.0 enables replacement without modifying 0.3.0. Fresh size admission is a service rule, not decoding/replay grammar.
-4. **`.pdcp` v0.2.3 (Frozen Legacy Text Format)**: The declarative text format with `PDCP 0.2.3` header, 7 required manifest fields per change, and `MATCH/REPLACE` delimiters, retained for backward compatibility and historical replay.
+> **Legacy Compatibility**: Frozen `.pdcp` v0.2.3 text transactions (`patchdiff_submit_pdcp`), deprecated regeneration wrappers, and historical runtime profiles (`0.1.0`–`0.2.1`) remain supported for backward compatibility and deterministic replay. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md) for their specification.
 
 None of these formats is executable code. All lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
 
@@ -16,7 +16,7 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
 ---
 
-## 1. Typed Transaction Format (`patchdiff-tx/1`, Primary)
+## 1. Typed Match Transaction (`patchdiff-tx/1`, Primary)
 
 ### Wire Representation (MCP Tool Arguments)
 Submitted over MCP via `patchdiff_submit_edits`:
@@ -49,7 +49,7 @@ Submitted over MCP via `patchdiff_submit_edits`:
 - `intent` (`string`, required nonblank): High-level transaction intent for audit logs and ledger.
 - `edits` (`array`, required, `minItems: 1`): Ordered list of edits executed sequentially.
 - `expected_target_version` (`integer 0..2^63-1 | null`): Version precondition guard.
-- `expected_current_hash` (`string | null`): exactly 64 lowercase hex SHA-256 target hash precondition guard.
+- `expected_current_hash` (`string | null`): Exactly 64 lowercase hex SHA-256 target hash precondition guard.
 - *Guard requirement*: At least one of `expected_target_version` or `expected_current_hash` must be non-null.
 - `client_request_id` (`string | null`, optional): 1..128 printable ASCII characters without whitespace for request deduplication.
 - `parent_pdcp_log_id` (`string | null`, optional): UUID of rejected parent attempt when retrying.
@@ -58,71 +58,131 @@ Submitted over MCP via `patchdiff_submit_edits`:
 ### Edit Item Schema (`TYPED_EDIT_JSON_SCHEMA`)
 - `match` (`string`, required non-empty): Exact target text to match.
 - `replace` (`string`, required): Replacement text. Empty string `""` denotes deletion.
-- `change_id` (`string | null`, optional): A complete 1–64-character identifier containing only ASCII letters, digits, underscore, period, colon or hyphen; trailing newlines reject. Defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate IDs reject with `FailureReason.MANIFEST_INVALID`.
+- `change_id` (`string | null`, optional): A complete 1–64-character identifier containing only ASCII letters, digits, underscore, period, colon, or hyphen; trailing newlines reject. Defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate IDs reject with `FailureReason.MANIFEST_INVALID`.
 - `rationale` (`string | null`, optional): Nonblank per-edit explanation when supplied.
 - `risk` (`"low" | "medium" | "high" | null`, optional): Advisory risk classification.
-- `occurrence_index` (`integer >= 1 | null`, optional): 1-based index over exact matches.
+- `occurrence_index` (`integer >= 1 | null`, optional): 1-based index over exact matches in the sequential buffer.
 - `anchor_before` (`string | null`, optional): Exact substring that must precede candidate span.
 - `anchor_after` (`string | null`, optional): Exact substring that must succeed candidate span.
-- Selectors are constraints even when there is only one match. An index beyond the occurrence count or an excluding anchor rejects; combined selectors must all hold. Anchors need not be adjacent.
-- `additionalProperties: false`: Unknown fields (such as `region_hint`) reject with `FailureReason.MANIFEST_INVALID`.
+- Selectors are conjunctive constraints even when there is only one match (`patchdiff-mvp-0.2.2`). An index beyond the occurrence count or an excluding anchor rejects (`disambiguation_invalid`); combined selectors must all hold. Anchors need not be adjacent.
+- `additionalProperties: false`: Unknown fields reject with `FailureReason.MANIFEST_INVALID`.
 
 ### Canonical Persisted Record
+Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"` and `runtime_version = "patchdiff-mvp-0.2.2"`, normalized via `json.dumps(record, ensure_ascii=False, separators=(",", ":"), sort_keys=True)`.
 
-Known-target invalid Unicode is rejected before normal hashing/storage. Its log uses a reversible ASCII-escaped patchdiff-invalid-input/1 evidence envelope in the same TEXT column, with a diagnostic marker; that rejected envelope is not this transaction format and must not be applied or decoded as accepted history. Valid record serialization below is unchanged.
-
-Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`. Normalized via `json.dumps(record, ensure_ascii=False, separators=(",", ":"), sort_keys=True)`.
+Known-target invalid Unicode (unpaired surrogates or NUL) is rejected before normal hashing/storage with `target_encoding_invalid` at `PROTOCOL_VALIDATION`. Its log uses a reversible ASCII-escaped `patchdiff-invalid-input/1` evidence envelope in the same `TEXT` column with a safe JSONB diagnostic marker; that rejected envelope is never applied or decoded as accepted history.
 
 ---
 
-## 2. Legacy PDCP Format (v0.2.3, Frozen)
+## 2. Guarded Match & Span Operations (`patchdiff-tx/2`)
 
-Submitted over MCP via `patchdiff_submit_pdcp`:
-```text
-PDCP 0.2.3
-target_file_id: 11111111-1111-4111-8111-111111111111
-target_type: text/markdown
-target_hash: b8711cb73b5f382538f71019da43211d7e191622d0a865a8c1e5bf63ea1b58f2
-
-# MANIFEST
-# change_id: chg_001
-# intent: Update user settings label.
-# input_state: theme is set to dark.
-# output_state: theme is set to system.
-# affected_region: settings section
-# user_visible_change: Theme default changes.
-# risk: low
-
-<<<<<<< MATCH
-theme: dark
-=======
-theme: system
->>>>>>> REPLACE
+### Wire Representation (MCP Tool Arguments)
+Submitted over MCP via `patchdiff_submit_operations` when the caller holds exact Unicode code-point offsets from `patchdiff_read_target`, `patchdiff_read_lines`, or `patchdiff_find_occurrences`:
+```json
+{
+  "target_file_id": "11111111-1111-4111-8111-111111111111",
+  "expected_target_version": 2,
+  "expected_current_hash": null,
+  "intent": "Insert header note and rename setting.",
+  "operations": [
+    {
+      "op": "span",
+      "start": 0,
+      "end": 0,
+      "expected_text": "",
+      "expected_after": "# Settings\n",
+      "replace": "Note: Managed by PatchDIFF\n"
+    },
+    {
+      "op": "match",
+      "match": "alpha",
+      "replace": "beta"
+    }
+  ],
+  "client_request_id": "req-ops-v2"
+}
 ```
 
-### Delimiters & Delimiter Collisions
-- `<<<<<<< MATCH`: Marks start of exact match payload.
-- `=======`: Separates match payload from replace payload.
-- `>>>>>>> REPLACE`: Marks end of replace payload.
-- If payload text contains lines identical to `<<<<<<< MATCH`, `=======`, or `>>>>>>> REPLACE`, PDCP v0.2.3 parsing fails with `FailureReason.BLOCK_MALFORMED`. The typed format (`patchdiff-tx/1`) eliminates delimiter collision.
-
-### 7 Required Manifest Fields (v0.2.3)
-Each change block must include all 7 non-empty manifest fields:
-1. `change_id`
-2. `intent`
-3. `input_state`
-4. `output_state`
-5. `affected_region`
-6. `user_visible_change`
-7. `risk` (`low`, `medium`, or `high`)
-
-Optional disambiguation fields in v0.2.3: `anchor_before`, `anchor_after`, `occurrence_index`, `region_hint` (advisory), `target_hash`.
+### Operation Rules & Runtime Profiles
+- Requires top-level `intent` and at least one state guard (`expected_target_version` and/or `expected_current_hash`).
+- `op: "match"` carries the same fields and selector rules as `patchdiff-tx/1` edit items.
+- `op: "span"` requires non-boolean integer `start` and `end` (`0 <= start <= end <= len(buffer)` in sequential canonical LF code points), exact `expected_text` (`buffer[start:end] == canonicalize_text(expected_text)`), and `replace`.
+  - Empty-span insertion uses `start == end` with `expected_text: ""`.
+  - Optional `expected_before` and `expected_after` verify exact adjacent text (`buffer[start-len(expected_before):start]` and `buffer[end:end+len(expected_after)]`) so off-by-N insertion offsets reject deterministically (`span_expected_text_mismatch`).
+- **Runtime profile selection**:
+  - `patchdiff-mvp-0.3.0` when no span carries `expected_before` or `expected_after`.
+  - `patchdiff-mvp-0.5.0` when any span carries `expected_before` or `expected_after`.
+- See [MCP_TOOLS.md](MCP_TOOLS.md#patchdiff_submit_operations-patchdiff-tx2) for complete field schemas.
 
 ---
 
-## 3. Shared Lowering and Applier Semantics
+## 3. Guarded Sole Whole-Target Replacement (`patchdiff-tx/3`)
 
-All four formats lower into `ParsedPDCP`:
+### Wire Representation & Canonical Record
+Submitted over MCP via `patchdiff_submit_replacement` for explicit whole-document replacement under mandatory state guards. Stored as canonical JSON under immutable runtime profile `patchdiff-mvp-0.4.0`:
+```json
+{
+  "expected_current_hash": null,
+  "expected_target_version": 0,
+  "format": "patchdiff-tx/3",
+  "intent": "Explicit whole-target replacement",
+  "operations": [
+    {
+      "op": "replace_all",
+      "replace": "new text\n"
+    }
+  ],
+  "target_file_id": "11111111-1111-4111-8111-111111111111"
+}
+```
+
+### Rules & Service Admission Boundary
+- Exactly one operation with `{"op": "replace_all", "replace": "..."}` is permitted. No `match`, `span`, selectors, or mixed operations are allowed in `patchdiff-tx/3` (and `patchdiff-tx/2` continues to refuse `replace_all`).
+- At least one valid state guard (`expected_target_version` and/or `expected_current_hash`) is required; both top-level guard keys are persisted with raw values (including `null`) through the same canonical JSON identity rule.
+- Default `change_id` is `chg_001`; default `risk` is `"low"`; one typed ledger row (`operation: "replace_all"`) covers the full original span `[0, len(buffer))`.
+- **Fresh service admission limit**: Fresh `patchdiff-tx/3` replacement submissions are bounded to `<= 1,000,000` Unicode code points and `<= 1,048,576` UTF-8 bytes (both raw input and canonical LF result). Replay bypasses fresh admission limits so historical accepted logs always replay.
+
+---
+
+## 4. Typed Format Decision Matrix & Measured Payload Overhead
+
+### Choosing the Right Typed Format
+
+| Format | MCP Tool | Runtime Profile | Primary Use Case | Guard Requirement | Typical Wire Overhead (Excluding Payload) |
+| --- | --- | --- | --- | --- | --- |
+| **`patchdiff-tx/1`** | `patchdiff_submit_edits` | `patchdiff-mvp-0.2.2` | Default exact `MATCH/REPLACE` edits with optional selectors (`occurrence_index`, `anchor_before`, `anchor_after`) | Required (`version` and/or `hash`) | **`~140 B`** (`151 B` total for 1 tiny edit; `259 B` for 5 small edits) |
+| **`patchdiff-tx/2`** | `patchdiff_submit_operations` | `patchdiff-mvp-0.3.0` (`0.5.0` with span context) | Coordinate-known `span` replacements, descending multi-span edits from a single read, and verified insertions (`expected_before`/`expected_after`) | Required (`version` and/or `hash`) | **`~165 B`** |
+| **`patchdiff-tx/3`** | `patchdiff_submit_replacement` | `patchdiff-mvp-0.4.0` | Explicit guarded whole-document replacement (`replace_all`, up to 1 MB / 1M code points) | Required (`version` and/or `hash`) | **`~280 B`** (`290 B` persisted record / `341 B` `tools/call` line) |
+
+### Deterministic Byte Accounting (`evaluation/offline_eval.py`)
+
+Measured UTF-8 byte sizes across standard typed editing scenarios (`PYTHONPATH=backend python evaluation/offline_eval.py`):
+
+| Scenario | `patchdiff-tx/1` Minimal (`typed_min`, Wire / Persisted) | `patchdiff-tx/1` Matched Prose (`typed_match`, Wire / Persisted) | Verdict & Delimiter Safety |
+| --- | --- | --- | --- |
+| **1 tiny edit** | **`151 B`** / **`206 B`** | `327 B` / `382 B` | `accepted` |
+| **5 small edits** | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | `accepted` |
+| **1 edit, 2 KB span** | **`4,441 B`** / **`4,496 B`** | `4,617 B` / `4,672 B` | `accepted` |
+| **Quotes + backslashes + Unicode** | **`172 B`** / **`227 B`** | `348 B` / `403 B` | `accepted` |
+| **Payload has a delimiter line (`<<<<<<< MATCH`)** | **`162 B`** / **`217 B`** | `338 B` / `393 B` | `accepted` (immune to delimiter collision) |
+
+Measured `patchdiff-tx/3` (`patchdiff_submit_replacement`) UTF-8 byte sizes:
+
+| `patchdiff-tx/3` Case | Persisted Record Bytes (`pdcp_content`) | Complete JSON-RPC `tools/call` Line Bytes | Verdict |
+| --- | --- | --- | --- |
+| **Guarded whole-target rewrite** | `290 B` | `341 B` | `accepted` |
+| **Empty target replacement** | `290 B` | `341 B` | `accepted` |
+| **Empty replacement (clear target)** | `287 B` | `338 B` | `accepted` |
+| **Unicode, quotes, CRLF normalization** | `308 B` | `359 B` | `accepted` |
+| **Whole-target 2 KB rewrite** | `2,435 B` | `2,486 B` | `accepted` |
+
+*(For the baseline comparison against frozen `.pdcp` v0.2.3, see [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#5-measured-comparison-legacy-pdcp-v023-vs-typed-patchdiff-tx1).)*
+
+---
+
+## 5. Shared Lowering and Applier Semantics
+
+All supported transaction formats lower into `ParsedPDCP`:
 ```python
 @dataclass(frozen=True, slots=True)
 class ParsedPDCP:
@@ -133,11 +193,10 @@ class ParsedPDCP:
 The applier `apply_pdcp_transaction(target_content, parsed)`:
 1. Normalizes target content and payloads to LF.
 2. Checks header preconditions (if present).
-3. Simulates each change sequentially against the buffer:
-   - Locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.2`).
-   - Resolves disambiguation to exactly one span.
-   - Slices buffer and splices `replace` immediately.
-   - For a tx/2 span, checks `0 <= start <= end <= len(buffer)` and `buffer[start:end] == expected_text` instead of matching; for the tx/3 sole `replace_all`, the span is the whole buffer.
-   - Computes `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests).
+3. Simulates each change sequentially against the in-memory buffer:
+   - For `match` operations: locates all exact spans (overlapping spans counted in `patchdiff-mvp-0.2.2`), resolves disambiguation to exactly one span, slices the buffer, and splices `replace` immediately.
+   - For `tx/2` `span` operations: verifies `0 <= start <= end <= len(buffer)`, `buffer[start:end] == expected_text`, and optional `expected_before` / `expected_after` adjacency guards before splicing `replace`.
+   - For the `tx/3` sole `replace_all` operation: replaces `[0, len(buffer))` in one step.
+   - Computes authoritative `change_facts` (`span_start`, `span_end`, char counts, SHA-256 digests).
 4. Computes final `after_hash`.
-5. Emits `AcceptedCoreResult` on full success or `RejectedCoreResult` on any failure.
+5. Emits `AcceptedCoreResult` on full success or `RejectedCoreResult` on any failure without mutating the target.

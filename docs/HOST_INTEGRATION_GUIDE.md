@@ -106,17 +106,7 @@ Typed-match (`patchdiff-tx/1`) and legacy PDCP submissions use runtime `patchdif
 {"target_file_id":"11111111-1111-4111-8111-111111111111","expected_target_version":0,"intent":"Replace greeting","edits":[{"match":"hello","replace":"goodbye","occurrence_index":2}]}
 ```
 
-The equivalent legacy proposal also rejects when submitted with the same target/version guard:
-
-```json
-{
-  "target_file_id": "11111111-1111-4111-8111-111111111111",
-  "expected_target_version": 0,
-  "pdcp_content": "PDCP 0.2.3\ntarget_file_id: 11111111-1111-4111-8111-111111111111\ntarget_type: text/plain\n\n# MANIFEST\n# change_id: greeting\n# intent: Replace greeting.\n# input_state: hello exists.\n# output_state: goodbye should exist.\n# affected_region: greeting\n# user_visible_change: Greeting changes.\n# risk: low\n# occurrence_index: 2\n\n<<<<<<< MATCH\nhello\n=======\ngoodbye\n>>>>>>> REPLACE"
-}
-```
-
-Use occurrence_index 1, omit selectors for a unique match, or supply anchors that actually hold. An index and anchors are combined constraints. Historical accepted logs recorded under 0.1.0, 0.2.0 or 0.2.1 retain their ignored-singleton-selector behavior on replay; resubmitting them as new proposals uses the current behavior.
+Use `occurrence_index` 1, omit selectors for a unique match, or supply anchors that actually hold. An index and anchors are combined constraints. (For legacy `.pdcp` v0.2.3 singleton-selector behavior and historical `0.1.0`–`0.2.1` replay profiles, see [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).)
 
 ### Invalid text and safe rejected evidence
 
@@ -134,7 +124,7 @@ The full contract is in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-previe
 - **Preview before submitting.** `patchdiff_preview` evaluates a proposal without writing, locking or reserving a request key, and returns the same warnings and near misses a submission would. Its evidence can be truncated or omitted to fit a 32,768-byte budget, so check `total_change_count`, `returned_fact_count`, `change_facts_truncated` and `evidence_omissions` before treating facts as complete. Verdict, stage, observed version/hash and `after_hash` are always kept. Submit afterwards with a version guard: a hash alone cannot detect intervening no-op or ABA changes.
 - **Replacement limits.** A fresh replacement over 1,000,000 code points or 1,048,576 UTF-8 bytes returns `invalid_argument` with `code: "replacement_too_large"` and writes nothing. The diagnostic gives `actual`, `limit` and `canonical_would_fit`; when that is `true`, the text only failed because of CRLF or CR line endings, so send it with LF. The limit applies to whole-document replacement only. If the change is really a set of edits, send them as edits or operations; do not split a rewrite to avoid the limit.
 - **Correlation.** Pass `include_correlation_id: true` to receive a fresh per-call UUID for your own logs. It is never a retry key; use `client_request_id` for that.
-- **Diagnostics.** See [Inspect rejection context](#inspect-rejection-context). Ambiguity failures list up to five exact candidates; when more exist, `next_occurrence_index` continues the list through `patchdiff_find_occurrences`. A candidate's `occurrence_index` can be used directly only when the failing edit is the first one (`prior_changes: 0`). Absent-match failures can include up to three `near_misses` at distinct locations, scanned over up to the first 65,536 code points of the failing buffer; `scanned_start`/`scanned_end` and `scope_truncated` say what was searched, and an empty list carries a `hint`. Treat near misses as hints to re-read, never as edits to apply blindly.
+- **Diagnostics.** See [Inspect rejection context](#inspect-rejection-context). Ambiguity failures list up to five exact candidates; when more exist, `next_occurrence_index` continues the list through `patchdiff_find_occurrences`. A candidate's `occurrence_index` can be used directly only when the failing edit is the first one (`prior_changes: 0`). Absent-match failures can include up to three `near_misses` at distinct locations, scanned over up to the first 65,536 code points of the failing buffer (`1.7 ms` median on 64K varied prose; `41.9 ms` median on 64K repetitive logs); `scanned_start`/`scanned_end` and `scope_truncated` say what was searched, and an empty list carries a `hint`. Treat near misses as hints to re-read, never as edits to apply blindly.
 
 ### Discovery example sequence
 
@@ -163,11 +153,9 @@ Moved from the old server prompt:
 - Prefer one edit per intended occurrence. If one edit's `match` covers several occurrences, say so in `rationale`.
 - After an accepted replacement, verify the result with `patchdiff_find_occurrences` for the old literal, report the number of occurrences actually changed, and do not report the manifest/edit count as the occurrence count.
 
-## 5. Legacy `.pdcp` (v0.2.3)
+## 5. Legacy Compatibility (`.pdcp` v0.2.3 & Deprecated Wrappers)
 
-Compatibility wrappers preserve caller-owned transaction commit/rollback; standalone wrapper calls own their context-read and guarded-submit transaction together.
-
-Still accepted through `patchdiff_submit_pdcp`, frozen, and fully replayable. Use it only if a client cannot send typed tool arguments. Format rules are in [PDCP_FORMAT.md](PDCP_FORMAT.md). `patchdiff_build_prompt_context` still emits PDCP rules for such clients; its target text is a bounded **prefix** (`context_truncated` tells you), not retrieval.
+Frozen `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`), `patchdiff_build_prompt_context`, and the deprecated regeneration wrappers remain supported for backward compatibility and historical replay. All legacy format rules, wrapper contracts, and historical replay profiles (`0.1.0`–`0.2.1`) are documented in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).
 
 ## 6. Checkpoints, history and context
 
