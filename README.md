@@ -13,7 +13,7 @@ Host / Model     = planning, context selection, proposal generator, retry owner
 PostgreSQL 16+   = canonical working substrate (SELECT ... FOR UPDATE)
 ```
 
-PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. The MCP host remains responsible for planning, generating proposals, and evaluating whether accepted edits accomplish the user's goal. See the [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md), and [security policy](SECURITY.md).
+PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. The MCP host remains responsible for planning, generating proposals, and evaluating whether accepted edits accomplish the user's goal. See the [Concept Paper v6](docs/PatchDIFF-Concept-Paper-6.md), [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md), and [security policy](SECURITY.md).
 
 ---
 
@@ -468,7 +468,8 @@ Read in order of precedence:
 7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1`, guarded operations `patchdiff-tx/2`, sole replacement `patchdiff-tx/3`)
 8. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop, reads, guards, retries, and failure handling)
 9. `docs/LEGACY_COMPATIBILITY.md` (frozen `.pdcp` v0.2.3 format, `patchdiff_submit_pdcp`, deprecated wrappers, and historical replay profiles)
-10. `docs/TEST_MATRIX.md` & `docs/CODEX_BUILD_PLAN.md`
+10. `docs/PatchDIFF-Concept-Paper-6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, operational efficiency bounds, and research hypotheses; supersedes historical `docs/PatchDIFF-Concept-Paper-5.md`)
+11. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `evaluation/README.md`
 
 ## License
 

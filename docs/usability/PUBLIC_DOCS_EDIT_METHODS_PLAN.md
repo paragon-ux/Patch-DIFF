@@ -218,6 +218,7 @@ Maintain a single authoritative source for each category of information and link
 | Architecture decisions (A1–A8), contracts (C1–C6), and Concept Paper reconciliation | [`docs/MODERNIZATION_ARCHITECTURE.md`](../MODERNIZATION_ARCHITECTURE.md) | Architectural authority. |
 | Frozen `.pdcp` v0.2.3 syntax, `patchdiff_submit_pdcp`, deprecated wrappers, and old replay profiles | [`docs/LEGACY_COMPATIBILITY.md`](../LEGACY_COMPATIBILITY.md) | Single consolidated home for legacy compatibility; referenced via a single pointer elsewhere. |
 | Host-owned loop, recovery patterns, and intermediate-buffer coordinate rules | [`docs/HOST_INTEGRATION_GUIDE.md`](../HOST_INTEGRATION_GUIDE.md) | Practical integration guidance for agent builders. |
+| Conceptual design rationale, generalized `tx/1..3` formal model, edit-method tradeoffs, and research hypotheses (`H1`–`H7`) | [`docs/PatchDIFF-Concept-Paper-6.md`](../PatchDIFF-Concept-Paper-6.md) | Current conceptual whitepaper; supersedes untouched historical `docs/PatchDIFF-Concept-Paper-5.md`. Normative specs (`AGENTS.md`, `MCP_TOOLS.md`, `PATCHDIFF_CORE_SPEC.md`, `DATA_MODEL.md`, `PDCP_FORMAT.md`) remain authoritative for executable schemas and runtime limits. |
 
 ---
 
