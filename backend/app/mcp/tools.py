@@ -714,6 +714,14 @@ def _attempt_meta_lateral(log_alias: Any):
     qual = log_alias.name
     pv = f"{qual}.protocol_version"
     content = f"{qual}.pdcp_content"
+    # Note: the SQL below is constructed via a Python f-string interpolating `pv` and
+    # `content`. Interpolating `json_open_brace` ("{") and `json_close_brace` ("}")
+    # rather than relying on Python f-string brace doubling (`{{` / `}}`) makes it
+    # explicit that the rendered SQL appends a single closing brace `'}'` to close
+    # the truncated JSON object before `,"operations":[` (and prepends a single `'{'`
+    # on the `tx/1` tail slice). The emitted SQL text is byte-for-byte identical.
+    json_open_brace = "{"
+    json_close_brace = "}"
     return (
         text(f"""
             SELECT CASE
@@ -751,9 +759,9 @@ def _attempt_meta_lateral(log_alias: Any):
                 END AS doc
                 FROM (
                     SELECT strpos(h.head, ',"operations":[') AS head_pos,
-                           split_part(h.head, ',"operations":[', 1) || '}}' AS head_slice,
+                           split_part(h.head, ',"operations":[', 1) || '{json_close_brace}' AS head_slice,
                            strpos(h.tail, ',"format":"patchdiff-tx/1",') AS tail_pos,
-                           regexp_replace(h.tail, '^.*,"format":"patchdiff-tx/1",', '{{', 's') AS tail_slice
+                           regexp_replace(h.tail, '^.*,"format":"patchdiff-tx/1",', '{json_open_brace}', 's') AS tail_slice
                     FROM (
                         SELECT CASE
                                  WHEN {pv} IN ('patchdiff-tx/2', 'patchdiff-tx/3')
