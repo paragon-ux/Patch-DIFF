@@ -13,7 +13,7 @@ Host / Model     = planning, context selection, proposal generator, retry owner
 PostgreSQL 16+   = canonical working substrate (SELECT ... FOR UPDATE)
 ```
 
-PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. The MCP host remains responsible for planning, generating proposals, and evaluating whether accepted edits accomplish the user's goal. See the [Concept Paper v6](docs/PatchDIFF-Concept-Paper-6.md), [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md), and [security policy](SECURITY.md).
+PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. The MCP host remains responsible for planning, generating proposals, and evaluating whether accepted edits accomplish the user's goal. See the [Concept Paper](docs/PatchDIFF-Concept-Paper-6.md), [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md), and [security policy](SECURITY.md).
 
 ---
 

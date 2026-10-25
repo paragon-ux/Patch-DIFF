@@ -1,671 +1,641 @@
-# PatchDIFF: Transaction-Enveloped State Transitions for Auditable, Low-Decoding-Cost LLM Document Editing
+# PatchDIFF: Transactional Document Editing for AI Agents
 
-> **Edition & Authority Note (Concept Paper v6):** This paper is the current conceptual and research edition for PatchDIFF, superseding the historical v0.2.3 paper ([PatchDIFF-Concept-Paper-5.md](PatchDIFF-Concept-Paper-5.md), which is preserved untouched as a historical design record). Concept Paper v6 explains PatchDIFF's theoretical model, design rationale, edit-method comparisons, generalized formal transaction model (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`, and legacy `.pdcp` v0.2.3), operational efficiency analysis, and research hypotheses (`H1`–`H7`). For executable MCP tool schemas, persistence behavior, runtime profiles, and exact byte/code-point limits, the normative specifications ([MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), [MCP_TOOLS.md](MCP_TOOLS.md), [PATCHDIFF_CORE_SPEC.md](PATCHDIFF_CORE_SPEC.md), [DATA_MODEL.md](DATA_MODEL.md), [PDCP_FORMAT.md](PDCP_FORMAT.md), and [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md)) govern.
+> **Scope & Authority Note:** This paper presents the conceptual foundation, formal transaction model, architectural tradeoffs, and research hypotheses of PatchDIFF. For executable API schemas, persistence contracts, and exact runtime limits, refer to the normative specifications ([AGENTS.md](../AGENTS.md), [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), [MCP_TOOLS.md](MCP_TOOLS.md), [PATCHDIFF_CORE_SPEC.md](PATCHDIFF_CORE_SPEC.md), [DATA_MODEL.md](DATA_MODEL.md), and [PDCP_FORMAT.md](PDCP_FORMAT.md)).
 
 ---
 
 ## Abstract
 
-Large language models (LLMs) and coding agents are increasingly used to edit long-lived textual artifacts such as source files, Markdown specifications, configuration files, structured documents, and knowledge bases (Chen et al., 2021; Yao et al., 2023; Schick et al., 2023; Jimenez et al., 2024). Across contemporary systems, two interaction patterns dominate: full-document regeneration, where the model decodes an entire replacement artifact even when the requested change is local, and ad-hoc local editing tools (such as unique-string `str_replace` or line-oriented unified diffs), which reduce output size but typically leave optimistic concurrency locking, multi-edit rollback, repeated-string disambiguation, retry idempotence, and rejected-attempt auditing to custom host glue code.
+Large language models (LLMs) and coding agents frequently modify existing documents, source files, and structured configurations across multi-turn sessions. Prevailing editing interfaces force an uncomfortable tradeoff: full-document regeneration scales in output cost with total file length and exposes unmodified regions to silent drift, whereas ad-hoc local patching (`str_replace` substring replacement, unified diffs, or unguarded line-range splices) relies on fragile context-copying or line-number arithmetic and typically lacks server-enforced optimistic concurrency, all-or-nothing multi-edit rollback, idempotent retry recovery, and durable auditability.
 
-PatchDIFF addresses this systems gap by treating model-generated edits as **transaction-enveloped textual state transitions** over an authoritative target document managed in PostgreSQL and exposed through the Model Context Protocol (MCP). Instead of rewriting a file unguarded or applying unverified local patches, an MCP host reads bounded canonical slices from PatchDIFF and submits declarative JSON transactions: localized exact-match edits (`patchdiff-tx/1`), guarded match and code-point span operations including zero-length insertions (`patchdiff-tx/2`), or explicitly authorized whole-target replacements (`patchdiff-tx/3`). A pure, deterministic runtime validates the transaction envelope, checks required target version and/or SHA-256 hash preconditions under PostgreSQL `SELECT ... FOR UPDATE`, simulates operations sequentially in memory, and either commits all changes atomically per target or rejects the transaction without mutating target state. Both accepted and rejected attempts are recorded in an append-only log with request-key idempotence (`client_request_id`) and retry lineage (`parent_pdcp_log_id`), while accepted changes populate an append-only manifest ledger pairing model-claimed intent with runtime-derived span and hash facts.
-
-The central claim of PatchDIFF is not that textual diffs are new (Hunt and Szymanski, 1977; Myers, 1986; Chacon and Straub, 2014). Rather, PatchDIFF defines the **transactional runtime and lifecycle semantics** required to make model-generated textual deltas safe to apply, reject, recover, audit, checkpoint (`SAVE`), and deterministically replay across protocol evolution. PatchDIFF deliberately avoids AST rewriting, fuzzy auto-mutation, silent merge, and executable model-generated protocol logic. Strict precondition matching enforces transaction applicability and selection constraints rather than semantic or task correctness (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`), while bounded rejection diagnostics (`failure_context`, `exact_candidates`, and post-commit Levenshtein `near_misses`) convert uncertain model context into structured feedback for host-driven recovery.
+PatchDIFF reframes agent-driven document editing as a **deterministic, preconditioned relational transaction** exposed over the Model Context Protocol (MCP). Rather than trusting an agent to rewrite a file or directly mutate a workspace buffer, PatchDIFF maintains the canonical document state inside PostgreSQL and requires agents to submit declarative JSON transactions: **`patchdiff-tx/1`** (exact substring match/replace with explicit disambiguation), **`patchdiff-tx/2`** (mixed exact-match and guarded `[start, end)` Unicode code-point span operations with exact `expected_text` and optional `expected_before` / `expected_after` adjacency checks), and **`patchdiff-tx/3`** (explicitly guarded whole-document replacement). Every submission must carry an explicit state precondition (`expected_target_version` and/or `expected_current_hash`). Under a per-target PostgreSQL row lock (`SELECT ... FOR UPDATE`), the pure core runtime validates preconditions, simulates all operations sequentially in memory, derives exact span and cryptographic hash facts, and either commits the entire transaction atomically or rejects it without target mutation while returning bounded recovery diagnostics (`failure_context`, `exact_candidates`, and post-commit Levenshtein `near_misses`). Both accepted and rejected attempts are recorded in an append-only audit log with `client_request_id` idempotence and retry lineage (`parent_pdcp_log_id`), while accepted changes populate an append-only manifest ledger that supports `SAVE` cycle compaction and deterministic replay across versioned execution profiles.
 
 ---
 
-## 1. Introduction
+## 1. Introduction: Why Agent Document Editing Needs Transactions
 
-Large language models are now routinely deployed inside interactive coding and document-editing loops over long-lived artifacts: source code, configuration files, Markdown specifications, YAML/JSON manifests, and technical prose (Chen et al., 2021; Jimenez et al., 2024). In these workflows, reliability depends not only on whether a model can propose a plausible edit, but on how the surrounding system validates, applies, records, and recovers from faulty or stale proposals.
+When an AI agent edits an authoritative artifact—such as a technical specification, legal contract, configuration manifest, or source module—the core systems challenge is not merely *how to represent a text delta*. The deeper challenge is **how to make untrusted, probabilistic model proposals safe to apply repeatedly to a shared, evolving document**.
 
-Historically, the simplest editing abstraction has been **full-state regeneration**: the host supplies a document, requests a modification, and the model emits a complete rewritten artifact. Full-state regeneration is both computationally expensive and operationally fragile. Even when a user requests a one-line change, the model must decode the entire file, unchanged regions may silently drift or be truncated, and an edit generated from stale context can overwrite newer state without detection. Retrieval-augmented generation reduces input context pressure by selecting relevant passages (Lewis et al., 2020), but retrieval alone does not make the retrieved view transactionally authoritative at write time.
+In typical agent harnesses, editing is treated as an unguarded side effect of tool execution:
+1. The agent reads part or all of a file into its prompt context.
+2. The model decodes either a complete replacement file or a local patch (such as a `str_replace` call or unified diff).
+3. The host writes the result directly to disk or memory, often with no version lock, no transactional rollback if the third edit in a five-edit sequence fails, no durable record of rejected attempts, and no idempotence key if the transport times out after commit.
 
-To avoid full-file decoding, modern agent harnesses commonly adopt localized edit tools—most notably **unique-match string replacement** (`str_replace`, e.g., Anthropic, 2025) and **structured diff/patch tools** (`apply_patch`, e.g., OpenAI, 2025), alongside classical unified diffs and line-range splicers. These interfaces substantially reduce output tokens for small edits, but they expose a second layer of systems challenges during multi-turn agent loops:
+PatchDIFF separates **probabilistic proposal generation** (owned by the MCP host and model) from **deterministic state transition authority** (owned by the PatchDIFF transaction server and PostgreSQL substrate).
 
-1. **Disambiguation vs. context bloat:** In a unique-match `str_replace` interface, editing a repeated line (such as `"enabled: true"` in a configuration file) requires expanding `old_str` and `new_str` with enough surrounding lines to force global uniqueness.
-2. **Hunk formatting and coordinate drift:** In unified diff or line-range interfaces, miscounted line headers (`@@ -l,s +l,s @@`) or stale line offsets after earlier edits cause hunk rejections or misplaced edits.
-3. **Host-delegated transaction lifecycle:** Standard tool schemas define how a model formats an edit request, but leave optimistic concurrency control, all-or-nothing multi-edit rollback, lost-response retry idempotence, rejected-attempt logging, and deterministic replay to the host harness.
-4. **Strict matching vs. blind recovery:** Strict exact matching prevents silent misplacement, but when a model quotes slightly wrong whitespace or encounters duplicate matches, a bare error string forces extra search/read turns to recover.
+### 1.1 Architectural Layers and Claim Boundaries
 
-PatchDIFF resolves these problems by elevating document editing from a stateless string-replacement helper into a **server-side, PostgreSQL-backed deterministic transaction service** exposed over MCP (Anthropic, 2024). The canonical target resides in PostgreSQL. The host reads bounded slices or searches exact occurrences, submits a guarded declarative transaction (`patchdiff-tx/1`, `patchdiff-tx/2`, or `patchdiff-tx/3`), and receives either an atomic per-target commit with runtime-derived span/hash evidence or a structured rejection enriched with bounded recovery candidates.
+To keep conceptual claims, software guarantees, and empirical questions distinct, this paper separates four layers throughout:
 
-### 1.1 Status of the Thesis, Implemented Mechanisms, Verified Properties, and Open Hypotheses
-
-To maintain strict scientific and engineering clarity, this paper separates four layers of status across the PatchDIFF project:
-
-| Layer | Status in Current System (`PR #14`, Runtime Profiles `0.1.0`–`0.5.0`) |
-| --- | --- |
-| **1. Core Architectural Thesis** | **Preserved from v0.2.3:** Model-generated edits are untrusted declarative proposals validated against canonical UTF-8 target state under optimistic concurrency guards, applied sequentially and atomically per target, logged in append-only accepted/rejected tables, compacted via `SAVE` cycles, and verified by deterministic replay. |
-| **2. Modernized Runtime & Protocol Mechanisms** | **Implemented:** Typed JSON transaction formats (`patchdiff-tx/1` exact match edits, `patchdiff-tx/2` guarded `[start, end)` spans and zero-length insertions with optional `expected_before`/`expected_after` adjacency checks, `patchdiff-tx/3` guarded whole-target replacement) alongside frozen legacy `.pdcp` v0.2.3; MCP stdio JSON-RPC adapter and 20-tool surface; `(target_file_id, client_request_id)` idempotent outcome recovery; read-only `patchdiff_preview`; bounded rejection enrichment (`failure_context`, `exact_candidates`, and post-commit pigeonhole + Landau–Vishkin Levenshtein `near_misses`); line-ending preservation (`migration 0003`); and immutable replay profiles `patchdiff-mvp-0.1.0` through `0.5.0`. |
-| **3. Deterministically Verified & Locally Benchmarked Properties** | **Verified:** **1,226 automated tests** (`816` pure unit tests + `410` live PostgreSQL 16.3 and real stdio MCP subprocess integration tests, including populated Alembic `upgrade -> downgrade -> upgrade` checks) and **235/235** live stdio friction checks; deterministic UTF-8 payload byte and verdict equivalence accounting (`evaluation/offline_eval.py`); and local fixture benchmarks for `SVC-001` near-miss scans (`1.7 ms` prose / `41.9 ms` repetitive log 5-run medians) and `MCP-001` PostgreSQL 16+ `LATERAL` history reads (`14.68 ms` ledger / `22.85 ms` log 7-run medians on 20 MB `tx/3` history). |
-| **4. Open Empirical Research Hypotheses (`H1`–`H7`)** | **Designed, Not Yet Executed (`NOT RUN` for live-model / human studies):** While deterministic guarantees (`H2` locality for local operations, `H3` stale-guard rejection, `H5` profile-dispatched replay) and payload byte scaling (`H1` byte accounting) are established in software, controlled live-LLM comparative trials measuring actual token usage, task-level unintended edit rates, multi-turn recovery rates (`H1`–`H4`, `H7`), and human review studies (`H6`) have not been run (Decision A8). |
+| Layer | Scope & Evidentiary Status |
+| :--- | :--- |
+| **1. Core Architectural Thesis** | Model-generated edits are untrusted declarative proposals that must be validated against explicit document version/hash preconditions and applied atomically (`all-or-nothing`) by a deterministic server-side runtime over a canonical relational substrate. |
+| **2. Formal Transaction & Lifecycle Mechanisms** | Structured JSON transaction formats (`patchdiff-tx/1` exact match, `patchdiff-tx/2` guarded match/span operations with optional adjacency guards, `patchdiff-tx/3` guarded whole-document replacement), MCP read/search/preview tools, per-target PostgreSQL `SELECT ... FOR UPDATE` serialization, `client_request_id` idempotency, bounded rejection diagnostics (`failure_context`, `exact_candidates`, post-commit `near_misses`), `SAVE` cycle rotation, and profile-dispatched deterministic replay. |
+| **3. Deterministically Enforced & Reference-Measured Properties** | Automated unit and live PostgreSQL/stdio integration verification, deterministic payload byte accounting (`evaluation/offline_eval.py`: `151 B` compact MCP `arguments` for 1 minimal edit, `259 B` for 5 edits), hard response byte/code-point caps, and local reference implementation latency profiles. |
+| **4. Open Empirical Hypotheses (`H1`–`H7`)** | Live-model comparative trials across model families (`H1`–`H4`, `H7`) and human reviewer usability studies (`H6`) are **designed in §23.2–§23.3 (`NOT RUN`)**. Strict precondition matching enforces **applicability and selection constraints**; it does **not** guarantee semantic correctness (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`) or automatic agent recovery. |
 
 ---
 
-## 2. From Full-State Regeneration to Transaction-Enveloped Editing
+## 2. Failure Modes of Full-Document Regeneration
 
-In full-state regeneration, the model acts as an unverified state generator:
+When an LLM is asked to revise an existing document by regenerating the entire artifact, four structural problems arise:
 
-`T_new = LLM(T_old, instruction)`
-
-Even when `T_new` differs from `T_old` by only a few characters, the model must re-emit the entire artifact, and the host must either overwrite `T_old` blindly or compute a post-hoc diff to infer what changed. Post-hoc diffing can show what the model altered after the fact, but it cannot distinguish an intentional edit from accidental drift in an unrelated paragraph, nor can it prevent a stale model turn from overwriting a concurrent update.
-
-In PatchDIFF, the model does not emit a new target state. Instead, the model emits a **declarative transaction** $\tau$ containing a state guard $g$, transaction intent $I$, and ordered operations $\langle o_1, \dots, o_n \rangle$:
-
-`T_new = Apply(T_current, τ)`
-
-The runtime evaluates $\tau$ against the current authoritative target $T_{\text{current}}$. If the state guard $g$ or any operation precondition fails, `Apply` leaves $T_{\text{current}}$ unchanged and records a rejected transaction attempt.
-
-| Editing Problem | Conventional Approach | What PatchDIFF Provides Directly |
-| --- | --- | --- |
-| **Small edit in a large file** | Full regeneration emits the complete replacement document on every turn | `patchdiff-tx/1` and `tx/2` emit only the matched/replaced spans plus compact transaction framing (`151 B` `arguments` JSON for 1 tiny edit) |
-| **Repeated identical text** | Unique-match replacement (`str_replace`) requires expanding `old_str` with surrounding lines until unique | Explicit `occurrence_index`, `anchor_before` / `anchor_after` (`tx/1`), or guarded `[start, end)` spans (`tx/2`) without enlarging the match |
-| **Unified diff formatting** | Agent must construct line-oriented hunks and maintain `@@ -l,s +l,s @@` header arithmetic | Structured JSON fields (`patchdiff_submit_edits` / `patchdiff_submit_operations`); zero hunk-header arithmetic or text-delimiter collision |
-| **Coordinate & state drift** | Line-based edits depend on positions remaining unchanged since the agent last read the file | Required `expected_target_version` and/or `expected_current_hash` under `SELECT ... FOR UPDATE`, plus exact `expected_text` and optional `expected_before` / `expected_after` span checks |
-| **Multiple changes in one target** | Single-replacement interfaces require $N$ separate tool calls (or leave multi-edit rollback to the host) | One `edits[]` / `operations[]` submission simulated sequentially in memory and committed all-or-nothing per target |
-| **Missing or ambiguous match** | Basic interfaces return an error string, leaving the host to search for context in extra turns | Structured rejection with bounded `failure_context` (`<= 256` code points), up to 5 indexed `exact_candidates`, and up to 3 ranked Levenshtein `near_misses` |
-| **Lost submission response** | Host must inspect current target state to guess whether a timed-out write succeeded before retrying | Retrying with the same `(target_file_id, client_request_id)` returns the exact recorded outcome (`deduplicated: true`) |
-| **Long editing session & audit** | Host must maintain its own history, rejected-attempt logs, and state verification | Append-only attempt log (accepted + rejected), accepted manifest ledger with runtime-derived span/hash facts, `patchdiff_save` cycles, and profile-dispatched `patchdiff_replay` |
+1. **$O(|T|)$ Output Cost for $O(|\Delta|)$ Edits:** Modifying a single clause or configuration value in a 64 KB document requires decoding all 64 KB of unchanged text. Output token cost, latency, and truncation risk scale with document length $|T|$ rather than edit magnitude $|\Delta|$.
+2. **Unintended Drift Outside Target Regions:** Because autoregressive decoding samples every token afresh, unmodified sections remain exposed to silent rewording, formatting normalization, dropped comments, or accidental omissions.
+3. **Opaque Review Surface:** Without a post-hoc diff step, a human reviewer or supervising agent cannot tell whether the model changed only the requested paragraph or subtly altered three other sections.
+4. **Silent Overwrite Under Concurrent or Stale Context:** If the document advances between the turn when the agent read it and the turn when it finishes decoding a full rewrite, naive file replacement silently overwrites the intervening changes.
 
 ---
 
-## 3. Authoritative Cached Target Editing Model
+## 3. Why Cached State Alone Is Insufficient
 
-PatchDIFF separates **authoritative document storage** from **transient model context**. The canonical target document is stored in PostgreSQL (`cloud_target_files`) with its current integer `version`, canonical LF-normalized UTF-8 `content`, `current_hash` (SHA-256), and optional `source_line_endings` metadata (`"LF"`, `"CRLF"`, or `"MIXED"`).
+Modern LLM APIs support prompt caching and stateful conversation threads, reducing the *input* cost of re-reading a stable document prefix. However, caching input context does not solve the *output* and *state-transition* problems:
 
-Rather than loading an entire multi-thousand-line file into the prompt on every turn, the MCP host interacts with the cached target through bounded read and search primitives:
-
-1. **Bounded code-point slice reads (`patchdiff_read_target`):** Reads `length` Unicode code points starting at 0-based code-point offset `start` (default `4,000`, maximum `8,000` code points), returning `content`, `version`, `current_hash`, `truncated`, and `next_start`.
-2. **Bounded inclusive line reads (`patchdiff_read_lines`):** Reads 1-based inclusive line ranges (`start_line`..`end_line`) up to `8,000` Unicode code points (`max_chars`) with optional `line_offset`, returning line-numbered slices along with range-relative `next_offset` and absolute `next_start` cursors when truncated.
-3. **Exact occurrence search (`patchdiff_find_occurrences`):** Enumerates all exact occurrences of a query string (including overlapping matches under runtime `patchdiff-mvp-0.2.2+`), returning 1-based `occurrence_index`, 0-based `[start, end)` code-point offsets, 1-based `line` and `column`, and bounded `context_before` / `context_after` snippets (default `40`, maximum `400` code points; up to `200` results per page with `next_occurrence_index`).
-
-Because every read and search response returns the committed `version` and `current_hash` observed from PostgreSQL, the host can immediately bind its subsequent edit proposal to the exact target state it inspected.
+- **Input caching does not bound output decoding:** Even if a 64 KB document is cached in the model's KV cache, asking the model to emit the updated document still decodes 64 KB of output tokens.
+- **Prompt state is not authoritative storage:** A model's context window is a lossy, truncated projection of workspace state. If an agent reads lines 1–100 in turn 1 and proposes an edit in turn 4, only an external authoritative store can verify whether the target document is still at the version the agent observed.
+- **Multi-turn editing requires explicit compaction boundaries:** Over dozens of edits, accumulating raw patch attempts and error traces in the conversation history bloats the prompt window unless the storage layer supports explicit checkpoints (`SAVE`) and bounded metadata queries.
 
 ---
 
-## 4. Why Unified Diff and Host-Delegated Patch Tools Are Insufficient Alone
+## 4. Comparative Analysis of Agent Editing Paradigms
 
-Unified diff (Myers, 1986) is a foundational representation for human code review and version control, and modern agent platforms expose structured patch tools such as OpenAI's `apply_patch` (OpenAI, 2025). However, using a diff syntax alone as an LLM editing protocol leaves three distinct gaps:
+Existing agent harnesses typically rely on one of five editing paradigms. While a host application can always build custom locking, rollback, retry deduplication, and audit tables around any patch syntax, those guarantees are external to the edit primitive itself. PatchDIFF integrates them into the transaction protocol and persistence service:
 
-1. **Hunk syntax and line-count fragility:** Classical unified diffs require the model to emit `---`/`+++` headers, `@@ -l,s +l,s @@` line counts, and prefix characters (` `, `-`, `+`) for every line in a hunk. When a model miscounts lines or omits a context line, standard `patch` parsers reject the hunk—or, if configured with line-offset/fuzz tolerances, may apply the hunk at an unintended location.
-2. **Text-delimiter collision in custom envelopes:** Line-oriented patch envelopes (including V4A-style diff wrappers and PatchDIFF's own legacy `.pdcp` v0.2.3 format) reserve marker lines such as `<<<<<<< MATCH`, `=======`, or `*** End Patch`. When the target document itself discusses merge conflicts, Markdown dividers (`=======`), or patch examples, raw text delimiters collide with payload content unless represented inside a structured string encoding such as JSON.
-3. **Format vs. transaction authority:** OpenAI's `apply_patch` specification defines a structured tool call (`create_file`, `update_file`, `delete_file`) and explicitly delegates patch application, path validation, and atomicity semantics to the caller's host harness (OpenAI, 2025). Thus, while `apply_patch` can express multi-file operations when backed by a capable host, the format itself does not provide an authoritative state database, required version/hash preconditions, durable rejected-attempt logs, or request-key idempotence. PatchDIFF provides those transactional guarantees directly inside the server per target.
+| Capability / Guarantee | Full-File Rewrite | Unique Substring (`str_replace`) | Unified Diff (`apply_patch`) | Line-Range Splice | AST / RFC 6902 JSON Patch | **PatchDIFF (`patchdiff-tx/1..3`)** |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Output payload scaling** | $O(\text{file size})$ | $O(\text{edit} + \text{uniqueness padding})$ | $O(\text{edit} + \text{context lines})$ | $O(\text{edit})$ | $O(\text{edit})$ | **$O(\text{edit})$** (`tx/1`, `tx/2`); explicit $O(\text{file})$ only on `tx/3` |
+| **Works across prose, code, configs & logs** | Yes | Yes | Yes | Yes | Only with grammar/JSON parser | **Yes (UTF-8 format-agnostic)** |
+| **Stale-state / concurrent-write guard** | Host-dependent | Host-dependent | Via context lines (implicit) | None (corrupts on line shift) | Via `test` op (RFC 6902) | **Required (`expected_target_version` and/or `expected_current_hash`)** |
+| **Repeated-string disambiguation** | N/A | Expand `old_str` context until unique | Line numbers + context | Line numbers (fragile) | Structural path | **`occurrence_index`, `anchor_before`/`after` (`tx/1`), or guarded `[start, end)` span (`tx/2`)** |
+| **Zero-length insertion at exact offset** | Re-emit full text | Must match & re-emit adjacent text | Context hunk | Line insertion (fragile) | Path insertion | **`tx/2` empty span (`start == end`, `expected_text: ""`) + optional adjacency guards** |
+| **Multi-edit all-or-nothing atomicity** | Single write | Host-dependent (often per-call) | Implementation-dependent | Host-dependent | Atomic per patch document | **Server-enforced per target (`SELECT ... FOR UPDATE` + in-memory simulation)** |
+| **Idempotent retry on lost transport response** | Overwrites | Fails if edit already applied | Fails if hunk already applied | Corrupts / duplicates | Fails if `test` no longer holds | **Built-in (`client_request_id` returns recorded outcome with `deduplicated: true`)** |
+| **Structured recovery on mismatch** | None | Error string (`0` or `>1` matches) | Patch reject message | None | Path/test error | **Bounded `failure_context`, `exact_candidates` (up to 5), and post-commit `near_misses` (up to 3)** |
+| **Durable attempt & accepted-fact ledger** | Host-dependent | Host-dependent | Host-dependent | Host-dependent | Host-dependent | **PostgreSQL `append_only_pdcp_logs` (accepted + rejected) & `append_only_manifest_ledger`** |
+
+### 4.1 Where Unified Diffs (`apply_patch`) Break Down for LLMs
+
+Unified diffs (`@@ -l,s +l,s @@`) were designed for deterministic diff generators (`diff -u`, `git diff`), not autoregressive language models:
+1. **Hunk header arithmetic:** LLMs frequently miscount line numbers or hunk lengths (`-l,s +l,s`), causing strict `patch` parsers to reject otherwise valid edits.
+2. **Delimiter and prefix collisions:** In line-oriented diff envelopes (including V4A-style diff wrappers and conflict-marker blocks), every line inside a hunk must be prefixed with `' '`, `'+'`, or `'-'`, and target text containing standalone marker lines (`=======`, `<<<<<<<`, `>>>>>>>`, or `@@`) can collide with the patch envelope grammar.
+3. **Fuzzy offset application risks:** To mask model line-number errors, many diff appliers enable fuzz factors or line-offset search, which can silently apply a hunk to the wrong repeated block in a file.
+
+### 4.2 Where Naive `str_replace` Breaks Down
+
+Anthropic-style `str_replace(old_str, new_str)` avoids line-number arithmetic by requiring `old_str` to appear exactly once in the target file. However, this creates three operational bottlenecks:
+1. **Context padding on repeated text:** When the target line occurs multiple times (for example, `"enabled: true"` in a multi-service YAML file or a repeated closing block in source code), the model must copy 10–30 surrounding lines into **both** `old_str` and `new_str` purely to force uniqueness—inflating output tokens by 5×–20× and increasing the surface area for a single-character whitespace typo.
+2. **Lack of explicit cursor insertion:** Because `old_str` must be non-empty and unique, inserting new content at a specific boundary requires duplicating an existing anchor block into `old_str` and `new_str`.
+3. **Multi-call partial state on batch edits:** When an agent issues five separate `str_replace` tool calls and the fourth call fails, the first three mutations remain applied on disk unless the host builds an external transaction wrapper.
+
+### 4.3 How PatchDIFF Resolves Both Failure Modes
+
+PatchDIFF combines three complementary transaction primitives under a single guarded execution model:
+- **`patchdiff-tx/1` (`patchdiff_submit_edits`)** handles standard exact-match edits without line numbers. When a target string repeats, the agent does **not** need to pad `match` with 20 lines of surrounding text; it can specify `"occurrence_index": 2` or short `"anchor_before"` / `"anchor_after"` strings.
+- **`patchdiff-tx/2` (`patchdiff_submit_operations`)** adds `[start, end)` Unicode code-point span replacements and zero-length insertions (`start == end`, `expected_text: ""`). Unlike unguarded line/offset splices, every `tx/2` span requires `expected_text` to match `T[start:end]` exactly and supports optional `expected_before` and `expected_after` adjacency checks.
+- **`patchdiff-tx/3` (`patchdiff_submit_replacement`)** provides an explicit, bounded whole-document replacement path when a complete rewrite is genuinely intended, still guarded by `expected_target_version` and/or `expected_current_hash`.
 
 ---
 
-## 5. Unique-Match `str_replace` and Unguarded Line-Range Editing
+## 5. Design Principles
 
-Two other local editing paradigms are widely used in agentic coding:
+PatchDIFF is governed by eight architectural invariants:
 
-### 5.1 Unique-Match `str_replace` Interfaces
-
-Anthropic's documented text-editor tool (`str_replace_based_edit_tool` / `text_editor_20250728`; Anthropic, 2025) replaces an exact `old_str` with `new_str` and rejects the call when `old_str` appears zero times or more than once. Requiring a unique exact match is a sound safety choice—it avoids the silent corruption of naive first-match `string.replace()` implementations.
-
-However, a unique-match-only interface introduces three structural limitations that PatchDIFF directly addresses:
-
-1. **Context padding on repeated text:** When the line to be edited occurs multiple times in a file (e.g., `"retry: false"`, `"version = \"0.1.0\""`, or a repeated closing block), the model cannot submit the short target line as `old_str`. It must copy 10–30 surrounding lines into both `old_str` and `new_str` solely to construct a globally unique string. In PatchDIFF, the model keeps `match` minimal and disambiguates via `occurrence_index: 2`, `anchor_before` / `anchor_after` (`patchdiff-tx/1`), or an explicit `[start, end)` span (`patchdiff-tx/2`).
-2. **Single-replacement tool calls vs. atomic multi-edit batches:** A single-replacement `str_replace` call applies one edit per invocation. Making five related edits to a document requires five separate tool invocations, and if the fourth call fails, the first three edits remain applied unless the host implements an external rollback wrapper. PatchDIFF's `patchdiff_submit_edits` and `patchdiff_submit_operations` accept an ordered array of edits in a single call, simulate them sequentially in memory, and commit all five or none under a single PostgreSQL row lock.
-3. **Unindexed ambiguity errors:** When `str_replace` rejects an ambiguous `old_str`, the agent typically receives an error message stating that multiple matches were found and must issue a separate view/search tool call to locate the occurrences. PatchDIFF's rejection response includes `diagnostic.exact_candidates` with the total `occurrence_count` and up to 5 indexed occurrences (`occurrence_index`, `start`, `end`, `before`, `match_preview`, `after`) so the host can disambiguate immediately.
-
-### 5.2 Unguarded Line-Range and Coordinate Splicing
-
-Line-number editing (`replace lines 40–45 with ...`) is compact, but raw coordinates are fragile across multi-edit turns: inserting three lines at line 20 shifts every subsequent line number by $+3$. If an agent submits a second edit using line numbers remembered from an earlier read, it splices into the wrong location without warning.
-
-PatchDIFF's `patchdiff-tx/2` (`patchdiff_submit_operations`) supports coordinate-based editing (`op: "span"`) while eliminating silent coordinate drift through three mechanisms:
-- **Mandatory target state guard:** Every `tx/2` transaction requires `expected_target_version` and/or `expected_current_hash`.
-- **Mandatory `expected_text` precondition:** Every `[start, end)` code-point span must declare `expected_text`, which must match `buffer[start:end]` character-for-character (`FailureReason.SPAN_EXPECTED_TEXT_MISMATCH` otherwise).
-- **Optional `expected_before` and `expected_after` adjacency guards (profile `patchdiff-mvp-0.5.0`):** Particularly for zero-length insertions (`start == end`, `expected_text: ""`), the transaction can assert the exact text immediately preceding `start` and following `end` (`FailureReason.SPAN_CONTEXT_MISMATCH` on mismatch).
+1. **Authoritative Relational State:** Canonical document text, version counters, and SHA-256 content hashes live in PostgreSQL (`cloud_target_files`), never in prompt memory or unversioned scratch files.
+2. **Declarative, Non-Executable Transactions:** Transaction payloads (`patchdiff-tx/1`, `tx/2`, `tx/3`) are pure data structures. The runtime never evaluates model-submitted code, regular expressions, or template scripts.
+3. **Mandatory Optimistic Preconditions:** Every write submission must supply `expected_target_version` and/or `expected_current_hash`, checked under a per-target `SELECT ... FOR UPDATE` row lock.
+4. **Exact Deterministic Matching & Sequential Simulation:** All operations in a transaction are simulated sequentially in memory against LF-normalized canonical text. No fuzzy matching, heuristic offset guessing, or partial commit is permitted.
+5. **Separated Asserted Intent and Runtime-Derived Facts:** The model asserts high-level `intent` (and optional per-edit `rationale` and `risk`), while the runtime independently computes and records exact `span_start`, `span_end`, character counts, and SHA-256 digests (`derived_json`).
+6. **Complete Append-Only Auditability:** Both accepted and rejected attempts are durably logged in `append_only_pdcp_logs` with retry lineage (`parent_pdcp_log_id`) and idempotent request keys (`client_request_id`). Accepted edits also append to `append_only_manifest_ledger`.
+7. **Stage-Aware Validity & Bounded Diagnostics:** Every submission returns explicit stage validity (`protocol_valid`, `transaction_valid`, `task_correct: "not_evaluated"`, `semantic: "not_evaluated"`) and strictly bounded recovery context on rejection.
+8. **Profile-Dispatched Deterministic Replay:** Re-applying the ordered sequence of accepted transactions from the initial upload snapshot under each log entry's recorded `(protocol_version, runtime_version)` profile deterministically reconstructs the exact canonical content, SHA-256 hash, and version number.
 
 ---
 
-## 6. System Model & Five-Layer Runtime Architecture
+## 6. System Architecture and Runtime Boundary
 
-PatchDIFF is structured as a five-layer server architecture with strict separation of concerns:
+PatchDIFF enforces a strict separation between the **MCP host/agent** (which plans edits, selects context slices, calls the model, and decides when to retry) and the **PatchDIFF transaction server** (which owns authoritative reads, validation, atomic commits, history, and replay):
 
 ```text
-+-----------------------------------------------------------------------+
-| Host / Agent Loop (External to PatchDIFF)                             |
-|   Planning, context selection, proposal generation, retry decisions,  |
-|   and semantic/task evaluation.                                       |
-+-----------------------------------+-----------------------------------+
-                                    | MCP (stdio JSON-RPC / registry)
-                                    v
-+-----------------------------------------------------------------------+
-| Layer 1: MCP Transport & Tool Surface (backend/app/mcp/)              |
-|   Stdio JSON-RPC adapter, full JSON Schema discovery (20 tools),      |
-|   bounded response projection, and SQL LATERAL metadata paging.       |
-+-----------------------------------+-----------------------------------+
-                                    |
-+-----------------------------------+-----------------------------------+
-| Layer 2: Transaction & Read Service Layer (backend/app/services/)     |
-|   Request-key idempotency (client_request_id), SELECT ... FOR UPDATE  |
-|   row locking, precondition guards, tx/3 admission caps, post-commit  |
-|   near-miss scanning, SAVE cycle rotation, and replay orchestration.  |
-+-----------------------------------+-----------------------------------+
-                                    |
-+-----------------------------------+-----------------------------------+
-| Layer 3: Declarative Parsers & Validators (backend/app/pdcp/)         |
-|   Typed JSON decoders (patchdiff-tx/1, tx/2, tx/3) and frozen legacy  |
-|   PDCP v0.2.3 parser/validator lowering into shared ParsedPDCP.       |
-+-----------------------------------+-----------------------------------+
-                                    |
-+-----------------------------------+-----------------------------------+
-| Layer 4: Pure Deterministic Core Applier (backend/app/core/, pdcp/)   |
-|   Canonicalization, exact overlapping match enumeration, selector     |
-|   disambiguation, sequential in-memory simulation, change_facts       |
-|   computation, advisory warnings, and ValidationStage classification. |
-+-----------------------------------+-----------------------------------+
-                                    |
-+-----------------------------------+-----------------------------------+
-| Layer 5: PostgreSQL Persistence Substrate (backend/app/storage/)      |
-|   cloud_target_files, append_only_pdcp_logs,                          |
-|   append_only_manifest_ledger, target_snapshots, editing_cycles.      |
-+-----------------------------------------------------------------------+
++-------------------------------------------------------------------------+
+|                        MCP Host / Coding Agent                          |
+|  - Planning, prompt construction, model invocation, retry decisions     |
+|  - Semantic & task-level verification (tests, linters, human review)    |
++------------------------------------+------------------------------------+
+                                     |
+                                     | Model Context Protocol (MCP)
+                                     | (stdio JSON-RPC / internal registry)
+                                     v
++-------------------------------------------------------------------------+
+|                      PatchDIFF Transaction Server                       |
+|                                                                         |
+|  +-------------------------------------------------------------------+  |
+|  | Layer 1: MCP Transport & Tool Interface                           |  |
+|  |   Advertises JSON schemas & examples; enforces response byte caps |  |
+|  +---------------------------------+---------------------------------+  |
+|                                    v                                    |
+|  +-------------------------------------------------------------------+  |
+|  | Layer 2: Transaction & Read Service Layer                         |  |
+|  |   Acquires SELECT ... FOR UPDATE; checks client_request_id        |  |
+|  |   idempotency, version/hash guards, and tx/3 admission caps;      |  |
+|  |   computes post-commit Levenshtein near_misses on rejection.      |  |
+|  +---------------------------------+---------------------------------+  |
+|                                    v                                    |
+|  +-------------------------------------------------------------------+  |
+|  | Layer 3: Declarative Transaction Decoders & Validators            |  |
+|  |   Typed JSON decoders (patchdiff-tx/1, tx/2, tx/3) lowering       |  |
+|  |   into the shared internal transaction representation.            |  |
+|  +---------------------------------+---------------------------------+  |
+|                                    v                                    |
+|  +-------------------------------------------------------------------+  |
+|  | Layer 4: Pure Deterministic Core Applier                          |  |
+|  |   LF canonicalization, exact match enumeration, disambiguation,   |  |
+|  |   span verification, sequential simulation, change_facts, replay. |  |
+|  +---------------------------------+---------------------------------+  |
+|                                    v                                    |
+|  +-------------------------------------------------------------------+  |
+|  | Layer 5: Relational Persistence Substrate (PostgreSQL)            |  |
+|  |   cloud_target_files, append_only_pdcp_logs,                      |  |
+|  |   append_only_manifest_ledger, target_snapshots, editing_cycles   |  |
+|  +-------------------------------------------------------------------+  |
++-------------------------------------------------------------------------+
 ```
 
-The core runtime (Layers 3 and 4) is pure and deterministic: it never calls an LLM, holds no model credentials, performs no network or database I/O, and never silently repairs a malformed or non-matching transaction.
+The core runtime (Layers 3 and 4) is a pure function of `(target_text, target_version, target_hash, transaction_payload, runtime_profile)`. It never calls an LLM, never performs network or database I/O, and never mutates state outside memory.
 
 ---
 
-## 7. Why Unified Validation, Audit, Idempotence, and Replay Belong in One Substrate
+## 7. Why Validation, Audit Logging, Idempotency, and Replay Share One Transactional Substrate
 
-A natural architectural question is whether PatchDIFF's capabilities could be assembled loosely by a host using local files, an in-memory `str_replace` function, and git commits. Integrating validation, audit logging, idempotence, and replay inside a single PostgreSQL transaction boundary solves four coupled failure modes that loose host wrappers struggle to prevent:
+A natural architectural question is whether PatchDIFF's capabilities could be decomposed into separate, loosely coupled utilities—for example, a stateless local patch validator paired with a filesystem workspace and an external logging sink. PatchDIFF combines validation, state mutation, append-only attempt logging, request idempotence, and replay inside a single PostgreSQL transactional boundary because separating them introduces four classic distributed-state hazards:
 
-1. **Check-then-act race conditions:** When concurrency checks (`stat()` / hash comparison) and file writes occur in separate host steps without a database row lock, two concurrent agent workers can both observe version $v$, pass their respective precondition checks, and overwrite each other. Acquiring `SELECT ... FOR UPDATE` on `cloud_target_files` before checking `expected_target_version` / `expected_current_hash` and holding that lock through target mutation and log insertion guarantees serializability per target.
-2. **Auditability of rejected proposals:** Version-control systems record accepted commits, while rejected tool calls typically vanish into ephemeral chat logs. In agentic workflows, rejected edit attempts are high-signal operational data: they reveal whether failures stem from stale context (`target_version_mismatch`), ambiguous spans (`match_ambiguous`), or sequential self-conflict (`sequential_match_invalid`). Persisting rejected attempts in `append_only_pdcp_logs` with `parent_pdcp_log_id` lineage preserves the full retry tree.
-3. **Crash-safe retry idempotence:** If an MCP transport connection drops after the server commits an edit from $v=3 \to v=4$—or if a later transaction subsequently advances the target to $v=5$ or reverts it back to the hash of $v=3$ (an ABA transition)—a naive host retry will either fail with `version_mismatch` or apply the edit a second time. Storing `(target_file_id, client_request_id, request_fingerprint)` atomically in the same PostgreSQL transaction as the attempt log allows the server to return the exact recorded terminal outcome (`deduplicated: true`) on retry, or reject payload reuse with `client_request_id_conflict`.
-4. **Long-term replay across runtime evolution:** As an editing protocol evolves (for example, fixing non-overlapping match enumeration in `0.2.0`, enforcing singleton selectors in `0.2.2`, adding span operations in `0.3.0`, whole-target replacement in `0.4.0`, and span adjacency guards in `0.5.0`), re-running historical logs through the latest runtime rules could alter historical outcomes. Recording both `protocol_version` and `runtime_version` on every log row and dispatching replay through immutable `RuntimeProfile` definitions ensures that historical transactions replay under the exact semantics that accepted them.
-
----
-
-## 8. The PatchDIFF Transaction Protocol Family (`patchdiff-tx/1`, `tx/2`, `tx/3`, and Legacy `.pdcp` v0.2.3)
-
-PatchDIFF supports three active declarative JSON transaction formats and one frozen legacy text format. All four lower into the same internal `ParsedPDCP` structure and execute through the same deterministic applier (`apply_pdcp_transaction`):
-
-| Format | MCP Tool | Default Runtime Profile | Operations Supported | Required Preconditions |
-| --- | --- | --- | --- | --- |
-| **`patchdiff-tx/1`** (Primary) | `patchdiff_submit_edits` | `patchdiff-mvp-0.2.2` | Ordered `edits[]` with exact `match` and `replace`, optional `occurrence_index`, `anchor_before`, `anchor_after` | `expected_target_version` and/or `expected_current_hash` |
-| **`patchdiff-tx/2`** (Guarded Operations) | `patchdiff_submit_operations` | `patchdiff-mvp-0.3.0` (`0.5.0` when `expected_before`/`after` used) | Ordered `operations[]` mixing `op: "match"` and `op: "span"` (`start`, `end`, `expected_text`, `replace`, optional `expected_before`, `expected_after`) | `expected_target_version` and/or `expected_current_hash` |
-| **`patchdiff-tx/3`** (Whole Replacement) | `patchdiff_submit_replacement` | `patchdiff-mvp-0.4.0` | Single `{"op": "replace_all", "replace": "..."}` (`<= 1,000,000` code points and `<= 1,048,576` UTF-8 bytes) | `expected_target_version` and/or `expected_current_hash` |
-| **`.pdcp` v0.2.3** (Frozen Legacy) | `patchdiff_submit_pdcp` | `patchdiff-mvp-0.2.2` (historical `0.1.0`..`0.2.1` on replay) | Raw text blocks with 7 `# MANIFEST` fields and `<<<<<<< MATCH` / `=======` / `>>>>>>> REPLACE` delimiters | Optional `target_hash` / `expected_target_version` |
-
-*(Full legacy `.pdcp` v0.2.3 grammar and deprecated regeneration wrappers are specified in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).)*
-
-### 8.1 Separation of Model-Claimed Intent (`origin`) and Runtime-Derived Facts (`derived_json`)
-
-In the historical v0.2.3 `.pdcp` format, every change block required seven prose `# MANIFEST` lines (`change_id`, `intent`, `input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`). This imposed significant output overhead on multi-edit transactions and conflated model assertions with operational facts.
-
-In the modernized `patchdiff-tx/1..3` architecture:
-- Only a top-level transaction `intent` string is required from the proposer; per-edit `change_id`, `rationale`, and `risk` (`"low"`, `"medium"`, `"high"`) are optional.
-- When a transaction is accepted, the runtime computes exact **`change_facts`** (`span_start`, `span_end`, `matched_chars`, `replacement_chars`, `match_sha256`, `replace_sha256`, and selector metadata) and stores them in `append_only_manifest_ledger.derived_json`, strictly separated from the proposer's `origin` metadata.
+1. **Check-then-act races between validation and commit:** If a patch is validated against a file snapshot outside a database row lock, another agent or background process can modify the file before the write completes. Acquiring `SELECT ... FOR UPDATE` on `cloud_target_files` before checking `expected_target_version` and `expected_current_hash` guarantees serializability per target.
+2. **Lost rejection history on ephemeral tool errors:** When a stateless patch tool fails, the rejected payload and exact failure state vanish into transient chat logs. By persisting rejected attempts in `append_only_pdcp_logs` with `parent_pdcp_log_id` lineage, PatchDIFF preserves a complete, queryable record of *why* an edit failed and *how* the agent recovered.
+3. **Non-idempotent retries and the ABA problem:** If a stdio or HTTP transport connection drops after the server commits an edit but before the agent receives the response, a naive retry either fails with a version mismatch (leaving the agent unsure whether its edit or another writer's edit won) or—under a hash-only guard after an $A \rightarrow B \rightarrow A$ cycle—re-applies the transaction a second time. Persisting `(target_file_id, client_request_id)` alongside the terminal response payload inside the same database commit allows the server to return the exact recorded outcome (`deduplicated: true`) on retry.
+4. **Long-term replay across runtime evolution:** As an editing protocol evolves (for example, adding guarded code-point span operations or span adjacency predicates), historical audit logs cannot be re-verified unless every committed transaction records both its `protocol_version` and its immutable `runtime_version` profile alongside the initial snapshot in the same durable store.
 
 ---
 
-## 9. Validity Levels (`ValidationStage`)
+## 8. The PatchDIFF Transaction Protocol Family (`patchdiff-tx/1`, `tx/2`, and `tx/3`)
 
-PatchDIFF separates four levels of validity and reports them explicitly in every submission and preview response:
+PatchDIFF provides three declarative JSON transaction formats that lower into a single internal representation and execute through the same deterministic applier:
 
-| Validity Field | Meaning | Enforced by PatchDIFF? |
-| --- | --- | --- |
-| `protocol_valid` | The transaction payload satisfies structural schema, type, UTF-8 text safety, and protocol grammar rules (`ValidationStage.PROTOCOL_PARSE` and `PROTOCOL_VALIDATION`) | **Yes (`true` / `false`)** |
-| `transaction_valid` | State guards (`expected_target_version`, `expected_current_hash`) hold and all sequential operations resolve and apply cleanly (`PRECONDITION_GUARD`, `TRANSACTION_APPLICABILITY`, `COMMIT_GUARD`) | **Yes (`true` / `false`, or `null` when `protocol_valid` is `false`)** |
-| `task_correct` | The accepted edit satisfies the user's high-level instruction | **No (`"not_evaluated"`)** |
-| `semantic` | The resulting document compiles, passes tests, or preserves domain invariants | **No (`"not_evaluated"`)** |
+| Protocol Version | MCP Submission Tool | Execution Profile | Primary Use Case & Operation Types |
+| :--- | :--- | :--- | :--- |
+| **`patchdiff-tx/1`** (Primary) | `patchdiff_submit_edits` | Exact-match profile | Ordered `edits[]` with exact `match` and `replace` strings, plus optional `occurrence_index`, `anchor_before`, and `anchor_after` disambiguators. Ideal for 90%+ of localized code and prose edits. |
+| **`patchdiff-tx/2`** (Guarded Operations) | `patchdiff_submit_operations` | Match + span profile (with optional adjacency guard profile) | Ordered `operations[]` mixing `{"op": "match", ...}` and `{"op": "span", "start": s, "end": e, "expected_text": ..., "replace": ...}` (including zero-length insertion when `start == end` and `expected_text == ""`, plus optional `expected_before` / `expected_after` adjacency checks). |
+| **`patchdiff-tx/3`** (Whole Replacement) | `patchdiff_submit_replacement` | Whole-target replacement profile | Single `{"op": "replace_all", "content": ...}` operation under mandatory version/hash guards and fresh admission caps (`1,000,000` code points and `1,048,576` UTF-8 bytes). |
 
-This four-part distinction prevents overclaiming: **strict matching and precondition guards enforce transaction applicability and selection constraints, not semantic correctness or task success.**
-
----
-
-## 10. Generalized Formal Transaction Model
-
-Let $\Sigma$ be the set of valid Unicode scalar values (excluding UTF-16 surrogates $\text{U+D800}..\text{U+DFFF}$ and NUL $\text{U+0000}$), and let $\text{canon}: \Sigma^* \to \Sigma^*$ be the canonicalization function that normalizes $\text{CRLF}$ and $\text{CR}$ line endings to $\text{LF}$ (`\n`). Let $H: \Sigma^* \to \{0, \dots, 9, \text{a}, \dots, \text{f}\}^{64}$ denote the lowercase hexadecimal SHA-256 digest of the UTF-8 encoding of a canonical string.
-
-At transaction start, the committed target row in PostgreSQL holds canonical text $T_0 \in \Sigma^*$, integer version $v_0 \in \mathbb{N}$, and digest $h_0 = H(T_0)$.
-
-A transaction $\tau = (p, \pi, g, I, \langle o_1, \dots, o_n \rangle)$ consists of:
-- Protocol version $p \in \{\text{"patchdiff-tx/1"}, \text{"patchdiff-tx/2"}, \text{"patchdiff-tx/3"}, \text{"0.2.3"}\}$,
-- Immutable runtime profile $\pi \in \{\text{0.1.0}, \text{0.2.0}, \text{0.2.1}, \text{0.2.2}, \text{0.3.0}, \text{0.4.0}, \text{0.5.0}\}$,
-- Precondition guard $g = (v_{\text{exp}}, h_{\text{exp}})$ where $v_{\text{exp}} \in \mathbb{N} \cup \{\bot\}$ and $h_{\text{exp}} \in \Sigma^{64} \cup \{\bot\}$,
-- Transaction intent $I \in \Sigma^+$, and
-- A non-empty ordered sequence of operations $\langle o_1, \dots, o_n \rangle$ ($n \ge 1$; for $p = \text{"patchdiff-tx/3"}$, $n = 1$).
-
-### 10.1 Precondition Guard Evaluation
-
-For all typed formats ($p \in \{\text{"patchdiff-tx/1"}, \text{"patchdiff-tx/2"}, \text{"patchdiff-tx/3"}\}$), at least one guard component must be non-null ($v_{\text{exp}} \neq \bot \lor h_{\text{exp}} \neq \bot$). Under a row lock on the target, guard evaluation $\text{Guard}(g, v_0, h_0)$ succeeds iff:
-
-$$\bigl(v_{\text{exp}} = \bot \lor v_{\text{exp}} = v_0\bigr) \;\land\; \bigl(h_{\text{exp}} = \bot \lor h_{\text{exp}} = h_0\bigr)$$
-
-If $\text{Guard}(g, v_0, h_0)$ fails, evaluation halts at `ValidationStage.PRECONDITION_GUARD` (`target_version_mismatch` or `target_hash_mismatch`) and the target remains $(T_0, v_0, h_0)$.
-
-### 10.2 Sequential Operation Semantics ($T_0 \to T_1 \to \dots \to T_n$)
-
-When the precondition guard holds, the applier evaluates $o_1, \dots, o_n$ sequentially over in-memory canonical buffers $T_0, T_1, \dots, T_n$. For step $i \in \{1, \dots, n\}$ against current buffer $T_{i-1}$:
-
-1. **Localized Exact-Match Operation (`tx/1` and `tx/2` `op="match"`, plus `.pdcp` v0.2.3):**
-   $o_i = (\text{match}, m_i, r_i, d_i)$ where $m_i = \text{canon}(m_i^{\text{raw}}) \in \Sigma^+$ ($|m_i| \ge 1$) and $r_i = \text{canon}(r_i^{\text{raw}}) \in \Sigma^*$.
-   Let $\text{Occ}_\pi(T_{i-1}, m_i)$ be the ordered sequence of exact code-point spans $[s, e)$ in $T_{i-1}$ such that $T_{i-1}[s:e] = m_i$ (enumerated at every starting code point when $\pi.\text{overlapping\_matches} = \text{true}$, or non-overlapping left-to-right when $\pi = \text{0.1.0}$).
-   - If $|\text{Occ}_\pi(T_{i-1}, m_i)| = 0$, $o_i$ fails with `match_absent` (or `sequential_match_invalid` if $i > 1$ and $|\text{Occ}_\pi(T_0, m_i)| > 0$).
-   - Otherwise, selector resolution $\text{Resolve}_\pi(\text{Occ}_\pi(T_{i-1}, m_i), d_i)$ filters or indexes $\text{Occ}_\pi(T_{i-1}, m_i)$ using $d_i = (\text{occ\_idx}, a_{\text{before}}, a_{\text{after}})$. Under $\pi.\text{enforce\_singleton\_selectors} = \text{true}$ (`0.2.2+`), supplied anchors and `occurrence_index` are validated even when $|\text{Occ}_\pi(T_{i-1}, m_i)| = 1$.
-   - If resolution yields a unique span $[s_i, e_i)$, the next buffer state is:
-     $$T_i = T_{i-1}[0:s_i] \mathbin{\Vert} r_i \mathbin{\Vert} T_{i-1}[e_i:|T_{i-1}|]$$
-
-2. **Localized Guarded Code-Point Span Operation (`tx/2` `op="span"`, profiles `0.3.0` and `0.5.0`):**
-   $o_i = (\text{span}, s_i, e_i, x_i, b_i, f_i, r_i)$ with integer code-point offsets $s_i, e_i \in \mathbb{Z}$, expected slice $x_i = \text{canon}(x_i^{\text{raw}}) \in \Sigma^*$, optional adjacency guards $b_i, f_i \in \Sigma^* \cup \{\bot\}$ (requiring $\pi = \text{0.5.0}$ when non-null), and replacement $r_i = \text{canon}(r_i^{\text{raw}}) \in \Sigma^*$.
-   - **Bounds precondition:** $0 \le s_i \le e_i \le |T_{i-1}|$ (failing with `span_out_of_bounds` otherwise). Note that $s_i = e_i$ with $x_i = \varepsilon$ represents an explicit zero-length insertion at code-point offset $s_i$.
-   - **Expected-text precondition:** $T_{i-1}[s_i:e_i] = x_i$ (failing with `span_expected_text_mismatch` otherwise).
-   - **Adjacency preconditions ($\pi = \text{0.5.0}$):** If $b_i \neq \bot$, then $s_i \ge |b_i|$ and $T_{i-1}[s_i - |b_i| : s_i] = b_i$; if $f_i \neq \bot$, then $e_i + |f_i| \le |T_{i-1}|$ and $T_{i-1}[e_i : e_i + |f_i|] = f_i$ (failing with `span_context_mismatch` otherwise).
-   - When all preconditions hold, the selected span is $[s_i, e_i)$ and:
-     $$T_i = T_{i-1}[0:s_i] \mathbin{\Vert} r_i \mathbin{\Vert} T_{i-1}[e_i:|T_{i-1}|]$$
-
-3. **Guarded Whole-Target Replacement Operation (`tx/3` `op="replace_all"`, profile `0.4.0`):**
-   A `tx/3` transaction contains exactly one operation ($n = 1$), $o_1 = (\text{replace\_all}, r_1)$ where $r_1 = \text{canon}(r_1^{\text{raw}})$. Fresh service submissions enforce admission caps $|r_1^{\text{raw}}|_{\text{cp}} \le 10^6$, $|r_1|_{\text{cp}} \le 10^6$, $|r_1^{\text{raw}}|_{\text{utf8}} \le 1{,}048{,}576$, and $|r_1|_{\text{utf8}} \le 1{,}048{,}576$ (`replacement_too_large`). The operation selects the full target span $[s_1, e_1) = [0, |T_0|)$ and produces:
-   $$T_1 = r_1$$
-
-### 10.3 Core Formal Invariants
-
-#### Invariant 1: Localized Unmatched-Content Preservation (`tx/1`, `tx/2`, `.pdcp`)
-For every individual localized operation $o_i \in \{\text{match}, \text{span}\}$ that selects span $[s_i, e_i)$ in $T_{i-1}$, the prefix $T_{i-1}[0:s_i]$ and suffix $T_{i-1}[e_i:|T_{i-1}|]$ are preserved code-point-for-code-point in $T_i = T_{i-1}[0:s_i] \mathbin{\Vert} r_i \mathbin{\Vert} T_{i-1}[e_i:|T_{i-1}|]$. Consequently, across any accepted localized transaction (`patchdiff-tx/1`, `patchdiff-tx/2`, or `.pdcp` v0.2.3), no code point outside the union of sequentially selected spans is modified. *(Whole-target replacement `patchdiff-tx/3` is an explicitly separated tool and format whose selected span is $[0, |T_0|)$ under mandatory version/hash guards.)*
-
-#### Invariant 2: Per-Target All-or-Nothing Atomicity
-If protocol validation, precondition guard evaluation $\text{Guard}(g, v_0, h_0)$, any sequential operation $o_i$ ($1 \le i \le n$), or the commit guard fails, the committed target state in PostgreSQL remains $(T_0, v_0, h_0)$, zero entries are appended to `append_only_manifest_ledger`, and a single rejected attempt row is committed to `append_only_pdcp_logs` with `before_hash` $= h_0$ and `after_hash` $= \text{NULL}$. If all steps succeed, the target advances atomically to $(T_n, v_0 + 1, H(T_n))$.
-
-#### Invariant 3: Profile-Dispatched Replay Determinism
-Let $T_{\text{init}}$ be a target's `initial_upload` snapshot and let $\langle (\tau_1, p_1, \pi_1, h_1^{\text{after}}), \dots, (\tau_m, p_m, \pi_m, h_m^{\text{after}}) \rangle$ be the ordered sequence of accepted log records for that target. Re-executing each $\tau_k$ from $T_{\text{init}}$ using the shared applier configured with $\text{resolve\_runtime\_profile}(\pi_k)$ deterministically reconstructs $T_{\text{final}}$ and verifies four independent checks (`materialized_state_checks`): `content_matches` ($T_{\text{final}} = T_{\text{stored}}$), `stored_hash_matches` ($H(T_{\text{final}}) = h_{\text{stored}}$), `recomputed_hash_matches` ($H(T_{\text{stored}}) = h_{\text{stored}}$), and `version_matches` ($m = v_{\text{stored}}$).
+Because all three formats are native JSON objects validated by MCP tool schemas, they eliminate text-delimiter collisions entirely: target text containing `<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`, or `@@` requires no special escaping beyond standard JSON string serialization.
 
 ---
 
-## 11. Canonicalization, Unicode Code-Point Indexing, and Line-Ending Preservation
+## 9. Separating Asserted Intent from Runtime-Derived Change Facts
 
-PatchDIFF operates on canonical LF-normalized UTF-8 text:
+When an autonomous agent proposes a document modification, two fundamentally different kinds of metadata exist:
+- **Asserted metadata (what the proposer *claims* it is doing):** Why the change is being made, how risky the proposer believes it is, and what logical identifier the proposer assigns to the step.
+- **Derived metadata (what the transaction *actually* changes):** Which exact code-point interval $[s_i, e_i)$ was matched, how many characters were removed and inserted, and the cryptographic hashes of the before and after substrings.
 
-| Property | Canonical Rule |
-| --- | --- |
-| Character encoding | Valid UTF-8 scalar values (surrogates and NUL rejected before normal hashing/storage) |
-| Line endings in canonical storage | Normalize `\r\n` (CRLF) and `\r` (CR) to `\n` (LF) |
-| Tabs, spaces, trailing whitespace, final newline | Preserved byte-for-byte |
-| Unicode normalization (NFC/NFD/NFKC/NFKD) | None (exact code-point sequence identity required) |
-| Coordinate system (`start`, `end`, `length`) | 0-based Unicode code-point offsets over canonical LF text |
-| Source line-ending preservation (`migration 0003`) | Upload records `source_line_endings` (`"LF"`, `"CRLF"`, `"MIXED"`); `patchdiff_export_target(format="original_eol")` restores uniform `"CRLF"` on export without altering canonical LF storage or SHA-256 digests |
+If a protocol forces the LLM to compute character counts, byte offsets, or SHA-256 digests in its output, the model wastes output tokens on fragile arithmetic that the server cannot trust anyway. Conversely, if a protocol records only raw patch strings without intent metadata, human reviewers and downstream agents must reverse-engineer the purpose of a 50-edit session by re-reading every diff payload.
 
-When a submission for a known target contains invalid UTF-8/PostgreSQL text (such as a NUL character `\u0000` or lone surrogate), PatchDIFF does not crash with an unhandled database driver error or silently strip the invalid code point. Instead, it durably logs the rejection through the locked commit path using a reversible ASCII-escaped `patchdiff-invalid-input/1` evidence envelope (`evidence_format: "ascii_escaped_json_v1"`).
+PatchDIFF separates these two concerns cleanly:
+1. **Minimal asserted metadata on input:** Every transaction requires a single non-blank top-level `intent` string (e.g., `"Enable TLS and increase pool timeout"`). Individual edits may optionally supply `change_id` (auto-assigned as `chg_001`, `chg_002`, ... when omitted), `rationale`, and `risk` (`"low" | "medium" | "high"`).
+2. **Authoritative runtime-derived facts on commit (`derived_json`):** As the applier executes each operation $i$, it computes and persists in `append_only_manifest_ledger`:
+   - `span_start` and `span_end` (0-based code-point interval $[s_i, e_i)$ in the buffer state immediately preceding operation $i$),
+   - `matched_chars` and `replacement_chars` (exact code-point lengths),
+   - `matched_sha256` and `replacement_sha256` (lowercase hex SHA-256 digests of the UTF-8 encoded matched and replacement text),
+   - `operation` (`"match"`, `"span"`, or `"replace_all"`).
 
----
-
-## 12. Deterministic Matching and Overlapping Occurrence Enumeration
-
-For every `match` operation, the runtime searches the current in-memory buffer for all exact occurrences of the canonical match string.
-
-In historical runtime `patchdiff-mvp-0.1.0`, occurrence search used non-overlapping scan steps (`str.find(needle, pos + len(needle))`). Starting in `patchdiff-mvp-0.2.0` (and active in `0.2.2+`), `find_exact_occurrences` advances by 1 code point (`pos + 1`), enumerating **all** exact occurrences including overlapping spans (for example, `"aba"` inside `"ababa"` has two exact occurrences at $[0, 3)$ and $[2, 5)$).
-
-In `patchdiff-mvp-0.2.2+` (`enforce_singleton_selectors = True`), if a proposer supplies `occurrence_index > 1`, `anchor_before`, or `anchor_after`, the runtime enforces those selectors even when only a single occurrence of `match` exists in the buffer—preventing a stale selector intended for a multi-occurrence file from silently matching the wrong survivor after earlier deletions.
+This separation allows `patchdiff_get_manifest_ledger(include_content=False)` to return a compact, trustworthy summary of a long editing session (`~10–15 KB` for 50 entries) without loading multi-megabyte transaction payloads into the agent's context window.
 
 ---
 
-## 13. Sequential In-Memory Mutation Semantics and Intermediate-Buffer Coordinates
+## 10. Formal Transaction Model and Core Invariants
 
-Within a multi-operation transaction (`patchdiff-tx/1`, `patchdiff-tx/2`, or `.pdcp` v0.2.3), operations execute **sequentially in memory**:
+Let $\Sigma^*$ denote the set of valid, LF-normalized UTF-8 strings (sequences of Unicode scalar values containing no UTF-16 surrogates `\uD800`–`\uDFFF` and no `NUL` code point `\u0000`, with `\r\n` and `\r` normalized to `\n`). For any string $T \in \Sigma^*$, let $|T|$ denote its length in Unicode code points, let $T[a:b]$ ($0 \le a \le b \le |T|$) denote the half-open code-point slice from index $a$ to $b$, and let $H(T) = \text{SHA256}_{\text{hex}}(\text{UTF8}(T))$.
 
-- Operation 1 is evaluated against $T_0$.
-- Operation 2 is evaluated against $T_1$ (the buffer resulting from Operation 1).
-- Operation $i$ is evaluated against $T_{i-1}$ (the buffer after $i - 1$ earlier simulated changes).
+### 10.1 Target State and Transaction Structure
 
-This design supports dependent edits within a single atomic transaction, and makes descending-offset multi-span edits in `patchdiff-tx/2` straightforward. It also has two important diagnostic consequences implemented in the runtime:
+An authoritative target document at rest is a tuple:
+$$\mathcal{S} = (T_0, v_0, h_0) \quad \text{where } T_0 \in \Sigma^*,\; v_0 \in \mathbb{N}_0,\; h_0 = H(T_0).$$
 
-1. **Consumed-match detection (`sequential_match_invalid`) and basis-shift warnings (`occurrence_index_basis_shift`):** If operation $i > 1$ fails with zero matches in $T_{i-1}$, the applier checks whether $m_i$ existed in $T_0$. If so, it classifies the failure as `sequential_match_invalid`, identifies which earlier operation (`consumed_by_change_id`) overlapped or consumed the original match, and omits unrelated near-miss scanning (`omission_reason: "sequential_match_consumed"`). Similarly, if an earlier edit shifts the occurrence count of a later edit's `occurrence_index` selector, an accepted transaction records an advisory `occurrence_index_basis_shift` warning.
-2. **Intermediate-buffer coordinate reporting (`prior_changes > 0`):** When operation $i > 1$ fails, `failure_context`, `exact_candidates`, and `near_misses` report `buffer_stage: "intermediate_buffer"` and `prior_changes: i - 1`. Their `[start, end)` offsets and `occurrence_index` values refer to the **in-memory buffer $T_{i-1}$**, not the persisted canonical target $T_0$.
+A PatchDIFF transaction submission $\mathcal{X}$ evaluated under immutable execution profile $\pi$ is a tuple:
+$$\mathcal{X} = \bigl(\tau,\; \pi,\; g_v,\; g_h,\; \text{intent},\; \langle o_1, o_2, \dots, o_k \rangle\bigr)$$
+where:
+- $\tau \in \{\texttt{patchdiff-tx/1},\; \texttt{patchdiff-tx/2},\; \texttt{patchdiff-tx/3}\}$ is the protocol version,
+- $\pi$ is the immutable execution profile encoding the active capability and rule flags (`overlap_aware_matching`, `enforce_singleton_selectors`, `allow_span_operations`, `allow_replace_all_operations`, `allow_span_adjacency_guards`),
+- $(g_v, g_h) \in (\mathbb{N}_0 \cup \{\bot\}) \times (\Sigma^{64} \cup \{\bot\})$ is the state precondition guard, with the requirement that $(g_v, g_h) \neq (\bot, \bot)$,
+- $\text{intent} \in \Sigma^+$ is the non-blank transaction intent, and
+- $\langle o_1, \dots, o_k \rangle$ ($k \ge 1$) is an ordered non-empty sequence of declarative operations.
+
+### 10.2 Precondition Verification
+
+Before any operation $o_i$ is evaluated, the state guard is checked against $(T_0, v_0, h_0)$:
+$$\text{GuardOK}(\mathcal{S}, g_v, g_h) \iff (g_v = \bot \lor g_v = v_0) \;\land\; (g_h = \bot \lor g_h = h_0).$$
+If $\neg\text{GuardOK}(\mathcal{S}, g_v, g_h)$, the transaction is rejected at stage `CONTEXT` (`target_version_mismatch`, `target_hash_mismatch`, or `target_diverged` when both are supplied and both mismatch) and $\mathcal{S}$ remains unchanged.
+
+### 10.3 Sequential Operation Semantics Across All Three Operation Classes
+
+When $\text{GuardOK}(\mathcal{S}, g_v, g_h)$ holds, the applier initializes $T^{(0)} = T_0$ and evaluates $o_1, \dots, o_k$ sequentially. Each operation $o_i$ ($1 \le i \le k$) maps intermediate buffer $T_{i-1}$ to either a unique resolved span $[s_i, e_i)$ ($0 \le s_i \le e_i \le |T_{i-1}|$) with canonical replacement string $r_i \in \Sigma^*$, or to a deterministic rejection $\bot$:
+
+1. **Localized Exact-Match Operation (`tx/1` and `tx/2` `op="match"`):**
+   $$o_i = \text{Match}(m_i, r_i, \text{occ}_i, \alpha_i, \beta_i), \quad m_i \in \Sigma^+,\; r_i \in \Sigma^*$$
+   Let $\text{Occ}_\pi(T_{i-1}, m_i)$ be the ordered sequence of all exact code-point spans $[s, e)$ in $T_{i-1}$ such that $T_{i-1}[s:e] = m_i$ (enumerating every start index $s$ where $T_{i-1}[s:s+|m_i|] = m_i$, including overlapping occurrences).
+   - If $|\text{Occ}_\pi(T_{i-1}, m_i)| = 0$, $o_i$ rejects with `match_absent` (or `sequential_match_consumed` if $m_i$ occurred in $T_0$ but was consumed by an earlier operation $o_j$, $j < i$).
+   - If $|\text{Occ}_\pi(T_{i-1}, m_i)| = 1$ and the singleton-selector rule is active, supplying a non-trivial selector ($\text{occ}_i > 1$, or $\alpha_i \neq \bot$ / $\beta_i \neq \bot$ that fails to match at the unique span) rejects with `disambiguation_invalid`.
+   - Otherwise, candidate spans $[s, e) \in \text{Occ}_\pi(T_{i-1}, m_i)$ are filtered by requiring $T_{i-1}[s - |\alpha_i| : s] = \alpha_i$ (if $\alpha_i \neq \bot$) and $T_{i-1}[e : e + |\beta_i|] = \beta_i$ (if $\beta_i \neq \bot$), and selecting the $\text{occ}_i$-th remaining candidate (1-based) if $\text{occ}_i \neq \bot$. Operation $o_i$ succeeds iff this resolution yields a **single unique span** $[s_i, e_i)$.
+
+2. **Localized Guarded Code-Point Span Operation (`tx/2` `op="span"`):**
+   $$o_i = \text{Span}(s_i, e_i, x_i, r_i, b_i, a_i), \quad 0 \le s_i \le e_i,\; x_i, r_i \in \Sigma^*,\; |x_i| = e_i - s_i$$
+   Operation $o_i$ succeeds on intermediate buffer $T_{i-1}$ iff:
+   - Bounds hold: $0 \le s_i \le e_i \le |T_{i-1}|$ (otherwise `span_out_of_bounds`),
+   - Substring precondition holds: $T_{i-1}[s_i:e_i] = x_i$ (otherwise `span_text_mismatch`; when $s_i = e_i$ and $x_i = \varepsilon$, this defines an exact **zero-length insertion** at code-point offset $s_i$), and
+   - Adjacency preconditions hold when supplied ($b_i \neq \bot$ or $a_i \neq \bot$): $s_i \ge |b_i| \land T_{i-1}[s_i - |b_i| : s_i] = b_i$, and $e_i + |a_i| \le |T_{i-1}| \land T_{i-1}[e_i : e_i + |a_i|] = a_i$ (otherwise `span_context_mismatch`).
+
+3. **Guarded Whole-Target Replacement Operation (`tx/3` `op="replace_all"`):**
+   $$k = 1,\quad o_1 = \text{ReplaceAll}(r_1), \quad r_1 \in \Sigma^*$$
+   Subject to service-level fresh admission bounds on raw and canonical content ($|r_1| \le 1{,}000{,}000$ code points and $|\text{UTF8}(r_1)| \le 1{,}048{,}576$ bytes), $o_1$ selects the full target span $[s_1, e_1) = [0, |T_0|)$ and replaces $T_0$ with $r_1$.
+
+When operation $o_i$ resolves to $[s_i, e_i)$, the next buffer state is:
+$$T_i = T_{i-1}[0 : s_i] \,\|\, r_i \,\|\, T_{i-1}[e_i : |T_{i-1}|].$$
+
+### 10.4 Four Core Formal Invariants
+
+#### Invariant 1: Localized Unmatched-Content Preservation (`tx/1` and `tx/2`)
+For every individual localized operation $o_i \in \{\text{Match}, \text{Span}\}$ that resolves to span $[s_i, e_i)$ in $T_{i-1}$, the prefix and suffix outside $[s_i, e_i)$ are preserved code-point-for-code-point:
+$$T_i[0 : s_i] = T_{i-1}[0 : s_i] \quad \text{and} \quad T_i\bigl[s_i + |r_i| : |T_i|\bigr] = T_{i-1}\bigl[e_i : |T_{i-1}|\bigr].$$
+*(Note: Whole-target replacement `tx/3` is intentionally excluded from localized preservation because its explicit contract is to replace the full span $[0, |T_0|)$ under mandatory version/hash guards.)*
+
+#### Invariant 2: All-or-Nothing Per-Target Atomic State Transition
+If any precondition fails or any operation $o_i$ ($1 \le i \le k$) yields $\bot$, the committed target state remains identically $\mathcal{S}' = \mathcal{S} = (T_0, v_0, h_0)$. Only if all $k$ operations succeed does the target advance atomically to:
+$$\mathcal{S}' = \bigl(T_k,\; v_0 + 1,\; H(T_k)\bigr).$$
+
+#### Invariant 3: Deterministic Execution and Profile-Dispatched Replay Equivalence
+For any fixed initial snapshot $T_{\text{init}}$ and ordered sequence of accepted log records $\langle (\mathcal{X}_1, \pi_1), \dots, (\mathcal{X}_m, \pi_m) \rangle$, sequential evaluation of $\mathcal{X}_j$ under its recorded profile $\pi_j$ is a pure deterministic function that yields the exact materialized state $(T_m, m, H(T_m))$.
+
+#### Invariant 4: Request-Key Idempotency
+For any target $F$ and non-null `client_request_id` $q$, at most one transaction submission with key $(F, q)$ is ever executed. Any subsequent submission carrying $(F, q)$ with an identical request fingerprint returns the recorded terminal response (`deduplicated: true`) without re-executing the applier or mutating $\mathcal{S}$; any submission carrying $(F, q)$ with a different request fingerprint is rejected with `client_request_id_conflict` without mutating $\mathcal{S}$.
 
 ---
 
-## 14. Deletion, Zero-Length Span Insertion, and Disambiguation
+## 11. Canonicalization, Unicode Semantics, and Source Line-Ending Preservation
 
-- **Deletion:** In `patchdiff-tx/1` and `patchdiff-tx/2`, replacing a non-empty match or `[start, end)` span with `replace: ""` deletes the selected text.
-- **Insertion:** In `patchdiff-tx/1` (and legacy `.pdcp` v0.2.3), `match` must be non-empty, so insertion is expressed as anchored replacement of an existing non-empty substring. In `patchdiff-tx/2` (`patchdiff_submit_operations`), **zero-length insertion is supported directly** via an empty span (`start == end`, `expected_text: ""`), optionally guarded by `expected_before` and `expected_after` under runtime profile `patchdiff-mvp-0.5.0`.
-- **Disambiguation:** Multiple exact matches of `m_i` are resolved deterministically by filtering candidates that are immediately preceded by `anchor_before` and/or immediately followed by `anchor_after`, and then selecting the 1-based `occurrence_index` among the surviving candidates. Advisory fields (`rationale`, `risk`, or legacy `region_hint`) never disambiguate a match.
+Cross-platform editing fails silently when tools disagree on line endings (`\r\n` vs. `\n`), character indexing (UTF-8 bytes vs. UTF-16 code units vs. Unicode scalar values), or invalid Unicode sequences. PatchDIFF enforces three rules:
 
----
-
-## 15. Protocol Validity, Precondition Guards, and Transaction Applicability
-
-Every rejection is classified by a deterministic `FailureReason` and `ValidationStage`:
-
-| Validation Stage | Representative Failure Reasons | Target Mutated? |
-| --- | --- | --- |
-| `PROTOCOL_PARSE` / `PROTOCOL_VALIDATION` | `context_missing`, `context_invalid`, `manifest_missing`, `manifest_invalid`, `block_malformed`, `executable_logic_detected`, `target_encoding_invalid`, `replacement_too_large` | No (`protocol_valid: false`, `transaction_valid: null`) |
-| `PRECONDITION_GUARD` | `target_not_found`, `target_version_mismatch`, `target_hash_mismatch` | No (`protocol_valid: true`, `transaction_valid: false`) |
-| `TRANSACTION_APPLICABILITY` | `match_absent`, `match_ambiguous`, `anchor_absent`, `anchor_ambiguous`, `disambiguation_invalid`, `span_out_of_bounds`, `span_expected_text_mismatch`, `span_context_mismatch`, `sequential_match_invalid` | No (`protocol_valid: true`, `transaction_valid: false`) |
-| `COMMIT_GUARD` | `target_diverged` (post-simulation guard verification before commit) | No (`protocol_valid: true`, `transaction_valid: false`) |
+| Boundary | Canonical Rule |
+| :--- | :--- |
+| **Canonical storage & matching (`\n`)** | All target documents, `match`/`replace` strings, `expected_text`, and anchors are canonicalized to LF (`\r\n` $\rightarrow$ `\n`, standalone `\r` $\rightarrow$ `\n`) before hashing (`current_hash`) or matching. |
+| **Unicode scalar indexing** | All offsets (`start`, `end`, `span_start`, `span_end`, `length`) are 0-based Unicode code-point (scalar value) indices over the LF-canonical string—identical to Python `str` indexing. |
+| **UTF-8 & PostgreSQL text safety** | Strings containing UTF-16 surrogates (`\uD800`–`\uDFFF`) or `NUL` (`\u0000`) are rejected at stage `PROTOCOL` (`text_invalid_utf8`). Known-target invalid-text attempts are durably logged using reversible ASCII-escaped evidence without corrupting PostgreSQL `TEXT`/`JSONB` columns. |
+| **Source line-ending preservation** | Upload records `source_line_endings` (`"LF"`, `"CRLF"`, `"MIXED"`, or `"NONE"`). While canonical storage and SHA-256 hashes always use LF, `patchdiff_export_target` supports `format = "canonical_lf" | "crlf" | "original_eol"` so CRLF files can be exported with CRLF restored. |
+| **Advisory grapheme-split warning** | If a matched or span boundary splits a multi-code-point Unicode extended grapheme cluster (UAX #29, such as an emoji ZWJ sequence or base character + combining mark), the applier emits an advisory `grapheme_boundary_split` warning on acceptance without rejecting the edit. |
 
 ---
 
-## 16. The Strict-Matching Tradeoff and Structured Diagnostic Recovery
+## 12. Exact Matching, Overlapping Occurrences, and Disambiguation
 
-Strict exact matching is essential for safety—it prevents the runtime from guessing which lines to overwrite when a model's context is slightly out of date. However, in an agent loop, strict matching creates a well-known usability tradeoff: if a rejection returns only a generic error code, the agent must spend extra tool calls and tokens reading slices of the file to discover why its match failed.
+A subtle defect in many string-replacement tools is how they count occurrences when a pattern overlaps itself. Consider the target string $T = \texttt{"ababa"}$ and pattern $m = \texttt{"aba"}$.
+- A naive non-overlapping scanner (`str.find` stepping by `len(m)`) finds only index `0` and falsely concludes that `"aba"` is unique in `"ababa"`.
+- In fact, `"aba"` occurs at two exact spans: $[0, 3)$ and $[2, 5)$.
 
-PatchDIFF resolves this tradeoff **without introducing fuzzy auto-mutation**. Application remains 100% exact, while rejection responses return bounded, structured recovery evidence (capped at **`<= 18,432` compact ASCII-escaped JSON bytes** across newly added enrichment fields):
-
-1. **Bounded Failure and Current Contexts (`<= 4,096 B` each; `<= 256` code points):** Every rejection captures `diagnostic.failure_context` (`CONTEXT_CHARS = 256` code points—either a prefix of the failing buffer or a window centered around a known span failure offset `focus`) and response-only `current_context` (elided with `unavailable_reason: "same_as_failure_context"` when identical to `failure_context`).
-2. **Indexed Ambiguity Candidates (`diagnostic.exact_candidates`, `<= 8,192 B`):** On `match_ambiguous` or `anchor_ambiguous`, PatchDIFF returns `occurrence_count` and up to **5 exact occurrences** (`occurrence_index`, `start`, `end`, `before` $\le 20$ chars, `match_preview` $\le 64$ chars, `match_truncated`, `after` $\le 20$ chars), allowing immediate disambiguation.
-3. **Post-Commit Exact Levenshtein Near-Miss Discovery (`near_misses`, `<= 8,192 B`):** On `match_absent` when $|\text{match}| \le 64$ code points (`omission_reason: "match_too_large"` otherwise), after the service-owned rejection transaction commits and releases its PostgreSQL row lock, PatchDIFF scans at most the first `65,536` code points (`NEAR_MISS_SCAN_CHARS`) of the failing buffer under a `1,000,000` comparison-cell cap (`MAX_COMPARISON_CELLS`). Using an **exact positional pigeonhole filter ($k+1$ disjoint needle pieces) coupled with a Landau–Vishkin diagonal-wave banded dynamic program** (Landau and Vishkin, 1989) over candidate widths $|\text{needle}| + \{-1, 0, +1\}$ and threshold $k = \min(4, \max(1, \lfloor |\text{needle}| / 4 \rfloor))$, it returns up to **3 ranked non-overlapping near-miss candidates** (`distance`, `start`, `end`, `text`, `before`, `after`).
-4. **Advisory Dry-Run Preview (`patchdiff_preview`, `<= 32,768 B`):** Evaluates any `tx/1`, `tx/2`, or `tx/3` proposal against a coherent read-only observation of the target without taking a row lock, writing audit rows, or reserving a version.
-5. **Request-Key Outcome Recovery (`client_request_id`):** If a network timeout occurs during submission, retrying the identical payload with the same `(target_file_id, client_request_id)` returns the recorded accepted or rejected outcome (`deduplicated: true`).
+PatchDIFF's matcher enumerates **all** exact occurrences by advancing the search start by $1$ code point (`pos + 1`) after each match:
+- In `"ababa"`, searching for `"aba"` finds two occurrences ($[0, 3)$ and $[2, 5)$) and rejects an un-disambiguated `tx/1` edit with `match_ambiguous` (`match_count = 2`), returning both spans in `diagnostic.exact_candidates`.
+- Furthermore, under the singleton-selector rule (`enforce_singleton_selectors`), if a pattern occurs only **once** in $T_{i-1}$ (`match_count = 1`), the runtime still validates any supplied `occurrence_index`, `anchor_before`, or `anchor_after` so that a stale selector (e.g., `occurrence_index = 2` when only 1 occurrence remains) is caught and rejected as `disambiguation_invalid` rather than silently ignored.
 
 ---
 
-## 17. Structural Safety Model
+## 13. Sequential In-Memory Application and Coordinate Semantics
 
-PatchDIFF enforces a strict boundary between **declarative transaction data** and **executable code**:
+Within a multi-operation transaction (`patchdiff-tx/1` or `patchdiff-tx/2`), operations execute **sequentially in array order** against the evolving in-memory buffer:
+$$T_0 \xrightarrow{o_1} T_1 \xrightarrow{o_2} T_2 \xrightarrow{\dots} T_k.$$
+
+This sequential model has two important consequences that host integrations must respect:
+1. **Later operations observe earlier replacements:** If $o_1$ changes `"version = 1"` to `"version = 2"`, or shifts character offsets in $T_1$, operation $o_2$ is evaluated against $T_1$, not $T_0$.
+   - If $o_1$ and $o_2$ target the same repeated string and $o_1$ replaces occurrence `1`, then in $T_1$ the remaining occurrence is now occurrence `1` (not `2`). When an accepted transaction's later `occurrence_index` selects a span whose index shifted due to an earlier edit in the same transaction, the runtime records an advisory `occurrence_index_basis_shift` warning so the host can inspect it.
+   - When submitting multiple `tx/2` code-point span edits in a single transaction where each span changes the length of the document ($|r_i| \neq e_i - s_i$), submitting spans in **descending offset order** (from the bottom of the file toward the top) keeps earlier code-point offsets invariant.
+2. **Intermediate-buffer rejection coordinates (`prior_changes > 0`):** If operations $o_1, \dots, o_{i-1}$ succeed in memory and operation $o_i$ ($i > 1$) fails, no changes are committed to PostgreSQL ($\mathcal{S}' = \mathcal{S}$). However, `diagnostic.failure_context`, `exact_candidates`, and `near_misses` for the failing operation $o_i$ are computed against the **intermediate in-memory buffer $T_{i-1}$** (`buffer_stage = "intermediate_buffer"`, `prior_changes = i - 1`), whereas `current_context` reflects the committed target $T_0$.
+
+---
+
+## 14. Operational Primitives: Replacement, Insertion, Deletion, and Guarded Rewrite
+
+All common document editing actions map cleanly onto `patchdiff-tx/1`, `patchdiff-tx/2`, and `patchdiff-tx/3`:
+
+- **Modification (in-place replacement):** `match` $\rightarrow$ `replace` (`tx/1` or `tx/2` `op="match"`), or `[start, end)` + `expected_text` $\rightarrow$ `replace` (`tx/2` `op="span"`).
+- **Deletion:** Set `replace: ""` on a non-empty `match` (`tx/1` / `tx/2`) or non-empty `[start, end)` span (`tx/2`).
+- **Insertion:**
+  - In `patchdiff-tx/1`, `match` must be non-empty (`match_empty` if `""`), so insertion is expressed by matching an adjacent anchor substring and including it in `replace`.
+  - In `patchdiff-tx/2`, zero-length insertion is expressed directly without duplicating anchor text into `replace`: set `op: "span"`, `start == end`, `expected_text: ""`, and optionally guard the insertion point with `expected_before` and/or `expected_after`.
+- **Whole-Document Replacement:** Use `patchdiff_submit_replacement` (`patchdiff-tx/3`, `op: "replace_all"`) with mandatory `expected_target_version` and/or `expected_current_hash`.
+
+---
+
+## 15. Stage-Aware Validity and Failure Taxonomy
+
+A central flaw in naive patch tools is collapsing all failures into an unstructured error string, or conversely treating a syntactically applied patch as proof that the user's task succeeded. PatchDIFF evaluates every transaction through an explicit five-stage pipeline (`ValidationStage`) and reports a four-part `validity` object on every response:
 
 ```text
-patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3, or .pdcp = declarative, non-executable transaction artifact
-backend/app/*.py                                         = trusted deterministic runtime and service
-target document                                          = arbitrary UTF-8 text (Python, Markdown, YAML, JSON, etc.)
+STAGE 1: PROTOCOL     (JSON schema, required fields, UTF-8 validity, change_id uniqueness)
+   |
+   v
+STAGE 2: CONTEXT      (target_file_id existence, expected_target_version / expected_current_hash)
+   |
+   v
+STAGE 3: APPLICABILITY (match existence, uniqueness/disambiguation, span bounds, expected_text, adjacency)
+   |
+   v
+STAGE 4: TRANSACTION  (sequential in-memory completion of all operations & atomic DB commit)
+   |
+   v
+STAGE 5: ADVISORY     (non-blocking warnings on accepted edits: no-op, basis shift, grapheme split)
 ```
 
-The target document and the `match` / `replace` / `expected_text` strings frequently contain source code (such as Python `def` blocks, `import` statements, or shell commands). Those strings are treated strictly as passive UTF-8 character sequences and are never evaluated or executed.
+| Validity Dimension | Value when Rejected at `PROTOCOL` | Value when Rejected at `CONTEXT` or `APPLICABILITY` | Value when `accepted` | Meaning |
+| :--- | :--- | :--- | :--- | :--- |
+| `protocol_valid` | `"invalid"` | `"valid"` | `"valid"` | Was the transaction well-formed according to the protocol grammar/schema? |
+| `transaction_valid` | `"not_evaluated"` | `"invalid"` | `"valid"` | Did all state preconditions and sequential operations succeed against the target? |
+| `task_correct` | `"not_evaluated"` | `"not_evaluated"` | `"not_evaluated"` | Did the edit fulfill the user's high-level instruction? *(Host-evaluated)* |
+| `semantic` | `"not_evaluated"` | `"not_evaluated"` | `"not_evaluated"` | Does the resulting code/document compile, pass tests, or preserve domain meaning? *(Host-evaluated)* |
 
-It is important to distinguish how structural safety is enforced across input formats:
-- **In legacy `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`):** Because `.pdcp` is a custom line-oriented text format, `protocol_validator.py` scans structural lines outside `<<<<<<< MATCH ... >>>>>>> REPLACE` payloads for code-like constructs (`FailureReason.EXECUTABLE_LOGIC_DETECTED`).
-- **In typed JSON formats (`patchdiff-tx/1`, `tx/2`, `tx/3`):** Proposals arrive as parsed JSON objects validated against strict key, type, and enum schemas (`typed.py`, `operations.py`, `replacement.py`). Metadata fields (`intent`, `rationale`, `change_id`) are validated as non-empty, UTF-8 / PostgreSQL-safe strings (no NUL or lone surrogates) and are **not** subject to legacy `.pdcp` keyword heuristics—allowing a developer or agent to freely name Python functions, SQL queries, or shell commands inside `intent` and `rationale` prose.
-
----
-
-## 18. Locality Controls, Whole-Target Replacement Admission, and Host Policy Layering
-
-The historical v0.2.3 concept paper discussed both runtime locality rules and potential deployment heuristics (such as flagging transactions whose replacement ratio exceeds a percentage of the file, or requiring human review when `risk: high` is declared). To prevent confusion between normative runtime behavior and optional host policy, Concept Paper v6 separates them explicitly:
-
-| Control / Policy | Enforced by PatchDIFF Server Today? | Mechanism / Owner |
-| --- | --- | --- |
-| **Non-empty `match` in `tx/1`, `tx/2` match ops, and `.pdcp`** | **Yes (Runtime-enforced)** | Empty `match` is rejected at protocol validation (`block_malformed`). |
-| **Separation of localized edits (`tx/1`, `tx/2`) from whole-file replacement (`tx/3`)** | **Yes (Runtime-enforced)** | `replace_all` is forbidden in `tx/1` and `tx/2` (`0.2.2`, `0.3.0`, `0.5.0`) and is only admitted through `patchdiff_submit_replacement` (`tx/3`, profile `0.4.0`). |
-| **Fresh `tx/3` replacement size caps (`1,000,000` code points / `1,048,576` UTF-8 bytes)** | **Yes (Service-enforced)** | Checked on both raw and LF-canonical replacement strings during fresh `patchdiff_submit_replacement` calls (`replacement_too_large`); never re-applied during replay. |
-| **Runtime-derived span and character-count evidence (`change_facts`)** | **Yes (Runtime-enforced)** | Every accepted change records exact `span_start`, `span_end`, `matched_chars`, and `replacement_chars` in `evidence.changes` and `append_only_manifest_ledger.derived_json`. |
-| **Advisory warnings (`no_op_change`, `no_op_transaction`, `occurrence_index_basis_shift`, `grapheme_boundary_split`)** | **Yes (Runtime-computed, non-blocking)** | Returned on accepted submissions and previews; never alter the commit verdict or replay. |
-| **Replacement-ratio thresholds or mandatory human approval on `risk: "high"`** | **No (Host-owned policy)** | PatchDIFF records `risk` and `change_facts` accurately, but does not block large localized `tx/1`/`tx/2` spans or `risk: "high"` edits; hosts may inspect `patchdiff_preview` facts to enforce custom approval policies before committing. |
+Always returning `"not_evaluated"` for `task_correct` and `semantic` enforces a vital epistemic boundary: **PatchDIFF certifies that the state transition was authorized, exact, and atomic—never that the resulting code passes unit tests or satisfies domain logic.**
 
 ---
 
-## 19. Persistence, Append-Only Logs, and Profile-Dispatched Replay
+## 16. Host-Owned Recovery Loop and Bounded Rejection Diagnostics
 
-PatchDIFF's PostgreSQL schema (`migrations 0001`, `0002`, and `0003`) maintains five core tables:
+Instead of embedding a hidden LLM inside the database server to silently rewrite failed patches, PatchDIFF keeps the retry loop in the **MCP host** and equips every rejection response with bounded, deterministic recovery evidence so the agent can often self-correct on the next turn without extra read/search round-trips:
 
-1. **`cloud_target_files`**: Authoritative current target state (`target_file_id`, `target_type`, `content`, `current_hash`, `version`, `active_cycle_id`, `source_line_endings`).
-2. **`append_only_pdcp_logs`**: Immutable record of every accepted and rejected transaction attempt (`log_sequence`, `pdcp_content`, `protocol_version`, `runtime_version`, `status`, `before_hash`, `after_hash`, `failure_reason`, `diagnostic_json`, `parent_pdcp_log_id`, `client_request_id`, `request_fingerprint`).
-3. **`append_only_manifest_ledger`**: Accepted-only ledger recording one row per applied change (`origin_json` for proposer metadata + `derived_json` for runtime-computed span/hash facts).
-4. **`target_snapshots`**: Immutable content snapshots (`initial_upload` and `save_checkpoint` rows).
-5. **`editing_cycles`**: Active and closed editing cycles tracking `start_version`, `end_version`, `start_hash`, `end_hash`, and `save_snapshot_id`.
-
-### 19.1 Immutable Runtime Profiles (`0.1.0` through `0.5.0`)
-
-Deterministic replay (`patchdiff_replay`) reconstructs target state from the `initial_upload` snapshot by applying all accepted `append_only_pdcp_logs` rows in ascending `log_sequence` order. Each log row is decoded according to its `protocol_version` and executed under its recorded `runtime_version` profile:
-
-| Runtime Profile | `overlapping_matches` | `enforce_singleton_selectors` | `span_operations` | `replace_all_operations` | `span_context` | Primary Introduction |
-| --- | --- | --- | --- | --- | --- | --- |
-| `patchdiff-mvp-0.1.0` | `False` | `False` | `False` | `False` | `False` | Historical non-overlapping `.pdcp` baseline |
-| `patchdiff-mvp-0.2.0` | `True` | `False` | `False` | `False` | `False` | Overlapping exact match enumeration |
-| `patchdiff-mvp-0.2.1` | `True` | `False` | `False` | `False` | `False` | Pre-singleton-selector typed/PDCP profile |
-| `patchdiff-mvp-0.2.2` | `True` | `True` | `False` | `False` | `False` | Active default for `patchdiff-tx/1` and `.pdcp` v0.2.3 |
-| `patchdiff-mvp-0.3.0` | `True` | `True` | `True` | `False` | `False` | Active default for `patchdiff-tx/2` (`match` + `span`) |
-| `patchdiff-mvp-0.4.0` | `True` | `True` | `True` | `True` | `False` | Active profile for `patchdiff-tx/3` (`replace_all`) |
-| `patchdiff-mvp-0.5.0` | `True` | `True` | `True` | `False` | `True` | Active profile for `patchdiff-tx/2` spans with `expected_before`/`after` |
+1. **Up-to-date state coordinates:** Every rejection returns the target's committed `current_version` and `current_hash` at the top level.
+2. **Bounded failure window (`failure_context` and `current_context`):** Up to `256` Unicode code points (`<= 4,096` compact ASCII-escaped JSON bytes each; `<= 8,192 B` combined, with `current_context` omitted when identical to `failure_context`) showing the exact region of the failing buffer around the failure offset.
+3. **Ambiguity candidates (`exact_candidates` on `match_ambiguous` / `disambiguation_invalid`):** Up to `5` exact occurrences (`<= 8,192 B`) with their 1-based `occurrence_index`, `[span_start, span_end)`, and 20-code-point `before`/`after` snippets—allowing the agent to resubmit immediately with `"occurrence_index": k`.
+4. **Post-commit Levenshtein near-misses (`near_misses` on `match_absent` / `span_text_mismatch`):** After the service-owned transaction commits the rejection log and releases the target row lock, PatchDIFF scans up to `65,536` code points of the failing buffer copy (for needles `1..64` code points under a `1,000,000`-comparison-cell cap) using an exact positional pigeonhole prefilter and Ukkonen-banded Landau–Vishkin edit-distance program (`threshold = min(8, max(1, ceil(0.25 * len(needle))))`). It returns up to `3` ranked candidate substrings (`text`, `span_start`, `span_end`, `distance`, `similarity_pct`, `before`, `after`; `<= 8,192 B`), subject to a combined `<= 18,432 B` ceiling on newly added diagnostic enrichment.
+5. **Advisory dry-run preview (`patchdiff_preview`):** Allows a host to test a `tx/1`, `tx/2`, or `tx/3` payload against a read-only observation (`<= 32,768 B` response budget) without acquiring a row lock, writing an audit log, or reserving a version.
 
 ---
 
-## 20. Concurrency Control and Serialized Per-Target Commits
+## 17. Structural Safety and the Non-Executable Boundary
 
-In the historical v0.2.3 paper, concurrency was described informally as a "single-active-writer" assumption. In the modernized PostgreSQL service, concurrency is governed precisely by **per-target row-locked serialization combined with required optimistic state preconditions** (Kung and Robinson, 1981; Bernstein and Goodman, 1981):
+PatchDIFF treats every transaction submission as **untrusted data**, never executable code:
 
-- **Multiple connected hosts or agents are supported:** Any number of MCP clients or agent workers may read from and submit transactions to the service.
-- **Per-target serialization under `SELECT ... FOR UPDATE`:** Every write submission (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`, `patchdiff_submit_pdcp`, and `patchdiff_save`) acquires a PostgreSQL row lock on `cloud_target_files` for the specified `target_file_id`.
-- **Deterministic conflict rejection (no silent merge):** If Agent A and Agent B both read target version $v=3$ and submit concurrent edits with `expected_target_version: 3`, PostgreSQL serializes their row locks. The first transaction to acquire the lock validates $v=3$, commits $v=4$, and releases the lock. The second transaction then acquires the lock, observes committed version $v=4 \neq 3$, logs a rejected attempt (`target_version_mismatch`), and returns the rejection along with the fresh `current_version: 4` and `current_hash` without mutating the target.
-- **Version vs. hash guards and ABA detection:** A hash-only guard (`expected_current_hash`) detects any net content change, whereas a version guard (`expected_target_version`) also detects intervening no-op commits or $A \to B \to A$ content cycles because `version` increments monotonically on every accepted transaction.
+```text
+patchdiff-tx/1, patchdiff-tx/2, or patchdiff-tx/3 = declarative, non-executable transaction data
+PatchDIFF core runtime & service layers           = trusted deterministic validator and applier
+target document                                   = Markdown / Python / YAML / JSON / prose / etc.
+```
 
----
-
-## 21. Authoritative MCP Service Interface
-
-PatchDIFF exposes 20 MCP tools organized into five functional groups (normative schemas and byte budgets are specified in [MCP_TOOLS.md](MCP_TOOLS.md)):
-
-1. **Target Lifecycle (`4` tools):** `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target` (`"original_text"`, `"canonical_text"`, `"original_eol"`).
-2. **Authoritative Bounded Reads & Search (`3` tools):** `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`.
-3. **Guarded Transaction Submission (`3` active typed + `1` legacy):** `patchdiff_submit_edits` (`tx/1`), `patchdiff_submit_operations` (`tx/2`), `patchdiff_submit_replacement` (`tx/3`), and legacy `patchdiff_submit_pdcp` (`.pdcp` v0.2.3).
-4. **Advisory Dry-Run Evaluation (`1` tool):** `patchdiff_preview`.
-5. **Checkpointing, Replay, History & Compatibility (`4` core + `4` convenience/deprecated):** `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`, plus convenience prefix `patchdiff_build_prompt_context` and deprecated regeneration wrappers ([LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md)).
+- **No `eval`, shell, regex, or AST execution:** The runtime performs only deterministic Unicode string slicing, exact substring search, SHA-256 hashing, and parameterized SQL queries via SQLAlchemy.
+- **Typed JSON validation vs. prose freedom:** In `patchdiff-tx/1`, `patchdiff-tx/2`, and `patchdiff-tx/3`, proposals arrive as structured JSON objects validated against strict schemas (`additionalProperties: false`, type and bound checks, and UTF-8/PostgreSQL text validation). Because JSON keys and string values are structurally separated, `intent` and `rationale` strings in typed transactions may freely mention code symbols (`import`, `def`, `class`, SQL keywords, or diff markers) without triggering false-positive rejections.
 
 ---
 
-## 22. SAVE Checkpointing and Editing-Cycle Rotation
+## 18. Locality Controls: Runtime-Enforced Bounds vs. Host Policies
 
-During long editing sessions, the manifest ledger accumulates accepted entries across many turns. `patchdiff_save` provides an explicit **editing-cycle checkpoint** without mutating target content or advancing the target `version`:
+To prevent unintended wide-area rewrites while still supporting legitimate whole-file updates, it is important to distinguish **controls enforced directly by the PatchDIFF runtime** from **optional policies that an MCP host or enterprise harness may layer on top**:
 
-1. **Optional state guards:** `patchdiff_save` accepts optional `expected_target_version` and `expected_current_hash` preconditions checked under `SELECT ... FOR UPDATE`.
-2. **Immutable snapshot creation:** Writes a `save_checkpoint` row in `target_snapshots` recording the current canonical `content`, `content_hash`, and `version`.
-3. **Cycle rotation:** Marks the current `editing_cycles` row `"closed"` (recording `end_version`, `end_hash`, `save_snapshot_id`, and `closed_at`) and opens a new active `editing_cycles` row (`cycle_number + 1`).
-
-**Boundary clarification vs. v0.2.3:** `patchdiff_save` rotates the server-side editing cycle and creates a durable database snapshot (`active_cycle_only: true` in `patchdiff_get_manifest_ledger` then scopes ledger reads to the new cycle). Unlike the illustrative heuristics discussed in v0.2.3, `patchdiff_save` does **not** automatically compact the host's LLM conversation history or enforce token-ratio thresholds ($0.30$ / $0.50$) inside the server; deciding when to invoke `patchdiff_save` or summarize chat history belongs to the MCP host.
-
----
-
-## 23. Operational Efficiency & Research Evaluation Plan (`H1`–`H7`)
-
-All quantitative and comparative claims in PatchDIFF documentation follow a four-tier evidence classification (`MODERNIZATION_ARCHITECTURE.md` Decision A8):
-- **`Measured`**: Deterministic UTF-8 serialization byte counts from `evaluation/offline_eval.py` or locally executed benchmark medians on specified workloads.
-- **`Derived`**: Exact arithmetic or deterministic tool-invocation counts for an explicitly specified interface workflow.
-- **`Illustrative`**: Clearly labeled token or decoding-time illustrations stating their conversion assumptions (not tokenizer measurements).
-- **`Not yet measured`**: Controlled live-model comparative accuracy, retry-turn distributions, end-to-end agent turn latency, and human review studies (`NOT RUN`).
-
-### 23.1 Four User-Centric Operational Dimensions
-
-#### 1. Output Payload Size & Scaling (`Measured` + `Derived`)
-
-Reproducible via `PYTHONPATH=backend python evaluation/offline_eval.py` (fixed 36-char UUID, concise `intent`, `expected_target_version: 0`, compact UTF-8 JSON):
-
-| Scenario (`evaluation/offline_eval.py`) | Raw Match + Replace (`UTF-8 B`) | `patchdiff-tx/1` Minimal (`typed_min`, MCP `arguments` / Stored) | `patchdiff-tx/1` with Prose (`typed_match`, MCP `arguments` / Stored) | `patchdiff-tx/3` Guarded Replacement (`arguments` / Stored / `tools/call` Line) | Verdict |
-| --- | --- | --- | --- | --- | --- |
-| **1 tiny edit (`"old" -> "new"`)** | `6 B` | **`151 B`** / **`206 B`** | `327 B` / `382 B` | `232 B` / `290 B` / `341 B` (`3 B` replacement) | `accepted` |
-| **5 small edits (`5 × 1-byte edits`)** | `10 B` | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | — | `accepted` |
-| **1 edit, 2 KB span (`2,109 B` text)** | `4,218 B` | **`4,441 B`** / **`4,496 B`** | `4,617 B` / `4,672 B` | `2,377 B` / `2,435 B` / `2,486 B` (`2,109 B` replacement) | `accepted` |
-| **Quotes + backslashes + Unicode (`🌟`, `中`)** | `23 B` | **`172 B`** / **`227 B`** | `348 B` / `403 B` | `250 B` / `308 B` / `359 B` (`16 B` raw / `15 B` LF) | `accepted` |
-| **Payload has a delimiter line (`"a\n=======\nb"`)** | `14 B` | **`162 B`** / **`217 B`** | `338 B` / `393 B` | — | **`accepted`** (`.pdcp` rejects with `block_malformed`) |
-
-- **Marginal edit framing (`Derived`):** Each additional minimal edit item in `edits[]` adds **`25 B`** of JSON keys/punctuation (`{"match":"","replace":""}`) + **`1 B`** array comma separator + the UTF-8 JSON-escaped byte lengths of `match` and `replace` (**`+28 B` per additional edit** with two 1-byte ASCII strings: `151 B - 4 B = 147 B` base for one 1-byte edit, and `147 B + 4 × 28 B = 259 B` for five 1-byte edits).
-- **Scaling vs. full-document regeneration and context-padded `str_replace` (`Derived` / `Illustrative`):** On a `65,536 B` (`~16,384`-token illustrative at `~4 UTF-8 B ≈ 1 token`) document, a 1-edit `patchdiff-tx/1` `arguments` payload is **`151 B`** (>99.7% smaller than re-emitting `65,536 B`). When editing a repeated short line, `patchdiff-tx/1` disambiguates via `"occurrence_index": 2` (**`+21 B`**) rather than duplicating surrounding context lines in `old_str` and `new_str`.
-
-#### 2. Input Context Window Protection (`Measured` Runtime Caps)
-
-- **Bounded reads:** `patchdiff_read_target` and `patchdiff_read_lines` default to **`4,000` Unicode code points** and cap at **`8,000` Unicode code points** per call.
-- **Bounded occurrence search:** `patchdiff_find_occurrences` defaults `context_chars` to **`40`** (cap **`400`** code points) and caps `max_results` at **`200`**.
-- **Bounded rejection enrichment:** Newly added enrichment fields (`failure_context`, `current_context`, `exact_candidates` / `near_misses`, `correlation_id`) are capped at **`<= 18,432` compact ASCII-escaped JSON bytes** (`<= 4,096 B` per context window; `<= 8,192 B` per candidate block).
-- **Bounded history & ledger paging:** `patchdiff_get_pdcp_log` and `patchdiff_get_manifest_ledger` project bounded `intent` (`<= 256` chars) and `rationale` (`<= 128` chars) in SQL; when `include_content=True`, cumulative `pdcp_content` is governed by a **`1,048,576 B` UTF-8 page budget** (the first entry with content is returned whole even if $> 1\text{ MB}$; subsequent entries over budget omit content with `pdcp_content_omitted: "page_byte_budget"`).
-
-#### 3. Tool Invocations for Multi-Edit & Recovery Workflows (`Derived`)
-
-- **Multi-edit batching:** Applying 5 edits to one target requires **`1`** `patchdiff_submit_edits` call (or `2` with optional `patchdiff_preview`) versus **`5`** separate invocations of a single-replacement interface.
-- **Recovery from ambiguity, minor typos, or lost responses:** Because rejection responses carry indexed `exact_candidates` ($\le 5$) or post-commit Levenshtein `near_misses` ($\le 3$), and `client_request_id` deduplicates timed-out retries, common recovery paths can avoid an intermediate read/search tool call (**`1` retry call** vs. **`2+` calls**). *(Whether this reduces total live-model turns across diverse tasks is a separate empirical question: `Not yet measured`.)*
-
-#### 4. Latency: Model Generation Scaling vs. Internal Server Benchmarks (`Illustrative` vs. `Measured`)
-
-- **Model generation scaling (`Illustrative`):** Because LLM decoding latency scales linearly with generated tokens, emitting compact `patchdiff-tx/1` deltas avoids decoding thousands of unchanged tokens on large files.
-- **Internal PatchDIFF runtime & PostgreSQL benchmarks (`Measured` — `PR #13` baseline vs. `PR #14`, Windows 11, `Python 3.11.9`, `PostgreSQL 16.3`):**
-  *(Note: These measure internal PatchDIFF server/database optimizations on specified local fixtures, not cross-product comparisons against external editing tools or end-to-end model turns.)*
-  - **`SVC-001` Near-Miss Levenshtein Scan (`65,536`-code-point buffers, needle length `45`, threshold `4`, 5-run medians):** Exact positional pigeonhole filtering + Landau–Vishkin diagonal-wave DP reduced scan time on varied prose from `100.2 ms` (`174,897` cells) to **`1.7 ms`** (`585` cells, **58.9× faster**), and on repetitive logs from `708.5 ms` (`1,000,000` cells, truncated at 69% of buffer) to **`41.9 ms`** (`142,255` cells, **16.9× faster** while scanning **100%** of the eligible buffer).
-  - **`MCP-001` PostgreSQL 16+ `LATERAL` History & Ledger Reads (`20 MB` total history, 7-run medians after warmup):** On `50 × 400 KB` `tx/3` history, `patchdiff_get_manifest_ledger(limit=50)` improved from `279.6 ms` to **`14.68 ms`** (**19.0× faster**) and `patchdiff_get_pdcp_log(limit=50)` from `372.4 ms` to **`22.85 ms`** (**16.3× faster**). On `20 × 1 MB` `tx/1` history (5 edits × 200 KB), `patchdiff_get_pdcp_log(limit=50)` runs in **`136.72 ms`** (vs. `305.55 ms`, **2.2× faster**), `patchdiff_get_manifest_ledger(limit=50)` in **`221.59 ms`** (vs. `305.55 ms`, **1.38× faster**), and `patchdiff_get_manifest_ledger(limit=100)` in **`445.33 ms`** (vs. `449.92 ms`, **1.01×**).
-
-### 23.2 Research Hypotheses `H1`–`H7`: Original Meaning, Established Properties, and Unexecuted Empirical Trials
-
-Preserving the exact hypothesis identities from §23 of the original concept paper, the table below distinguishes what is established today by deterministic verification and offline byte accounting from what requires a controlled live-model or human empirical study:
-
-| Hypothesis (Original Identity Preserved) | What Is Established Today (`Measured` / `Derived` / Conformance Suite) | What Still Needs Empirical Validation (`Not yet measured` — Live-Model / Human Study `NOT RUN`) |
-| --- | --- | --- |
-| **H1: PatchDIFF reduces full-document decoding cost** | **Deterministic payload byte accounting (`evaluation/offline_eval.py`):** Localized `patchdiff-tx/1` and `tx/2` requests scale $O(\text{delta})$ (`151 B` `arguments` for 1 edit; `259 B` for 5 edits; `+28 B` per additional minimal 1-byte edit) rather than $O(|T|)$. Dropping `.pdcp` v0.2.3's 7 mandatory prose fields reduces 1-edit wire bytes by 66.5% (`451 B -> 151 B`) and 5-edit wire bytes by 82.3% (`1,467 B -> 259 B`). | **Actual model token consumption and end-to-end cost:** Measuring tokenizer-reported input + output tokens across multi-turn editing sessions (including any retry turns) against full regeneration, `str_replace`, and `apply_patch`. |
-| **H2: PatchDIFF reduces unintended mutation** | **Deterministic locality for localized operations (Invariant 1):** Across all `816` unit and `410` integration tests, accepted `patchdiff-tx/1` and `tx/2` transactions preserve every code point outside selected match/span regions identically, and `tx/2` `expected_text` + `expected_before`/`after` guards prevent coordinate-drift splices. | **Task-level unintended edit rate:** Measuring how often an LLM using PatchDIFF introduces extraneous edits outside user-requested regions compared to full-document regeneration or unified diff tools on a benchmark task corpus. |
-| **H3: PatchDIFF improves stale-context detection** | **Deterministic conflict rejection (Invariant 2):** Required `expected_target_version` and/or `expected_current_hash` under PostgreSQL `SELECT ... FOR UPDATE` plus post-simulation `target_diverged` checks guarantee a **0% silent overwrite rate** when target state diverges from the transaction's declared guard. | **Comparative agent recovery success:** Measuring how reliably agents refresh context and complete tasks after a `target_version_mismatch` / `target_hash_mismatch` rejection in multi-agent or concurrent workflows. |
-| **H4: PatchDIFF supports multi-edit cached-document workflows** | **Multi-edit batching, `SAVE` cycles, and bounded SQL history (`MCP-001`):** Atomic sequential batching (`edits[]` / `operations[]`), `patchdiff_save` cycle rotation, bounded code-point reads (`4,000` / `8,000`), and SQL `LATERAL` history paging (`14.68 ms`–`221.59 ms` on 20 MB logs) are verified against live PostgreSQL. | **Multi-turn session throughput and total turn cost:** Measuring cumulative tokens, recovery overhead, and accepted edits per session over 20+ turn editing trajectories with and without `patchdiff_save`. |
-| **H5: PatchDIFF preserves deterministic replay** | **Verified in software across all 7 runtime profiles (`0.1.0`..`0.5.0`) and 4 protocol versions (`0.2.3`, `tx/1`, `tx/2`, `tx/3`):** `patchdiff_replay` deterministically reconstructs target state from `initial_upload` + ordered accepted logs and verifies 4-part `materialized_state_checks`, including raw CRLF divergence detection (`evaluation/offline_eval.py` + live integration suite). | **Cross-language / independent-runtime interoperability:** Only needed if a second independent non-Python runtime implementation is introduced in the future. |
-| **H6: PatchDIFF improves reviewability** | **Machine-verifiable provenance separation:** `append_only_manifest_ledger` and `patchdiff_preview` separate proposer-claimed `intent`/`rationale` (`origin`) from runtime-derived `span_start`, `span_end`, char counts, and SHA-256 digests (`derived_json`), plus advisory warnings (`no_op_change`, `grapheme_boundary_split`). | **Human reviewer speed and error-detection study:** Controlled human evaluation measuring review time, hidden-mutation detection rate, and reviewer accuracy across PatchDIFF manifests/facts vs. raw unified diffs and full-file diffs. |
-| **H7: LLMs can reliably generate valid PatchDIFF transactions** | **JSON-native schema & delimiter-collision elimination:** `patchdiff-tx/1..3` replace custom text delimiters with standard tool-use JSON schemas (`TYPED_EDIT_JSON_SCHEMA`, 13 executable discovery examples), eliminating `.pdcp` delimiter collisions (`"a\n=======\nb"` accepted at `162 B` args) and providing structured `exact_candidates` and `near_misses` on rejection. | **Live-model first-attempt validity and recovery rates:** Measuring syntax-valid rate, protocol-valid rate, first-attempt `transaction_valid` rate, recovery rate after rejection diagnostics, and final task success across frontier and smaller models. |
+| Control Mechanism | Enforced by PatchDIFF Runtime? | Actual Runtime / Host Behavior |
+| :--- | :--- | :--- |
+| **Non-empty `match` in `tx/1` and `tx/2` match ops** | **Yes (Runtime-enforced)** | Empty `match: ""` is rejected (`match_empty`). |
+| **Separation of localized edits (`tx/1`, `tx/2`) from whole-target rewrite (`tx/3`)** | **Yes (Runtime-enforced)** | `replace_all` is forbidden in `tx/1` and `tx/2`; whole-document replacement requires calling `patchdiff_submit_replacement` (`tx/3`). |
+| **Fresh admission size cap on `tx/3` (`replace_all`)** | **Yes (Service-enforced)** | Fresh `tx/3` submissions exceeding `1,000,000` Unicode code points or `1,048,576` UTF-8 bytes (raw or canonical) are rejected with `replacement_content_too_large`. |
+| **Runtime-derived `matched_chars` & `replacement_chars` per edit** | **Yes (Runtime-computed)** | Computed and returned in `evidence.changes` (and `patchdiff_preview`) and stored in `append_only_manifest_ledger.derived_json`. |
+| **Advisory warnings (`no_op_change`, `no_op_transaction`, `occurrence_index_basis_shift`, `grapheme_boundary_split`)** | **Yes (Runtime-computed, non-blocking)** | Returned in `warnings[]` on accepted transactions and persisted in `diagnostic_json.warnings`; never convert an accepted edit into a rejection. |
+| **Heuristic replacement-ratio limits or mandatory human approval on `risk: "high"`** | **No (Host-owned policy)** | The runtime does **not** reject a localized edit because `replacement_chars / matched_chars` is large or because `risk == "high"`. Hosts can inspect `patchdiff_preview` or `evidence.changes` to enforce custom approval gates. |
 
 ---
 
-## 24. Conformance & Runtime Verification Matrix
+## 19. Persistence Architecture, Audit Logs, and Deterministic Replay
 
-A PatchDIFF deployment is verified against an automated test matrix (**1,226 tests**: `816` unit + `410` live PostgreSQL & stdio MCP subprocess integration tests) and `evaluation/offline_eval.py`:
+PatchDIFF's PostgreSQL persistence substrate maintains five core tables:
 
-| Conformance Area | Verified Properties |
-| --- | --- |
-| **Exact & overlapping match tests** | Single match succeeds; zero match rejects (`match_absent`); duplicate match rejects (`match_ambiguous`) with `exact_candidates`; overlapping occurrences counted (`0.2.0+`); singleton selectors enforced (`0.2.2+`) |
-| **Guarded span & insertion tests (`tx/2`)** | `[start, end)` bounds checked; `expected_text` verified; zero-length insertion (`start == end`, `expected_text: ""`) verified; `expected_before` / `expected_after` adjacency guards enforced under `0.5.0` |
-| **Guarded replacement tests (`tx/3`)** | Required version/hash guard enforced; `1,000,000`-code-point and `1,048,576`-byte raw/canonical admission caps enforced on fresh submissions and bypassed on replay |
-| **Sequential mutation & coordinates** | Later operation sees earlier replacement; consumed original match reports `sequential_match_invalid` and `consumed_by_change_id`; `prior_changes > 0` reports `buffer_stage: "intermediate_buffer"` |
-| **Atomicity, locking & idempotency** | Failed operation $k$ rolls back operations $1..k-1$; `SELECT ... FOR UPDATE` serializes concurrent commits; `(target_file_id, client_request_id)` deduplicates identical retries and rejects conflicting payloads |
-| **Diagnostics & near-miss exactness** | Seeded differential fuzzing (`1,000` trials) proves pigeonhole + Landau–Vishkin DP returns identical `(distance, start, end)` rankings to unpruned Levenshtein DP within `MAX_COMPARISON_CELLS = 1,000,000` |
-| **Migrations, SAVE & profile replay** | Live Alembic `0001 -> 0002 -> 0003` upgrade/downgrade/upgrade with populated data; `patchdiff_save` cycle rotation; `patchdiff_replay` across `0.1.0`..`0.5.0` and `original_eol` export |
+1. **`cloud_target_files`**: Canonical `current_content` (LF-normalized), `current_hash` (SHA-256), `current_version` (monotonic integer starting at `0`), and `source_line_endings`.
+2. **`append_only_pdcp_logs`**: Immutable log of **every** submission attempt (`status = 'accepted' | 'rejected'`), ordered by `log_sequence`, recording `protocol_version`, `runtime_version`, `pdcp_content` (canonical JSON), `pdcp_hash`, `expected_target_version`, `expected_current_hash`, `base_version`, `resulting_version`, `failure_reason`, `diagnostic_json`, `parent_pdcp_log_id`, and `client_request_id` + `request_fingerprint`.
+3. **`append_only_manifest_ledger`**: Immutable ledger of **accepted** changes only, ordered by `ledger_sequence`, recording `origin`, `editing_cycle_id`, `change_id`, `intent`, `risk`, and `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests).
+4. **`target_snapshots`**: Immutable snapshots (`snapshot_type = 'initial_upload' | 'save_checkpoint'`), storing the full canonical content, hash, and version at creation and at each `SAVE` boundary.
+5. **`editing_cycles`**: Tracks active and completed editing cycles (`status = 'active' | 'saved'`) rotated by `patchdiff_save`.
 
----
+### 19.1 Versioned Execution Profiles and 4-Component Replay Verification
 
-## 25. Related Work
+Every accepted row in `append_only_pdcp_logs` records both its `protocol_version` and an immutable `runtime_version` profile capturing the exact semantic rule flags active when the transaction was committed (`overlap_aware_matching`, `enforce_singleton_selectors`, `allow_span_operations`, `allow_replace_all_operations`, `allow_span_adjacency_guards`).
 
-PatchDIFF draws on classical textual differencing, version control, structured JSON patching, optimistic concurrency control, event sourcing, collaborative editing, semantic program transformation, edit-based neural generation, retrieval-augmented generation, and agentic software engineering.
-
-### 25.1 Textual Differencing and Patch Systems
-Classical longest-common-subsequence and shortest-edit-script algorithms established practical diff tools (Hunt and Szymanski, 1977; Myers, 1986), while Landau and Vishkin (1989) introduced efficient diagonal-wave $O(kn)$ approximate string matching (which PatchDIFF adapts in `near_miss_service.py` solely for post-rejection diagnostic discovery, never for fuzzy mutation). PatchDIFF inherits the principle of localized textual deltas while adding mandatory state preconditions, sequential transaction simulation, and append-only auditability.
-
-### 25.2 Version Control and Commit Histories
-Version-control systems such as Git record accepted repository states and content-addressed trees (Chacon and Straub, 2014). PatchDIFF operates one layer earlier, inside the agent edit-proposal loop: it records both accepted and rejected transaction attempts (`append_only_pdcp_logs`) with retry lineage (`parent_pdcp_log_id`) and separates operational replay logs from accepted manifest provenance (`append_only_manifest_ledger`).
-
-### 25.3 JSON Patch and Structured Document Patching
-RFC 6902 JSON Patch defines sequential atomic operations (`add`, `remove`, `replace`, `move`, `copy`, `test`) over JSON Pointers (Bryan and Nottingham, 2013). When paired with HTTP `PATCH` and `If-Match` ETags, JSON Patch provides preconditioned atomic updates for JSON documents. PatchDIFF applies the same preconditioned-transaction philosophy to **arbitrary UTF-8 text artifacts** (Markdown, Python, YAML, JSON, prose) where JSON Pointers do not exist, using exact text matches (`tx/1`) and text-guarded code-point spans (`tx/2`) as preconditions.
-
-### 25.4 Optimistic Concurrency Control and MVCC
-PatchDIFF's transaction lifecycle is a direct realization of optimistic concurrency control (Kung and Robinson, 1981; Bernstein and Goodman, 1981): an agent formulates a proposal against an observed `(version, current_hash)` read phase, and the server validates that precondition and every sequential text/span guard inside a serialized PostgreSQL `SELECT ... FOR UPDATE` validation/write phase.
-
-### 25.5 Event Sourcing and Deterministic Replay
-In event-sourced architectures, current state is a materialized projection of an immutable sequence of domain events (Fowler, 2005). PatchDIFF pairs an authoritative materialized target row (`cloud_target_files`) with an immutable event log (`target_snapshots` + `append_only_pdcp_logs`) and verifies their agreement via profile-dispatched `patchdiff_replay`.
-
-### 25.6 Operational Transformation and CRDTs
-Collaborative editing systems use Operational Transformation (Ellis and Gibbs, 1989; Sun et al., 1998) or Conflict-free Replicated Data Types (Shapiro et al., 2011) to merge concurrent edits automatically without rejection. Automatic convergence is desirable for concurrent human typing, but dangerous when an LLM agent acts on stale context: silently merging a stale model edit into a refactored function can produce syntactically broken or semantically contradictory text. PatchDIFF intentionally rejects stale or conflicting transactions so the agent must re-read current state.
-
-### 25.7 Program Transformation and Semantic Patching
-Semantic patching tools such as Coccinelle (Padioleau et al., 2008) express transformations over language-specific ASTs and control-flow graphs. PatchDIFF trades language-specific AST expressiveness for universal text-format neutrality and deterministic replay across code, configuration, and prose.
-
-### 25.8 Edit-Based Neural Generation
-Edit-based sequence models such as LaserTagger (Malmi et al., 2019) and Levenshtein Transformer (Gu et al., 2019) showed that predicting edit operations can be more compact than full sequence decoding. PatchDIFF applies this insight at the **protocol and transaction boundary** for general-purpose tool-use LLMs.
-
-### 25.9 LLM-Assisted Editing and Agentic Tool Use
-Reasoning-and-acting loops (Yao et al., 2023), tool-use models (Schick et al., 2023), software-engineering benchmarks such as SWE-bench (Jimenez et al., 2024), and commercial agent tools (`str_replace_based_edit_tool`, Anthropic, 2025; `apply_patch`, OpenAI, 2025) demonstrate both the power of localized model edits and the prevalence of patch-application failures, ambiguity errors, and multi-turn retry loops. PatchDIFF provides the server-side transactional substrate and structured diagnostic feedback needed to make those tool loops auditable and deterministic.
-
-### 25.10 Context Management in Long-Horizon Agent Loops
-Retrieval-augmented generation (Lewis et al., 2020) and bounded file-viewing tools mitigate prompt bloat on read, while PatchDIFF complements bounded reads (`patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`) with hard byte budgets on preview (`<= 32,768 B`), rejection diagnostics (`<= 18,432 B`), and SQL `LATERAL` history paging (`<= 1,048,576 B` content budget).
+When `patchdiff_replay(target_file_id)` is invoked, the replay engine loads the `initial_upload` snapshot, replays every accepted log entry in `log_sequence` order by dispatching on `(protocol_version, runtime_version)`, and verifies four independent `materialized_state_checks` against `cloud_target_files`:
+1. `content_matches`: Replayed canonical text equals `cloud_target_files.current_content`.
+2. `stored_hash_matches`: Replayed SHA-256 hash equals `cloud_target_files.current_hash`.
+3. `recomputed_hash_matches`: `SHA256(cloud_target_files.current_content)` equals `cloud_target_files.current_hash` (detecting raw out-of-band database corruption such as injected CRLF bytes).
+4. `version_matches`: Replayed version equals `cloud_target_files.current_version`.
 
 ---
 
-## 26. Limitations and Operational Boundaries
+## 20. Concurrency Model: Serialized Per-Target Commits Under Optimistic Guards
 
-### 26.1 Historical v0.2.3 Limitations Resolved in the Modernized Architecture
+Multiple MCP hosts, background workers, or subagents may connect to the same PatchDIFF server and read or target the same document concurrently:
 
-Several limitations identified in the v0.2.3 paper have been resolved in the current implementation:
-- **Delimiter collisions:** Resolved by structured JSON string encoding in `patchdiff-tx/1`, `tx/2`, and `tx/3` (`.pdcp` v0.2.3 remains frozen for legacy compatibility).
-- **Mandatory 7-field prose manifest overhead:** Reduced to a single required transaction `intent` plus optional per-edit `rationale`/`risk`, while moving span/length/hash accounting into runtime-derived `change_facts`.
-- **Lack of zero-length cursor insertion:** Resolved by `patchdiff-tx/2` empty spans (`start == end`, `expected_text: ""`) with optional `expected_before` / `expected_after` adjacency guards (`patchdiff-mvp-0.5.0`).
-- **Blind rejection errors on missing or duplicate matches:** Mitigated (without fuzzy auto-mutation) by `diagnostic.failure_context`, `diagnostic.exact_candidates` ($\le 5$), post-commit Levenshtein `near_misses` ($\le 3$), and `patchdiff_preview`.
-- **Replay drift across protocol evolution:** Resolved by recording `(protocol_version, runtime_version)` on every log row and dispatching replay across immutable profiles `0.1.0`..`0.5.0`.
-
-### 26.2 Active Architectural Limitations and Tradeoffs
-
-1. **Exact matching can still reject and require extra agent turns:** While `exact_candidates` and `near_misses` assist recovery, PatchDIFF never auto-applies a near miss. When a model's assumed text differs by more than edit distance $k \le 4$, exceeds the `64`-code-point needle limit for near-miss scanning, or falls outside the first `65,536` code points / `1,000,000` comparison cells, the host must issue fresh read or search calls and resubmit.
-2. **Conditional near-miss availability and intermediate-buffer coordinates:** `near_misses` is omitted inside caller-owned SQLAlchemy transactions (`"caller_transaction"`), when an earlier edit in the same transaction consumed the match (`"sequential_match_consumed"`), when `len(match) > 64` (`"match_too_large"`), or on historical recovery without context (`"historical_context_unavailable"`). On idempotent recovery (`deduplicated: true`), near-miss scanning sees only the stored 256-code-point `failure_context`. When `prior_changes > 0`, candidate coordinates refer to the sequential intermediate buffer $T_{i-1}$, not the committed target $T_0$.
-3. **Per-target atomicity only (no cross-file transactions):** Atomicity is guaranteed for a single `target_file_id` under `SELECT ... FOR UPDATE`. PatchDIFF does not provide multi-target two-phase commit across multiple files simultaneously.
-4. **No automatic concurrent merge:** Concurrent conflicting writes to the same target are rejected (`target_version_mismatch` / `target_hash_mismatch`), requiring the losing writer to re-read and re-propose.
-5. **Semantic and task correctness are not evaluated:** An accepted transaction guarantees only that protocol rules and text/span/state preconditions held (`protocol_valid: true`, `transaction_valid: true`). It can still introduce syntax errors, type errors, or logic bugs (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
-6. **Conservative UAX #29 grapheme approximation:** The `grapheme_boundary_split` warning checks common multi-scalar sequences (combining marks, ZWJ, regional indicators, emoji modifiers/variation selectors; Unicode Consortium, 2024), not full state-machine segmentation over every UAX #29 rule.
-7. **Managed PostgreSQL state and untracked external disk edits:** Targets must be uploaded/initialized in PostgreSQL. Exporting a target writes a snapshot; external edits made directly to files on disk outside PatchDIFF are not tracked unless re-uploaded.
-8. **Live-model and human comparative studies remain unexecuted (`NOT RUN`):** As detailed in Section 23.2, controlled live-LLM trials (`H1`–`H4`, `H7`) and human review trials (`H6`) are designed for future execution and are not claimed as completed measurements.
+- **Per-target serialization under `SELECT ... FOR UPDATE`:** Every write submission (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`) and `patchdiff_save` acquires a PostgreSQL row-level lock (`SELECT ... FOR UPDATE` with `populate_existing=True`) on the `cloud_target_files` row before checking `client_request_id` idempotency or evaluating `expected_target_version` / `expected_current_hash`.
+- **Optimistic concurrency rejection on conflict:** If two agents read version `v = 4` concurrently and submit edits carrying `expected_target_version = 4`, the first transaction to acquire the row lock commits and advances the target to `v = 5`. The second transaction then acquires the lock, sees `current_version = 5 != 4`, logs a deterministic `target_version_mismatch` rejection (with `current_version: 5` and bounded `current_context`), and leaves `v = 5` intact.
+- **Single-target atomicity scope:** Atomicity is strictly **per `target_file_id`**. PatchDIFF does not provide multi-file distributed transactions across different `target_file_id` rows; hosts editing multiple files coordinate multi-file workflows at the host layer.
 
 ---
 
-## 27. Discussion
+## 21. MCP Tool Surface and Host Integration Workflow
 
-PatchDIFF's central design choice is to shift trust away from unverified model-generated states and into **deterministic, stateful transaction validation** over canonical text.
+PatchDIFF exposes its transaction and inspection lifecycle over MCP (`tools/list` and `tools/call`) across five functional tool groups:
 
-In doing so, PatchDIFF changes the failure mode of agentic editing:
-- A stale agent view becomes an explicit `target_version_mismatch` or `target_hash_mismatch` rejection rather than a silent overwrite.
-- An ambiguous target string becomes either an explicit selector (`occurrence_index`, `anchor_before`/`after`, or `[start, end)` span) or a structured `match_ambiguous` rejection carrying `exact_candidates`.
-- A multi-edit proposal becomes an all-or-nothing sequential transaction rather than a partial series of tool calls that leaves a document half-updated on error.
-- A timed-out network call becomes an idempotent `client_request_id` lookup rather than a duplicate edit.
-
-Crucially, these guarantees do not require the runtime to understand the programming language or domain semantics of the target artifact. By operating on canonical LF-normalized Unicode code points and separating `protocol_valid` and `transaction_valid` from `task_correct` and `semantic`, PatchDIFF provides a clean, verifiable substrate on top of which hosts can layer compilers, linters, test suites, and human review workflows.
+1. **Target Initialization & Export (`4` tools):** `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`.
+2. **Authoritative Bounded Reads & Search (`4` tools):** `patchdiff_read_target` (code-point slices, `4,000` default / `8,000` max), `patchdiff_read_lines` (1-based line ranges, `100` default / `200` max, `<= 8,000` code points), `patchdiff_find_occurrences` (exact substring search with `40` default / `400` max side context, up to `200` results), and `patchdiff_build_prompt_context` (labelled convenience prefix wrapper).
+3. **Guarded Transaction Submission (`3` tools):** `patchdiff_submit_edits` (`tx/1`), `patchdiff_submit_operations` (`tx/2`), and `patchdiff_submit_replacement` (`tx/3`).
+4. **Advisory Dry-Run Preview (`1` tool):** `patchdiff_preview` (`<= 32,768 B` response budget).
+5. **Checkpointing, Replay & Bounded History (`4` tools):** `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, and `patchdiff_get_manifest_ledger`.
 
 ---
 
-## 28. Future Work
+## 22. `SAVE` Compaction and Long-Session Context Hygiene
 
-With typed JSON transactions (`patchdiff-tx/1..3`), bounded recovery diagnostics, request-key idempotency, and versioned replay profiles (`0.1.0`..`0.5.0`) now implemented, future work centers on five areas:
+During a long editing session (for example, 40 sequential edits to a specification or module), two distinct histories grow:
+1. The **server-side manifest ledger** (`append_only_manifest_ledger`), and
+2. The **host's LLM conversation history** (past tool calls, responses, and reasoning turns).
 
-| Area | Open Research / Engineering Direction |
-| --- | --- |
-| **1. Controlled Live-Model Comparative Study (`H1`–`H4`, `H7`)** | Execute the Section 23.2 multi-model benchmark across prose, source code, and configuration corpora comparing full regeneration, native `str_replace`, native `apply_patch`, and PatchDIFF (`tx/1..3`) with identical models, prompts, and retry budgets, recording actual tokenizer counts, first-attempt validity, recovery turns, and decomposed latency. |
-| **2. Controlled Human Review Study (`H6`)** | Evaluate human review speed, error detection, and confidence when inspecting PatchDIFF manifest provenance (`origin` + `derived_json` facts) versus raw unified diffs and full-document diffs. |
-| **3. Optional Multi-Target Transaction Coordination** | Investigate grouped transactions across multiple `target_file_id` rows (e.g., ordered multi-row locking by UUID) for cross-file refactors while preserving per-target replay determinism. |
-| **4. Explicit Client/Server Protocol-Version Handshake** | Add optional MCP capability negotiation for transaction format versions (distinct from the already-implemented per-record replay profile dispatch). |
-| **5. Pluggable Post-Simulation Semantic Validation Hooks** | Allow hosts or server plugins to register deterministic syntax/schema validators (e.g., JSON/YAML parser, AST syntax check) between in-memory simulation ($T_n$) and PostgreSQL commit. |
+`patchdiff_save(target_file_id)` provides an explicit **cycle boundary** in the persistence substrate:
+1. Under `SELECT ... FOR UPDATE`, it records an immutable `save_checkpoint` row in `target_snapshots` capturing `(current_content, current_hash, current_version)`.
+2. It marks the current row in `editing_cycles` as `status = 'saved'` (`ended_version = current_version`) and opens a fresh `active` editing cycle (`cycle_number + 1`, `started_version = current_version`).
+3. Because `patchdiff_get_manifest_ledger` defaults to `active_cycle_only = True`, querying the ledger immediately after `patchdiff_save` returns **0 entries (`0 B`)** for the new cycle, while setting `active_cycle_only = False` still exposes the complete historical ledger across all cycles, and `patchdiff_replay` still verifies the full history from `initial_upload`.
+
+**Scope boundary:** `patchdiff_save` compacts the server-side active cycle view and records a durable checkpoint snapshot; it does **not** automatically summarize or truncate the host's in-memory LLM chat transcript. Instead, hosts use `patchdiff_save` as a safe synchronization point at which the host can discard prior edit-turn messages from its prompt window and retain only the new `current_version` / `current_hash` and active slices read via `patchdiff_read_target`.
+
+---
+
+## 23. Operational Efficiency, Reference Measurements, and Research Hypotheses (`H1`–`H7`)
+
+All quantitative and comparative claims in this paper follow a four-tier classification:
+1. **`Enforced Contract / Hard Cap`**: Deterministic byte, code-point, or row-count bounds enforced in software.
+2. **`Measured (PatchDIFF-only)`**: Deterministic byte counts from `evaluation/offline_eval.py` and local reference workload medians.
+3. **`Analytical Comparison`**: Structural complexity and round-trip comparisons under stated workflow assumptions.
+4. **`Comparative Hypothesis (Not Yet Measured)`**: Live-model token/success trials (`H1`–`H4`, `H7`) and human review studies (`H6`) (`NOT RUN`).
+
+### 23.1 Deterministic Payload Byte Scaling & Reference Runtime Characteristics (`Measured`)
+
+Reproducible via `PYTHONPATH=backend python evaluation/offline_eval.py`:
+
+| Scenario (`evaluation/offline_eval.py`) | Raw Replacement Text (`B`) | Minimal `patchdiff-tx/1` (`arguments` `B` / Persisted Record `B`) | Rationale-Annotated `patchdiff-tx/1` (`arguments` `B` / Persisted Record `B`) | `patchdiff-tx/3` Whole-Target Rewrite (`arguments` `B` / Persisted Record `B` / JSON-RPC Line `B`) |
+| :--- | :--- | :--- | :--- | :--- |
+| **1 tiny edit (`"old" -> "new"`)** | `3 B` | **`151 B`** / **`206 B`** | `327 B` / `382 B` | **`232 B`** / **`290 B`** / **`341 B`** |
+| **5 small edits in 1 transaction (`5 × 1 B`)** | `5 B` | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | — |
+| **1 edit, 2 KB span (`2,053 B` match/replace)** | `2,053 B` (`2,109 B` full body) | **`4,441 B`** / **`4,496 B`** | `4,617 B` / `4,672 B` | **`2,377 B`** / **`2,435 B`** / **`2,486 B`** |
+| **Quotes + backslashes + Unicode (`🌍`, `中`)** | `16 B` | **`172 B`** / **`227 B`** | `348 B` / `403 B` | **`250 B`** / **`308 B`** / **`359 B`** |
+| **Payload containing a standalone `=======` line** | `14 B` | **`162 B`** / **`217 B`** | `338 B` / `393 B` | — |
+
+- **Marginal wire cost per additional `patchdiff-tx/1` edit:** Each additional minimal edit item `{"match":"...","replace":"..."}` in `edits[]` adds exactly **`26 B` of JSON structure** (`25 B` object keys/punctuation + `1 B` comma) plus the JSON-escaped UTF-8 lengths of `match` and `replace` (`28 B` total for two 1-byte ASCII strings).
+- **Hard context-protection caps (`Enforced Contract`):**
+  - Target reads (`patchdiff_read_target`, `patchdiff_read_lines`): **`4,000` code points default / `8,000` code points max** (`100` / `200` lines max on `read_lines`).
+  - Occurrence search (`patchdiff_find_occurrences`): **`40` code points side context default (`400` max)**, up to **`200` results**.
+  - Rejection context (`failure_context`, `current_context`): **`<= 256` code points (`<= 4,096 B`) each** (`<= 8,192 B` combined).
+  - Ambiguity & near-miss enrichment (`exact_candidates` up to 5, `near_misses` up to 3): **`<= 8,192 B` each**, **`<= 18,432 B` combined enrichment cap**.
+  - Advisory preview (`patchdiff_preview`): **`<= 32,768 B` total** (`<= 16,384 B` facts + `<= 16,384 B` diagnostics).
+  - History & ledger pagination (`patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`): **`50` rows default / `200` max**; default `include_content=False` omits raw payloads and projects bounded `intent` (`<= 256` chars); `include_content=True` enforces a **`1,048,576 B` (`1 MiB`)** cumulative `pdcp_content` page budget (always returning the first non-empty entry on a page whole and marking subsequent over-budget entries with `pdcp_content_omitted: "page_byte_budget"`).
+  - MCP tool discovery (`tools/list`): **`<= 65,536 B` total** across all registered tools (`<= 8,192 B` for 13 worked examples across 9 tools).
+- **Reference implementation latency characteristics (`Measured` — local single-machine medians on Windows 11, `Python 3.11.9`, `postgres:16.3-alpine`):**
+  - **Post-Commit Near-Miss Levenshtein Scan (`65,536`-code-point buffers, needle length `45`, threshold `4`, 5-run medians):** Using exact positional pigeonhole prefiltering plus an Ukkonen-banded Landau–Vishkin edit-distance DP under the `1,000,000`-cell cap, scanning a 65,536-code-point varied prose buffer takes **`1.7 ms`** (`scanned_end = 65,536`, `scope_truncated = False`), and scanning a dense repetitive log buffer takes **`41.9 ms`** (`scanned_end = 65,493`, `142,255` cells, `scope_truncated = False`).
+  - **Bounded SQL History & Ledger Reads (`20 MB` total history, 7-run medians after warmup):** Using PostgreSQL 16+ `pg_input_is_valid(..., 'jsonb')` and `LATERAL` JSON projections so `include_content=False` queries do not transfer multi-megabyte `pdcp_content` blobs to Python, reading 50 rows over a `20 MB` `tx/3` history (`50 × 400 KB`) takes **`14.68 ms`** (ledger) and **`22.85 ms`** (attempt log); over a `20 MB` `tx/1` history (`20 × 1 MB`), reading 50 rows takes **`136.72 ms`** (attempt log) and **`221.59 ms`** (ledger, or **`445.33 ms`** at `limit=100`).
+
+### 23.2 Status of the Seven Core Research Hypotheses (`H1`–`H7`)
+
+The table below states each of PatchDIFF's seven core research hypotheses (`H1`–`H7`) and separates what is **established in software and offline measurements today** from what **requires live-model or human empirical validation (`NOT RUN`)**:
+
+| Research Hypothesis | Established Today (Deterministic Runtime & Offline Measurements) | Open Empirical Evaluation (`NOT RUN` — Experimental Protocol in §23.3) |
+| :--- | :--- | :--- |
+| **H1: PatchDIFF reduces full-document decoding cost** | **Deterministic payload byte accounting (`evaluation/offline_eval.py`):** Localized `patchdiff-tx/1` payloads scale with $O(|\Delta|)$ rather than document size $|T|$ (`151 B` MCP `arguments` for 1 minimal edit, `259 B` for 5 edits, `+28 B` per additional 1-byte edit). | **Live-model token & latency study (`NOT RUN`):** Measure total input + output tokens, wall-clock latency, and API cost across live LLM families when performing single-turn and multi-turn edits via PatchDIFF vs. full-document rewrite, `str_replace`, and `apply_patch`. |
+| **H2: PatchDIFF reduces unintended mutation** | **Deterministic locality for localized operations (Invariant 1):** For every accepted `tx/1` and `tx/2` transaction, code points outside the resolved $[s_i, e_i)$ spans are provably invariant (`T_i[0:s_i] == T_{i-1}[0:s_i]` and `T_i[s_i+|r_i|:] == T_{i-1}[e_i:]`). Unintended whole-file rewrites cannot occur via `tx/1` or `tx/2`. | **End-to-end agent edit-fidelity study (`NOT RUN`):** Measure how often live models select an unintended span or over-broad `match` string compared to silent drift in full-file rewrites or misapplied fuzzy diffs. |
+| **H3: PatchDIFF improves stale-context detection** | **Enforced optimistic concurrency guards:** Every submission requires `expected_target_version` and/or `expected_current_hash` evaluated under `SELECT ... FOR UPDATE`. Any version or hash divergence deterministically rejects (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation. | **Multi-agent contention & recovery study (`NOT RUN`):** Measure conflict recovery success rates and wasted turns when multiple live agents concurrently edit shared documents under optimistic locking. |
+| **H4: PatchDIFF supports multi-edit cached-document workflows** | **Multi-edit batching, `SAVE` cycles, and bounded SQL history:** `tx/1` and `tx/2` execute ordered multi-edit batches atomically in memory; `patchdiff_save` rotates active editing cycles (`active_cycle_only=True` resets active ledger context to `0 B`); SQL `LATERAL` projection bounds 50-row history reads over `20 MB` logs to `14.68–221.59 ms`. | **Long-horizon session study (`NOT RUN`):** Measure cumulative prompt token growth and task completion over 20–100 sequential edits with periodic `patchdiff_save` compaction vs. uncompacted agent loops. |
+| **H5: PatchDIFF preserves deterministic replay** | **Verified in software across execution profiles:** `patchdiff_replay` reconstructs canonical state from `initial_upload` + ordered accepted logs and verifies all four `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`), including detection of out-of-band raw CRLF injection. | **Fully verified deterministically in software.** *(Future operational validation: multi-million-row longitudinal archive replay benchmarks.)* |
+| **H6: PatchDIFF improves reviewability** | **Separation of asserted intent from derived facts:** `append_only_manifest_ledger` stores model-claimed `intent` / `rationale` alongside runtime-computed `derived_json` (`span_start`, `span_end`, char counts, SHA-256 hashes), and `patchdiff_preview` exposes those exact facts prior to commit. | **Human reviewer & auditing study (`NOT RUN`):** Measure human review time and defect-detection accuracy when inspecting PatchDIFF manifest ledgers + derived span facts vs. raw unified diffs or full-file rewrites. |
+| **H7: LLMs can reliably generate valid PatchDIFF transactions** | **JSON-native schema & delimiter-collision elimination:** `patchdiff-tx/1..3` use standard JSON tool arguments (`TYPED_EDIT_JSON_SCHEMA`, `TYPED_OPERATIONS_JSON_SCHEMA`, `TYPED_REPLACEMENT_JSON_SCHEMA`) advertised with 13 executable discovery examples (`<= 8,192 B`), eliminating line-delimiter collisions (`"a\n=======\nb"` is accepted at `162 B`). | **Live-model first-pass validity & retry-convergence study (`NOT RUN`):** Measure first-turn `protocol_valid` and `transaction_valid` rates, plus 1-retry convergence rates using `exact_candidates` and `near_misses`, across frontier and smaller open-weight models. |
+
+### 23.3 Experimental Design for Live-Model & Human Benchmarks (`H1`–`H4`, `H6`, `H7`)
+
+To evaluate the open empirical hypotheses (`H1`–`H4`, `H6`, `H7`) rigorously without conflating Edit Format with Host Harness policy, future live-model trials should hold the model, temperature (`0.0`), target corpus (`4 KB`, `32 KB`, `64 KB`, and `256 KB` files across Python, TypeScript, Markdown, JSON, and YAML), and read budget constant while comparing four conditions:
+1. **Condition A:** Full-document rewrite (`write_file`).
+2. **Condition B:** Unique substring replacement (`str_replace`).
+3. **Condition C:** Unified diff (`apply_patch`).
+4. **Condition D:** PatchDIFF (`patchdiff_read_target` / `patchdiff_find_occurrences` $\rightarrow$ `patchdiff_submit_edits` / `patchdiff_submit_operations`, with bounded diagnostic feedback on rejection).
+
+Primary dependent variables: (a) first-attempt `protocol_valid` and `transaction_valid` rates (`H7`), (b) post-rejection recovery rate within $\le 2$ retries and total tool round-trips (`H7`), (c) total input and output tokens billed (`H1`, `H4`), (d) unintended out-of-span character mutations (`H2`), (e) stale-write prevention under injected concurrent modifications (`H3`), and (f) human review time and error-identification accuracy (`H6`).
+
+---
+
+## 24. Verification Methodology: Unit, Relational, and Transport Conformance
+
+Because PatchDIFF acts as an authoritative transaction monitor, its deterministic guarantees must be verified across three distinct testing layers:
+
+| Verification Category | Required Invariant Coverage |
+| :--- | :--- |
+| **Canonicalization & Unicode safety** | CRLF/CR $\rightarrow$ LF normalization; rejection of UTF-16 surrogates and `NUL` (`text_invalid_utf8`) with reversible ASCII-escaped audit evidence; preservation of `source_line_endings` on export (`canonical_lf`, `crlf`, `original_eol`). |
+| **Exact & overlapping match enumeration** | Single match succeeds; zero match rejects (`match_absent`); duplicate match rejects (`match_ambiguous`) unless uniquely resolved by `occurrence_index` and/or `anchor_before`/`anchor_after`; overlapping occurrences (`"aba"` in `"ababa"`) enumerated accurately; invalid singleton selectors rejected (`disambiguation_invalid`). |
+| **Guarded span (`tx/2`) & replacement (`tx/3`) semantics** | Exact `expected_text` verification on `[start, end)`; zero-length insertion (`start == end`, `expected_text: ""`); `expected_before` / `expected_after` adjacency checks; `tx/3` fresh admission size caps (`1,000,000` code points, `1,048,576` bytes). |
+| **Sequential simulation & atomicity** | Multi-operation transactions evaluate against intermediate in-memory buffers $T_{i-1}$; failure at operation $i > 1$ leaves PostgreSQL target state completely unchanged (`v_0`, `h_0`) and labels diagnostics with `buffer_stage = "intermediate_buffer"` and `prior_changes = i - 1`. |
+| **Bounded diagnostics & preview** | `failure_context` / `current_context` capped at `256` code points (`<= 4,096 B` each); `exact_candidates` (max 5) and post-commit `near_misses` (max 3) capped at `<= 8,192 B` each (`<= 18,432 B` combined enrichment); `patchdiff_preview` capped at `<= 32,768 B` with zero DB locks or writes. |
+| **Concurrency, idempotency & lineage** | `SELECT ... FOR UPDATE` row locking; stale version/hash rejection; `(target_file_id, client_request_id)` idempotent recovery (`deduplicated: true`) and payload-mismatch conflict detection (`client_request_id_conflict`); `parent_pdcp_log_id` retry lineage validation. |
+| **Checkpointing, profile replay & stdio transport** | Schema migration reversibility (`upgrade -> downgrade -> upgrade`); `patchdiff_save` snapshot creation and cycle rotation; 4-component replay verification across execution profiles; end-to-end JSON-RPC execution over real `stdio` subprocess pipes. |
+
+---
+
+## 25. End-to-End Transactional Walkthrough
+
+Consider a target file `config.yaml` initialized at `current_version = 0`, `current_hash = "8f4a..."`:
+
+```yaml
+service:
+  name: auth-api
+  timeout_ms: 1000
+  retry: false
+worker:
+  name: background-sync
+  timeout_ms: 1000
+  retry: false
+```
+
+1. **Bounded Read / Search:** The agent calls `patchdiff_find_occurrences(target_file_id, text="retry: false")`. PatchDIFF returns `total_occurrences: 2` (`occurrence_index: 1` at `[46, 58)` under `service`, and `occurrence_index: 2` at `[106, 118)` under `worker`), along with `current_version: 0`.
+2. **Guarded Multi-Edit Submission (`patchdiff-tx/1`):** To update `service.timeout_ms` to `2500` and enable `retry: true` only on `worker`, the agent submits a single atomic transaction:
+   ```json
+   {
+     "target_file_id": "2c6f9c9c-6e9e-4f15-9a25-88c5b6e2f101",
+     "expected_target_version": 0,
+     "client_request_id": "req-worker-retry-01",
+     "intent": "Increase service timeout to 2500ms and enable worker retries",
+     "edits": [
+       {
+         "match": "  name: auth-api\n  timeout_ms: 1000",
+         "replace": "  name: auth-api\n  timeout_ms: 2500"
+       },
+       {
+         "match": "retry: false",
+         "replace": "retry: true",
+         "occurrence_index": 2
+       }
+     ]
+   }
+   ```
+3. **Deterministic Validation & Atomic Commit:** Under `SELECT ... FOR UPDATE`, PatchDIFF verifies `current_version == 0`, applies edit 1 in memory ($T_0 \rightarrow T_1$), resolves occurrence `2` of `"retry: false"` in $T_1$ ($T_1 \rightarrow T_2$), increments `current_version` to `1`, records the accepted attempt in `append_only_pdcp_logs` and two derived change rows in `append_only_manifest_ledger`, and returns `status: "accepted"`, `current_version: 1`.
+4. **Idempotent Retry Recovery:** If a network glitch drops the response and the host resends the identical payload with `"client_request_id": "req-worker-retry-01"`, PatchDIFF sees the recorded key, skips re-execution, and returns the exact `status: "accepted"`, `current_version: 1` response with `"deduplicated": true`.
+
+---
+
+## 26. Architectural Limitations and Operational Tradeoffs
+
+PatchDIFF deliberately trades heuristic permissiveness for deterministic safety. Integrators and researchers should account for the following boundaries and operational limitations:
+
+1. **Exact matching can still reject and cost extra turns when near-miss bounds are exceeded:**
+   - Because PatchDIFF never performs fuzzy auto-application, a single-character typo in `match` or `expected_text` always rejects the transaction and requires a host retry turn.
+   - Furthermore, post-commit `near_misses` are bounded: they run **only** when the failing needle has length `1..64` code points, scan at most `65,536` code points of the failing buffer copy under a `1,000,000`-comparison-cell cap (`scope_truncated: true` if capped), are omitted on `sequential_match_consumed` rejections, and are skipped when `submit_*` is called inside a caller-owned outer SQLAlchemy transaction. When `near_misses` are unavailable or truncated, the host must issue an explicit `patchdiff_read_target` or `patchdiff_find_occurrences` call.
+2. **Intermediate-buffer coordinates on multi-edit failures (`prior_changes > 0`):**
+   - When operation $i > 1$ fails in a multi-operation transaction, `failure_context`, `exact_candidates`, and `near_misses` reflect the uncommitted intermediate buffer $T_{i-1}$ (`buffer_stage = "intermediate_buffer"`), not the committed target $T_0$. Hosts must either adjust operation $i$ relative to the preceding operations $1 \dots i-1$ in the same batch or inspect `current_context` ($T_0$).
+3. **Single-target atomicity only:**
+   - Transactions are atomic per `target_file_id`. Cross-file refactorings spanning multiple documents are not committed in a single multi-target transaction.
+4. **Conservative Unicode grapheme-cluster warning:**
+   - The `grapheme_boundary_split` check inspects immediate boundary code points around $[s_i, e_i)$ (catching combining marks, ZWJ sequences, variation selectors, and regional indicator pairs) as an advisory warning; it is not a full locale-sensitive linguistic segmentation engine.
+5. **No semantic or task-level correctness guarantee:**
+   - An accepted PatchDIFF transaction guarantees that precondition guards held and exact text/span operations succeeded (`protocol_valid: "valid"`, `transaction_valid: "valid"`). It never guarantees that the resulting code compiles, passes tests, or satisfies the user's intent (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
+6. **Live-model comparative efficiency remains an open empirical question (`Decision A8`):**
+   - While deterministic byte counts and local PostgreSQL/runtime latencies are measured, end-to-end token savings and retry-convergence rates across live LLM families remain unexecuted (`NOT RUN`).
+
+---
+
+## 27. Security, Trust Boundaries, and Deployment Scope
+
+- **Trust boundary:** Model outputs and MCP tool arguments are untrusted inputs validated at the protocol and service layers. The PostgreSQL database and PatchDIFF Python runtime are trusted infrastructure components.
+- **Resource & DoS bounds:** Read/search tools enforce hard code-point and result caps (`8,000` code points, `200` occurrences); `tx/3` enforces a `1 MiB` (`1,048,576 B`) / `1,000,000`-code-point fresh admission cap; `near_misses` execute *after* releasing the target row lock under a hard `1,000,000`-cell budget; and `include_content=True` history paging enforces a `1 MiB` cumulative page budget (after the first non-empty entry on a page).
+- **Authentication & multi-tenant isolation:** PatchDIFF is designed as a local or private-network MCP transaction service (`stdio` subprocess or internal FastAPI/MCP registry). Multi-tenant authentication, RBAC, and network TLS termination are deployment-layer responsibilities outside the core transaction engine.
+
+---
+
+## 28. Future Research and Architectural Extensions
+
+1. **Executing the Live-Model & Human Comparative Benchmark Suite (`H1`–`H4`, `H6`, `H7`):** Running the controlled multi-model evaluation defined in §23.3 across frontier and open-weight coding models to quantify first-pass validity, retry convergence with `near_misses`/`exact_candidates`, and net session token cost.
+2. **Multi-Target Coordinated Transactions:** Extending `SELECT ... FOR UPDATE` lock ordering (e.g., canonical UUID sort order across `target_file_id[]`) to support all-or-nothing multi-file refactoring transactions while preserving per-target replayable ledgers.
+3. **Client/Server Protocol Capability Handshake:** While PatchDIFF already dispatches replay across recorded `(protocol_version, runtime_version)` tuples, adding an explicit MCP capability-negotiation handshake would allow hosts and servers at different minor versions to negotiate supported transaction versions (`tx/1..3`) dynamically at connection startup.
+4. **Optional Host-Side Semantic Verification Hooks:** Providing standardized post-preview / pre-commit callback patterns so hosts can run syntax checkers, typecheckers, or unit tests against `patchdiff_preview` outputs before committing.
 
 ---
 
 ## 29. Conclusion
 
-PatchDIFF reframes LLM and agent document editing as **deterministic transaction control over authoritative state**.
+As AI agents transition from single-turn code completions to long-horizon, multi-turn collaborators over persistent documents, the editing interface can no longer treat file mutation as an unguarded side effect. Full-document regeneration wastes output bandwidth and risks silent drift across untouched regions, while unguarded local patch tools (`str_replace`, unified diffs, line-range splices) leave concurrency control, multi-edit rollback, retry idempotence, and auditability to ad-hoc host wrappers.
 
-Its primary contribution is not a new diff syntax in isolation, but an integrated transaction protocol and runtime lifecycle: required version/hash preconditions checked under PostgreSQL row locks, sequential in-memory simulation across localized exact-match edits (`patchdiff-tx/1`), guarded code-point span operations and insertions (`patchdiff-tx/2`), and explicitly bounded whole-target replacements (`patchdiff-tx/3`), paired with structured rejection diagnostics (`failure_context`, `exact_candidates`, and post-commit Levenshtein `near_misses`), idempotent retry recovery (`client_request_id`), append-only attempt and manifest ledgers, `SAVE` cycle checkpointing, and profile-dispatched deterministic replay.
-
-For localized operations (`tx/1` and `tx/2`), accepted transactions guarantee that only matched or explicitly span-verified regions change while all unmatched content remains invariant; for explicit whole-target replacements (`tx/3`), the full-document transition is governed by the same mandatory state preconditions, atomic commit path, and audit trail. Rejected transactions never mutate the target and instead supply bounded, machine-actionable feedback for host-driven recovery.
-
-PatchDIFF provides structural and transactional applicability guarantees rather than semantic correctness. By transforming model-generated edits from unverified rewrites or ad-hoc patches into preconditioned, auditable, and replayable state transitions, PatchDIFF provides a rigorous systems foundation for reliable agentic document editing.
+PatchDIFF demonstrates that agent document editing is naturally modeled as a **deterministic, preconditioned database transaction**. By combining structured JSON transaction primitives—localized exact-match edits (`patchdiff-tx/1`), localized guarded code-point span operations (`patchdiff-tx/2`), and explicitly guarded whole-target replacement (`patchdiff-tx/3`)—with per-target PostgreSQL `SELECT ... FOR UPDATE` serialization, `client_request_id` idempotency, stage-accurate validity reporting, bounded recovery diagnostics (`failure_context`, `exact_candidates`, and post-commit Levenshtein `near_misses`), `SAVE` cycle compaction, and profile-dispatched deterministic replay, PatchDIFF gives MCP hosts a rigorous, auditable foundation for iterative document state transitions.
 
 ---
 
 ## References
 
-Anthropic (2024). _Model Context Protocol (MCP) Specification_. modelcontextprotocol.io.
-
-Anthropic (2025). _Text Editor Tool (`str_replace_based_edit_tool` / `text_editor_20250728`) Documentation_. Claude Platform Documentation (`https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool`).
-
-Bernstein, P. A., and Goodman, N. (1981). Concurrency control in distributed database systems. _ACM Computing Surveys_, 13(2), 185–221.
-
-Bryan, P., and Nottingham, M. (2013). _RFC 6902: JavaScript Object Notation (JSON) Patch_. Internet Engineering Task Force.
-
-Chacon, S., and Straub, B. (2014). _Pro Git_. Apress.
-
-Chen, M., Tworek, J., Jun, H., Yuan, Q., Pinto, H. P. O., Kaplan, J., Edwards, H., Burda, Y., Joseph, N., Brockman, G., et al. (2021). Evaluating large language models trained on code. _arXiv:2107.03374_.
-
-Ellis, C. A., and Gibbs, S. J. (1989). Concurrency control in groupware systems. _Proceedings of the ACM SIGMOD International Conference on Management of Data_, 399–407.
-
-Fowler, M. (2005). Event Sourcing. martinfowler.com.
-
-Gu, J., Wang, C., and Zhao, J. (2019). Levenshtein Transformer. _Advances in Neural Information Processing Systems_, 32.
-
-Hunt, J. W., and Szymanski, T. G. (1977). A fast algorithm for computing longest common subsequences. _Communications of the ACM_, 20(5), 350–353.
-
-Jimenez, C. E., Yang, J., Wettig, A., Yao, S., Pei, K., Press, O., and Narasimhan, K. (2024). SWE-bench: Can language models resolve real-world GitHub issues? _International Conference on Learning Representations_.
-
-Kung, H. T., and Robinson, J. T. (1981). On optimistic methods for concurrency control. _ACM Transactions on Database Systems_, 6(2), 213–226.
-
-Landau, G. M., and Vishkin, U. (1989). Fast parallel and serial approximate string matching. _Journal of Algorithms_, 10(2), 157–169.
-
-Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Küttler, H., Lewis, M., Yih, W., Rocktäschel, T., Riedel, S., and Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. _Advances in Neural Information Processing Systems_, 33.
-
-Malmi, E., Krause, S., Rothe, S., Mirylenka, D., and Severyn, A. (2019). Encode, Tag, Realize: High-Precision Text Editing. _Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing_.
-
-Myers, E. W. (1986). An O(ND) difference algorithm and its variations. _Algorithmica_, 1, 251–266.
-
-OpenAI (2025). _Apply Patch Tool (`apply_patch`) Guide_. OpenAI Developer Documentation (`https://developers.openai.com/api/docs/guides/tools-apply-patch`).
-
-Padioleau, Y., Lawall, J. L., Muller, G., and Hansen, R. R. (2008). Documenting and automating collateral evolutions in Linux device drivers. _Proceedings of the European Conference on Computer Systems_, 247–260.
-
-Schick, T., Dwivedi-Yu, J., Dessì, R., Raileanu, R., Lomeli, M., Hambro, E., Zettlemoyer, L., Cancedda, N., and Scialom, T. (2023). Toolformer: Language models can teach themselves to use tools. _Advances in Neural Information Processing Systems_.
-
-Shapiro, M., Preguiça, N., Baquero, C., and Zawirski, M. (2011). Conflict-free replicated data types. _International Symposium on Stabilization, Safety, and Security of Distributed Systems_, 386–400.
-
-Sun, C., Jia, X., Zhang, Y., Yang, Y., and Chen, D. (1998). Achieving convergence, causality preservation, and intention preservation in real-time cooperative editing systems. _ACM Transactions on Computer-Human Interaction_, 5(1), 63–108.
-
-Unicode Consortium (2024). _Unicode Standard Annex #29: Unicode Text Segmentation_. unicode.org/reports/tr29/.
-
-Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., and Cao, Y. (2023). ReAct: Synergizing reasoning and acting in language models. _International Conference on Learning Representations_.
+1. **Model Context Protocol (MCP) Specification:** Anthropic, *Model Context Protocol Specification (JSON-RPC 2.0 Transport & Tool Calling)*, `https://modelcontextprotocol.io/`.
+2. **IETF RFC 6902:** P. Bryan and M. Nottingham, *JavaScript Object Notation (JSON) Patch*, RFC 6902, April 2013.
+3. **Unicode Standard Annex #29 (UAX #29):** M. Davis, *Unicode Text Segmentation (Extended Grapheme Clusters)*, Unicode Consortium.
+4. **Approximate String Matching & Banded Edit Distance:**
+   - E. Ukkonen, *"Algorithms for Approximate String Matching,"* Information and Control, 64(1–3):100–118, 1985.
+   - G. M. Landau and U. Vishkin, *"Fast Parallel and Serial Approximate String Matching,"* Journal of Algorithms, 10(2):157–169, 1989.
+5. **Optimistic Concurrency Control:** H. T. Kung and J. T. Robinson, *"On Optimistic Methods for Concurrency Control,"* ACM Transactions on Database Systems (TODS), 6(2):213–226, 1981.
+6. **PatchDIFF Normative Specifications:**
+   - [AGENTS.md](../AGENTS.md) — Locked architectural invariants and runtime boundaries.
+   - [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md) — Architecture decisions (`A1`–`A8`), contracts (`C1`–`C6`), and historical design reconciliation.
+   - [MCP_TOOLS.md](MCP_TOOLS.md) — Normative MCP tool contracts, schemas, and byte budgets.
+   - [PATCHDIFF_CORE_SPEC.md](PATCHDIFF_CORE_SPEC.md) — Deterministic core runtime specification and validation stages.
+   - [DATA_MODEL.md](DATA_MODEL.md) — PostgreSQL schema and constraints.
+   - [PDCP_FORMAT.md](PDCP_FORMAT.md) — Transaction formats (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`).
+   - [evaluation/README.md](../evaluation/README.md) — Offline payload byte accounting and evaluation methodology.
