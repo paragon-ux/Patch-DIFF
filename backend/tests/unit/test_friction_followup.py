@@ -297,6 +297,23 @@ def test_abandoned_starts_keep_the_exact_ranking_and_cut_work():
     assert result["comparison_cells"] < (len(buffer) - len(needle)) * len(needle) * 9 // 3
 
 
+def test_repetitive_64k_buffer_scans_to_end_within_work_bound():
+    lines = ["# Operations log", ""]
+    for idx in range(1, 1000):
+        if idx % 500 == 0:
+            lines.append(f"## Section {idx // 500}")
+        lines.append(f"- entry {idx:05d}: service calcly processed batch {idx % 97} in {idx % 13} ms; status=ok")
+    buffer = ("\n".join(lines) + "\n")[:65536]
+    needle = "entry 00700: service calcly processd batch 21"
+    result = near_misses(stored(buffer, needle), caller_owned=False, buffer=buffer)
+    assert result["status"] == "computed" and result["scope_truncated"] is False
+    assert result["scanned_end"] == len(buffer) - (len(needle) - 1) + 1 == 65493
+    assert [(c["distance"], c["start"], c["end"]) for c in result["candidates"]] == [
+        (1, 47646, 47692), (3, 27193, 27238), (3, 27808, 27854)
+    ]
+    assert 0 < result["comparison_cells"] <= 200_000
+
+
 def test_sequential_failures_name_the_consuming_change_and_suppress_near_misses():
     result = typed("# Calcly\nInstall Calcly", [{"match": "# Calcly", "replace": "# Numerix"},
                                                  {"match": "# Calcly", "replace": "# X"}])

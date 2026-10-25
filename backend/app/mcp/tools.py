@@ -6,7 +6,8 @@ import json
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, literal_column, select
+from sqlalchemy.orm import defer
 
 from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.validity import validity_levels
@@ -338,7 +339,11 @@ def patchdiff_get_pdcp_log(
         return _history_error(target_file_id, "include_content must be a boolean.")
 
     effective_limit = clamp_limit(limit, default=DEFAULT_HISTORY_LIMIT, maximum=MAX_HISTORY_LIMIT)
-    query = select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_uuid)
+    query = (
+        select(AppendOnlyPdcpLogs)
+        .options(defer(AppendOnlyPdcpLogs.pdcp_content))
+        .where(AppendOnlyPdcpLogs.target_file_id == target_uuid)
+    )
     if before_sequence is not None:
         query = query.where(AppendOnlyPdcpLogs.log_sequence < before_sequence)
     if status is not None:
@@ -353,12 +358,55 @@ def patchdiff_get_pdcp_log(
         rows = session.scalars(
             query.order_by(AppendOnlyPdcpLogs.log_sequence.desc()).limit(effective_limit + 1)
         ).all()
-    has_more = len(rows) > effective_limit
-    page_rows = rows[:effective_limit]
+        has_more = len(rows) > effective_limit
+        page_rows = rows[:effective_limit]
+        meta_by_id: dict[uuid.UUID, Any] = {}
+        contents_by_id: dict[uuid.UUID, str] = {}
+        if page_rows:
+            meta_cols = [
+                AppendOnlyPdcpLogs.pdcp_log_id,
+                _sql_bounded_intent().label("intent"),
+                _sql_intent_truncated().label("intent_truncated"),
+            ]
+            if include_content:
+                meta_cols.append(func.octet_length(AppendOnlyPdcpLogs.pdcp_content).label("content_bytes"))
+            page_ids = [row.pdcp_log_id for row in page_rows]
+            meta_by_id = {
+                meta.pdcp_log_id: meta
+                for meta in session.execute(
+                    select(*meta_cols).where(AppendOnlyPdcpLogs.pdcp_log_id.in_(page_ids))
+                ).all()
+            }
+            if include_content:
+                included_ids: list[uuid.UUID] = []
+                budget_used = 0
+                for row in page_rows:
+                    meta = meta_by_id.get(row.pdcp_log_id)
+                    size = (
+                        (meta.content_bytes or 0)
+                        if (meta is not None and hasattr(meta, "content_bytes"))
+                        else len(row.pdcp_content.encode("utf-8"))
+                    )
+                    if not budget_used or budget_used + size <= MAX_CONTENT_PAGE_BYTES:
+                        included_ids.append(row.pdcp_log_id)
+                        budget_used += size
+                for item in session.execute(
+                    select(AppendOnlyPdcpLogs.pdcp_log_id, AppendOnlyPdcpLogs.pdcp_content).where(
+                        AppendOnlyPdcpLogs.pdcp_log_id.in_(included_ids)
+                    )
+                ).all():
+                    contents_by_id[item.pdcp_log_id] = item.pdcp_content
     next_sequence = page_rows[-1].log_sequence if has_more and page_rows else None
     entries = []
-    content_bytes = 0
     for row in page_rows:
+        meta = meta_by_id.get(row.pdcp_log_id)
+        if meta is not None and hasattr(meta, "intent_truncated"):
+            intent_val = meta.intent
+            intent_trunc = bool(meta.intent_truncated)
+        else:
+            raw_intent = _record_field(row.protocol_version, row.pdcp_content, "intent")
+            intent_val = raw_intent[:MAX_ATTEMPT_INTENT_CHARS] if isinstance(raw_intent, str) else None
+            intent_trunc = isinstance(raw_intent, str) and len(raw_intent) > MAX_ATTEMPT_INTENT_CHARS
         entry = {
             "pdcp_log_id": str(row.pdcp_log_id),
             "log_sequence": row.log_sequence,
@@ -382,19 +430,16 @@ def patchdiff_get_pdcp_log(
             "request_fingerprint": row.request_fingerprint,
             "diagnostic": row.diagnostic_json,
             "created_at": row.created_at.isoformat(),
+            "intent": intent_val,
+            "intent_truncated": intent_trunc,
         }
-        intent = _record_field(row.protocol_version, row.pdcp_content, "intent")
-        entry["intent"] = intent[:MAX_ATTEMPT_INTENT_CHARS] if isinstance(intent, str) else None
-        entry["intent_truncated"] = isinstance(intent, str) and len(intent) > MAX_ATTEMPT_INTENT_CHARS
         if include_content:
-            size = len(row.pdcp_content.encode("utf-8"))
-            if content_bytes and content_bytes + size > MAX_CONTENT_PAGE_BYTES:
+            if row.pdcp_log_id in contents_by_id:
+                # The first entry with content is always whole, so limit=1 can fetch any row.
+                entry["pdcp_content"] = contents_by_id[row.pdcp_log_id]
+            else:
                 entry["pdcp_content"] = None
                 entry["pdcp_content_omitted"] = "page_byte_budget"
-            else:
-                # The first entry with content is always whole, so limit=1 can fetch any row.
-                entry["pdcp_content"] = row.pdcp_content
-                content_bytes += size
         entries.append(entry)
     return {"entries": entries, "has_more": has_more, "next_sequence": next_sequence}
 
@@ -474,27 +519,57 @@ def patchdiff_get_manifest_ledger(
         rows = session.scalars(
             query.order_by(AppendOnlyManifestLedger.ledger_sequence.desc()).limit(effective_limit + 1)
         ).all()
-        log_ids = {row.pdcp_log_id for row in rows[:effective_limit]}
+        page_rows = rows[:effective_limit]
+        log_ids = {row.pdcp_log_id for row in page_rows}
+        needs_json = any(
+            row.origin == "typed" and (row.derived_json or {}).get("operation") != "replace_all"
+            for row in page_rows
+        )
+        log_cols = [
+            AppendOnlyPdcpLogs.pdcp_log_id,
+            AppendOnlyPdcpLogs.log_sequence,
+            AppendOnlyPdcpLogs.before_version,
+            AppendOnlyPdcpLogs.after_version,
+            AppendOnlyPdcpLogs.protocol_version,
+        ]
+        if needs_json:
+            log_cols.extend((
+                _sql_transaction_intent().label("transaction_intent"),
+                _sql_rationales().label("rationales"),
+            ))
         logs = {
             log.pdcp_log_id: log
-            for log in (session.execute(select(
-                AppendOnlyPdcpLogs.pdcp_log_id, AppendOnlyPdcpLogs.log_sequence, AppendOnlyPdcpLogs.before_version,
-                AppendOnlyPdcpLogs.after_version, AppendOnlyPdcpLogs.protocol_version, AppendOnlyPdcpLogs.pdcp_content,
-            ).where(AppendOnlyPdcpLogs.pdcp_log_id.in_(log_ids))).all() if log_ids else ())
+            for log in (
+                session.execute(select(*log_cols).where(AppendOnlyPdcpLogs.pdcp_log_id.in_(log_ids))).all()
+                if log_ids else ()
+            )
         }
 
     has_more = len(rows) > effective_limit
-    page_rows = rows[:effective_limit]
     next_sequence = page_rows[-1].ledger_sequence if has_more and page_rows else None
     ordered_rows = list(reversed(page_rows))
 
-    records = {log_id: _decoded_record(log.protocol_version, log.pdcp_content) for log_id, log in logs.items()}
     entries = []
     for row in ordered_rows:
         log = logs.get(row.pdcp_log_id)
-        record = records.get(row.pdcp_log_id)
-        items = (record.get("edits") if "edits" in record else record.get("operations")) if record else None
-        item = items[row.change_index - 1] if isinstance(items, list) and 0 < row.change_index <= len(items) else None
+        if not needs_json:
+            tx_intent = row.intent if (row.origin == "typed" and log and log.protocol_version in _TYPED_PROTOCOLS) else None
+            rationale = None
+        else:
+            if log is not None and hasattr(log, "transaction_intent"):
+                tx_intent = (
+                    row.intent
+                    if (row.origin == "typed" and log.protocol_version == "patchdiff-tx/3")
+                    else log.transaction_intent
+                )
+                rats = log.rationales
+                rationale = rats[row.change_index - 1] if isinstance(rats, list) and 0 < row.change_index <= len(rats) else None
+            else:
+                record = _decoded_record(log.protocol_version, getattr(log, "pdcp_content", None)) if log else None
+                items = (record.get("edits") if "edits" in record else record.get("operations")) if record else None
+                item = items[row.change_index - 1] if isinstance(items, list) and 0 < row.change_index <= len(items) else None
+                tx_intent = record.get("intent") if record else None
+                rationale = item.get("rationale") if isinstance(item, dict) else None
         entries.append({
             "ledger_sequence": row.ledger_sequence,
             "pdcp_log_id": str(row.pdcp_log_id),
@@ -505,8 +580,8 @@ def patchdiff_get_manifest_ledger(
             "change_index": row.change_index,
             "change_id": row.change_id,
             "intent": row.intent,
-            "transaction_intent": record.get("intent") if record else None,
-            "rationale": item.get("rationale") if isinstance(item, dict) else None,
+            "transaction_intent": tx_intent,
+            "rationale": rationale,
             "input_state": row.input_state,
             "output_state": row.output_state,
             "affected_region": row.affected_region,
@@ -635,6 +710,80 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
         "deduplicated": result.deduplicated,
         "client_request_id": result.client_request_id,
     }
+
+
+_PREFIX_SLICE = 'split_part(left(append_only_pdcp_logs.pdcp_content, 4096), \',"operations":[\', 1) || \'}\''
+_SAFE_DOC_SQL = f"""(
+    CASE
+      WHEN append_only_pdcp_logs.protocol_version IN ('patchdiff-tx/1', 'patchdiff-tx/2', 'patchdiff-tx/3') THEN
+        CASE
+          WHEN octet_length(append_only_pdcp_logs.pdcp_content) > 65536
+               AND strpos(left(append_only_pdcp_logs.pdcp_content, 4096), ',"operations":[') > 0
+               AND pg_input_is_valid({_PREFIX_SLICE}, 'jsonb')
+          THEN
+            CASE
+              WHEN jsonb_typeof(({_PREFIX_SLICE})::jsonb) = 'object'
+                   AND NOT ((({_PREFIX_SLICE})::jsonb) ? 'evidence_format')
+              THEN ({_PREFIX_SLICE})::jsonb
+            END
+          WHEN pg_input_is_valid(append_only_pdcp_logs.pdcp_content, 'jsonb') THEN
+            CASE
+              WHEN jsonb_typeof(append_only_pdcp_logs.pdcp_content::jsonb) = 'object'
+                   AND NOT ((append_only_pdcp_logs.pdcp_content::jsonb) ? 'evidence_format')
+              THEN append_only_pdcp_logs.pdcp_content::jsonb
+            END
+        END
+    END
+)"""
+_SAFE_TX12_DOC_SQL = """(
+    CASE
+      WHEN append_only_pdcp_logs.protocol_version IN ('patchdiff-tx/1', 'patchdiff-tx/2') THEN
+        CASE
+          WHEN pg_input_is_valid(append_only_pdcp_logs.pdcp_content, 'jsonb') THEN
+            CASE
+              WHEN jsonb_typeof(append_only_pdcp_logs.pdcp_content::jsonb) = 'object'
+                   AND NOT ((append_only_pdcp_logs.pdcp_content::jsonb) ? 'evidence_format')
+              THEN append_only_pdcp_logs.pdcp_content::jsonb
+            END
+        END
+    END
+)"""
+_ITEMS_SQL = f"""(
+    CASE
+      WHEN {_SAFE_TX12_DOC_SQL} IS NOT NULL THEN
+        CASE
+          WHEN {_SAFE_TX12_DOC_SQL} ? 'edits' THEN {_SAFE_TX12_DOC_SQL} -> 'edits'
+          ELSE {_SAFE_TX12_DOC_SQL} -> 'operations'
+        END
+    END
+)"""
+
+
+def _sql_bounded_intent():
+    return literal_column(
+        f"(CASE WHEN jsonb_typeof({_SAFE_DOC_SQL} -> 'intent') = 'string' "
+        f"THEN left({_SAFE_DOC_SQL} ->> 'intent', {MAX_ATTEMPT_INTENT_CHARS}) END)"
+    )
+
+
+def _sql_intent_truncated():
+    return literal_column(
+        f"coalesce(jsonb_typeof({_SAFE_DOC_SQL} -> 'intent') = 'string' "
+        f"AND char_length({_SAFE_DOC_SQL} ->> 'intent') > {MAX_ATTEMPT_INTENT_CHARS}, false)"
+    )
+
+
+def _sql_transaction_intent():
+    return literal_column(f"({_SAFE_DOC_SQL} -> 'intent')")
+
+
+def _sql_rationales():
+    return literal_column(
+        f"(CASE WHEN jsonb_typeof({_ITEMS_SQL}) = 'array' THEN "
+        f"(SELECT coalesce(jsonb_agg(coalesce(CASE WHEN jsonb_typeof(elem) = 'object' "
+        f"THEN elem -> 'rationale' END, 'null'::jsonb)), '[]'::jsonb) "
+        f"FROM jsonb_array_elements({_ITEMS_SQL}) AS elem) END)"
+    )
 
 
 def _decoded_record(protocol_version: str | None, content: str | None) -> dict | None:

@@ -363,3 +363,89 @@ def test_fr20_save_accepts_a_version_guard():
     saved = tools.patchdiff_save(target_file_id=str(target_id), expected_target_version=1,
                                  expected_current_hash=canonical_sha256("beta"))
     assert saved["status"] == "saved" and saved["version"] == 1
+
+
+def test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content():
+    from sqlalchemy import event
+    from app.services.pdcp_service import submit_pdcp
+    from app.storage.db import engine
+    from backend.tests.integration.helpers import pdcp_for
+
+    tx3_target = create_target("seed\n")
+    payload = "z" * 400_000 + "\n"
+    for version in range(4):
+        res = tools.patchdiff_submit_replacement(
+            target_file_id=str(tx3_target),
+            expected_target_version=version,
+            intent=f"Rewrite {version}",
+            replacement=f"{version:02d}" + payload,
+        )
+        assert res["status"] == "accepted"
+
+    statements: list[str] = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        ledger_page = tools.patchdiff_get_manifest_ledger(target_file_id=str(tx3_target), limit=50)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert [e["transaction_intent"] for e in ledger_page["entries"]] == [f"Rewrite {v}" for v in range(4)]
+    assert all(e["rationale"] is None and e["intent"] == e["transaction_intent"] for e in ledger_page["entries"])
+    assert all("pdcp_content" not in sql for sql in statements)
+
+    mixed_target = create_target("alpha beta gamma")
+    with SessionLocal() as session:
+        assert submit_edits(session, **edits(mixed_target, [
+            {"match": "alpha", "replace": "ALPHA", "rationale": "First rationale"},
+            {"match": "beta", "replace": "BETA"},
+        ], version=0)).status == "accepted"
+        assert submit_operations(session, **ops(mixed_target, [
+            {**span(11, 16, "gamma", "GAMMA"), "rationale": "Span rationale"},
+        ], version=1)).status == "accepted"
+        assert submit_pdcp(session, target_file_id=mixed_target,
+                           pdcp_content=pdcp_for(mixed_target, ("GAMMA", "delta")),
+                           expected_target_version=2).status == "accepted"
+    bad_utf8 = tools.patchdiff_submit_edits(
+        target_file_id=str(mixed_target), expected_target_version=3,
+        intent="bad\x00intent", edits=[{"match": "delta", "replace": "epsilon"}],
+    )
+    assert bad_utf8["status"] == "rejected"
+
+    statements.clear()
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        mixed_ledger = tools.patchdiff_get_manifest_ledger(target_file_id=str(mixed_target), limit=50)["entries"]
+        mixed_attempts = tools.patchdiff_get_pdcp_log(target_file_id=str(mixed_target), limit=50)["entries"]
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert [(e["transaction_intent"], e["rationale"]) for e in mixed_ledger] == [
+        ("Friction follow-up", "First rationale"),
+        ("Friction follow-up", None),
+        ("Friction follow-up", "Span rationale"),
+        (None, None),
+    ]
+    assert [(a["intent"], a["intent_truncated"]) for a in mixed_attempts] == [
+        (None, False),
+        (None, False),
+        ("Friction follow-up", False),
+        ("Friction follow-up", False),
+    ]
+    selected_cols: list[list[str]] = []
+
+    def capture_cols(conn, cursor, statement, parameters, context, executemany):
+        if cursor.description:
+            selected_cols.append([col.name for col in cursor.description])
+
+    event.listen(engine, "after_cursor_execute", capture_cols)
+    try:
+        tools.patchdiff_get_manifest_ledger(target_file_id=str(mixed_target), limit=50)
+        tools.patchdiff_get_pdcp_log(target_file_id=str(mixed_target), limit=50)
+    finally:
+        event.remove(engine, "after_cursor_execute", capture_cols)
+
+    assert selected_cols and all("pdcp_content" not in cols for cols in selected_cols)
