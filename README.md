@@ -1,10 +1,10 @@
 # PatchDIFF
 
-**Server-side deterministic document transaction service for MCP hosts and coding agents.**
+**Transactional document-editing service for MCP-connected agents.**
 
-PatchDIFF turns model-generated document edits from best-effort file rewrites into **guarded, atomic, auditable, and deterministically replayable PostgreSQL transactions** exposed over the Model Context Protocol (MCP).
+PatchDIFF turns model-generated document edits from unguarded file rewrites or ad-hoc local patches into **explicitly preconditioned, atomic, auditable, and deterministically replayable PostgreSQL transactions** exposed over the Model Context Protocol (MCP).
 
-Instead of trusting an LLM to regenerate an entire file or apply unverified local patches, the MCP host reads authoritative document slices from PatchDIFF, submits compact typed JSON transactions (`patchdiff-tx/1`, `patchdiff-tx/2`, or `patchdiff-tx/3`) guarded by version/hash preconditions and `client_request_id` idempotency keys, and receives either an **atomic per-target commit** (with runtime-derived span/hash facts and advisory warnings) or a **structured rejection** (with stage-accurate validity, exact ambiguity candidates, and sub-50 ms exact Levenshtein near-miss diagnostics).
+Agents propose structured text edits (`patchdiff-tx/1`, `patchdiff-tx/2`, or `patchdiff-tx/3`) against a canonical target document managed in PostgreSQL. PatchDIFF validates the proposal deterministically against exact text/span preconditions and required target version/hash guards, simulates all edits sequentially in memory, and either **commits the entire transaction atomically per target** (`SELECT ... FOR UPDATE`) or **rejects it without mutating target state** while returning bounded recovery diagnostics (`failure_context`, `exact_candidates`, and post-commit Levenshtein `near_misses`).
 
 ```text
 PatchDIFF server = deterministic transaction runtime + authoritative read/commit service
@@ -13,11 +13,36 @@ Host / Model     = planning, context selection, proposal generator, retry owner
 PostgreSQL 16+   = canonical working substrate (SELECT ... FOR UPDATE)
 ```
 
-PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. See the [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md), and [security policy](SECURITY.md).
+PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. The MCP host remains responsible for planning, generating proposals, and evaluating whether accepted edits accomplish the user's goal. See the [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md), and [security policy](SECURITY.md).
 
 ---
 
-## How the Transactional Loop Works
+## 1. Why PatchDIFF Instead of Existing Edit Methods?
+
+Coding agents and document workflows typically edit text through full-file rewrites, unique-string replacement (`str_replace`), unified diffs (`apply_patch`), or line-range splices. While a host harness can build custom concurrency locks, rollback logic, retry deduplication, and audit tables around those formats, PatchDIFF provides those capabilities directly in its transaction protocol and PostgreSQL runtime:
+
+| Editing Problem | Conventional Approach | What PatchDIFF Provides Directly |
+| --- | --- | --- |
+| **Small edit in a large file** | Full regeneration emits the complete replacement document on every turn | `patchdiff-tx/1` and `tx/2` emit only the matched/replaced spans plus compact transaction framing |
+| **Repeated identical text** | Unique-match replacement (`str_replace`) requires expanding `old_str` with surrounding lines until unique | Explicit `occurrence_index`, `anchor_before` / `anchor_after` (`tx/1`), or guarded `[start, end)` spans (`tx/2`) without enlarging the match |
+| **Unified diff formatting** | Agent must construct line-oriented hunks and maintain `@@ -l,s +l,s @@` header arithmetic | Structured JSON fields (`patchdiff_submit_edits` / `patchdiff_submit_operations`); zero hunk-header arithmetic or text-delimiter collision |
+| **Coordinate & state drift** | Line-based edits depend on positions remaining unchanged since the agent last read the file | Required `expected_target_version` and/or `expected_current_hash` under `SELECT ... FOR UPDATE`, plus exact `expected_text` and optional `expected_before` / `expected_after` span checks |
+| **Multiple changes in one target** | Single-replacement interfaces require $N$ separate tool calls (or leave multi-edit rollback to the host) | One `edits[]` / `operations[]` submission simulated sequentially in memory and committed all-or-nothing per target |
+| **Missing or ambiguous match** | Basic interfaces return an error string, leaving the host to search for context in extra turns | Structured rejection with bounded `failure_context` (`<= 256` code points), up to 5 indexed `exact_candidates`, and up to 3 ranked Levenshtein `near_misses` |
+| **Lost submission response** | Host must inspect current target state to guess whether a timed-out write succeeded before retrying | Retrying with the same `(target_file_id, client_request_id)` returns the exact recorded outcome (`deduplicated: true`) |
+| **Long editing session & audit** | Host must maintain its own history, rejected-attempt logs, and state verification | Append-only attempt log (accepted + rejected), accepted manifest ledger with runtime-derived span/hash facts, `patchdiff_save` cycles, and profile-dispatched `patchdiff_replay` |
+
+### How PatchDIFF Compares Across Editing Paradigms
+
+- **Against Full-Document Regeneration:** Localized `patchdiff-tx/1` and `patchdiff-tx/2` transactions scale with the edited delta rather than target file length, and restrict mutations strictly to the matched or span-guarded regions. When a whole-document rewrite is intentionally desired, `patchdiff-tx/3` (`patchdiff_submit_replacement`) provides an explicit, version/hash-guarded replacement path (`<= 1,000,000` code points and `<= 1,048,576` UTF-8 bytes).
+- **Against Unified Diff (`apply_patch`):** Unified diffs require models to emit line-oriented patch syntax and context hunks, and CLI `patch` tools may apply hunks at offset positions when fuzz is enabled. OpenAI's `apply_patch` tool specification delegates patch application and atomicity policy to the host harness; PatchDIFF enforces exact precondition matching and per-target PostgreSQL transactional atomicity directly in the server.
+- **Against Unique-Match `str_replace` (e.g., Anthropic Text Editor Tool):** Documented `str_replace` tools require `old_str` to match exactly once and reject zero or multiple matches, which is safe against silent first-match corruption but forces the model to copy surrounding context lines whenever a target line repeats (such as `"enabled: true"`). PatchDIFF preserves exact matching while allowing the model to disambiguate repeated strings via `occurrence_index`, `anchor_before` / `anchor_after`, or `tx/2` spans, and batches multiple edits in a single atomic call.
+- **Against Unguarded Line-Range Editing:** Splicing by raw line numbers can silently corrupt text if earlier edits shift line offsets. PatchDIFF's `patchdiff-tx/2` (`patchdiff_submit_operations`) requires `expected_text` on every `[start, end)` code-point span, supports optional `expected_before` and `expected_after` adjacency guards (runtime profile `patchdiff-mvp-0.5.0`), and emits conservative UAX #29 `grapheme_boundary_split` advisory warnings without silently guessing boundaries.
+- **Alternatives for Different Problem Domains:** AST / RFC 6902 JSON Patch tools are purpose-built for structural tree mutations on parsed JSON/code ASTs, and OT / CRDT systems (Yjs, Automerge) are designed for concurrent lock-free multi-user merging. PatchDIFF targets arbitrary canonical UTF-8 documents (Markdown, Python, YAML, JSON, prose) where stale or conflicting agent edits must be deterministically rejected rather than auto-merged.
+
+---
+
+## 2. How PatchDIFF Resolves Common Agent-Editing Failures (Strict Matching Without Blind Recovery)
 
 ```mermaid
 sequenceDiagram
@@ -25,7 +50,7 @@ sequenceDiagram
     participant PD as PatchDIFF MCP Server
     participant PG as PostgreSQL 16 (Authoritative State)
 
-    Host->>PD: 1. patchdiff_read_target / patchdiff_find_occurrences
+    Host->>PD: 1. patchdiff_read_target / patchdiff_read_lines / patchdiff_find_occurrences
     PD->>PG: Read committed canonical LF slice
     PG-->>PD: content slice + version + current_hash
     PD-->>Host: Bounded slice / exact spans + version=3
@@ -37,86 +62,103 @@ sequenceDiagram
         PD-->>Host: status="accepted", version=4, evidence.changes[], warnings[], validity
     else Stale guard, missing match, or ambiguity
         PD->>PG: Log rejected attempt in append_only_pdcp_logs (zero target mutation)
-        PD-->>Host: status="rejected", failure_reason, failure_context, exact_candidates / near_misses
-        Host->>PD: 3. Re-read fresh slice & retry with parent_pdcp_log_id
+        PD-->>Host: status="rejected", failure_reason, diagnostic.failure_context, exact_candidates / near_misses
+        Host->>PD: 3. Inspect diagnostics & resubmit with parent_pdcp_log_id
     end
 ```
 
+### The Strict-Matching Tradeoff: Enforcing Applicability Without Fuzzy Auto-Mutation
+
+Strict exact matching prevents the runtime from silently applying an edit at the wrong location, but it creates a well-known agent usability challenge: models occasionally quote slightly stale whitespace/characters (`match_absent`) or target a string that appears multiple times (`match_ambiguous`).
+
+> **Scope of Strict Matching:** Strict matching and state guards enforce **transaction applicability and selection constraints**—guaranteeing that an edit applies only to the exact target state and text span specified. They do **not** guarantee semantic or task correctness (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`), nor do they guarantee that an agent will successfully repair a rejected proposal.
+
+Instead of weakening exact matching with fuzzy auto-application, PatchDIFF returns **bounded, machine-actionable recovery diagnostics** on rejection so the host/agent can formulate an exact retry:
+
+1. **Ambiguous Match (`match_ambiguous` / `anchor_ambiguous`):** Returns `diagnostic.exact_candidates` containing `occurrence_count` and up to **5 indexed exact occurrences** (`occurrence_index`, `start`, `end`, `before`, `match_preview`, `match_truncated`, `after`, capped at `<= 8,192` compact ASCII JSON bytes) so the agent can resubmit immediately with `"occurrence_index": k` or a `[start, end)` span.
+2. **Missing Match (`match_absent`):** After releasing the database lock on a service-owned transaction, PatchDIFF scans up to the first `65,536` Unicode code points of the failing buffer (when `len(match) <= 64` code points, under a `1,000,000` comparison-cell budget) and returns top-level `near_misses` with up to **3 ranked exact Levenshtein candidates** (`distance`, `start`, `end`, `text`, `before`, `after`, capped at `<= 8,192` compact ASCII JSON bytes).
+3. **Consumed Sequential Match (`sequential_match_invalid`):** If edit $i$ fails because earlier edit $j < i$ in the same transaction already modified or consumed its match span, PatchDIFF reports `consumed_by_change_id` and up to 5 transaction-start `original_occurrences` (and omits `near_misses` with `omission_reason: "sequential_match_consumed"`).
+4. **Read-Only Dry-Run (`patchdiff_preview`):** Hosts can validate and simulate any `tx/1`, `tx/2`, or `tx/3` proposal in memory (`<= 32,768` compact ASCII JSON bytes) without acquiring row locks, writing audit rows, or advancing target state.
+
 ---
 
-## Why PatchDIFF: Measured Benefits & Guarantees
+## 3. Operational Efficiency: Payload, Context, Tool Calls, and Latency
 
-All measurements below are reproducible locally via `evaluation/offline_eval.py` and the live PostgreSQL benchmark suite (`Python 3.11.9`, `postgres:16.3-alpine` on Windows 11).
+Claims below use four explicit evidence labels (`docs/MODERNIZATION_ARCHITECTURE.md` Decision A8):
+- **`Measured`**: Deterministic UTF-8 serialization byte counts from `evaluation/offline_eval.py` or local benchmark medians on specified workloads.
+- **`Derived`**: Exact arithmetic or tool-call counts for an explicitly specified interface workflow.
+- **`Illustrative`**: Clearly labeled token or decoding-time illustrations stating their conversion assumptions (not tokenizer measurements).
+- **`Not yet measured`**: Live-model comparative accuracy, retry-turn distributions, and end-to-end agent turn latency (`NOT RUN`).
 
-### 1. Compact $O(\text{delta})$ Typed JSON Payloads & Zero Delimiter Collisions
-Unlike full-document regeneration ($O(\text{document size})$) or text-delimited patch envelopes that break when target files contain conflict markers (`<<<<<<<`), PatchDIFF's typed JSON formats scale strictly with the edited span:
+### 3.1 Output Payload Size & Scaling (`Measured` + `Derived`)
 
-| Scenario (`evaluation/offline_eval.py`) | `patchdiff-tx/1` Minimal (`typed_min`, Wire / Stored) | `patchdiff-tx/1` with Prose (`typed_match`, Wire / Stored) | `patchdiff-tx/3` Whole-Target Rewrite (Wire / Stored) | Verdict & Delimiter Safety |
+Reproducible via `PYTHONPATH=backend python evaluation/offline_eval.py` (using a fixed 36-char `target_file_id`, concise `intent`, `expected_target_version: 0`, and compact UTF-8 JSON):
+
+| Scenario (`evaluation/offline_eval.py`) | `patchdiff-tx/1` Minimal (`typed_min`, MCP `arguments` / Stored) | `patchdiff-tx/1` with Prose (`typed_match`, MCP `arguments` / Stored) | `patchdiff-tx/3` Whole-Target Replacement (`arguments` / Stored / `tools/call` Line) | Verdict & Delimiter Safety |
 | --- | --- | --- | --- | --- |
-| **1 tiny edit** | **`151 B`** / **`206 B`** | `327 B` / `382 B` | `341 B` / `290 B` | `accepted` |
-| **5 small edits in 1 transaction** | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | — | `accepted` (atomic all-or-nothing) |
-| **1 edit, 2 KB span** | **`4,441 B`** / **`4,496 B`** | `4,617 B` / `4,672 B` | `2,486 B` / `2,435 B` | `accepted` |
-| **Quotes + backslashes + Unicode (`🌍`, `中`)** | **`172 B`** / **`227 B`** | `348 B` / `403 B` | `359 B` / `308 B` | `accepted` |
-| **Payload contains `<<<<<<< MATCH` delimiter** | **`162 B`** / **`217 B`** | `338 B` / `393 B` | — | **`accepted` (100% collision-free)** |
+| **1 tiny edit (`"old" -> "new"`)** | **`151 B`** / **`206 B`** | `327 B` / `382 B` | `232 B` / `290 B` / `341 B` | `accepted` |
+| **5 small edits (`5 × 1-byte edits`)** | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | — | `accepted` (atomic all-or-nothing) |
+| **1 edit, 2 KB span (`2,109 B` text)** | **`4,441 B`** / **`4,496 B`** | `4,617 B` / `4,672 B` | `2,377 B` / `2,435 B` / `2,486 B` | `accepted` |
+| **Quotes + backslashes + Unicode (`🌟`, `中`)** | **`172 B`** / **`227 B`** | `348 B` / `403 B` | `250 B` / `308 B` / `359 B` | `accepted` |
+| **Payload has a delimiter line (`"a\n=======\nb"`)** | **`162 B`** / **`217 B`** | `338 B` / `393 B` | — | **`accepted`** (eliminates `.pdcp` `=======` collision) |
 
-### 2. Sub-50 ms Exact Near-Miss Diagnostics on 64K Buffers (`SVC-001`)
-When an exact match fails (`match_absent`), PatchDIFF scans up to the first `65,536` code points of the failing buffer after lock release using an **exact positional pigeonhole filter ($k+1$ disjoint needle pieces) coupled with a Landau–Vishkin diagonal-wave banded dynamic program** under a `1,000,000`-cell cap. It returns up to 3 non-overlapping exact Levenshtein near-miss candidates without ever applying a fuzzy edit:
+- **Marginal edit cost (`Derived`):** Each additional minimal edit item in `edits[]` adds **`25 B`** of JSON keys/punctuation (`{"match":"","replace":""}`) + **`1 B`** comma separator + the JSON-escaped UTF-8 lengths of `match` and `replace` (**`+28 B` per additional edit** with two 1-byte ASCII strings).
+- **Scaling comparison (`Derived` / `Illustrative`):** On a 64 KB (`65,536 B`) file, a full-document rewrite must emit all `65,536 B` of content (`~16,384` tokens under an illustrative `~4 UTF-8 bytes ≈ 1 token` code/English rule of thumb), whereas a 1-edit `patchdiff-tx/1` `arguments` payload is **`151 B`** (>99.7% fewer output bytes). When editing a repeated short line (e.g., `"enabled: true"`), a unique-match `str_replace` call must duplicate enough surrounding lines in both `old_str` and `new_str` to make the block unique, whereas `patchdiff-tx/1` adds `"occurrence_index": 2` (**`+21 B`**) to the short match.
 
-| 65,536-Code-Point Workload (`needle` len 45, `threshold=4`) | Baseline Banded DP (`PR #13`) | Pigeonhole + Landau–Vishkin (`PR #14`) | Speedup & Coverage Gain |
+### 3.2 Input Context Window Protection (`Measured` Runtime Caps)
+
+Every PatchDIFF read, search, preview, rejection, and history response enforces deterministic bounds so large targets or high-volume edit logs do not flood the agent's context window:
+
+| Surface | Enforced Bound & Unit | Operational Effect |
+| --- | --- | --- |
+| **Authoritative Reads (`patchdiff_read_target`, `patchdiff_read_lines`)** | **`4,000` default / `8,000` max Unicode code points** per call | Returns bounded slice with `truncated` flag and `next_start` (or `next_offset` / `next_start` on line reads) |
+| **Exact Search (`patchdiff_find_occurrences`)** | `context_chars` default **`40`** / cap **`400`** code points; `max_results` default/cap **`200`** | Locates all exact occurrences (including overlapping matches) with compact surrounding snippets |
+| **Rejection Enrichment (`failure_context`, `current_context`, `exact_candidates`, `near_misses`)** | **`<= 18,432 B` compact ASCII-escaped JSON** across newly added enrichment fields (`<= 4,096 B` per context window; `<= 8,192 B` per candidate block; `<= 256` code points in `FailureBufferContext`) | Provides immediate recovery context without dumping the full document into the error payload |
+| **Advisory Preview (`patchdiff_preview`)** | **`<= 32,768 B` compact ASCII-escaped JSON** (`<= 16,384 B` for up to 32 `change_facts` at `<= 2,048 B` each; `<= 16,384 B` diagnostics) | Bounds dry-run output on multi-edit transactions |
+| **History & Ledger Paging (`patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`)** | `limit` default **`50`** / cap **`200`**; `intent` bounded to **`<= 256` chars**, `rationale` to **`<= 128` chars**; `include_content=True` uses a **`1,048,576 B` UTF-8 page budget** (first entry with content returned whole; later entries over budget set `pdcp_content_omitted: "page_byte_budget"`) | Inspects audit history in SQL without transferring multi-megabyte `pdcp_content` blobs into the prompt |
+
+### 3.3 Tool Invocations for Multi-Edit & Recovery Workflows (`Derived`)
+
+*Note: Counts below compare deterministic **tool invocations** for a specified operation. Whether fewer tool calls or richer diagnostics reduce end-to-end **model turns** across diverse tasks requires a controlled live-model study (`Not yet measured`).*
+
+| Workflow Scenario | Single-Replacement / Basic Tool Interface (`Derived` Calls) | PatchDIFF MCP Interface (`Derived` Calls) | Mechanism |
 | --- | --- | --- | --- |
-| **Varied technical prose (`65,536` chars)** | `100.2 ms` (`174,897` cells, `100%` scanned) | **`1.7 ms`** (`585` cells, `100%` scanned) | **58.9× faster** (`99.7%` fewer DP cells) |
-| **Repetitive structured logs (`65,536` chars)** | `708.5 ms` (`1,000,000` cells, **truncated at `69%`**) | **`41.9 ms`** (`142,255` cells, **`100%` scanned**) | **16.9× faster** + **full 64K scan** (`scope_truncated=False`) |
+| **Apply 5 distinct edits to one target** | **`5` tool calls** (five separate single-replacement invocations, with partial state if call $k$ fails) | **`1` tool call** (`patchdiff_submit_edits` with 5 items in `edits[]`, or `2` with optional `patchdiff_preview`) | Sequential in-memory simulation and atomic per-target commit |
+| **Recover from an ambiguous match (`match_ambiguous`, <= 5 occurrences)** | **`2+` calls** (rejection error → search/read call to locate occurrences → retry call) | **`1` retry call** (`exact_candidates` in the rejection response already supplies `occurrence_index` and `[start, end)` coordinates) | Built-in `exact_candidates` enrichment on rejection |
+| **Recover from a minor typo (`match_absent`, needle <= 64 chars)** | **`2+` calls** (rejection error → read/search call around suspected region → retry call) | **`1` retry call** when the target string appears in the top 3 `near_misses` candidates (`text`, `start`, `end`) | Post-commit Levenshtein `near_misses` scan on the failing buffer |
+| **Recover from a lost/timed-out submission response** | **`2` calls** (read target to inspect whether edit was applied → conditional retry) | **`1` call** (resubmit identical request with the same `client_request_id`; server returns recorded outcome with `deduplicated: true`) | Durable `(target_file_id, client_request_id)` idempotency table |
 
-### 3. Millisecond-Scale PostgreSQL 16+ `LATERAL` History & Ledger Reads (`MCP-001`)
-Audit and manifest ledger tools (`patchdiff_get_manifest_ledger`, `patchdiff_get_pdcp_log`) project bounded `intent`, `transaction_intent`, and per-edit `rationale` directly in PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` subqueries and guarded 4 KB head/tail slices—avoiding Python-side TOAST transfer and JSON decoding of multi-megabyte transaction histories:
+### 3.4 Latency: Model Generation Scaling vs. Internal Server Benchmarks (`Illustrative` vs. `Measured`)
 
-| 20 MB Historical Substrate (`postgres:16.3-alpine`) | Query Operation | Full-Record Python Decode (`PR #13`) | Guarded SQL `LATERAL` Projection (`PR #14`) | Speedup |
-| --- | --- | --- | --- | --- |
-| **`50 × 400 KB` (`20 MB`) `patchdiff-tx/3` history** | `patchdiff_get_manifest_ledger(limit=50)` | `279.6 ms` | **`14.68 ms`** (zero `pdcp_content` TOAST reads) | **19.0× faster** |
-| **`50 × 400 KB` (`20 MB`) `patchdiff-tx/3` history** | `patchdiff_get_pdcp_log(limit=50)` | `372.4 ms` | **`22.85 ms`** (4 KB head slice fast path) | **16.3× faster** |
-| **`20 × 1 MB` (`20 MB`) `patchdiff-tx/1` history** | `patchdiff_get_pdcp_log(limit=50)` | `305.6 ms` | **`136.72 ms`** (4 KB tail slice fast path) | **2.2× faster** |
-| **`20 × 1 MB` (`20 MB`) `patchdiff-tx/1` history** | `patchdiff_get_manifest_ledger(limit=50)` | `305.6 ms` | **`221.59 ms`** (single-cast `LATERAL ... OFFSET 0`) | **1.38× faster** |
+End-to-end editing latency consists of **model output decoding time** (typically tens of milliseconds per output token), **MCP transport**, and **PatchDIFF server + PostgreSQL execution**:
 
-### 4. Hard Context Budgets & Verification Scale
-Every MCP response is strictly bounded to protect host context windows, and every invariant is verified against live PostgreSQL 16 and real stdio MCP subprocesses:
-- **Discovery (`tools/list`)**: `<= 65,536 B` total (`<= 8,192 B` for 13 executable examples across 9 tools).
-- **Authoritative Reads (`patchdiff_read_target`, `patchdiff_read_lines`)**: `4,000` default / `8,000` max Unicode code points per call; `patchdiff_find_occurrences` caps `context_chars` at `400` and `max_results` at `200`.
-- **Advisory Preview (`patchdiff_preview`)**: `<= 32,768 B` total (`<= 16,384 B` for up to 32 facts; `<= 16,384 B` for diagnostics).
-- **Rejection Enrichment**: `<= 18,432 B` combined (`<= 8,192 B` for up to 5 exact ambiguity candidates; `<= 8,192 B` for up to 3 near misses; `<= 256` code points of persisted `failure_context`).
-- **Verification Suite**: **1,226 automated tests** (`816` pure core unit tests + `410` live PostgreSQL & stdio MCP integration tests, including populated Alembic `upgrade -> downgrade -> upgrade` checks) and **235/235** live stdio agentic friction checks.
+1. **Model Generation Cost (`Illustrative`):** Because autoregressive decoding time scales linearly with output tokens, emitting a **`151 B`** (`~38`-token illustrative) `patchdiff-tx/1` request instead of regenerating a **`65,536 B`** (`~16,384`-token illustrative) document avoids generating thousands of unchanged tokens.
+2. **Internal PatchDIFF Server & PostgreSQL Benchmarks (`Measured` — `PR #13` vs. `PR #14`):**
+   The measurements below compare **internal PatchDIFF runtime optimizations (`PR #13` baseline vs. `PR #14`)** on Windows 11 (`Python 3.11.9`, `postgres:16.3-alpine` on `127.0.0.1:5432`). They are local fixture medians, not universal latency ceilings or cross-product benchmarks against external editors:
+   - **Near-Miss Levenshtein Scan (`SVC-001`, 5-run local medians on `65,536`-code-point buffers, needle length `45`, threshold `4`):**
+     Pairing an exact positional pigeonhole filter ($k+1=5$ disjoint pieces) with a Landau–Vishkin diagonal-wave banded DP reduced scan time on varied prose from `100.2 ms` (`174,897` cells) to **`1.7 ms`** (`585` cells, **58.9× faster** vs. PR #13), and on repetitive structured logs from `708.5 ms` (`1,000,000` cells, truncated at 69% of buffer) to **`41.9 ms`** (`142,255` cells, **16.9× faster** while scanning **100%** of the eligible buffer).
+   - **PostgreSQL 16+ `LATERAL` History & Ledger Projection (`MCP-001`, 7-run local medians after warmup):**
+     Extracting bounded `intent` and per-edit `rationale` in SQL (`pg_input_is_valid` + 4 KB head/tail slices + single-cast `LATERAL ... OFFSET 0`) rather than transferring full `pdcp_content` blobs to Python reduced `50 × 400 KB` (`20 MB`) `tx/3` history reads from `279.6 ms` to **`14.68 ms`** (**19.0× faster** on `patchdiff_get_manifest_ledger(limit=50)`) and from `372.4 ms` to **`22.85 ms`** (**16.3× faster** on `patchdiff_get_pdcp_log(limit=50)`). On a `20 × 1 MB` (`20 MB`) `tx/1` history (5 edits × 200 KB per row), `patchdiff_get_pdcp_log(limit=50)` runs in **`136.72 ms`** (`305.55 ms` baseline, **2.2× faster**), `patchdiff_get_manifest_ledger(limit=50)` runs in **`221.59 ms`** (`305.55 ms` baseline, **1.38× faster**), and `patchdiff_get_manifest_ledger(limit=100)` runs in **`445.33 ms`** vs. `449.92 ms` baseline (**1.01×**, at par while eliminating Python `pdcp_content` transfer).
+
+See [evaluation/README.md](evaluation/README.md) for the complete benchmark tables and reproduction commands.
 
 ---
 
-## How PatchDIFF Compares
-
-| Capability | Full-Document Rewrite | Built-In Agent `str_replace` / `apply_patch` | Local Filesystem Diff MCPs | **PatchDIFF (`patchdiff-tx/1..3`)** |
-| --- | --- | --- | --- | --- |
-| **Wire Payload Scaling** | $O(\text{full file})$ | $O(\text{delta})$ | $O(\text{delta})$ | **$O(\text{delta})$ (`151 B` for 1 edit)** |
-| **Optimistic Concurrency Guard** | None (last write wins) | None or mtime check | None | **Required `expected_target_version` and/or `expected_current_hash` under `SELECT ... FOR UPDATE`** |
-| **Multi-Edit Atomicity** | Whole file replaced | Often partial on multi-hunk failure | Varies | **Strict all-or-nothing per target** |
-| **Lost-Response Idempotency** | Re-runs overwrite | Re-runs fail or duplicate | None | **`client_request_id` recovers exact recorded outcome (`deduplicated: true`)** |
-| **Overlapping Match Safety** | N/A | Silent first-match or non-overlapping | Silent or fuzzy | **Counts all overlapping occurrences; requires explicit selector (`occurrence_index`, `anchor_before`/`after`)** |
-| **Verified Insertion Context** | N/A | Fragile line numbers | Fragile line numbers | **`tx/2` spans with `expected_before` / `expected_after` adjacency guards + UAX #29 grapheme split warnings** |
-| **Rejected Attempt Audit** | Ephemeral chat | Ephemeral tool error | Ephemeral | **Durable `append_only_pdcp_logs` + retry lineage (`parent_pdcp_log_id`)** |
-| **Deterministic Replay** | None | Git commits only | None | **Profile-dispatched replay (`0.1.0`..`0.5.0`) + 4-part `materialized_state_checks`** |
-
----
-
-## Choosing a Transaction Format & 3-Step Walkthrough
+## 4. Choosing a Transaction Format & 3-Step Walkthrough
 
 ### Typed Transaction Formats
 
-| Format | MCP Tool | When to Use | Guard Requirement |
-| --- | --- | --- | --- |
-| **`patchdiff-tx/1`** (Primary) | `patchdiff_submit_edits` | Default exact `MATCH/REPLACE` edits with optional `occurrence_index`, `anchor_before`, or `anchor_after` selectors. | `expected_target_version` and/or `expected_current_hash` |
-| **`patchdiff-tx/2`** | `patchdiff_submit_operations` | Coordinate-known `span` edits (`start`, `end`, `expected_text`, `replace`), descending multi-span edits from a single read, or verified insertions (`expected_before` / `expected_after`). | `expected_target_version` and/or `expected_current_hash` |
-| **`patchdiff-tx/3`** | `patchdiff_submit_replacement` | Explicit whole-document replacement (`{"op": "replace_all", "replace": "..."}`, up to 1 MB / 1M code points). | `expected_target_version` and/or `expected_current_hash` |
+| Format | MCP Tool | Runtime Profile | When to Use | Guard Requirement |
+| --- | --- | --- | --- | --- |
+| **`patchdiff-tx/1`** (Primary) | `patchdiff_submit_edits` | `patchdiff-mvp-0.2.2` | Default exact `MATCH/REPLACE` edits with optional `occurrence_index`, `anchor_before`, or `anchor_after` selectors. | `expected_target_version` and/or `expected_current_hash` |
+| **`patchdiff-tx/2`** | `patchdiff_submit_operations` | `patchdiff-mvp-0.3.0` (`0.5.0` with `expected_before`/`after`) | Ordered `match` and `[start, end)` code-point `span` operations (`expected_text`, `replace`), descending multi-span edits from a single read, or verified insertions. | `expected_target_version` and/or `expected_current_hash` |
+| **`patchdiff-tx/3`** | `patchdiff_submit_replacement` | `patchdiff-mvp-0.4.0` | Explicit whole-document replacement (`replacement` up to `1,000,000` code points and `1,048,576` UTF-8 bytes, raw and canonical). | `expected_target_version` and/or `expected_current_hash` |
 
 *(For the frozen `.pdcp` v0.2.3 text format and `patchdiff_submit_pdcp`, see [docs/LEGACY_COMPATIBILITY.md](docs/LEGACY_COMPATIBILITY.md).)*
 
 ### 3-Step Host Walkthrough
 
-**Step 1 — Read authoritative state (`patchdiff_read_target` or `patchdiff_find_occurrences`):**
+**Step 1 — Read authoritative state (`patchdiff_read_target`, `patchdiff_read_lines`, or `patchdiff_find_occurrences`):**
 ```json
 {
   "name": "patchdiff_read_target",
@@ -127,7 +169,7 @@ Every MCP response is strictly bounded to protect host context windows, and ever
   }
 }
 ```
-Response returns `content`, `version: 0`, and `current_hash: "8f434346..."`.
+Response returns `content`, `version: 0`, `current_hash: "8f434346..."`, `truncated: false`, and `next_start: null`.
 
 **Step 2 — Submit guarded typed edits (`patchdiff_submit_edits`):**
 ```json
@@ -160,48 +202,100 @@ Response returns `content`, `version: 0`, and `current_hash: "8f434346..."`.
   "before_hash": "8f434346...",
   "after_hash": "c3ab8ff1...",
   "current_hash": "c3ab8ff1...",
-  "deduplicated": false,
+  "manifest_entries_added": 1,
   "warnings": [],
+  "warning_details": [],
+  "warning_count": 0,
+  "warnings_truncated": false,
   "validity": {
     "protocol_valid": true,
     "transaction_valid": true,
     "task_correct": "not_evaluated",
     "semantic": "not_evaluated"
-  }
+  },
+  "evidence": {
+    "changes": [
+      {
+        "change_id": "edit_1",
+        "change_index": 1,
+        "op": "match",
+        "span_start": 14,
+        "span_end": 25,
+        "matched_chars": 11,
+        "replacement_chars": 13
+      }
+    ]
+  },
+  "deduplicated": false,
+  "client_request_id": "req-theme-001"
 }
 ```
 
-**Step 3b — Or Structured Rejection with Exact Near-Miss Diagnostics (`match_absent`):**
-If the target actually contained `"theme: drak"`, the target is untouched (`version: 0`) and PatchDIFF returns:
+**Step 3b — Or Structured Rejection with Top-Level Near-Miss Diagnostics (`match_absent`):**
+If the target actually contained `"theme: drak"`, the target is untouched (`current_version: 0`) and PatchDIFF returns:
 ```json
 {
   "status": "rejected",
+  "target_file_id": "11111111-1111-4111-8111-111111111111",
   "failure_reason": "match_absent",
-  "pdcp_log_id": "33333333-3333-4333-8333-333333333333",
+  "failure_detail": "edit_1 MATCH text was not found in the target.",
+  "failed_change_id": "edit_1",
   "current_version": 0,
+  "pdcp_log_id": "33333333-3333-4333-8333-333333333333",
+  "near_misses": {
+    "kind": "near_miss",
+    "status": "computed",
+    "omission_reason": null,
+    "candidates": [
+      {
+        "distance": 2,
+        "start": 14,
+        "end": 25,
+        "text": "theme: drak",
+        "before": "# Settings\n",
+        "after": "\nnotifications: "
+      }
+    ],
+    "returned_count": 1,
+    "truncated": false,
+    "scope_truncated": false,
+    "candidates_truncated": false,
+    "scan_source": "failing_buffer",
+    "scanned_start": 0,
+    "scanned_end": 36,
+    "buffer_stage": "canonical_target",
+    "prior_changes": 0
+  },
   "diagnostic": {
-    "stage": "TRANSACTION_APPLICABILITY",
     "retryable": true,
-    "failed_change_id": "chg_001",
-    "near_misses": {
+    "requires_new_submission": true,
+    "requires_new_pdcp": true,
+    "failure_context": {
       "available": true,
-      "candidates": [
-        {
-          "distance": 2,
-          "start": 14,
-          "end": 25,
-          "matched_text": "theme: drak",
-          "context_before": "# Settings\n",
-          "context_after": "\nnotifications: true"
-        }
-      ],
-      "scanned_start": 0,
-      "scanned_end": 46,
-      "scope_truncated": false
+      "selection": "prefix",
+      "buffer_stage": "canonical_target",
+      "prior_changes": 0,
+      "start": 0,
+      "end": 46,
+      "total_chars": 46,
+      "text": "# Settings\n\ntheme: drak\nnotifications: true\n",
+      "truncated": false
     }
   }
 }
 ```
+
+---
+
+## 5. Guarantees, Operational Bounds, and Limitations
+
+- **Managed PostgreSQL Authority & Per-Target Scope:** PatchDIFF manages canonical target state in PostgreSQL under `SELECT ... FOR UPDATE`. Atomicity is guaranteed **per `target_file_id`**, not across multiple targets or arbitrary unindexed filesystem paths. Exporting (`patchdiff_export_target`) writes a snapshot; external edits to exported files on disk are not tracked unless uploaded/initialized.
+- **No Automatic Merge or Semantic Validation:** Concurrent conflicting edits are deterministically rejected (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`). PatchDIFF never evaluates syntax, type safety, or task correctness (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
+- **Canonical LF Normalization & Unicode Code-Point Indexing:** All target content and edit payloads are canonicalized (`\r\n` and `\r` normalized to `\n`), and all read/span coordinates (`start`, `end`, `length`) are 0-based **Unicode code-point** offsets (JavaScript/TypeScript hosts must convert UTF-16 string indices). Migration `20261022_0003` records upload line-ending style so `patchdiff_export_target(format="original_eol")` can restore uniform CRLF on export.
+- **Intermediate-Buffer Coordinate Rule (`prior_changes > 0`):** Because multi-edit transactions execute sequentially in memory, if edit $k > 1$ fails, `failure_context`, `exact_candidates`, and `near_misses` report `buffer_stage: "intermediate_buffer"` and `prior_changes: k - 1`. Their offsets and `occurrence_index` values refer to the **in-memory buffer after the earlier simulated changes**, not the persisted canonical target.
+- **Advisory Preview & Unreserved State:** `patchdiff_preview` acquires no row lock, writes no audit rows, and does not reserve a version or hash; subsequent submission re-locks and re-validates all preconditions.
+- **Conditional Near-Miss Scanning:** `near_misses` runs only after a service-owned transaction commits and releases its lock. It is omitted with explicit `omission_reason` when `len(match) > 64` code points (`"match_too_large"`), when called inside a caller-owned transaction (`"caller_transaction"`), when an earlier edit in the same transaction consumed the match (`"sequential_match_consumed"`), when historical context is unavailable (`"historical_context_unavailable"`), or when the first window exceeds `MAX_COMPARISON_CELLS = 1,000,000` (`"work_budget_exhausted"`).
+- **Conservative Grapheme Warning:** `grapheme_boundary_split` is an advisory, conservative approximation of UAX #29 rules (combining marks, ZWJ, regional indicators, emoji modifiers/variation selectors); it never alters transaction verdicts or replay.
 
 ---
 

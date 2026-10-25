@@ -5,7 +5,7 @@
 This document defines the active declarative JSON transaction formats supported by PatchDIFF:
 1. **`patchdiff-tx/1` (Primary Typed Match Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content` under runtime profile `patchdiff-mvp-0.2.2`. Delimiter-collision free, with minimal mandatory prose overhead (`151 B` wire / `206 B` persisted for a 1-edit transaction; `259 B` wire / `314 B` persisted for 5 edits).
 2. **`patchdiff-tx/2` (Guarded Match & Span Operations)**: Canonical JSON passed through `patchdiff_submit_operations` with required `intent`, required state guard, and ordered `operations[]` carrying explicit `op: "match"` or `op: "span"`. Span records require `start`, `end`, `expected_text`, and `replace`, use sequential canonical Unicode code-point coordinates, and allow explicit empty-span insertion (`start == end`, `expected_text: ""`). Optional `expected_before` / `expected_after` verify exact adjacent text; records using them execute under immutable runtime profile `patchdiff-mvp-0.5.0` (otherwise `patchdiff-mvp-0.3.0`).
-3. **`patchdiff-tx/3` (Guarded Sole Whole-Target Replacement)**: Canonical JSON passed through `patchdiff_submit_replacement` with required `intent`, required state guard, and a single `{"op": "replace_all", "replace": "..."}` operation under immutable runtime profile `patchdiff-mvp-0.4.0` (`290 B` persisted record / `341 B` compact `tools/call` line for a small whole-target replacement).
+3. **`patchdiff-tx/3` (Guarded Sole Whole-Target Replacement)**: Canonical JSON passed through `patchdiff_submit_replacement` with required `intent`, required state guard, and a single `{"op": "replace_all", "replace": "..."}` operation under immutable runtime profile `patchdiff-mvp-0.4.0` (`232 B` MCP `arguments` JSON / `290 B` persisted record / `341 B` compact `tools/call` line for a 3-byte whole-target replacement).
 
 > **Legacy Compatibility**: Frozen `.pdcp` v0.2.3 text transactions (`patchdiff_submit_pdcp`), deprecated regeneration wrappers, and historical runtime profiles (`0.1.0`–`0.2.1`) remain supported for backward compatibility and deterministic replay. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md) for their specification.
 
@@ -152,29 +152,29 @@ Submitted over MCP via `patchdiff_submit_replacement` for explicit whole-documen
 | --- | --- | --- | --- | --- | --- |
 | **`patchdiff-tx/1`** | `patchdiff_submit_edits` | `patchdiff-mvp-0.2.2` | Default exact `MATCH/REPLACE` edits with optional selectors (`occurrence_index`, `anchor_before`, `anchor_after`) | Required (`version` and/or `hash`) | **`~140 B`** (`151 B` total for 1 tiny edit; `259 B` for 5 small edits) |
 | **`patchdiff-tx/2`** | `patchdiff_submit_operations` | `patchdiff-mvp-0.3.0` (`0.5.0` with span context) | Coordinate-known `span` replacements, descending multi-span edits from a single read, and verified insertions (`expected_before`/`expected_after`) | Required (`version` and/or `hash`) | **`~165 B`** |
-| **`patchdiff-tx/3`** | `patchdiff_submit_replacement` | `patchdiff-mvp-0.4.0` | Explicit guarded whole-document replacement (`replace_all`, up to 1 MB / 1M code points) | Required (`version` and/or `hash`) | **`~280 B`** (`290 B` persisted record / `341 B` `tools/call` line) |
+| **`patchdiff-tx/3`** | `patchdiff_submit_replacement` | `patchdiff-mvp-0.4.0` | Explicit guarded whole-document replacement (`replace_all`, up to 1,048,576 UTF-8 bytes / 1,000,000 code points, raw and canonical) | Required (`version` and/or `hash`) | **`229 B` MCP `arguments` JSON framing** (`232 B` `arguments` / `290 B` persisted record / `341 B` complete `tools/call` line for a 3-byte replacement) |
 
 ### Deterministic Byte Accounting (`evaluation/offline_eval.py`)
 
 Measured UTF-8 byte sizes across standard typed editing scenarios (`PYTHONPATH=backend python evaluation/offline_eval.py`):
 
 | Scenario | `patchdiff-tx/1` Minimal (`typed_min`, Wire / Persisted) | `patchdiff-tx/1` Matched Prose (`typed_match`, Wire / Persisted) | Verdict & Delimiter Safety |
-| --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- |
 | **1 tiny edit** | **`151 B`** / **`206 B`** | `327 B` / `382 B` | `accepted` |
 | **5 small edits** | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | `accepted` |
 | **1 edit, 2 KB span** | **`4,441 B`** / **`4,496 B`** | `4,617 B` / `4,672 B` | `accepted` |
 | **Quotes + backslashes + Unicode** | **`172 B`** / **`227 B`** | `348 B` / `403 B` | `accepted` |
-| **Payload has a delimiter line (`<<<<<<< MATCH`)** | **`162 B`** / **`217 B`** | `338 B` / `393 B` | `accepted` (immune to delimiter collision) |
+| **Payload has a delimiter line (`=======`)** | **`162 B`** / **`217 B`** | `338 B` / `393 B` | `accepted` (eliminates `.pdcp` delimiter-line collisions; JSON syntax remains protocol-validated) |
 
 Measured `patchdiff-tx/3` (`patchdiff_submit_replacement`) UTF-8 byte sizes:
 
-| `patchdiff-tx/3` Case | Persisted Record Bytes (`pdcp_content`) | Complete JSON-RPC `tools/call` Line Bytes | Verdict |
-| --- | --- | --- | --- |
-| **Guarded whole-target rewrite** | `290 B` | `341 B` | `accepted` |
-| **Empty target replacement** | `290 B` | `341 B` | `accepted` |
-| **Empty replacement (clear target)** | `287 B` | `338 B` | `accepted` |
-| **Unicode, quotes, CRLF normalization** | `308 B` | `359 B` | `accepted` |
-| **Whole-target 2 KB rewrite** | `2,435 B` | `2,486 B` | `accepted` |
+| `patchdiff-tx/3` Case | Raw / Canonical Replacement (`UTF-8 B`) | MCP Tool `arguments` JSON (`UTF-8 B`) | Persisted Record Bytes (`pdcp_content`) | Complete JSON-RPC `tools/call` Line Bytes | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| **Guarded whole-target rewrite (`"old" -> "new"`)** | `3 B` / `3 B` | `232 B` | `290 B` | `341 B` | `accepted` |
+| **Empty target replacement (`"" -> "new"`)** | `3 B` / `3 B` | `232 B` | `290 B` | `341 B` | `accepted` |
+| **Empty replacement (clear target, `"old" -> ""`)** | `0 B` / `0 B` | `229 B` | `287 B` | `338 B` | `accepted` |
+| **Unicode, quotes, CRLF normalization (`'say "hi" \\\r\n🌟'`)** | `16 B` raw / `15 B` LF | `250 B` | `308 B` | `359 B` | `accepted` |
+| **Whole-target 2 KB rewrite (40 lines, 39 `\n` chars)** | `2,109 B` / `2,109 B` | `2,377 B` | `2,435 B` | `2,486 B` | `accepted` |
 
 *(For the baseline comparison against frozen `.pdcp` v0.2.3, see [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#5-measured-comparison-legacy-pdcp-v023-vs-typed-patchdiff-tx1).)*
 

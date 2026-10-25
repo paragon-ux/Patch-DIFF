@@ -149,6 +149,6 @@ Deterministic UTF-8 byte and verdict accounting from `evaluation/offline_eval.py
 | --- | --- | --- | --- | --- | --- |
 | **1 tiny edit** | `451 B` / `331 B` | `327 B` / `382 B` | **`151 B` / `206 B`** | **-66.5% wire** (`-37.8%` stored) | `accepted` (identical hash) |
 | **5 small edits** | `1,467 B` / `1,287 B` | `1,139 B` / `1,194 B` | **`259 B` / `314 B`** | **-82.3% wire** (`-75.6%` stored) | `accepted` (identical hash) |
-| **1 edit, 2 KB span** | `4,741 B` / `4,581 B` | `4,617 B` / `4,672 B` | **`4,441 B` / `4,496 B`** | **-6.3% wire** (payload-dominated) | `accepted` (identical hash) |
-| **Quotes + backslashes + Unicode** | `484 B` / `344 B` | `348 B` / `403 B` | **`172 B` / `227 B`** | **-64.5% wire** (`-34.0%` stored) | `accepted` (identical hash) |
-| **Payload has a delimiter line (`<<<<<<< MATCH`)** | `464 B` / `340 B` (**`rejected: block_malformed`**) | `338 B` / `393 B` (**`accepted`**) | **`162 B` / `217 B`** (**`accepted`**) | **100% collision elimination** | Named legacy expressibility exception |
+| **1 edit, 2 KB span** | `4,741 B` / `4,543 B` | `4,617 B` / `4,672 B` | **`4,441 B` / `4,496 B`** | **-6.3% wire** (payload-dominated) | `accepted` (identical hash) |
+| **Quotes + backslashes + Unicode** | `472 B` / `345 B` | `348 B` / `403 B` | **`172 B` / `227 B`** | **-63.6% wire** (`-34.2%` stored) | `accepted` (identical hash) |
+| **Payload has a delimiter line (`=======`)** | `462 B` / `339 B` (**`rejected: block_malformed`**) | `338 B` / `393 B` (**`accepted`**) | **`162 B` / `217 B`** (**`accepted`**) | **100% collision elimination** | Named legacy expressibility exception |

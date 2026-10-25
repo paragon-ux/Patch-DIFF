@@ -35,33 +35,37 @@ Reports both MCP tool request wire JSON bytes (`tools/call` arguments) and persi
 
 ### Measured `patchdiff-tx/1` Payload Bytes (`evaluation/offline_eval.py`)
 
-| Scenario | `typed_min` Wire Bytes (`tools/call` args) | `typed_min` Persisted Bytes (`pdcp_content`) | `typed_match` Wire Bytes (`tools/call` args) | `typed_match` Persisted Bytes (`pdcp_content`) | Verdict |
-| --- | --- | --- | --- | --- | --- |
-| **1 tiny edit** | **`151 B`** | **`206 B`** | `327 B` | `382 B` | `accepted` |
-| **5 small edits** | **`259 B`** | **`314 B`** | `1,139 B` | `1,194 B` | `accepted` |
-| **1 edit, 2 KB span** | **`4,441 B`** | **`4,496 B`** | `4,617 B` | `4,672 B` | `accepted` |
-| **Quotes + backslashes + Unicode** | **`172 B`** | **`227 B`** | `348 B` | `403 B` | `accepted` |
-| **Payload has a delimiter line (`<<<<<<< MATCH`)** | **`162 B`** | **`217 B`** | `338 B` | `393 B` | `accepted` |
+| Scenario (`patchdiff_submit_edits`) | Raw Match + Replace Strings (`UTF-8 B`) | `typed_min` Wire Bytes (`tools/call` `arguments`) | `typed_min` Persisted Bytes (`pdcp_content`) | `typed_match` Wire Bytes (`tools/call` `arguments`) | `typed_match` Persisted Bytes (`pdcp_content`) | Verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| **1 tiny edit (`"old" -> "new"`)** | `6 B` (`3 B` + `3 B`) | **`151 B`** | **`206 B`** | `327 B` | `382 B` | `accepted` |
+| **5 small edits (`5 × 1-byte edits`)** | `10 B` (`5 × 2 B`) | **`259 B`** | **`314 B`** | `1,139 B` | `1,194 B` | `accepted` |
+| **1 edit, 2 KB span (`LONG_BODY`)** | `4,218 B` (`2,109 B` × 2) | **`4,441 B`** | **`4,496 B`** | `4,617 B` | `4,672 B` | `accepted` |
+| **Quotes + backslashes + Unicode** | `23 B` (`10 B` + `13 B`) | **`172 B`** | **`227 B`** | `348 B` | `403 B` | `accepted` |
+| **Payload has a delimiter line (`"a\n=======\nb"`)** | `14 B` (`11 B` + `3 B`) | **`162 B`** | **`217 B`** | `338 B` | `393 B` | `accepted` |
+
+- **Marginal edit framing (`Derived`):** Each additional minimal edit item in `edits[]` adds **`25 B`** of JSON object keys/punctuation (`{"match":"","replace":""}`) + **`1 B`** array comma separator (`,`) + the UTF-8 JSON-escaped byte lengths of `match` and `replace`. For two 1-byte ASCII strings (`{"match":"a","replace":"1"}`), the controlled marginal cost is **`+28 B` per additional edit**. (Scenario 1 uses `"old"` + `"new"` = `6 B` of strings for `151 B` total; replacing that first edit with `"a"` + `"1"` = `2 B` of strings yields a `147 B` 1-edit baseline, and `147 B + 4 × 28 B = 259 B` for Scenario 2's five 1-byte edits.)
+- **Delimiter collision immunity (`Measured`):** Scenario 5's match payload (`"a\n=======\nb"`) contains a standalone `=======` line that collides with the `.pdcp` v0.2.3 block separator (`rejected:block_malformed`), whereas `patchdiff-tx/1` encodes it as a standard JSON string (`162 B` `arguments`, `217 B` persisted) and commits cleanly. JSON string encoding eliminates `.pdcp` delimiter-line collisions while JSON syntax itself remains protocol-validated.
 
 ### Measured `patchdiff-tx/3` Guarded Replacement Bytes (`evaluation/offline_eval.py`)
 
-Five `patchdiff-tx/3` (`patchdiff_submit_replacement`) cases separately check accepted content/hash oracles through immutable runtime `0.4.0`. Each measures its canonical persisted record and complete compact UTF-8 JSON-RPC `tools/call` request line with fixed `id=1` and one terminal LF:
+Five `patchdiff-tx/3` (`patchdiff_submit_replacement`) cases separately check accepted content/hash oracles through immutable runtime `patchdiff-mvp-0.4.0`. The table below separates raw/canonical replacement text bytes, compact MCP `arguments` JSON bytes, canonical persisted record bytes (`pdcp_content`), and complete compact UTF-8 JSON-RPC `tools/call` request line bytes (fixed `id=1` plus one terminal LF):
 
-| `patchdiff-tx/3` Case | Persisted Record Bytes (`pdcp_content`) | Complete JSON-RPC `tools/call` Line Bytes | Verdict |
-| --- | --- | --- | --- |
-| **Guarded whole-target rewrite** | `290 B` | `341 B` | `accepted` |
-| **Empty target** | `290 B` | `341 B` | `accepted` |
-| **Empty replacement** | `287 B` | `338 B` | `accepted` |
-| **Unicode, quotes, CRLF** | `308 B` | `359 B` | `accepted` |
-| **Whole-target 2 KB rewrite** | `2,435 B` | `2,486 B` | `accepted` |
+| `patchdiff-tx/3` Case (`patchdiff_submit_replacement`) | Raw / Canonical Replacement (`UTF-8 B`) | MCP Tool `arguments` JSON (`UTF-8 B`) | Persisted Record Bytes (`pdcp_content`) | Complete JSON-RPC `tools/call` Line Bytes | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| **Guarded whole-target rewrite (`"old" -> "new"`)** | `3 B` / `3 B` | `232 B` | `290 B` | `341 B` | `accepted` |
+| **Empty target (`"" -> "new"`)** | `3 B` / `3 B` | `232 B` | `290 B` | `341 B` | `accepted` |
+| **Empty replacement (`"old" -> ""`)** | `0 B` / `0 B` | `229 B` | `287 B` | `338 B` | `accepted` |
+| **Unicode, quotes, CRLF (`'say "hi" \\\r\n🌟'`)** | `16 B` raw / `15 B` LF | `250 B` | `308 B` | `359 B` | `accepted` |
+| **Whole-target 2 KB rewrite (40 lines, 39 `\n` chars)** | `2,109 B` / `2,109 B` | `2,377 B` | `2,435 B` | `2,486 B` | `accepted` |
 
-These are deterministic serialization measurements; they do not execute live transport or persistence, measure timing, or establish representative workload results. No cross-format replacement equivalence is claimed.
+- **Accounting separation:** The compact MCP `arguments` JSON framing around raw `replacement` text is **`229 B`** (including `target_file_id`, `intent: "Replace complete target."`, `expected_target_version: 0`, and 64-char `expected_current_hash`), plus JSON character escaping (`+39 B` for 39 newlines in the 40-line 2 KB fixture, yielding `2,109 + 39 + 229 = 2,377 B`). The outer JSON-RPC `tools/call` envelope (`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"patchdiff_submit_replacement","arguments":...}}\n`) adds **`109 B`** to `arguments` (`232 + 109 = 341 B`; `2,377 + 109 = 2,486 B`). Persisted `tx/3` records (`290 B` / `2,435 B`) are canonical storage representations and are not compared directly to `tools/call` wire lines.
+- These are deterministic serialization measurements; they do not execute live transport or persistence, measure timing, or establish representative workload results. No cross-format replacement equivalence is claimed.
 
 ---
 
 ## 3. Service & Database Latency Benchmarks (`SVC-001` & `MCP-001`)
 
-Measured on Windows 11 (`Python 3.11.9`, `postgres:16.3-alpine` on `127.0.0.1:5432`, isolated PostgreSQL database).
+Measured on Windows 11 (`Python 3.11.9`, `postgres:16.3-alpine` on `127.0.0.1:5432`, isolated PostgreSQL database). These benchmarks measure **internal PatchDIFF server and database optimizations (`PR #13` baseline vs. `PR #14`)** on specified local fixtures; they are not cross-product benchmarks against external editing tools or end-to-end model turns.
 
 ### 3.1 Near-Miss Levenshtein Scan Latency (`SVC-001`, `backend/app/services/near_miss_service.py`)
 
