@@ -2,7 +2,7 @@
 
 - **Review Standard:** [PR Review Standard v1.1.0](../PR_REVIEW_STANDARD.md) (especially §5 Commit-Pinned Evidence & Closure)
 - **Repository / Branch:** `paragon-ux/Patch-DIFF` — `perf/pr13-deferred-p3` (PR [#14](https://github.com/paragon-ux/Patch-DIFF/pull/14))
-- **Base Commit (`main`):** `d09fbc8faabfb36647023c6c077130ff896c0e85` (`d09fbc8`)
+- **Base Commit (`main`):** `d09fbc8422bbc22543b0b209c2f689b3e341e3b2` (`d09fbc8`)
 - **Prior 10-Category Review HEAD:** `371192fbf934e0a1418d3e35c49eb0519cc39f39` (`371192f`), documented in [`docs/reviews/PR-14-371192f-final-category-review.md`](PR-14-371192f-final-category-review.md) (committed at `586bc316f26d0ba4e524febb436c65cfdcc8836a`)
 - **Substantive Correction HEAD Reviewed:** `30d15688f72324cb9647a989d3974e15345689b7` (`30d1568`)
 - **Reviewer:** Antigravity (Independent Final Delta Verification & Review Closure)
@@ -13,7 +13,7 @@
 
 ## 1. Scope & Relationship to Prior Review Records
 
-This document is the authoritative **final delta-review supplement** for PR [#14](https://github.com/paragon-ux/Patch-DIFF/pull/14) at substantive commit [`30d15688f72324cb9647a989d3974e15345689b7`](https://github.com/paragon-ux/Patch-DIFF/commit/30d15688f72324cb9647a989d3974e15345689b7). It supplements—and preserves untouched—the full 10-category review [`docs/reviews/PR-14-371192f-final-category-review.md`](PR-14-371192f-final-category-review.md) and all earlier historical SHA-specific review records (`PR-14-bfbba27-category-review.md`, `PR-14-aa0c5d3-final-category-review.md`).
+This document is the authoritative **final delta-review supplement** for PR [#14](https://github.com/paragon-ux/Patch-DIFF/pull/14) at substantive commit [`30d15688f72324cb9647a989d3974e15345689b7`](https://github.com/paragon-ux/Patch-DIFF/commit/30d15688f72324cb9647a989d3974e15345689b7). It supplements—and preserves untouched—the full 10-category review [`docs/reviews/PR-14-371192f-final-category-review.md`](PR-14-371192f-final-category-review.md) and all earlier historical SHA-specific review records (`PR-14-bfbba27-category-review.md`, `PR-14-aa0c5d3-category-review.md`).
 
 Between `586bc316f26d0ba4e524febb436c65cfdcc8836a` and `30d15688f72324cb9647a989d3974e15345689b7`, exactly three files changed (`3 files changed, 15 insertions(+), 7 deletions(-)`):
 
@@ -27,14 +27,14 @@ Between `586bc316f26d0ba4e524febb436c65cfdcc8836a` and `30d15688f72324cb9647a989
 
 ## 2. Category Impact Assessment (`586bc31..30d1568`)
 
-In accordance with [PR Review Standard v1.1.0](../PR_REVIEW_STANDARD.md), the delta `586bc31..30d1568` affects the categories below as follows, while the prior review [`PR-14-371192f-final-category-review.md`](PR-14-371192f-final-category-review.md) continues to govern all remaining required categories (`COR`, `CON`, `SEC`, `RES`, `PERF`, `OPS`, plus `SKILL`, `RUN`, `SVC`, `SCRIPT`, `DEP`):
+In accordance with [PR Review Standard v1.1.0](../PR_REVIEW_STANDARD.md), the delta `586bc31..30d1568` affects the categories below as follows, while the prior review [`PR-14-371192f-final-category-review.md`](PR-14-371192f-final-category-review.md) continues to govern all remaining required categories (`SKILL`, `RUN`, `SVC`, `SCRIPT`, `DEP`):
 
 - **`ARCH` (Architecture & System Boundaries):** **Assessed — No architectural boundary changes (`0 P1 / 0 P2 / 0 P3`, Verdict: Pass).** The documentation refinements in [`docs/PatchDIFF-Concept-Paper-6.md`](../PatchDIFF-Concept-Paper-6.md) and [`README.md`](../../README.md) align the paper's formal model and external comparisons with the existing runtime and service boundaries without modifying any runtime behavior.
 - **`DOC` (Documentation & Protocol Specification Consistency):** **Assessed — 3 remnant P2 documentation inaccuracies resolved at `30d1568` (`0 P1 / 0 P2 / 0 P3` remaining, Verdict: Pass).** Fixed §10.2 hash-guard stage attribution, §4.2 69-byte compact edit object accounting, and `README.md` §1 `diff -u` vs. V4A `apply_patch` comparison.
 - **`MCP` (MCP Transport & Tool Surface):** **Assessed — Non-functional source clarity edit only (`0 P1 / 0 P2 / 0 P3`, Verdict: Pass).** `_attempt_meta_lateral` in [`backend/app/mcp/tools.py`](../../backend/app/mcp/tools.py) interpolates `json_open_brace` and `json_close_brace` to make Python f-string brace escaping self-explanatory; compiled PostgreSQL SQL is verified byte-for-byte identical (`compiled_before == compiled_after`).
 - **`DB` (Database, SQL & Persistence):** **Assessed — Non-functional SQL source clarity edit verified against live PostgreSQL (`0 P1 / 0 P2 / 0 P3`, Verdict: Pass).** The generated `LATERAL (... OFFSET 0)` SQL query, `head_slice` (`split_part(h.head, ',"operations":[', 1) || '}'`), and `tail_slice` (`regexp_replace(h.tail, '^.*,"format":"patchdiff-tx/1",', '{', 's')`) are unchanged and pass live PostgreSQL verification.
 - **`TEST` (Test Coverage & Evaluation):** **Assessed — Existing unit, live PostgreSQL integration, and offline evaluator suites verified (`0 P1 / 0 P2 / 0 P3`, Verdict: Pass).** `test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content` (including `fast_path_tx3`), `test_friction_followup.py`, `test_pass_a_diagnostics.py`, and `evaluation/offline_eval.py` all pass at `30d1568`.
-- **Remaining Required Categories (`COR`, `CON`, `SEC`, `RES`, `PERF`, `OPS`, and `SKILL`, `RUN`, `SVC`, `SCRIPT`, `DEP`):** Unchanged by `586bc31..30d1568`; full coverage statements, empty P1/P2/P3 buckets, and `Pass` verdicts in [`PR-14-371192f-final-category-review.md`](PR-14-371192f-final-category-review.md) remain in force.
+- **Remaining Required Categories (`SKILL`, `RUN`, `SVC`, `SCRIPT`, `DEP`):** Unchanged by `586bc31..30d1568`; full coverage statements, empty P1/P2/P3 buckets, and `Pass` verdicts in [`PR-14-371192f-final-category-review.md`](PR-14-371192f-final-category-review.md) remain in force.
 
 ---
 
