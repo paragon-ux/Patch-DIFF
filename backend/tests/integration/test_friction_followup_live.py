@@ -363,3 +363,181 @@ def test_fr20_save_accepts_a_version_guard():
     saved = tools.patchdiff_save(target_file_id=str(target_id), expected_target_version=1,
                                  expected_current_hash=canonical_sha256("beta"))
     assert saved["status"] == "saved" and saved["version"] == 1
+
+
+def test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content():
+    from sqlalchemy import event, literal_column
+    from app.services.pdcp_service import submit_pdcp
+    from app.storage.db import engine
+    from backend.tests.integration.helpers import pdcp_for
+
+    tx3_target = create_target("seed\n")
+    payload = "z" * 600_000 + "\n"
+    for version in range(3):
+        res = tools.patchdiff_submit_replacement(
+            target_file_id=str(tx3_target),
+            expected_target_version=version,
+            intent=f"Rewrite {version}",
+            replacement=f"{version:02d}" + payload,
+        )
+        assert res["status"] == "accepted"
+
+    statements: list[str] = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        ledger_page = tools.patchdiff_get_manifest_ledger(target_file_id=str(tx3_target), limit=50)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert [e["transaction_intent"] for e in ledger_page["entries"]] == [f"Rewrite {v}" for v in range(3)]
+    assert all(e["rationale"] is None and e["intent"] == e["transaction_intent"] for e in ledger_page["entries"])
+    assert all("pdcp_content" not in sql for sql in statements)
+
+    # Verify 1 MB page byte budget on include_content=True (each record is ~600 KB)
+    with_content = tools.patchdiff_get_pdcp_log(
+        target_file_id=str(tx3_target), limit=50, include_content=True
+    )["entries"]
+    assert len(with_content) == 3
+    assert isinstance(with_content[0]["pdcp_content"], str) and len(with_content[0]["pdcp_content"]) > 600_000
+    assert "pdcp_content_omitted" not in with_content[0]
+    assert with_content[1]["pdcp_content"] is None and with_content[1]["pdcp_content_omitted"] == "page_byte_budget"
+    assert with_content[2]["pdcp_content"] is None and with_content[2]["pdcp_content_omitted"] == "page_byte_budget"
+
+    mixed_target = create_target("alpha beta gamma")
+    with SessionLocal() as session:
+        assert submit_edits(session, **edits(mixed_target, [
+            {"match": "alpha", "replace": "ALPHA", "rationale": "First rationale"},
+            {"match": "beta", "replace": "BETA"},
+        ], version=0)).status == "accepted"
+        assert submit_operations(session, **ops(mixed_target, [
+            {**span(11, 16, "gamma", "GAMMA"), "rationale": "Span rationale"},
+        ], version=1)).status == "accepted"
+        assert submit_pdcp(session, target_file_id=mixed_target,
+                           pdcp_content=pdcp_for(mixed_target, ("GAMMA", "delta")),
+                           expected_target_version=2).status == "accepted"
+    bad_utf8 = tools.patchdiff_submit_edits(
+        target_file_id=str(mixed_target), expected_target_version=3,
+        intent="bad\x00intent", edits=[{"match": "delta", "replace": "epsilon"}],
+    )
+    assert bad_utf8["status"] == "rejected"
+    bad_stored = log_row(uuid.UUID(bad_utf8["pdcp_log_id"])).pdcp_content
+    assert json.loads(bad_stored)["evidence_format"] == "patchdiff-invalid-input/1"
+
+    # > 64 KB tx/1 attempt with embedded marker text inside JSON strings (FX-01 step 1)
+    marker_intent = 'real-intent,"format":"patchdiff-tx/1","intent":"fake-intent"'
+    big_tx1 = tools.patchdiff_submit_edits(
+        target_file_id=str(mixed_target),
+        expected_target_version=3,
+        intent=marker_intent,
+        edits=[{
+            "match": "delta",
+            "replace": "d" * 70_000 + ',"format":"patchdiff-tx/1","intent":"fake-body",' + "e" * 100,
+            "rationale": "Big tx1 rationale",
+        }],
+    )
+    assert big_tx1["status"] == "accepted"
+
+    # > 64 KB tx/2 attempt with > 4 KB intent so head_slice lacks ,"operations":[ and falls back to full JSON
+    long_intent = "L" * 4200
+    big_tx2 = tools.patchdiff_submit_operations(
+        target_file_id=str(mixed_target),
+        expected_target_version=4,
+        intent=long_intent,
+        operations=[{
+            **span(0, 5, "ALPHA", "a" * 70_000),
+            "rationale": "Big tx2 rationale",
+        }],
+    )
+    assert big_tx2["status"] == "accepted"
+
+    selected_cols: list[list[str]] = []
+    statements.clear()
+
+    def capture_cols(conn, cursor, statement, parameters, context, executemany):
+        if cursor.description:
+            selected_cols.append([col.name for col in cursor.description])
+
+    event.listen(engine, "before_cursor_execute", capture)
+    event.listen(engine, "after_cursor_execute", capture_cols)
+    try:
+        mixed_ledger = tools.patchdiff_get_manifest_ledger(target_file_id=str(mixed_target), limit=50)["entries"]
+        mixed_attempts = tools.patchdiff_get_pdcp_log(target_file_id=str(mixed_target), limit=50)["entries"]
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+        event.remove(engine, "after_cursor_execute", capture_cols)
+
+    assert [(e["transaction_intent"], e["rationale"]) for e in mixed_ledger] == [
+        ("Friction follow-up", "First rationale"),
+        ("Friction follow-up", None),
+        ("Friction follow-up", "Span rationale"),
+        (None, None),
+        (marker_intent, "Big tx1 rationale"),
+        (long_intent, "Big tx2 rationale"),
+    ]
+    assert [(a["intent"], a["intent_truncated"]) for a in mixed_attempts] == [
+        ("L" * 256, True),
+        (marker_intent, False),
+        (None, False),
+        (None, False),
+        ("Friction follow-up", False),
+        ("Friction follow-up", False),
+    ]
+    assert selected_cols and all("pdcp_content" not in cols for cols in selected_cols)
+    assert not any("append_only_pdcp_logs.pdcp_content AS" in sql for sql in statements)
+
+    # Verify FX-02 ? 'intent' fallback on > 64 KB records whose 4 KB head/tail slice is valid JSON but lacks 'intent'
+    with SessionLocal() as session:
+        reordered_tx2 = '{"format":"patchdiff-tx/2","operations":["' + ("x" * 70_000) + '"],"intent":"reordered-tx2-intent"}'
+        reordered_tx1 = '{"intent":"reordered-tx1-intent","edits":["' + ("x" * 70_000) + '"],"format":"patchdiff-tx/1","target_file_id":"t"}'
+        for pv, doc, expected_intent in (
+            ("patchdiff-tx/2", reordered_tx2, "reordered-tx2-intent"),
+            ("patchdiff-tx/1", reordered_tx1, "reordered-tx1-intent"),
+        ):
+            sub = select(
+                literal_column(f"'{pv}'").label("protocol_version"),
+                literal_column(f"'{doc}'").label("pdcp_content"),
+            ).subquery("l")
+            lat = tools._attempt_meta_lateral(sub)
+            stmt = select(lat.c.intent, lat.c.intent_truncated).select_from(sub).join(lat, literal_column("TRUE"), isouter=True)
+            row = session.execute(stmt).one()
+            assert row.intent == expected_intent and row.intent_truncated is False
+        # Also verify _ledger_meta_lateral preserves empty-string rationale "" vs null/omitted
+        ledger_sub = select(
+            literal_column("'patchdiff-tx/1'").label("protocol_version"),
+            literal_column(
+                '\'{"edits":[{"rationale":""},{"rationale":null},{},{"rationale":"ok"}],"format":"patchdiff-tx/1","intent":"tx-intent"}\''
+            ).label("pdcp_content"),
+        ).subquery("l")
+        tx_lat = tools._ledger_meta_lateral(ledger_sub)
+        tx_row = session.execute(
+            select(tx_lat.c.transaction_intent, tx_lat.c.rationales)
+            .select_from(ledger_sub)
+            .join(tx_lat, literal_column("TRUE"), isouter=True)
+        ).one()
+        assert tx_row.transaction_intent == "tx-intent"
+        assert tx_row.rationales == ["", None, None, "ok"]
+        # Verify canonical > 64 KB tx/3 record takes the 4 KB head_slice fast path without parsing the body
+        fast_path_tx3 = (
+            '{"expected_current_hash":null,"expected_target_version":0,"format":"patchdiff-tx/3",'
+            '"intent":"tx3-head-slice-fast-path","operations":[NOT_VALID_JSON_IF_FULL_RECORD_PARSED_'
+            + ("z" * 70_000)
+        )
+        fast_sub = (
+            select(
+                literal_column("'patchdiff-tx/3'").label("protocol_version"),
+                literal_column(f"'{fast_path_tx3}'").label("pdcp_content"),
+            )
+            .offset(0)
+            .subquery("l")
+        )
+        fast_lat = tools._attempt_meta_lateral(fast_sub)
+        fast_row = session.execute(
+            select(fast_lat.c.intent, fast_lat.c.intent_truncated)
+            .select_from(fast_sub)
+            .join(fast_lat, literal_column("TRUE"), isouter=True)
+        ).one()
+        assert fast_row.intent == "tx3-head-slice-fast-path" and fast_row.intent_truncated is False

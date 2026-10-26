@@ -24,9 +24,19 @@ Host / Chatbot / Model = planning, context selection, proposal generator, retry 
 Postgres = canonical working substrate
 ```
 
-The host/model proposes edits through typed matches (`patchdiff_submit_edits`, preferred), guarded match/span operations (`patchdiff_submit_operations`), explicit sole replacement (`patchdiff_submit_replacement`) or frozen legacy `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`). All four paths lower into the same `ParsedPDCP` representation and execute through the same deterministic `apply_pdcp_transaction` applier.
+The host/model proposes edits through typed matches (`patchdiff_submit_edits`, `patchdiff-tx/1`, preferred), guarded match/span operations (`patchdiff_submit_operations`, `patchdiff-tx/2`), or explicit sole replacement (`patchdiff_submit_replacement`, `patchdiff-tx/3`). All formats lower into the same `ParsedPDCP` representation and execute through the same deterministic `apply_pdcp_transaction` applier. Frozen legacy `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`) and deprecated regeneration wrappers are documented in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).
 
 The product surface is the MCP server, not a standalone frontend, web app, or rich editor.
+
+## Measured System Characteristics (`PR #14`)
+
+| Dimension | Measured Value | Source / Verification |
+| --- | --- | --- |
+| **Minimal Typed Transaction Wire Overhead (`patchdiff-tx/1`)** | **`151 B`** wire (`206 B` stored) for 1 edit; **`259 B`** wire (`314 B` stored) for 5 edits; **0%** delimiter collisions | `evaluation/offline_eval.py` |
+| **Whole-Target Guarded Replacement (`patchdiff-tx/3`)** | **`341 B`** `tools/call` line (`290 B` stored) for small rewrite; fresh admission `<= 1 MB` / `1,000,000` code points | `evaluation/offline_eval.py` |
+| **65,536-Code-Point Near-Miss Scan (`SVC-001`)** | **`1.7 ms`** median (`585` cells) on varied prose (**58.9× faster**); **`41.9 ms`** median (`142,255` cells, 100% scanned) on repetitive logs (**16.9× faster**) | `backend/tests/unit/test_friction_followup.py` |
+| **20 MB History & Ledger Paging (`MCP-001`, PostgreSQL 16+ `LATERAL`)** | **`14.68 ms`** ledger / **`22.85 ms`** attempt log on `50 × 400 KB` `tx/3` (**16–19× faster**); **`136.72 ms`** log / **`221.59 ms`** ledger on `20 × 1 MB` `tx/1` | `backend/tests/integration/test_friction_followup_live.py` |
+| **Hard Response & Context Caps** | `<= 65,536 B` discovery; `<= 8,000` code points per read; `<= 32,768 B` preview; `<= 18,432 B` rejection enrichment | [MCP_TOOLS.md](MCP_TOOLS.md) |
 
 ## System Boundaries
 
@@ -59,7 +69,7 @@ May:
 - submit typed or `.pdcp` transactions through the unified service commit path
 - return accepted results (with `validity` and `evidence.changes`) or rejected results (with format-specific `diagnostic` and stage-aware `validity`)
 - execute `patchdiff_save`, `patchdiff_replay`, `patchdiff_export_target`, `patchdiff_get_target`, `patchdiff_get_pdcp_log`, and `patchdiff_get_manifest_ledger`
-- expose `patchdiff_build_prompt_context` as a labelled convenience prefix (`context_truncated`) and `patchdiff_get_regeneration_context` / `patchdiff_build_regeneration_prompt` / `patchdiff_request_regeneration` as deprecated compatibility wrappers
+- retain legacy compatibility wrappers (`patchdiff_submit_pdcp`, `patchdiff_build_prompt_context`, and deprecated regeneration wrappers) as documented in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md)
 
 Must not:
 - mutate `cloud_target_files.current_content` outside the single service commit path (`submit_edits`, `submit_operations`, `submit_replacement`, `submit_pdcp`)

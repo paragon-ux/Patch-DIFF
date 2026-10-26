@@ -297,6 +297,129 @@ def test_abandoned_starts_keep_the_exact_ranking_and_cut_work():
     assert result["comparison_cells"] < (len(buffer) - len(needle)) * len(needle) * 9 // 3
 
 
+def test_repetitive_64k_buffer_scans_to_end_within_work_bound():
+    lines = ["# Operations log", ""]
+    for idx in range(1, 1000):
+        if idx % 500 == 0:
+            lines.append(f"## Section {idx // 500}")
+        lines.append(f"- entry {idx:05d}: service calcly processed batch {idx % 97} in {idx % 13} ms; status=ok")
+    buffer = ("\n".join(lines) + "\n")[:65536]
+    needle = "entry 00700: service calcly processd batch 21"
+    result = near_misses(stored(buffer, needle), caller_owned=False, buffer=buffer)
+    assert result["status"] == "computed" and result["scope_truncated"] is False
+    assert result["scanned_end"] == len(buffer) - (len(needle) - 1) + 1 == 65493
+    assert [(c["distance"], c["start"], c["end"]) for c in result["candidates"]] == [
+        (1, 47646, 47692), (3, 27193, 27238), (3, 27808, 27854)
+    ]
+    assert 0 < result["comparison_cells"] <= 200_000
+
+
+def test_candidate_starts_strict_path_and_loop2_and_leading_insertion_exactness():
+    from app.services.near_miss_service import _candidate_starts
+
+    rng = random.Random(12345)
+    strict_hits = 0
+    loop2_only_hits = 0
+    leading_ins_hits = 0
+    for trial in range(120):
+        alphabet = "abc" if trial % 2 == 0 else "abcd"
+        nlen = rng.randint(16, 22)
+        needle = "".join(rng.choice(alphabet) for _ in range(nlen))
+        threshold = min(4, max(1, nlen // 4))
+        buf_list = [rng.choice(alphabet) for _ in range(rng.randint(140, 220))]
+        ins_pos = rng.randint(10, len(buf_list) - nlen - 5)
+        if trial % 3 == 0:
+            # Force all first `threshold` pieces to have 1 substitution and last piece exact (Loop 2 only)
+            step = nlen // (threshold + 1)
+            mut = list(needle)
+            for p_idx in range(threshold):
+                pos = p_idx * step
+                mut[pos] = "x" if mut[pos] != "x" else "y"
+            buf_list[ins_pos : ins_pos + nlen] = mut
+        elif trial % 3 == 1:
+            # Force a leading insertion at pos_k == 0 plus (threshold - 1) edits
+            mut = ["z"] + list(needle)
+            for p_idx in range(threshold - 1):
+                pos = 2 + p_idx * 3
+                if pos < len(mut):
+                    mut[pos] = "x" if mut[pos] != "x" else "y"
+            buf_list[ins_pos : ins_pos + len(mut)] = mut
+        buffer = "".join(buf_list)
+        starts = len(buffer) - (nlen - 1) + 1
+        cands = _candidate_starts(buffer, needle, threshold, threshold, starts, nlen + 1)
+        if not isinstance(cands, range):
+            strict_hits += 1
+            if trial % 3 == 0:
+                loop2_only_hits += 1
+            elif trial % 3 == 1:
+                leading_ins_hits += 1
+        result = near_misses(stored(buffer, needle), caller_owned=False, buffer=buffer)
+        expected = _reference(buffer, needle)
+        assert [(c["distance"], c["start"], c["end"]) for c in result["candidates"]] == expected[:3]
+        assert result["candidates_truncated"] is (len(expected) > 3) and result["scope_truncated"] is False
+    assert strict_hits >= 50
+    assert loop2_only_hits >= 15
+    assert leading_ins_hits >= 15
+
+
+def test_near_misses_cell_cap_boundary_stops_cleanly(monkeypatch):
+    from app.services import near_miss_service
+
+    buffer = "abcd" * 60
+    needle = "abce"
+    # Each start for len(needle)==4, threshold==1 charges reached_row * 3 cells (up to 12 cells).
+    # Run once with high cap to see exact per-window cost, then set cap right at a window boundary.
+    full = near_misses(stored(buffer, needle), caller_owned=False, buffer=buffer)
+    assert full["scope_truncated"] is False and full["comparison_cells"] > 60
+    cap = 45
+    monkeypatch.setattr(near_miss_service, "MAX_COMPARISON_CELLS", cap)
+    bounded = near_misses(stored(buffer, needle), caller_owned=False, buffer=buffer)
+    assert bounded["status"] == "computed" and bounded["scope_truncated"] is True
+    assert 0 < bounded["comparison_cells"] <= cap
+    assert 0 < bounded["scanned_end"] < full["scanned_end"]
+    ref = [item for item in _reference(buffer[: bounded["scanned_end"] + len(needle)], needle) if item[1] < bounded["scanned_end"]]
+    assert [(c["distance"], c["start"], c["end"]) for c in bounded["candidates"]] == ref[:3]
+
+
+def test_canonical_typed_records_keep_expected_key_order():
+    from app.pdcp.operations import build_operations_record
+    from app.pdcp.replacement import build_replacement_record
+    from app.pdcp.typed import build_record, canonical_record_json
+
+    tx1 = canonical_record_json(
+        build_record(
+            target_file_id="t1",
+            intent="intent-tx1",
+            edits=[{"match": "a", "replace": "b", "rationale": "r1"}],
+            expected_target_version=0,
+            expected_current_hash=None,
+        )
+    )
+    assert tx1.index('"edits":[') < tx1.index(',"format":"patchdiff-tx/1",') < tx1.index('"intent":"intent-tx1"') < tx1.index('"target_file_id":"t1"')
+
+    tx2 = canonical_record_json(
+        build_operations_record(
+            target_file_id="t1",
+            intent="intent-tx2",
+            operations=[{"start": 0, "end": 1, "replace": "b", "expected": "a", "rationale": "r2"}],
+            expected_target_version=0,
+            expected_current_hash=None,
+        )
+    )
+    assert tx2.index('"format":"patchdiff-tx/2"') < tx2.index('"intent":"intent-tx2"') < tx2.index(',"operations":[')
+
+    tx3 = canonical_record_json(
+        build_replacement_record(
+            target_file_id="t1",
+            intent="intent-tx3",
+            replacement="full",
+            expected_target_version=0,
+            expected_current_hash=None,
+        )
+    )
+    assert tx3.index('"format":"patchdiff-tx/3"') < tx3.index('"intent":"intent-tx3"') < tx3.index(',"operations":[')
+
+
 def test_sequential_failures_name_the_consuming_change_and_suppress_near_misses():
     result = typed("# Calcly\nInstall Calcly", [{"match": "# Calcly", "replace": "# Numerix"},
                                                  {"match": "# Calcly", "replace": "# X"}])
