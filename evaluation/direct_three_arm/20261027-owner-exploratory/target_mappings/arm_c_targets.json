@@ -1,0 +1,97 @@
+{
+  "matrix_kernel.py": {
+    "active_editing_cycle_id": "3e7a0f0b-acea-47a8-8118-fe3de7919b61",
+    "current_hash": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0",
+    "filename": "c_matrix_kernel.py",
+    "source_line_endings": {
+      "cr": 0,
+      "crlf": 0,
+      "lf": 770,
+      "normalized": false,
+      "source_code_points": 24065,
+      "source_sha256": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0",
+      "source_utf8_bytes": 24065,
+      "style": "lf"
+    },
+    "status": "ok",
+    "target_file_id": "e2731d31-589f-4730-b631-1c65d03616b3",
+    "target_type": "text/x-python",
+    "version": 0
+  },
+  "schema_defs.py": {
+    "active_editing_cycle_id": "e1bbbd10-93e3-4505-81a7-a70f261345e6",
+    "current_hash": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39",
+    "filename": "c_schema_defs.py",
+    "source_line_endings": {
+      "cr": 0,
+      "crlf": 0,
+      "lf": 339,
+      "normalized": false,
+      "source_code_points": 13393,
+      "source_sha256": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39",
+      "source_utf8_bytes": 13393,
+      "style": "lf"
+    },
+    "status": "ok",
+    "target_file_id": "b3795cb3-a75d-4460-80bb-6cbcd5d3be7e",
+    "target_type": "text/x-python",
+    "version": 0
+  },
+  "validator_engine.py": {
+    "active_editing_cycle_id": "b143aee8-946c-44d7-8f66-2ec925bc899e",
+    "current_hash": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291",
+    "filename": "c_validator_engine.py",
+    "source_line_endings": {
+      "cr": 0,
+      "crlf": 0,
+      "lf": 526,
+      "normalized": false,
+      "source_code_points": 21797,
+      "source_sha256": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291",
+      "source_utf8_bytes": 21797,
+      "style": "lf"
+    },
+    "status": "ok",
+    "target_file_id": "1ed44b1b-bb16-4d25-b03e-6cdc9ef66087",
+    "target_type": "text/x-python",
+    "version": 0
+  },
+  "routing_manifest.json": {
+    "active_editing_cycle_id": "b07be27d-5aec-43eb-8226-095f9a952cec",
+    "current_hash": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89",
+    "filename": "c_routing_manifest.json",
+    "source_line_endings": {
+      "cr": 0,
+      "crlf": 0,
+      "lf": 286,
+      "normalized": false,
+      "source_code_points": 6555,
+      "source_sha256": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89",
+      "source_utf8_bytes": 6555,
+      "style": "lf"
+    },
+    "status": "ok",
+    "target_file_id": "58680d04-9b72-4711-b2df-ab81906909b4",
+    "target_type": "application/json",
+    "version": 0
+  },
+  "MIGRATION_RUNBOOK.md": {
+    "active_editing_cycle_id": "894e7664-6ffe-48d4-9180-019b4bf4bb49",
+    "current_hash": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed",
+    "filename": "c_MIGRATION_RUNBOOK.md",
+    "source_line_endings": {
+      "cr": 0,
+      "crlf": 0,
+      "lf": 252,
+      "normalized": false,
+      "source_code_points": 10072,
+      "source_sha256": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed",
+      "source_utf8_bytes": 10072,
+      "style": "lf"
+    },
+    "status": "ok",
+    "target_file_id": "5452943b-6d67-40d5-bed0-82f6eaf48dd3",
+    "target_type": "text/markdown",
+    "version": 0
+  }
+}

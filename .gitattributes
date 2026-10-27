@@ -12,3 +12,7 @@ evaluation/structural_retest/primary/** -text
 # Execution source pins must be identical in Windows and Linux checkouts.
 evaluation/structural_retest/*.py text eol=lf
 evaluation/structural_retest/*.json text eol=lf
+# Preserve owner-supplied exploratory evidence byte for byte.
+evaluation/direct_three_arm/20261027-owner-exploratory/sources/** -text
+evaluation/direct_three_arm/20261027-owner-exploratory/exports/** -text
+evaluation/direct_three_arm/20261027-owner-exploratory/target_mappings/** -text

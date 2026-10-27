@@ -1,0 +1,413 @@
+{
+  "A": {
+    "full_byte": {
+      "passed": true,
+      "differences": [],
+      "reference": {
+        "MIGRATION_RUNBOOK.md": {
+          "length": 10104,
+          "sha256": "95b08e130e92c0aeeada6d92518e48509f5dd131d4ff96cd6b51d5d0de3f5fbb"
+        },
+        "matrix_kernel.py": {
+          "length": 24312,
+          "sha256": "36dba6340c0d47abcf6bbdc5e34788b8f800bbf0417254c7f791c40a926ab8f7"
+        },
+        "routing_manifest.json": {
+          "length": 6582,
+          "sha256": "84ce22315b1665e9308ccad447267c64ba04c4c660ee66a2be2f4ce14612306e"
+        },
+        "schema_defs.py": {
+          "length": 13498,
+          "sha256": "da3e5504f40a5cb0d4da5638fb986e4c4c23af5185aa481d9737838fce3b9c4d"
+        },
+        "validator_engine.py": {
+          "length": 21847,
+          "sha256": "90871b4658e10e960585abf05c27031179f7aab16b77d9e97a9a69ed604b1484"
+        }
+      }
+    },
+    "behavioral": {
+      "workspace": "primary",
+      "passed": 20,
+      "total": 20,
+      "accuracy_pct": 100.0,
+      "checks": [
+        {
+          "check": "matrix_kernel.sync_stream_2nd_overlap",
+          "passed": true,
+          "detail": "got 'HEADER::SYNC::SYNC::CALIB::SYNC::SYNC::TRAILER'"
+        },
+        {
+          "check": "matrix_kernel.k07_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 7, 'stride_offset': 230, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k14_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 14, 'stride_offset': 454, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k21_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 21, 'stride_offset': 678, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.other_21_kernels_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "matrix_kernel.dispatch_triad_total_saturation_clips",
+          "passed": true,
+          "detail": "got keys=['sync_stream', 'triad_kernels', 'total_accumulator', 'total_saturation_clips', 'k07', 'k14', 'k21'], total_acc=756"
+        },
+        {
+          "check": "schema_defs.dataclass_default_scope",
+          "passed": true,
+          "detail": "got 'GLOBAL'"
+        },
+        {
+          "check": "schema_defs.v1_v2_untouched",
+          "passed": true,
+          "detail": "s1={'wire_version': 'v1', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}, s2={'wire_version': 'v2', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}"
+        },
+        {
+          "check": "schema_defs.v3_updated",
+          "passed": true,
+          "detail": "s3={'wire_version': 'v3', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'ns', 'settlement_epoch': 1700000000000000000, 'quorum_required': 3, 'idempotency_scope': 'TENANT'}"
+        },
+        {
+          "check": "validator_engine.valid_scopes",
+          "passed": true,
+          "detail": "got ('GLOBAL', 'PARTITION', 'TENANT')"
+        },
+        {
+          "check": "validator_engine.v3_critical_rules_04_11_19_27_accept_ns",
+          "passed": true,
+          "detail": "got [(True, 'rule_04: ok'), (True, 'rule_11: ok'), (True, 'rule_19: ok'), (True, 'rule_27: ok')]"
+        },
+        {
+          "check": "validator_engine.other_26_rules_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.version_updated",
+          "passed": true,
+          "detail": "got '2026.10.2-v3'"
+        },
+        {
+          "check": "routing_manifest.canary_tenants_006_013_018_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.other_17_tenants_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.allowed_scopes",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.gate_14_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.other_19_gates_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.canary_table_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.conflict_marker_template_updated",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    "complete_correct": true
+  },
+  "B": {
+    "full_byte": {
+      "passed": true,
+      "differences": [],
+      "reference": {
+        "MIGRATION_RUNBOOK.md": {
+          "length": 10104,
+          "sha256": "95b08e130e92c0aeeada6d92518e48509f5dd131d4ff96cd6b51d5d0de3f5fbb"
+        },
+        "matrix_kernel.py": {
+          "length": 24312,
+          "sha256": "36dba6340c0d47abcf6bbdc5e34788b8f800bbf0417254c7f791c40a926ab8f7"
+        },
+        "routing_manifest.json": {
+          "length": 6582,
+          "sha256": "84ce22315b1665e9308ccad447267c64ba04c4c660ee66a2be2f4ce14612306e"
+        },
+        "schema_defs.py": {
+          "length": 13498,
+          "sha256": "da3e5504f40a5cb0d4da5638fb986e4c4c23af5185aa481d9737838fce3b9c4d"
+        },
+        "validator_engine.py": {
+          "length": 21847,
+          "sha256": "90871b4658e10e960585abf05c27031179f7aab16b77d9e97a9a69ed604b1484"
+        }
+      }
+    },
+    "behavioral": {
+      "workspace": "primary",
+      "passed": 20,
+      "total": 20,
+      "accuracy_pct": 100.0,
+      "checks": [
+        {
+          "check": "matrix_kernel.sync_stream_2nd_overlap",
+          "passed": true,
+          "detail": "got 'HEADER::SYNC::SYNC::CALIB::SYNC::SYNC::TRAILER'"
+        },
+        {
+          "check": "matrix_kernel.k07_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 7, 'stride_offset': 230, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k14_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 14, 'stride_offset': 454, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k21_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 21, 'stride_offset': 678, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.other_21_kernels_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "matrix_kernel.dispatch_triad_total_saturation_clips",
+          "passed": true,
+          "detail": "got keys=['sync_stream', 'triad_kernels', 'total_accumulator', 'total_saturation_clips', 'k07', 'k14', 'k21'], total_acc=756"
+        },
+        {
+          "check": "schema_defs.dataclass_default_scope",
+          "passed": true,
+          "detail": "got 'GLOBAL'"
+        },
+        {
+          "check": "schema_defs.v1_v2_untouched",
+          "passed": true,
+          "detail": "s1={'wire_version': 'v1', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}, s2={'wire_version': 'v2', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}"
+        },
+        {
+          "check": "schema_defs.v3_updated",
+          "passed": true,
+          "detail": "s3={'wire_version': 'v3', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'ns', 'settlement_epoch': 1700000000000000000, 'quorum_required': 3, 'idempotency_scope': 'TENANT'}"
+        },
+        {
+          "check": "validator_engine.valid_scopes",
+          "passed": true,
+          "detail": "got ('GLOBAL', 'PARTITION', 'TENANT')"
+        },
+        {
+          "check": "validator_engine.v3_critical_rules_04_11_19_27_accept_ns",
+          "passed": true,
+          "detail": "got [(True, 'rule_04: ok'), (True, 'rule_11: ok'), (True, 'rule_19: ok'), (True, 'rule_27: ok')]"
+        },
+        {
+          "check": "validator_engine.other_26_rules_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.version_updated",
+          "passed": true,
+          "detail": "got '2026.10.2-v3'"
+        },
+        {
+          "check": "routing_manifest.canary_tenants_006_013_018_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.other_17_tenants_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.allowed_scopes",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.gate_14_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.other_19_gates_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.canary_table_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.conflict_marker_template_updated",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    "complete_correct": true
+  },
+  "C": {
+    "full_byte": {
+      "passed": true,
+      "differences": [],
+      "reference": {
+        "MIGRATION_RUNBOOK.md": {
+          "length": 10104,
+          "sha256": "95b08e130e92c0aeeada6d92518e48509f5dd131d4ff96cd6b51d5d0de3f5fbb"
+        },
+        "matrix_kernel.py": {
+          "length": 24312,
+          "sha256": "36dba6340c0d47abcf6bbdc5e34788b8f800bbf0417254c7f791c40a926ab8f7"
+        },
+        "routing_manifest.json": {
+          "length": 6582,
+          "sha256": "84ce22315b1665e9308ccad447267c64ba04c4c660ee66a2be2f4ce14612306e"
+        },
+        "schema_defs.py": {
+          "length": 13498,
+          "sha256": "da3e5504f40a5cb0d4da5638fb986e4c4c23af5185aa481d9737838fce3b9c4d"
+        },
+        "validator_engine.py": {
+          "length": 21847,
+          "sha256": "90871b4658e10e960585abf05c27031179f7aab16b77d9e97a9a69ed604b1484"
+        }
+      }
+    },
+    "behavioral": {
+      "workspace": "primary",
+      "passed": 20,
+      "total": 20,
+      "accuracy_pct": 100.0,
+      "checks": [
+        {
+          "check": "matrix_kernel.sync_stream_2nd_overlap",
+          "passed": true,
+          "detail": "got 'HEADER::SYNC::SYNC::CALIB::SYNC::SYNC::TRAILER'"
+        },
+        {
+          "check": "matrix_kernel.k07_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 7, 'stride_offset': 230, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k14_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 14, 'stride_offset': 454, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k21_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 21, 'stride_offset': 678, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.other_21_kernels_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "matrix_kernel.dispatch_triad_total_saturation_clips",
+          "passed": true,
+          "detail": "got keys=['sync_stream', 'triad_kernels', 'total_accumulator', 'total_saturation_clips', 'k07', 'k14', 'k21'], total_acc=756"
+        },
+        {
+          "check": "schema_defs.dataclass_default_scope",
+          "passed": true,
+          "detail": "got 'GLOBAL'"
+        },
+        {
+          "check": "schema_defs.v1_v2_untouched",
+          "passed": true,
+          "detail": "s1={'wire_version': 'v1', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}, s2={'wire_version': 'v2', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}"
+        },
+        {
+          "check": "schema_defs.v3_updated",
+          "passed": true,
+          "detail": "s3={'wire_version': 'v3', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'ns', 'settlement_epoch': 1700000000000000000, 'quorum_required': 3, 'idempotency_scope': 'TENANT'}"
+        },
+        {
+          "check": "validator_engine.valid_scopes",
+          "passed": true,
+          "detail": "got ('GLOBAL', 'PARTITION', 'TENANT')"
+        },
+        {
+          "check": "validator_engine.v3_critical_rules_04_11_19_27_accept_ns",
+          "passed": true,
+          "detail": "got [(True, 'rule_04: ok'), (True, 'rule_11: ok'), (True, 'rule_19: ok'), (True, 'rule_27: ok')]"
+        },
+        {
+          "check": "validator_engine.other_26_rules_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.version_updated",
+          "passed": true,
+          "detail": "got '2026.10.2-v3'"
+        },
+        {
+          "check": "routing_manifest.canary_tenants_006_013_018_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.other_17_tenants_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.allowed_scopes",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.gate_14_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.other_19_gates_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.canary_table_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.conflict_marker_template_updated",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    "complete_correct": true
+  }
+}
