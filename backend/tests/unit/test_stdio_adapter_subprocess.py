@@ -21,7 +21,7 @@ def _rpc(*messages: str) -> list[dict]:
         capture_output=True,
         text=True,
         cwd=BACKEND,
-        env={"PYTHONPATH": str(BACKEND), "SYSTEMROOT": _systemroot()},
+        env={"PATCHDIFF_MCP_PROFILE": "full", "PYTHONPATH": str(BACKEND), "SYSTEMROOT": _systemroot()},
         timeout=60,
     )
     assert completed.returncode == 0, completed.stderr

@@ -17,6 +17,13 @@ As-built implementation record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHAN
 
 ## Architecture
 
+External MCP defaults to the seven-tool `editor` profile, with server-enforced
+`unobserved` (5), `observed` (6) and opt-in compatibility `full` (22). Trusted
+lifecycle work uses `full`; strict observed admission remains a separate service
+guard. Multi-scope bundles reuse the existing observe/submit tool names and
+shared applier, preserving one atomic target commit, audit, SAVE and replay.
+[Profiles and scoped batch workflow](STRUCTURAL_BATCH_EDITING.md).
+
 ```text
 PatchDIFF server = deterministic transaction runtime + authoritative read/commit service
 MCP = transport/interface (stdio JSON-RPC adapter + internal registry)

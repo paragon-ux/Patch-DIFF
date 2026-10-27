@@ -15,7 +15,7 @@ def _tool_payload(result: dict) -> dict:
 
 
 def test_external_mcp_tool_discovery_exposes_expected_patchdiff_tools() -> None:
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
 
     tools = adapter.list_tools()
     names = {tool["name"] for tool in tools}
@@ -39,7 +39,7 @@ def test_external_mcp_tool_discovery_exposes_expected_patchdiff_tools() -> None:
 
 
 def test_external_mcp_json_rpc_initialize_and_tool_list() -> None:
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
 
     initialized = adapter.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
     listed = adapter.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
@@ -57,7 +57,7 @@ def test_external_mcp_tools_call_routes_to_existing_internal_registry(monkeypatc
         return {"status": "ok", "tool": name, "arguments": kwargs}
 
     monkeypatch.setattr(type(external_adapter.registry), "call", fake_call)
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
 
     response = adapter.handle_request(
         {
@@ -77,7 +77,7 @@ def test_external_mcp_tools_call_routes_to_existing_internal_registry(monkeypatc
 
 
 def test_external_upload_and_submit_use_existing_behavior_without_direct_mutation() -> None:
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
 
     upload = _tool_payload(
         adapter.call_tool(

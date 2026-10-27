@@ -16,7 +16,7 @@ from app.storage.models import AppendOnlyPdcpLogs, CloudTargetFiles
 
 def test_real_stdio_friction_followup_shapes():
     backend = Path(__file__).resolve().parents[2]
-    env = {**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_DATABASE_URL": settings.database_url}
+    env = {**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url}
     env.pop("PYTHONIOENCODING", None)
     process = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=backend, env=env)

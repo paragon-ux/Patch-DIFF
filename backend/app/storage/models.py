@@ -276,12 +276,21 @@ class TargetScopeObservations(TimestampMixin, Base):
             "scope_start >= 0 AND scope_end >= scope_start",
             name="ck_target_scope_observations_scope_offsets",
         ),
-        UniqueConstraint("accepted_pdcp_log_id", name="uq_target_scope_observations_accepted_log"),
+        CheckConstraint("(observation_bundle_id IS NULL AND bundle_ordinal IS NULL) OR "
+                        "(observation_bundle_id IS NOT NULL AND bundle_ordinal IS NOT NULL AND bundle_ordinal >= 0 AND bundle_ordinal < 32)",
+                        name="ck_scope_bundle_pair"),
+        UniqueConstraint("observation_bundle_id", "bundle_ordinal", name="uq_scope_bundle_ordinal"),
+        Index("ix_scope_bundle", "observation_bundle_id"),
+        Index("ix_scope_accepted_log", "accepted_pdcp_log_id"),
+        Index("uq_scope_single_accepted_log", "accepted_pdcp_log_id", unique=True,
+              postgresql_where=text("observation_bundle_id IS NULL AND accepted_pdcp_log_id IS NOT NULL")),
         Index("ix_target_scope_observations_target_version", "target_file_id", "target_version"),
         Index("ix_target_scope_observations_target_cycle", "target_file_id", "editing_cycle_id"),
     )
 
     observation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    observation_bundle_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    bundle_ordinal: Mapped[int | None] = mapped_column(Integer)
     target_file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cloud_target_files.target_file_id"), nullable=False)
     editing_cycle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("editing_cycles.editing_cycle_id"), nullable=False)
     target_version: Mapped[int] = mapped_column(BigInteger, nullable=False)

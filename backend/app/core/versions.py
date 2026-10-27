@@ -8,6 +8,7 @@ RUNTIME_VERSION = "patchdiff-mvp-0.2.2"
 OPERATIONS_RUNTIME_VERSION = "patchdiff-mvp-0.3.0"
 REPLACEMENT_RUNTIME_VERSION = "patchdiff-mvp-0.4.0"
 SPAN_CONTEXT_RUNTIME_VERSION = "patchdiff-mvp-0.5.0"
+BATCH_RUNTIME_VERSION = "patchdiff-observed-batch-r1"
 PRE_SELECTOR_RUNTIME_VERSION = "patchdiff-mvp-0.2.1"
 PREVIOUS_RUNTIME_VERSION = "patchdiff-mvp-0.2.0"
 LEGACY_RUNTIME_VERSION = "patchdiff-mvp-0.1.0"
@@ -31,6 +32,7 @@ SUPPORTED_RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
     OPERATIONS_RUNTIME_VERSION: RuntimeProfile(True, True, True),
     REPLACEMENT_RUNTIME_VERSION: RuntimeProfile(True, True, True, True),
     SPAN_CONTEXT_RUNTIME_VERSION: RuntimeProfile(True, True, True, False, True),
+    BATCH_RUNTIME_VERSION: RuntimeProfile(True, True, True, False, True),
 }
 
 

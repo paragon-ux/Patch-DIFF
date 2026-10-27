@@ -1,5 +1,14 @@
 # Evaluation & Benchmarks
 
+The separate [structural batch capability check](../docs/STRUCTURAL_BATCH_EDITING.md#deterministic-capability-evidence)
+uses `structural_batch/verify.py` with live PostgreSQL and real stdio. It keeps the
+original five-file fixtures, task, gold oracle, exploratory transcripts and frozen
+Gate 2 controller unchanged. It checks five bundled observations/five atomic
+submissions, exact output bytes and 20 behavioral assertions; it invokes no model
+and makes no comparative performance claim. Evidence is stored in its own run
+directory. Existing host integrations requiring administrative tools opt into
+`PATCHDIFF_MCP_PROFILE=full` before launch.
+
 Four evaluation layers, kept strictly separate (`docs/MODERNIZATION_ARCHITECTURE.md` Decision A8).
 
 ---

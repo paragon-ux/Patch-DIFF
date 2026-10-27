@@ -19,6 +19,16 @@ These extensions keep the thesis unchanged: exact matching, sequential in-memory
 
 ## 0. Reading guide and evidence limits
 
+The structural batch extension preserves per-target atomicity across multiple
+server-issued scopes. Its decision and contracts are in
+[STRUCTURAL_BATCH_EDITING.md](STRUCTURAL_BATCH_EDITING.md): one discovery per
+snapshot, per-group tx/2 evaluation through the existing applier, descending
+assembly, one locked commit, exact request recovery, all-scope replay without
+Waymark, and immutable `patchdiff-observed-batch/1` /
+`patchdiff-observed-batch-r1`. Historical profiles remain unchanged. External MCP
+defaults to seven advertised/callable tools; compatibility requires explicit
+startup `PATCHDIFF_MCP_PROFILE=full`.
+
 - **Conceptual design thesis** = [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (modernized conceptual whitepaper covering `patchdiff-tx/1..3`, edit-method comparisons, operational efficiency bounds, generalized transaction invariants, and research hypotheses `H1`–`H7`). It supersedes the original v0.2.3 whitepaper (`docs/PatchDIFF-Concept-Paper-5.md`, "P1"), which is preserved untouched alongside `docs/PatchDIFF-Protocol-Spec-v0.2.3.md` and `docs/PatchDIFF-Implementation-Spec-v0.2.3.md` as a historical design record.
 - **Active implementation contract** = `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/MCP_TOOLS.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md`, `docs/HOST_INTEGRATION_GUIDE.md`, `docs/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md`. Active documents state the current modernized system coherently in their main body rather than contradicting themselves via tacked-on footers.
 - **Primary external evidence (E1–E8)** was fetched and verified directly from the primary vendor documentation pages and release endpoints on `2026-10-20` (Section 3.1).
@@ -182,7 +192,8 @@ Read/search string arguments return invalid_argument with safely serialized deta
   - Because all application mutation paths serialize through `select_target_for_update`, this establishes a point-in-time observation boundary relative to participating writers without phantom divergence.
   - Caller transaction ownership is preserved: in a caller-owned transaction, the row lock remains held until that transaction ends.
 - **Explicit Profile Dispatch**:
-  - `protocol_version`: `"0.2.3"` (parsed via `parse_pdcp` + `validate_pdcp`) or `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). `"patchdiff-tx/2"` dispatches `decode_operations_record` + `to_parsed_operations` and requires a span-capable recorded profile. `"patchdiff-tx/3"` dispatches `decode_replacement_record` + `to_parsed_replacement` and requires replacement-capable 0.4.0; replay does not apply fresh size-admission limits. Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
+  - `protocol_version`: `"0.2.3"` (parsed via `parse_pdcp` + `validate_pdcp`) or `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). `"patchdiff-tx/2"` dispatches `decode_operations_record` + `to_parsed_operations` and requires a span-capable recorded profile. `"patchdiff-tx/3"` dispatches `decode_replacement_record` + `to_parsed_replacement` and requires replacement-capable 0.4.0; replay does not apply fresh size-admission limits. The internal `patchdiff-observed-batch/1` format dispatches only with `patchdiff-observed-batch-r1` and verifies every authoritative scope link before local application. Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
+  - The separate immutable `patchdiff-observed-batch-r1` profile enables scope-local grouped tx/2 evaluation and descending assembly; it never changes historical profiles.
   - Runtime profiles are immutable execution settings, with separate overlap and singleton-selector flags:
 
     | Runtime | Overlapping matches | Enforce singleton selectors | Typed change IDs |

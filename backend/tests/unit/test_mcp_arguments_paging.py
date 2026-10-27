@@ -82,7 +82,7 @@ def test_default_context_is_40_and_tool_routing_keeps_domain_errors(monkeypatch)
     monkeypatch.setattr(tools, "SessionLocal", lambda: session)
     default = tools.patchdiff_find_occurrences(target_file_id=str(TARGET), text="X")
     assert len(default["occurrences"][0]["before"]) == 40
-    payload = ExternalMCPAdapter().call_tool("patchdiff_find_occurrences", {
+    payload = ExternalMCPAdapter(profile="full").call_tool("patchdiff_find_occurrences", {
         "target_file_id": str(TARGET), "text": "X", "context_chars": -1})
     assert payload["isError"] is False
     assert json.loads(payload["content"][0]["text"])["status"] == "invalid_argument"
@@ -167,7 +167,7 @@ def test_unknown_and_malformed_targets_have_empty_continuation(monkeypatch, hand
 
 
 def test_discovery_agrees_with_bounds_nullable_history_and_legacy_key_lookup():
-    schemas = {item["name"]: item["inputSchema"] for item in ExternalMCPAdapter().list_tools()}
+    schemas = {item["name"]: item["inputSchema"] for item in ExternalMCPAdapter(profile="full").list_tools()}
     context = schemas["patchdiff_find_occurrences"]["properties"]["context_chars"]
     assert context["type"] == "integer" and context["minimum"] == 0 and context["default"] == 40
     assert "maximum" not in context and "400" in context["description"]

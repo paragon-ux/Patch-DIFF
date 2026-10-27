@@ -47,7 +47,7 @@ def test_range_continuation_long_line_and_eof_offset():
 
 
 def test_discovery_examples_are_valid_bounded_and_isolated():
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
     tools = adapter.list_tools()
     schemas = {tool["name"]: tool["inputSchema"] for tool in tools}
     assert len(TOOL_EXAMPLES) == 9 and sum(map(len, TOOL_EXAMPLES.values())) == 13

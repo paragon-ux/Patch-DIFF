@@ -11,6 +11,13 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ## Runtime and persistence foundations
 
+- Structural batch implementation: `pdcp/observed_batch.py`, bundle issuance in
+  `services/scope_observation_service.py`, existing locked submission path,
+  explicit batch replay dispatch and additive migration `20261027_0005`.
+- External MCP profiles: immutable startup selection, shared advertisement/call
+  filtering and generated schemas for the two extended tool identities.
+- [Contract, implementation trace and deterministic evidence](STRUCTURAL_BATCH_EDITING.md).
+
 - Built pure deterministic core runtime (`backend/app/core/`, `backend/app/pdcp/`).
 - Established Postgres persistence layer (`cloud_target_files`, `append_only_pdcp_logs`, `append_only_manifest_ledger`, `target_snapshots`, `editing_cycles`) under Alembic migration `20260510_0001_initial_schema`.
 - Implemented MCP tool registry and stdio JSON-RPC adapter (`backend/app/mcp/external_adapter.py`).

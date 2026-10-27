@@ -22,6 +22,7 @@ from app.services.pdcp_service import (
     submit_replacement,
 )
 from app.services.scope_observation_service import observe_scope
+from app.pdcp.observed_batch import BATCH_UNSET
 from app.services.rejection_context import response_current_context
 from app.services.prompt_context_service import build_prompt_context
 from app.services.regeneration_service import (
@@ -51,7 +52,7 @@ _UNSET = object()
 # include_content pages: later entries stop carrying pdcp_content past this many UTF-8 bytes.
 MAX_CONTENT_PAGE_BYTES = 1_048_576
 MAX_ATTEMPT_INTENT_CHARS = 256
-_TYPED_PROTOCOLS = ("patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3")
+_TYPED_PROTOCOLS = ("patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3", "patchdiff-observed-batch/1")
 
 
 @registry.register("patchdiff_handle_upload")
@@ -194,6 +195,7 @@ def patchdiff_observe_scope(
     symbol_name: str | None = None,
     kind: str | None = None,
     observation_id: str | None = None,
+    selections: list[dict] | None = BATCH_UNSET,
     offset: int = 0,
     max_chars: int | None = None,
     include_line_starts: bool = False,
@@ -206,6 +208,7 @@ def patchdiff_observe_scope(
             symbol_name=symbol_name,
             kind=kind,
             observation_id=observation_id,
+            selections=selections,
             offset=offset,
             max_chars=max_chars,
             include_line_starts=include_line_starts,
@@ -217,8 +220,10 @@ def patchdiff_submit_observed_operations(
     *,
     target_file_id: str,
     intent: str,
-    operations: list[dict],
-    observation_id: str | None = None,
+    operations: list[dict] | None = BATCH_UNSET,
+    observation_id: str | None = BATCH_UNSET,
+    observation_bundle_id: str | None = BATCH_UNSET,
+    groups: list[dict] | None = BATCH_UNSET,
     expected_target_version: int | None = None,
     expected_current_hash: str | None = None,
     source: str = "model_response",
@@ -234,6 +239,8 @@ def patchdiff_submit_observed_operations(
             observation_id=observation_id,
             intent=intent,
             operations=operations,
+            observation_bundle_id=observation_bundle_id,
+            groups=groups,
             expected_target_version=expected_target_version,
             expected_current_hash=expected_current_hash,
             submission_source=source,
@@ -368,6 +375,7 @@ def patchdiff_replay(*, target_file_id: str) -> dict[str, Any]:
         "failure_reason": result.failure_reason.value if result.failure_reason else None,
         "failure_detail": result.failure_detail,
         "pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
+        **({"code": result.code} if result.code else {}),
     }
 
 
@@ -737,6 +745,8 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
     if result.status == "accepted":
         return {
             "status": "accepted",
+            **(result.batch_metadata or {}),
+            **({"before_version": result.before_version, "after_version": result.after_version} if result.batch_metadata else {}),
             **invocation,
             "target_file_id": str(result.target_file_id),
             "before_hash": result.before_hash,
@@ -816,7 +826,7 @@ def _attempt_meta_lateral(log_alias: Any):
                          AND NOT ((s.tail_slice::jsonb) ? 'evidence_format')
                          AND ((s.tail_slice::jsonb) ? 'intent')
                     THEN s.tail_slice::jsonb
-                    WHEN {pv} IN ('patchdiff-tx/1', 'patchdiff-tx/2', 'patchdiff-tx/3')
+                    WHEN {pv} IN ('patchdiff-tx/1', 'patchdiff-tx/2', 'patchdiff-tx/3', 'patchdiff-observed-batch/1')
                          AND pg_input_is_valid({content}, 'jsonb')
                     THEN (
                         CASE
@@ -890,7 +900,7 @@ def _ledger_meta_lateral(log_alias: Any):
                    END AS rationales
             FROM (
                 SELECT CASE
-                    WHEN {pv} IN ('patchdiff-tx/1', 'patchdiff-tx/2')
+                    WHEN {pv} IN ('patchdiff-tx/1', 'patchdiff-tx/2', 'patchdiff-observed-batch/1')
                          AND pg_input_is_valid({content}, 'json')
                     THEN ({content})::json
                 END AS doc
@@ -902,9 +912,16 @@ def _ledger_meta_lateral(log_alias: Any):
                   THEN raw.doc
                   ELSE '{{}}'::json
                 END
-            ) AS x(intent json, edits json, operations json, evidence_format text)
+            ) AS x(intent json, edits json, operations json, groups json, evidence_format text)
             CROSS JOIN LATERAL (
-                SELECT CASE WHEN x.edits IS NOT NULL THEN x.edits ELSE x.operations END AS items
+                SELECT CASE WHEN {pv} = 'patchdiff-observed-batch/1' AND json_typeof(x.groups) = 'array'
+                       THEN (SELECT json_agg(o.operation ORDER BY g.ordinal, o.ordinal)
+                             FROM json_array_elements(x.groups) WITH ORDINALITY AS g(value, ordinal)
+                             CROSS JOIN LATERAL json_array_elements(
+                               CASE WHEN json_typeof(g.value -> 'operations') = 'array'
+                                    THEN g.value -> 'operations' ELSE '[]'::json END
+                             ) WITH ORDINALITY AS o(operation, ordinal))
+                       WHEN x.edits IS NOT NULL THEN x.edits ELSE x.operations END AS items
                 OFFSET 0
             ) AS d
             WHERE raw.doc IS NOT NULL

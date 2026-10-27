@@ -667,6 +667,7 @@ def test_stdio_mcp_subprocess_end_to_end_observe_and_strict_submit() -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root / "backend")
     env["PATCHDIFF_STRICT_OBSERVATION_MODE"] = "1"
+    env["PATCHDIFF_MCP_PROFILE"] = "full"
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "app.mcp.external_adapter"],

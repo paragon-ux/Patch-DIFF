@@ -8,6 +8,21 @@ merge or self-approval is authorized by this document.
 
 ## Separate studies and immutable inputs
 
+The later structural batch remediation has its own deterministic capability
+check, `evaluation/structural_batch/verify.py`, and [contract](STRUCTURAL_BATCH_EDITING.md).
+It reuses authenticated original source/task/oracle bytes and declarative
+exploratory C operations, issues five observation bundles and five atomic editing
+submissions, then SAVE/replay per file. It invokes no model, does not modify this
+frozen controller/manifest or approve Gate 2, and makes no comparative latency or
+cost claim. Its outputs and request/response evidence live separately under
+`evaluation/structural_batch/`. A new direct three-arm functionality test still
+requires independent product review followed by owner authorization.
+
+When running the older frozen controller for compatibility checks, its trusted
+operator must set `PATCHDIFF_MCP_PROFILE=full` before launch. It retains its
+original bytes and host-owned filters; the new service profiles are tested
+separately through actual external MCP advertisement and dispatch.
+
 The **primary** replication is the recovered original **21-edit-labeled, five-file
 task**, extended with observed Arm C. Its exact TASK.md, five fixtures, setup,
 verifier, old A/B prompts and provenance remain unchanged and SHA-256 pinned.

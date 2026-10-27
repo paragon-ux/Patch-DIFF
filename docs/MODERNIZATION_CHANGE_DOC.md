@@ -6,6 +6,23 @@ Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP 
 
 ## Transaction formats and compatibility
 
+Structural batches extend the two existing observation tools without adding tool
+names. `patchdiff_observe_scope(selections=...)` issues 1–32 disjoint scopes from
+one snapshot/discovery; `patchdiff_submit_observed_operations(groups=...)`
+requires both guards and a request key, evaluates scope-local tx/2 operations
+through the shared applier and commits one target increment. The internal durable
+pair is `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`; historical
+single-scope and unobserved records/profiles retain their semantics. Migration
+0005 adds bundles and many-to-one accepted linkage while preserving historical
+single uniqueness; replay verifies every recorded scope without Waymark.
+[Limits, error codes, evidence and examples](STRUCTURAL_BATCH_EDITING.md).
+
+External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
+`unobserved` has 5, `observed` 6, and explicit compatibility `full` 22. Profiles
+filter both discovery and calls and remain immutable for a session; the internal
+registry keeps all 22 handlers. Trusted lifecycle operators and older integrations
+must opt into `full` before starting their session.
+
 | Tool | Stored protocol | Runtime for new submissions | Behavior |
 | --- | --- | --- | --- |
 | `patchdiff_submit_edits` | `patchdiff-tx/1` | `patchdiff-mvp-0.2.2` | Typed exact matches with intent and required version/hash guard. |
@@ -47,7 +64,7 @@ Discovery examples are deep-copied per result and bounded: 65,536 compact ASCII-
 
 SAVE snapshots current target state and rotates editing cycles without mutating content; optional version and hash guards are both checked. Replay checks initial snapshot ownership/hash, accepted-log ownership/content hashes, contiguous versions, before/after hashes and recorded execution profiles. Materialized health reports independent raw `content_matches`, `stored_hash_matches`, `recomputed_hash_matches` and `version_matches`; successful reconstruction can coexist with unhealthy storage. CRLF/bare-CR corruption is visible even if canonical hashes agree. Replay never repairs target or history.
 
-Migrations are `20260510_0001`, `20261020_0002` and `20261022_0003`. Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses existing typed ledger rows rather than discarding information. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
+Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004` (observations) and `20261027_0005` (bundles). Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses existing typed ledger rows rather than discarding information. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
 
 ## Verification scope
 

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sqlalchemy import select
@@ -16,6 +17,12 @@ from app.core.input_text import safe_input_text
 from app.core.result import AcceptedCoreResult
 from app.core.versions import UnsupportedRuntimeVersionError, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
+from app.pdcp.observed_batch import (
+    BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION, BatchValidationError, BatchScope,
+    parse_batch_request, apply_observed_batch,
+)
+from app.pdcp.typed import canonical_record_json
+from app.services.scope_observation_service import batch_scope_evidence
 from app.pdcp.operations import OPERATIONS_PROTOCOL_VERSION, decode_operations_record, to_parsed_operations
 from app.pdcp.replacement import REPLACEMENT_PROTOCOL_VERSION, decode_replacement_record, to_parsed_replacement
 from app.pdcp.models import SUPPORTED_PROTOCOL_VERSION, ParsedPDCP
@@ -41,6 +48,7 @@ class ReplayResult:
     failure_reason: FailureReason | None = None
     failure_detail: str | None = None
     pdcp_log_id: uuid.UUID | None = None
+    code: str | None = None
 
 
 def replay_target(
@@ -147,11 +155,13 @@ def replay_target(
 
         expected_version = initial_snapshot.version
         for replayed_count, log in enumerate(accepted_logs, start=1):
+            batch_code = "BATCH_REPLAY_INTEGRITY_FAILURE" if log.protocol_version == BATCH_PROTOCOL_VERSION else None
             if log.target_file_id != target.target_file_id:
                 return _failed(
                     target,
                     FailureReason.REPLAY_PROTOCOL_INVALID,
                     "Logged target_file_id does not match the replayed target.",
+                    code=batch_code,
                     replayed=replayed_count - 1,
                     pdcp_log_id=log.pdcp_log_id,
                 )
@@ -163,12 +173,13 @@ def replay_target(
                     target,
                     FailureReason.REPLAY_PROTOCOL_INVALID,
                     str(exc),
+                    code=batch_code,
                     replayed=replayed_count - 1,
                     pdcp_log_id=log.pdcp_log_id,
                 )
 
             try:
-                parsed = _decode_logged_transaction(log, target)
+                parsed = None if log.protocol_version == BATCH_PROTOCOL_VERSION else _decode_logged_transaction(log, target)
             except (PDCPParseError, ProtocolValidationError, _UnsupportedLoggedProtocol) as exc:
                 return _failed(
                     target,
@@ -183,6 +194,7 @@ def replay_target(
                     target,
                     FailureReason.REPLAY_PROTOCOL_INVALID,
                     "Logged version chain is not contiguous with the replay buffer.",
+                    code=batch_code,
                     replayed=replayed_count - 1,
                     pdcp_log_id=log.pdcp_log_id,
                 )
@@ -192,10 +204,22 @@ def replay_target(
                     target,
                     FailureReason.REPLAY_HASH_MISMATCH,
                     "Logged before_hash does not match the replay buffer before this transaction.",
+                    code=batch_code,
                     replayed=replayed_count - 1,
                     pdcp_log_id=log.pdcp_log_id,
                     reconstructed_hash=buffer_hash,
                 )
+
+            if log.protocol_version == BATCH_PROTOCOL_VERSION:
+                try:
+                    result = _replay_observed_batch(log, target, buffer, obs_by_log_id.get(log.pdcp_log_id, []))
+                except (BatchValidationError, ValueError, TypeError, KeyError) as exc:
+                    return replace(_failed(target, FailureReason.REPLAY_PROTOCOL_INVALID,
+                        f"Batch replay integrity failure: {exc}", replayed=replayed_count - 1, pdcp_log_id=log.pdcp_log_id),
+                        code="BATCH_REPLAY_INTEGRITY_FAILURE")
+                buffer = result.target_content
+                expected_version = log.after_version
+                continue
 
             scope_bounds: tuple[int, int] | None = None
             linked_observations = obs_by_log_id.get(log.pdcp_log_id, [])
@@ -296,6 +320,52 @@ def replay_target(
         )
 
 
+def _replay_observed_batch(log, target, buffer, linked):
+    def fail(detail):
+        raise BatchValidationError("BATCH_REPLAY_INTEGRITY_FAILURE", detail)
+
+    if log.runtime_version != BATCH_RUNTIME_VERSION or canonical_sha256(log.pdcp_content) != log.pdcp_content_hash:
+        fail("Unknown batch runtime or altered record hash.")
+    record = json.loads(log.pdcp_content)
+    if not isinstance(record, dict) or canonical_record_json(record) != log.pdcp_content:
+        fail("Batch record must be canonical JSON.")
+    request = {key: value for key, value in record.items() if key not in {"scope_evidence", "editing_cycle_id"}}
+    groups = parse_batch_request(request)
+    if (request["target_file_id"] != str(target.target_file_id)
+            or record.get("editing_cycle_id") != str(log.editing_cycle_id)
+            or request["expected_target_version"] != log.before_version
+            or request["expected_current_hash"] != log.before_hash
+            or log.expected_target_version != log.before_version or log.expected_current_hash != log.before_hash):
+        fail("Batch target, cycle or global preimage guard differs.")
+    if len(linked) != len(groups) or {str(row.observation_id) for row in linked} != {g.observation_id for g in groups}:
+        fail("Missing, additional or duplicated authoritative observation linkage.")
+    by_id = {str(row.observation_id): row for row in linked}
+    expected_evidence, scopes = [], []
+    for index, group in enumerate(groups):
+        row = by_id[group.observation_id]
+        if (str(row.observation_bundle_id) != request["observation_bundle_id"]
+                or row.accepted_pdcp_log_id != log.pdcp_log_id or row.target_file_id != target.target_file_id
+                or row.editing_cycle_id != log.editing_cycle_id or row.target_version != log.before_version
+                or row.target_current_hash != log.before_hash):
+            fail("Authoritative observation bundle, linkage or preimage differs.")
+        expected_evidence.append(batch_scope_evidence(row, index, len(group.transaction.edits)))
+        scopes.append(BatchScope(group.observation_id, row.bundle_ordinal, row.scope_start, row.scope_end, row.observed_scope_hash))
+    # Canonical serialization distinguishes booleans from integer coordinates and indices.
+    if canonical_record_json({"evidence": record.get("scope_evidence")}) != canonical_record_json({"evidence": expected_evidence}):
+        fail("Authoritative scope evidence or group ordering differs.")
+    metadata = {"observation_bundle_id": request["observation_bundle_id"], "group_count": len(groups),
+                "change_count": sum(len(group.transaction.edits) for group in groups),
+                "groups": [{"group_index": index, "observation_id": group.observation_id,
+                            "change_count": len(group.transaction.edits)} for index, group in enumerate(groups)]}
+    if canonical_record_json((log.diagnostic_json or {}).get("batch_metadata", {})) != canonical_record_json(metadata):
+        fail("Recorded group mapping differs from authoritative batch order.")
+    result = apply_observed_batch(buffer, groups, tuple(scopes), target_type=target.target_type, collect_warnings=False)
+    if (not isinstance(result, AcceptedCoreResult) or result.after_hash != log.after_hash
+            or result.change_count != log.change_count):
+        fail("Batch operations, count or resulting hash differ.")
+    return result
+
+
 class _UnsupportedLoggedProtocol(Exception):
     pass
 
@@ -341,6 +411,7 @@ def _failed(
     replayed: int,
     pdcp_log_id: uuid.UUID | None = None,
     reconstructed_hash: str | None = None,
+    code: str | None = None,
 ) -> ReplayResult:
     return ReplayResult(
         status="failed",
@@ -353,6 +424,7 @@ def _failed(
         failure_reason=reason,
         failure_detail=detail,
         pdcp_log_id=pdcp_log_id,
+        code=code,
     )
 
 

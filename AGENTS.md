@@ -129,6 +129,22 @@ Recorded decisions: `docs/usability/F01-decision.md`, `docs/usability/PASS-A-dec
 
 ## Non-Negotiable Invariants
 
+Structural batch extension: the existing `patchdiff_observe_scope` accepts
+bounded `selections` and the existing `patchdiff_submit_observed_operations`
+accepts guarded `groups`. Each group uses its original scope-local sequential
+buffer through the shared applier; descending assembly commits one target
+version, accepted log and complete observation linkage atomically. The internal
+durable pair is `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`;
+replay verifies every authoritative scope without Waymark. Additive migration
+`20261027_0005` follows `20261026_0004`, preserving historical single linkage and
+refusing destructive downgrade. See [the batch contract](docs/STRUCTURAL_BATCH_EDITING.md).
+
+External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default `editor`
+advertises and permits exactly 7 tools; `unobserved` 5, `observed` 6 and explicit
+compatibility `full` all 22. Trusted lifecycle/legacy clients opt into `full`;
+the internal registry retains all handlers. Strict observed service admission
+remains independent. The frozen comparative Gate 2 stays closed.
+
 PatchDIFF must always preserve:
 
 ```text

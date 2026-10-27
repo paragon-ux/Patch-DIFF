@@ -238,6 +238,18 @@ If any check or edit fails:
 
 ## Deterministic Replay
 
+The additional immutable internal pair `patchdiff-observed-batch/1` /
+`patchdiff-observed-batch-r1` validates a canonical batch envelope and authoritative
+scope evidence. `app.pdcp.observed_batch` applies each group's parsed tx/2 changes
+through `apply_pdcp_transaction` to its original scope-local buffer, then assembles
+results in descending original scope order. Both global guards are validated
+under the target lock before substituting each real slice hash for local
+application. A failure returns no assembled target. Runtime facts retain ordered
+group/operation indices, observation IDs, original scope bounds and sequential
+local coordinates. Replay checks all exact authoritative links and hashes, never
+calls Waymark and changes no storage. Historical profiles and branches below
+remain unchanged. [Batch contract](STRUCTURAL_BATCH_EDITING.md).
+
 Replay reconstructs canonical target state from the `initial_upload` snapshot plus ordered accepted log entries:
 1. Verify initial snapshot content against `initial_snapshot.content_hash`.
 2. For each accepted log row in sequence:

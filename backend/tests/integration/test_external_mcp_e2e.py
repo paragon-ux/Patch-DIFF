@@ -32,7 +32,7 @@ def _call(adapter: ExternalMCPAdapter, name: str, arguments: dict) -> dict:
 
 
 def test_external_mcp_happy_path_matches_internal_product_flow() -> None:
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
 
     upload = _call(
         adapter,
@@ -77,7 +77,7 @@ def test_external_mcp_happy_path_matches_internal_product_flow() -> None:
 
 
 def test_external_mcp_rejects_invalid_and_malformed_pdcp_without_mutation() -> None:
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
 
     upload = _call(
         adapter,
@@ -123,7 +123,7 @@ def test_external_mcp_rejects_invalid_and_malformed_pdcp_without_mutation() -> N
 
 
 def test_external_mcp_regeneration_save_replay_and_export_preserve_internal_semantics() -> None:
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
 
     upload = _call(
         adapter,
@@ -203,7 +203,7 @@ def test_real_stdio_subprocess_mcp_full_modernized_workflow() -> None:
     env = {
         **os.environ,
         "PYTHONPATH": str(BACKEND),
-        "PATCHDIFF_DATABASE_URL": settings.database_url,
+        "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url,
     }
     proc = subprocess.Popen(
         [sys.executable, "-m", "app.mcp.external_adapter"],

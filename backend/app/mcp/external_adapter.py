@@ -9,7 +9,9 @@ from __future__ import annotations
 import copy
 import inspect
 import json
+import os
 import sys
+from dataclasses import dataclass
 from types import NoneType, UnionType
 from typing import Any, TextIO, get_args, get_origin, get_type_hints
 
@@ -20,6 +22,8 @@ from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSI
 from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
 from app.core.line_endings import EXPORT_FORMATS
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, SPAN_CONTEXT_RUNTIME_VERSION
+from app.pdcp.observed_batch import (SELECTION_JSON_SCHEMA, GROUP_JSON_SCHEMA, MAX_BATCH_SCOPES,
+                                     MAX_BATCH_OPERATIONS, BATCH_ERROR_CODES, BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION)
 
 
 PROTOCOL_VERSION = "2024-11-05"
@@ -58,8 +62,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
     "patchdiff_get_manifest_ledger": "Return the newest bounded ledger page displayed oldest-first, with has_more/next_sequence for backward traversal.",
-    "patchdiff_observe_scope": "Discover structural symbols via pinned Waymark Engine or select a unique symbol scope to issue a server-persisted observation_id and bounded canonical text slice." + _CODE_POINTS,
-    "patchdiff_submit_observed_operations": "Submit guarded patchdiff-tx/2 match/span operations restricted to a server-issued observed symbol scope. Requires observation_id, expected_target_version, and expected_current_hash. Zero-width insertions must be strictly inside the sequential scope and carry nonempty expected_before and expected_after guards matching adjacent text entirely inside that scope; either boundary rejects." + _CODE_POINTS,
+    "patchdiff_observe_scope": "Discover structural symbols via pinned Waymark Engine, select one exact symbol, or use selections to issue a bundle of 1..32 disjoint scopes from one snapshot and discovery pass. Every scope has an observation_id and bounded text. Paginate with observation_id." + _CODE_POINTS,
+    "patchdiff_submit_observed_operations": "Commit one guarded atomic target transaction. Single mode: observation_id + operations (absolute spans). Batch mode: observation_bundle_id + groups, both guards and client_request_id; each group uses scope-local sequential spans and match indexes. At most 32 groups/128 operations. Any failure rejects all groups. Interior insertions require both nonempty adjacency guards within that scope; boundary insertions reject." + _CODE_POINTS,
 }
 
 # Illustrative resources; hosts bind real IDs, guards, parents and returned cursors.
@@ -92,8 +96,28 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
 }
 
 
+_BASE_EDITOR_TOOLS = frozenset({"patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_save", "patchdiff_replay"})
+MCP_PROFILES = {
+    "editor": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_edits", "patchdiff_submit_observed_operations"},
+    "unobserved": _BASE_EDITOR_TOOLS | {"patchdiff_submit_edits"},
+    "observed": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_observed_operations"},
+    "full": frozenset(EXPECTED_TOOL_NAMES),
+}
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class ExternalMCPAdapter:
     """Minimal JSON-RPC MCP adapter backed by the internal PatchDIFF registry."""
+
+    profile: str
+    _tool_names: tuple[str, ...]
+
+    def __init__(self, *, profile: str | None = None):
+        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
+        if selected not in MCP_PROFILES:
+            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, observed or full.")
+        object.__setattr__(self, "profile", selected)
+        object.__setattr__(self, "_tool_names", tuple(sorted(MCP_PROFILES[selected])))
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [
@@ -102,11 +126,11 @@ class ExternalMCPAdapter:
                 "description": TOOL_DESCRIPTIONS.get(name, f"PatchDIFF tool {name}."),
                 "inputSchema": _input_schema_for(name),
             }
-            for name in registry.names()
+            for name in self._tool_names
         ]
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-        if name not in registry.names():
+        if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
         argument_error = _argument_error(name, args)
@@ -327,6 +351,9 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             properties[field]["minimum"] = minimum
         properties["offset"]["default"] = 0
         properties["include_line_starts"]["default"] = False
+        properties["selections"] = {"type": "array", "minItems": 1, "maxItems": MAX_BATCH_SCOPES,
+                                    "uniqueItems": True, "items": copy.deepcopy(SELECTION_JSON_SCHEMA),
+                                    "description": "Select 1..32 exact, disjoint symbol scopes on one snapshot. Initial text <=32,768; total scope text <=65,536 code points."}
     if name == "patchdiff_export_target":
         properties["format"].update({"enum": list(EXPORT_FORMATS), "default": "original_text",
                                      "description": "original_text (legacy alias of canonical_lf), canonical_lf, crlf, or original_eol."})
@@ -382,9 +409,24 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                                for key in ("expected_before", "expected_after")},
             },
         }]
-        for req_field in ("observation_id", "expected_target_version", "expected_current_hash"):
+        for req_field in ("expected_target_version", "expected_current_hash"):
             if req_field not in schema.setdefault("required", []):
                 schema["required"].append(req_field)
+        properties["expected_target_version"]["type"] = "integer"
+        properties["expected_current_hash"]["type"] = "string"
+        properties["observation_id"] = {"type": "string", "format": "uuid", "description": "Server-issued observation for the existing single-scope form."}
+        properties["observation_bundle_id"] = {"type": "string", "format": "uuid", "description": "Server-issued bundle for an atomic scope-local batch."}
+        group_schema = copy.deepcopy(GROUP_JSON_SCHEMA)
+        group_schema["properties"]["operations"]["items"] = copy.deepcopy(properties["operations"]["items"])
+        properties["groups"] = {"type": "array", "minItems": 1, "maxItems": MAX_BATCH_SCOPES, "items": group_schema,
+                                "description": "At most 128 operations total. Each group uses its own original scope slice; match indexes and sequential span offsets are scope-local."}
+        schema["oneOf"] = [
+            {"required": ["observation_id", "operations"],
+             "not": {"anyOf": [{"required": [key]} for key in ("observation_bundle_id", "groups")]}},
+            {"required": ["observation_bundle_id", "groups", "client_request_id"],
+             "properties": {"client_request_id": {"type": "string"}},
+             "not": {"anyOf": [{"required": [key]} for key in ("observation_id", "operations")]}},
+        ]
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
             "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
@@ -393,7 +435,15 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                                    "required_guards": ["expected_before", "expected_after"],
                                    "guards_within_scope": True, "adjacency": "sequential_buffer"},
             "span_context": {"fields": ["expected_before", "expected_after"], "runtime_version": SPAN_CONTEXT_RUNTIME_VERSION},
+            "batch": {"protocol_version": BATCH_PROTOCOL_VERSION, "runtime_version": BATCH_RUNTIME_VERSION,
+                      "max_scopes": MAX_BATCH_SCOPES, "max_operations": MAX_BATCH_OPERATIONS,
+                      "coordinates": "scope_local_sequential_code_points", "error_codes": list(BATCH_ERROR_CODES)},
         }
+    if name == "patchdiff_observe_scope":
+        schema["allOf"] = [{"if": {"required": ["selections"]}, "then": {
+            "not": {"anyOf": [{"required": [key]} for key in ("symbol_name", "query", "observation_id", "kind")]},
+            "properties": {"offset": {"const": 0}},
+        }}]
     if name == "patchdiff_submit_replacement":
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": REPLACEMENT_PROTOCOL_VERSION, "runtime_version": REPLACEMENT_RUNTIME_VERSION,

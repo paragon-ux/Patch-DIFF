@@ -16,7 +16,12 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
 ## MCP Tool Surface Overview
 
-The 20 registered MCP tools are organized into five functional groups:
+The 22 internal tools are organized into the groups below. External stdio MCP
+defaults to the **7-tool `editor` profile**; `unobserved` exposes 5, `observed` 6,
+and explicitly selected `full` exposes all 22. Both advertisement and dispatch
+enforce the immutable startup `PATCHDIFF_MCP_PROFILE`. Initialization, export,
+legacy and administrative tools require `full` at the external boundary.
+See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_EDITING.md).
 
 | Group | Tool Name | Role & Modernized Status |
 | --- | --- | --- |
@@ -521,6 +526,16 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 ### `patchdiff_observe_scope`
 Discover structural symbol candidates or select a unique symbol scope in the authoritative PostgreSQL target snapshot using the pinned `waymark-engine@4.1.0` package.
 
+Bundle mode additionally accepts `selections: [{symbol_name, kind?}, ...]`
+(1–32 exact, unique, nonempty, disjoint scopes), exclusive with single selectors,
+query, observation ID, top-level kind and nonzero offset. One target snapshot and
+one Waymark pass serve all selections; no partial issuance occurs.
+`status: "observed_batch"` returns a bundle ID, both target guards, engine/language,
+and ordered scope receipts. Total scope contents cap at 65,536 code points;
+initial text totals cap at 32,768 (`BUNDLE_RESPONSE_TOO_LARGE`), with existing
+per-scope default 4,000 / max 8,000 pages and ID pagination. Selection failures
+identify `selection_index`. [Exact fields and lifecycle](STRUCTURAL_BATCH_EDITING.md#observation-contract).
+
 - **Arguments**:
   - `target_file_id` (UUID string, required)
   - `query` (string | null, optional): case-insensitive substring filter for candidate discovery when `symbol_name` is omitted.
@@ -539,6 +554,25 @@ Discover structural symbol candidates or select a unique symbol scope in the aut
 
 ### `patchdiff_submit_observed_operations`
 Submit guarded `patchdiff-tx/2` `match`/`span` operations restricted to a server-issued `observation_id`.
+
+Alternatively submit one atomic batch with `observation_bundle_id`, `groups`,
+`intent`, **both** target guards and mandatory `client_request_id`. Each group
+contains exactly one unique bundle `observation_id` and nonempty tx/2 `operations`;
+allow 1–32 groups, at most 128 operations total, and nonempty bundle subsets.
+Single and batch forms are mutually exclusive. Batch spans and match selectors
+use each group's own **scope-local sequential buffer**; single form spans remain
+absolute. One Waymark pass re-verifies all participating scopes under the target
+lock. A failed batch consumes no receipts and adds no accepted ledger rows.
+Success assembles descending original spans, writes one accepted log and advances
+version once, returning before/after versions, bundle ID, group/change counts and
+bounded group summaries. Key recovery precedes stale guards; changed bodies
+conflict through the existing audited mechanism.
+
+The internal durable pair is `patchdiff-observed-batch/1` /
+`patchdiff-observed-batch-r1`; replay requires every exact authoritative link,
+scope hash, bundle and ordered group mapping without invoking Waymark. Migration
+0005 preserves historical single linkage via a partial unique index.
+[Batch errors, replay and executable examples](STRUCTURAL_BATCH_EDITING.md).
 
 - **Arguments**:
   - `target_file_id` (UUID string, required)

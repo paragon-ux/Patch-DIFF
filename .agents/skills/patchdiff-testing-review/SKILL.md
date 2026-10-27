@@ -101,3 +101,7 @@ When testing or reviewing Goal F behavior, cover:
 - Diagnostics: failure versus current context, intermediate-buffer labeling, exact-key recovery, near misses only after a service-owned commit, banded near-miss results equal to an unbanded Levenshtein reference.
 - Discovery: every advertised example executed over real stdio and PostgreSQL; capability metadata equal to the runtime constants.
 - Friction follow-up: warnings persisted and recovered; 0.5.0 span context beside unchanged 0.3.0 records and replay; every export format; retryable values; near misses beyond 256 code points versus a pruned-equals-unpruned reference; key-conflict fields; history joins and content budget; literal tool text inside pure-ASCII JSON-RPC lines on the real stdio wire; SQL NULL for accepted rows without warnings.
+
+## Structural batch verification
+
+Cover 2/5/20/32 scopes, one discovery per snapshot, bounded complete issuance, scope-local sequential semantics, atomic rejection/rollback, concurrent writers, committed-response-loss recovery, corrupted all-scope replay authority and populated 0004/0005 roundtrips/refusal. Test exact 7/5/6/22 catalogs and forbidden calls in-process and over real stdio. Run the documented Python/JSON/Markdown examples and `evaluation/structural_batch/verify.py`; the latter is a deterministic five-file oracle check, not authorization for a comparative model run or Gate 2 approval. Preserve frozen experiment bytes.

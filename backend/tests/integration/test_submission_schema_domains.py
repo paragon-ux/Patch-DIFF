@@ -55,7 +55,7 @@ CASES = [
 
 @pytest.mark.parametrize("name,overrides,valid", CASES, ids=[case[0] for case in CASES])
 def test_discovery_domains_match_live_rejection_and_audit(name, overrides, valid):
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
     listed = adapter.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     schema = next(tool["inputSchema"] for tool in listed["result"]["tools"] if tool["name"] == "patchdiff_submit_edits")
     Draft202012Validator.check_schema(schema)
@@ -81,7 +81,7 @@ def test_discovery_domains_match_live_rejection_and_audit(name, overrides, valid
 
 @pytest.mark.parametrize("tool", ["patchdiff_submit_edits", "patchdiff_submit_pdcp"])
 def test_newline_hash_guard_is_durably_rejected_with_raw_evidence(tool):
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
     target = call(adapter, "patchdiff_initialize_target", {"filename": "newline-guard.txt", "content": "alpha", "content_type": "text/plain"})
     target_id = uuid.UUID(target["target_file_id"])
     proposal = {"intent": "Update", "edits": [{"match": "alpha", "replace": "beta"}]} if tool.endswith("edits") else {"pdcp_content": pdcp_for(target_id, ("alpha", "beta"))}
@@ -102,7 +102,7 @@ def test_newline_hash_guard_is_durably_rejected_with_raw_evidence(tool):
 
 
 def test_schema_numeric_domain_does_not_replace_business_guards():
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile="full")
     schema = next(t["inputSchema"] for t in adapter.list_tools() if t["name"] == "patchdiff_submit_edits")
     target = call(adapter, "patchdiff_initialize_target", {"filename": "max-version.txt", "content": "alpha", "content_type": "text/plain"})
     args = {"target_file_id": target["target_file_id"], "intent": "Update", "edits": [{"match": "alpha", "replace": "beta"}], "expected_target_version": 2**63 - 1}

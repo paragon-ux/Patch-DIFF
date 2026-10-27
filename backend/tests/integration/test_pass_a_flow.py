@@ -301,7 +301,7 @@ def test_real_stdio_operations_schema_correlation_candidates_and_replay():
     backend = Path(__file__).resolve().parents[2]
     process = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=backend,
-        env={**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_DATABASE_URL": settings.database_url})
+        env={**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url})
     sequence = 0
     def rpc(method, params):
         nonlocal sequence

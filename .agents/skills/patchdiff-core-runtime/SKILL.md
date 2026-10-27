@@ -148,3 +148,7 @@ The transaction is the smallest atomic unit:
 - Accepted results carry advisory `warnings` (`app.core.advisories`): no-op change/transaction, `occurrence_index_basis_shift` and `grapheme_boundary_split`. They never change verdicts or facts; replay passes `collect_warnings=False`. `retryable` comes from `RETRYABLE_FAILURE_REASONS` in `app.core.failures`.
 - Fresh tx/3 size admission, preview, near-miss ranking and correlation IDs are service/MCP concerns and stay out of the core runtime.
 - Contract: `docs/PATCHDIFF_CORE_SPEC.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
+
+## Structural batch extension
+
+`app.pdcp.observed_batch` owns immutable internal `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`: validate bounded envelopes, lower ordered tx/2 groups, apply the existing applier to each original scope-local buffer, and assemble descending original scopes. Never replace the global locked guard with a slice guard; the service checks the former before local application. Preserve every historical profile and the single-scope absolute span convention. See `docs/STRUCTURAL_BATCH_EDITING.md`.

@@ -182,6 +182,15 @@ Measured `patchdiff-tx/3` (`patchdiff_submit_replacement`) UTF-8 byte sizes:
 
 ## 5. Shared Lowering and Applier Semantics
 
+The structural batch tool mode wraps ordered tx/2 operation groups in the internal
+durable format `patchdiff-observed-batch/1`, runtime `patchdiff-observed-batch-r1`.
+It is not another public tool or operation type. Each group lowers through the
+same tx/2 parser and `ParsedPDCP` and executes the existing applier against its
+own original slice. The canonical envelope additionally records target/bundle,
+both guards, intent, editing cycle and immutable authoritative scope evidence.
+Original operation order, group/operation indices, scope hashes/bounds and IDs
+support deterministic replay without discovery. [Complete batch specification](STRUCTURAL_BATCH_EDITING.md).
+
 All supported transaction formats lower into `ParsedPDCP`:
 ```python
 @dataclass(frozen=True, slots=True)

@@ -21,6 +21,10 @@ from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
 from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.validity import ValidationStage
+from app.pdcp.observed_batch import (
+    MAX_BATCH_SCOPES, MAX_BATCH_TOTAL_SCOPE_CHARS, MAX_BATCH_INITIAL_TEXT_CHARS,
+    BATCH_UNSET, BatchScope, BatchValidationError, validate_scope_set,
+)
 from app.services.read_service import DEFAULT_READ_CHARS, MAX_READ_CHARS
 from app.services.waymark_adapter import (
     DEFAULT_WAYMARK_TIMEOUT_SECONDS,
@@ -203,6 +207,7 @@ def observe_scope(
     kind: str | None = None,
     query: str | None = None,
     observation_id: uuid.UUID | str | None = None,
+    selections: list[dict] | None = BATCH_UNSET,
     offset: int = 0,
     max_chars: int | None = None,
     include_line_starts: bool = False,
@@ -226,6 +231,7 @@ def observe_scope(
             "observation_id": observation_id,
             "offset": offset,
             "max_chars": max_chars,
+            "selections": None if selections is BATCH_UNSET else selections,
         }
     ):
         return {
@@ -274,6 +280,20 @@ def observe_scope(
                 "target_file_id": str(target_uuid),
                 "failure_detail": "Target file was not found.",
             }
+
+        if selections is not BATCH_UNSET:
+            if any(value is not None for value in (symbol_name, query, observation_id, kind)) or offset != 0:
+                return {"status": "invalid_argument", "code": "INVALID_BATCH_REQUEST",
+                        "failure_detail": "selections cannot be combined with single selectors, paging or kind."}
+            if target in session.dirty or session.is_modified(target):
+                return {"status": "invalid_argument", "code": "INVALID_BATCH_REQUEST",
+                        "failure_detail": "Cannot issue a bundle over pending caller-local target changes."}
+            # Refresh the entire row together, so a caller's identity map cannot mix snapshots.
+            with session.no_autoflush:
+                target = session.execute(select(CloudTargetFiles).where(
+                    CloudTargetFiles.target_file_id == target_uuid).execution_options(populate_existing=True)).scalar_one()
+            return _issue_bundle(session, target, selections, max_chars=max_chars,
+                                 include_line_starts=include_line_starts, timeout_seconds=timeout_seconds)
 
         # Mode 1: Paginated read of an already-issued observation_id
         if observation_id is not None:
@@ -561,6 +581,7 @@ def validate_observation_for_locked_target(
     observation_id: Any,
     expected_target_version: int | None,
     expected_current_hash: str | None,
+    _discovery=None,
 ) -> ValidatedScopeObservation | ObservationValidationFailure:
     """Validate a server-issued `observation_id` against a `SELECT ... FOR UPDATE` locked target row."""
     if observation_id is None or (isinstance(observation_id, str) and not observation_id.strip()):
@@ -759,7 +780,7 @@ def validate_observation_for_locked_target(
         )
 
     # Re-verify Waymark symbol identity and boundaries against the locked target state
-    discovery = discover_symbols_from_content(
+    discovery = _discovery if _discovery is not None else discover_symbols_from_content(
         filename=target.filename,
         content=target.current_content,
         kind=obs.symbol_kind,
@@ -839,6 +860,131 @@ def validate_observation_for_locked_target(
         scope_end=obs.scope_end,
         observed_scope_hash=obs.observed_scope_hash,
     )
+
+
+def _issue_bundle(session, target, selections, *, max_chars, include_line_starts, timeout_seconds):
+    def fail(code, detail, index=None):
+        return {"status": "rejected", "code": code, "failure_detail": detail,
+                "target_file_id": str(target.target_file_id),
+                **({"selection_index": index} if index is not None else {})}
+
+    if not isinstance(selections, list) or not selections:
+        return fail("INVALID_BATCH_REQUEST", "selections must contain 1..32 exact selectors.")
+    if len(selections) > MAX_BATCH_SCOPES:
+        return fail("BATCH_LIMIT_EXCEEDED", "At most 32 selections are allowed.")
+    seen = set()
+    for index, selector in enumerate(selections):
+        if (not isinstance(selector, dict) or set(selector) - {"symbol_name", "kind"}
+                or "symbol_name" not in selector or any(not isinstance(v, str) or not v.strip() for v in selector.values())):
+            return fail("INVALID_BATCH_REQUEST", "Each selector needs symbol_name and optional kind.", index)
+        key = (selector["symbol_name"], selector.get("kind"))
+        if key in seen:
+            return fail("BUNDLE_SCOPE_DUPLICATE", "Duplicate selector.", index)
+        seen.add(key)
+    discovery = discover_symbols_from_content(filename=target.filename, content=target.current_content,
+                                               timeout_seconds=timeout_seconds)
+    if not discovery.ok:
+        return fail(discovery.error.code if discovery.error else "WAYMARK_DISCOVERY_ERROR",
+                    discovery.error.message if discovery.error else "Discovery failed.")
+    resolved, pages, scopes = [], [], []
+    for index, selector in enumerate(selections):
+        matching = [sym for sym in discovery.symbols if _symbol_matches_selection(sym, **selector)]
+        if len(matching) != 1:
+            return fail("BUNDLE_SELECTION_NOT_FOUND" if not matching else "BUNDLE_SELECTION_AMBIGUOUS",
+                        "Exact selector must resolve uniquely.", index)
+        sym = matching[0]
+        try:
+            start, end = waymark_span_to_code_point_offsets(target.current_content, sym.start, sym.end)
+        except ScopeCoordinateConversionError as exc:
+            return fail("INVALID_BATCH_REQUEST", str(exc), index)
+        if start == end:
+            return fail("INVALID_BATCH_REQUEST", "Selected scope must be nonempty.", index)
+        if any((start, end) == (s.scope_start, s.scope_end) for s in scopes):
+            return fail("BUNDLE_SCOPE_DUPLICATE", "Selectors refer to the same scope.", index)
+        if any(start < s.scope_end and s.scope_start < end for s in scopes):
+            return fail("BUNDLE_SCOPE_OVERLAP", "Nested and overlapping scopes are forbidden.", index)
+        scope = BatchScope(str(uuid.uuid4()), index, start, end, canonical_sha256(target.current_content[start:end]))
+        scopes.append(scope)
+        if sum(s.scope_end - s.scope_start for s in scopes) > MAX_BATCH_TOTAL_SCOPE_CHARS:
+            return fail("BATCH_LIMIT_EXCEEDED", "Selected contents exceed 65,536 code points.", index)
+        page = _scope_page(target.current_content, scope_start=start, scope_end=end,
+                           start_line=sym.start.line, end_line=sym.end.line, max_chars=max_chars,
+                           include_line_starts=include_line_starts)
+        pages.append(page)
+        if sum(len(p["text"]) for p in pages) > MAX_BATCH_INITIAL_TEXT_CHARS:
+            return fail("BUNDLE_RESPONSE_TOO_LARGE", "Initial pages exceed 32,768 code points.", index)
+        resolved.append(sym)
+    bundle_id = uuid.uuid4()
+    entries = []
+    # Nothing is persisted until every selection and both aggregate limits pass.
+    for scope, sym, page in zip(scopes, resolved, pages):
+        session.add(TargetScopeObservations(
+            observation_id=uuid.UUID(scope.observation_id), observation_bundle_id=bundle_id, bundle_ordinal=scope.bundle_ordinal,
+            target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id,
+            target_version=target.version, target_current_hash=target.current_hash,
+            waymark_engine_version=discovery.waymark_engine_version or EXPECTED_WAYMARK_ENGINE_VERSION,
+            language=discovery.language or "unknown", symbol_name=sym.name, symbol_kind=sym.kind,
+            symbol_parent=sym.parent, start_line=sym.start.line, start_column=sym.start.column,
+            end_line=sym.end.line, end_column=sym.end.column, scope_start=scope.scope_start, scope_end=scope.scope_end,
+            observed_scope_hash=scope.observed_scope_hash))
+        entries.append({"observation_id": scope.observation_id, "ordinal": scope.bundle_ordinal,
+                        "symbol": {"name": sym.name, "kind": sym.kind, "parent": sym.parent},
+                        "observed_scope_hash": scope.observed_scope_hash, **page})
+    session.flush()
+    return {"status": "observed_batch", "observation_bundle_id": str(bundle_id),
+            "target_file_id": str(target.target_file_id), "target_version": target.version,
+            "target_current_hash": target.current_hash, "waymark_engine_version": discovery.waymark_engine_version,
+            "language": discovery.language, "scopes": entries}
+
+
+def batch_scope_evidence(obs, group_index, operation_count):
+    fields = ("bundle_ordinal", "scope_start", "scope_end", "observed_scope_hash", "symbol_name", "symbol_kind",
+              "symbol_parent", "start_line", "start_column", "end_line", "end_column", "waymark_engine_version", "language")
+    return {"observation_id": str(obs.observation_id), "group_index": group_index,
+            "operation_indices": list(range(operation_count)), **{field: getattr(obs, field) for field in fields}}
+
+
+def validate_bundle_for_locked_target(session, *, target, record, observation_ids):
+    bundle_id = uuid.UUID(record["observation_bundle_id"])
+    with session.no_autoflush:
+        rows = session.scalars(select(TargetScopeObservations).where(
+            TargetScopeObservations.observation_bundle_id == bundle_id).order_by(
+            TargetScopeObservations.bundle_ordinal).with_for_update().execution_options(populate_existing=True)).all()
+    if not rows:
+        raise BatchValidationError("BUNDLE_NOT_FOUND", "Bundle was not issued by this server.")
+    # All members were issued together; even unused members retain their original snapshot identity.
+    by_id = {str(row.observation_id): row for row in rows}
+    chosen = []
+    for index, observation_id in enumerate(observation_ids):
+        obs = by_id.get(observation_id)
+        if obs is None:
+            raise BatchValidationError("BATCH_GROUP_INVALID", "Observation does not belong to this bundle.",
+                                       group_index=index, observation_id=observation_id)
+        for condition, code, detail in (
+            (obs.target_file_id != target.target_file_id, "BUNDLE_TARGET_MISMATCH", "Bundle belongs to another target."),
+            (obs.editing_cycle_id != target.active_editing_cycle_id, "BUNDLE_CYCLE_MISMATCH", "Bundle belongs to a closed cycle."),
+            (obs.accepted_pdcp_log_id is not None, "BUNDLE_ALREADY_CONSUMED", "Observation was already consumed."),
+            (obs.target_version != target.version or obs.target_version != record["expected_target_version"],
+             "BUNDLE_VERSION_MISMATCH", "Bundle version differs from the locked snapshot."),
+            (obs.target_current_hash != target.current_hash or obs.target_current_hash != record["expected_current_hash"],
+             "BUNDLE_HASH_MISMATCH", "Bundle preimage hash differs from the locked snapshot."),
+        ):
+            if condition:
+                raise BatchValidationError(code, detail, group_index=index, observation_id=observation_id)
+        chosen.append(obs)
+    discovery = discover_symbols_from_content(filename=target.filename, content=target.current_content)
+    for index, obs in enumerate(chosen):
+        checked = validate_observation_for_locked_target(
+            session, target=target, observation_id=obs.observation_id,
+            expected_target_version=record["expected_target_version"], expected_current_hash=record["expected_current_hash"],
+            _discovery=discovery)
+        if isinstance(checked, ObservationValidationFailure):
+            raise BatchValidationError("BATCH_GROUP_INVALID", checked.failure_detail, group_index=index,
+                                       observation_id=str(obs.observation_id), underlying_code=checked.code)
+    scopes = tuple(BatchScope(str(obs.observation_id), obs.bundle_ordinal, obs.scope_start, obs.scope_end,
+                              obs.observed_scope_hash) for obs in chosen)
+    validate_scope_set(target.current_content, scopes)
+    return chosen, scopes
 
 
 def _try_coerce_uuid(value: Any) -> uuid.UUID | None:

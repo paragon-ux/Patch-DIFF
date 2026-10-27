@@ -347,7 +347,7 @@ Start Postgres:
 docker compose up -d postgres
 ```
 
-Run migrations (`20260510_0001`, `20261020_0002`, and `20261022_0003`):
+Run migrations through `20261027_0005` (bundled scope observations):
 
 ```powershell
 $env:PYTHONPATH = "backend"
@@ -411,6 +411,20 @@ See [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md) for full setup 
 
 ## MCP Tool Surface
 
+External MCP defaults to the **7-tool `editor` profile**: `patchdiff_read_target`,
+`patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`,
+`patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay`.
+Set trusted startup `PATCHDIFF_MCP_PROFILE=unobserved` (5), `observed` (6), or
+`full` (22). Older integrations and trusted initialization/export operators must
+explicitly select `full`. Both discovery and dispatch enforce the same immutable
+profile. The internal registry retains every handler listed below.
+
+Select multiple structures with `patchdiff_observe_scope(selections=...)` and
+submit their scope-local operation `groups` in one guarded atomic transaction
+through `patchdiff_submit_observed_operations`. A successful batch advances the
+target once and links every scope for deterministic replay.
+[Exact contracts and executable examples](docs/STRUCTURAL_BATCH_EDITING.md).
+
 - **Document Lifecycle**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
 - **Authoritative Reads & Exact Search**: `patchdiff_read_target` (bounded slices with `next_start`), `patchdiff_read_lines` (inclusive LF ranges with `next_offset` / `next_start`), `patchdiff_find_occurrences` (exact spans with context and pagination)
 - **Guarded Submission**: `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (sequential match/span edits, `patchdiff-tx/2`), `patchdiff_submit_replacement` (sole explicit whole-target replacement, `patchdiff-tx/3`)
@@ -420,7 +434,7 @@ See [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md) for full setup 
 
 See [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) and [docs/HOST_INTEGRATION_GUIDE.md](docs/HOST_INTEGRATION_GUIDE.md).
 
-Discovery advertises 20 tools and 13 executable examples across nine tools. Bind examples to actual target IDs, guards, rejection parents, and returned cursors. A preview does not reserve state: subsequent submission must recheck a version or hash guard. Span and whole-target replacement always require a guard; a version guard also detects intervening no-op/ABA edits. Correlation IDs are opt-in invocation metadata, separate from caller-known retry keys.
+The explicit `full` catalog retains all 22 tools and the existing executable discovery examples. Bind examples to actual target IDs, guards, rejection parents, and returned cursors. A preview does not reserve state: subsequent submission must recheck a version or hash guard. Span and whole-target replacement always require a guard; a version guard also detects intervening no-op/ABA edits. Correlation IDs are opt-in invocation metadata, separate from caller-known retry keys.
 
 ## Testing & Offline Evaluation
 

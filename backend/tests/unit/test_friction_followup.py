@@ -150,10 +150,10 @@ def test_span_context_is_refused_by_the_0_3_0_profile_and_runtime_selection_keep
     assert refused.failure_reason is FailureReason.BLOCK_MALFORMED
 
 
-def test_profiles_are_immutable_and_only_0_5_0_enables_span_context():
+def test_historical_profiles_are_immutable_and_batch_also_supports_span_context():
     assert SUPPORTED_RUNTIME_PROFILES[OPERATIONS_RUNTIME_VERSION] == RuntimeProfile(True, True, True, False, False)
     assert resolve_runtime_profile(SPAN_CONTEXT_RUNTIME_VERSION) == RuntimeProfile(True, True, True, False, True)
-    assert [name for name, profile in SUPPORTED_RUNTIME_PROFILES.items() if profile.span_context] == [SPAN_CONTEXT_RUNTIME_VERSION]
+    assert [name for name, profile in SUPPORTED_RUNTIME_PROFILES.items() if profile.span_context] == [SPAN_CONTEXT_RUNTIME_VERSION, "patchdiff-observed-batch-r1"]
 
 
 @pytest.mark.parametrize("value", ["", 3, True, ["a"]])
@@ -555,13 +555,13 @@ def test_unknown_and_missing_arguments_are_structured():
     missing = _argument_error("patchdiff_submit_edits", {"target_file_id": "t"})
     assert missing["code"] == "missing_argument" and missing["missing_arguments"] == ["edits", "intent"]
     assert _argument_error("patchdiff_get_target", {"target_file_id": "x"}) is None
-    result = ExternalMCPAdapter().call_tool("patchdiff_preview", {"target_file_id": "x", "format": "patchdiff-tx/1",
+    result = ExternalMCPAdapter(profile="full").call_tool("patchdiff_preview", {"target_file_id": "x", "format": "patchdiff-tx/1",
                                                                   "include_correlation_id": True})
     assert result["isError"] is True and json.loads(result["content"][0]["text"])["status"] == "invalid_argument"
 
 
 def test_every_tool_parameter_is_described_and_new_schema_domains_are_advertised():
-    tools = {tool["name"]: tool for tool in ExternalMCPAdapter().list_tools()}
+    tools = {tool["name"]: tool for tool in ExternalMCPAdapter(profile="full").list_tools()}
     assert not [(name, field) for name, tool in tools.items()
                 for field, schema in tool["inputSchema"]["properties"].items() if not schema.get("description")]
     assert tools["patchdiff_export_target"]["inputSchema"]["properties"]["format"]["enum"] == list(EXPORT_FORMATS)

@@ -17,11 +17,16 @@ from sqlalchemy.orm import Session
 from app.core.advisories import bounded_warnings, warning_strings
 from app.core.failures import RETRYABLE_FAILURE_REASONS, FailureReason
 from app.core.hashing import canonical_sha256
+from app.core.canonicalization import canonicalize_text
 from app.core.input_text import invalid_text_paths, is_persistable_text, safe_input_text
 from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
 from app.core.validity import ValidationStage, validity_levels
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
+from app.pdcp.observed_batch import (
+    BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION, BATCH_UNSET, BatchValidationError,
+    validate_batch_envelope, parse_batch_request, flatten_batch, apply_observed_batch,
+)
 from app.pdcp.operations import (OPERATIONS_PROTOCOL_VERSION, build_operations_record, operations_runtime_version,
                                  parse_operations_record, to_parsed_operations)
 from app.pdcp.replacement import (REPLACEMENT_PROTOCOL_VERSION, build_replacement_record, parse_replacement_record,
@@ -55,6 +60,7 @@ from app.services.scope_observation_service import (
     ObservationValidationFailure,
     ValidatedScopeObservation,
     validate_observation_for_locked_target,
+    validate_bundle_for_locked_target, batch_scope_evidence,
 )
 from app.storage.models import (
     AppendOnlyManifestLedger,
@@ -130,6 +136,7 @@ class SubmitPDCPResult:
     code: str | None = None
     # Bounded, response-only failing-buffer copy for fresh near-miss scans; never stored.
     near_miss_buffer: str | None = None
+    batch_metadata: dict | None = None
 
 
 
@@ -302,9 +309,11 @@ def submit_observed_operations(
     session: Session,
     *,
     target_file_id: uuid.UUID | str,
-    observation_id: uuid.UUID | str | None,
+    observation_id: uuid.UUID | str | None = BATCH_UNSET,
     intent: Any,
-    operations: Any,
+    operations: Any = BATCH_UNSET,
+    observation_bundle_id: str | None = BATCH_UNSET,
+    groups: Any = BATCH_UNSET,
     expected_target_version: int | None = None,
     expected_current_hash: str | None = None,
     submission_source: str = "model_response",
@@ -318,6 +327,25 @@ def submit_observed_operations(
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         return _invalid_target_uuid_result(target_file_id)
+    if observation_bundle_id is not BATCH_UNSET or groups is not BATCH_UNSET:
+        record = {"format": BATCH_PROTOCOL_VERSION, "target_file_id": str(target_uuid),
+                  "observation_bundle_id": None if observation_bundle_id is BATCH_UNSET else observation_bundle_id,
+                  "intent": intent, "groups": None if groups is BATCH_UNSET else groups,
+                  "expected_target_version": expected_target_version, "expected_current_hash": expected_current_hash}
+        if observation_id is not BATCH_UNSET or operations is not BATCH_UNSET:
+            record["conflicting_single_request"] = {
+                "observation_id": None if observation_id is BATCH_UNSET else observation_id,
+                "operations": None if operations is BATCH_UNSET else operations}
+        return _submit(
+            session, target_uuid=target_uuid, submitted_target_id=target_file_id,
+            record_content=canonical_record_json(record), raw_record=record, decode=lambda target: (None, None),
+            protocol_version=BATCH_PROTOCOL_VERSION, runtime_version=BATCH_RUNTIME_VERSION,
+            guard_required=True, expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+            submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
+            regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
+            client_request_id=client_request_id, _before_final_guard=_before_final_guard, _batch_request=record)
+    observation_id = None if observation_id is BATCH_UNSET else observation_id
+    operations = None if operations is BATCH_UNSET else operations
     record = build_operations_record(
         target_file_id=str(target_uuid),
         intent=intent,
@@ -539,6 +567,7 @@ def _submit(
     _fresh_admission: Callable[[], dict | None] | None = None,
     _require_observation: bool = False,
     _observation_id: Any = None,
+    _batch_request: dict | None = None,
 ) -> SubmitPDCPResult:
     """Shared locked validate/apply/commit path for every submission format."""
 
@@ -899,7 +928,7 @@ def _submit(
                 request_fingerprint=fingerprint,
             )
 
-        if is_strict_observation_mode_enabled() and not _require_observation:
+        if is_strict_observation_mode_enabled() and not _require_observation and _batch_request is None:
             rejection = _core_rejection(
                 FailureReason.CONTEXT_MISSING,
                 "Strict observation mode requires a server-issued scope observation via patchdiff_submit_observed_operations.",
@@ -1009,10 +1038,21 @@ def _submit(
             validated_obs = obs_check
             scope_bounds = (validated_obs.scope_start, validated_obs.scope_end)
 
-        parsed, typed, core_result, stage = _evaluate_proposal(
-            target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
-            expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
-            runtime_version=runtime_version, scope_bounds=scope_bounds)
+        batch_observations, batch_metadata = (), None
+        if _batch_request is not None:
+            parsed, typed, core_result, stage, batch_observations, durable_record, batch_metadata = _evaluate_locked_batch(
+                session, target=target, record=_batch_request, client_request_id=validated_req_id)
+            if isinstance(core_result, AcceptedCoreResult):
+                # Fingerprint identifies the original request; the durable content also records server authority.
+                pdcp_content = canonical_record_json(durable_record)
+                pdcp_content_hash = canonical_sha256(pdcp_content)
+                current_pdcp.pdcp_content = pdcp_content
+                current_pdcp.pdcp_content_hash = pdcp_content_hash
+        else:
+            parsed, typed, core_result, stage = _evaluate_proposal(
+                target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
+                expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+                runtime_version=runtime_version, scope_bounds=scope_bounds)
 
         if isinstance(core_result, RejectedCoreResult):
             if validated_obs is not None:
@@ -1101,7 +1141,53 @@ def _submit(
             client_request_id=validated_req_id,
             request_fingerprint=fingerprint,
             validated_observation=validated_obs,
+            validated_observations=batch_observations,
+            batch_metadata=batch_metadata,
         )
+
+
+def _evaluate_locked_batch(session, *, target, record, client_request_id):
+    parsed, typed = None, None
+    stage = ValidationStage.PROTOCOL_VALIDATION
+    try:
+        if client_request_id is None:
+            raise BatchValidationError("INVALID_BATCH_REQUEST", "Batch submissions require client_request_id.")
+        observation_ids = validate_batch_envelope(record)
+        rejection, guard_stage = _guard_rejection(target=target,
+            expected_target_version=record["expected_target_version"], expected_current_hash=record["expected_current_hash"],
+            guard_required=True, protocol_version=BATCH_PROTOCOL_VERSION)
+        if rejection is not None:
+            code = "BUNDLE_VERSION_MISMATCH" if rejection.failure_reason == FailureReason.TARGET_VERSION_MISMATCH else "BUNDLE_HASH_MISMATCH"
+            rejection = replace(rejection, diagnostic={**rejection.diagnostic, "code": code},
+                                failure_buffer=FailureBufferContext.capture(""))
+            return parsed, typed, rejection, guard_stage, (), None, None
+        stage = ValidationStage.PRECONDITION_GUARD
+        if canonicalize_text(target.current_content) != target.current_content or canonical_sha256(target.current_content) != target.current_hash:
+            raise BatchValidationError("BUNDLE_HASH_MISMATCH", "Locked target content differs from its canonical preimage hash.")
+        observations, scopes = validate_bundle_for_locked_target(session, target=target, record=record, observation_ids=observation_ids)
+        stage = ValidationStage.PROTOCOL_VALIDATION
+        groups = parse_batch_request(record)
+        parsed, typed = flatten_batch(groups, target_type=target.target_type)
+        stage = ValidationStage.TRANSACTION_APPLICABILITY
+        result = apply_observed_batch(target.current_content, groups, scopes, target_type=target.target_type)
+        if isinstance(result, RejectedCoreResult):
+            result = _enrich_diagnostic(result, protocol_version=BATCH_PROTOCOL_VERSION, stage=stage)
+            return parsed, typed, result, stage, (), None, None
+        evidence = [batch_scope_evidence(obs, index, len(group.transaction.edits))
+                    for index, (obs, group) in enumerate(zip(observations, groups))]
+        bundle_id = str(uuid.UUID(record["observation_bundle_id"]))
+        durable = {**record, "observation_bundle_id": bundle_id,
+                   "groups": [{**raw, "observation_id": group.observation_id} for raw, group in zip(record["groups"], groups)],
+                   "editing_cycle_id": str(target.active_editing_cycle_id), "scope_evidence": evidence}
+        metadata = {"observation_bundle_id": bundle_id, "group_count": len(groups),
+                    "change_count": result.change_count,
+                    "groups": [{"group_index": index, "observation_id": group.observation_id,
+                                "change_count": len(group.transaction.edits)} for index, group in enumerate(groups)]}
+        return parsed, typed, result, stage, observations, durable, metadata
+    except BatchValidationError as exc:
+        rejection = _core_rejection(FailureReason.CONTEXT_INVALID, str(exc), target.current_hash,
+                                    protocol_version=BATCH_PROTOCOL_VERSION, stage=stage, diagnostic_extra=exc.diagnostic)
+        return parsed, typed, replace(rejection, failure_buffer=FailureBufferContext.capture("")), stage, (), None, None
 
 
 def _evaluate_proposal(
@@ -1273,6 +1359,8 @@ def _persist_acceptance(
     request_fingerprint: str | None = None,
     runtime_version: str | None = None,
     validated_observation: ValidatedScopeObservation | None = None,
+    validated_observations: tuple = (),
+    batch_metadata: dict | None = None,
 ) -> SubmitPDCPResult:
     after_version = before_version + 1
     envelope = bounded_warnings(accepted.warnings)
@@ -1289,6 +1377,8 @@ def _persist_acceptance(
             "observed_scope_hash": validated_observation.observed_scope_hash,
         }
         accepted_diag = {**(accepted_diag or {}), **obs_meta}
+    if batch_metadata is not None:
+        accepted_diag = {**(accepted_diag or {}), "batch_metadata": batch_metadata}
     log = AppendOnlyPdcpLogs(
         target_file_id=target.target_file_id,
         editing_cycle_id=target.active_editing_cycle_id,
@@ -1317,6 +1407,8 @@ def _persist_acceptance(
     session.flush()
     if validated_observation is not None:
         validated_observation.observation.accepted_pdcp_log_id = log.pdcp_log_id
+    for observation in validated_observations:
+        observation.accepted_pdcp_log_id = log.pdcp_log_id
 
     facts_by_id = {fact["change_id"]: fact for fact in accepted.change_facts}
     if typed is None:
@@ -1382,6 +1474,7 @@ def _persist_acceptance(
         change_facts=accepted.change_facts,
         validation_stage=ValidationStage.ACCEPTED,
         client_request_id=client_request_id,
+        batch_metadata=batch_metadata,
         **_warning_fields(envelope),
     )
 
@@ -1415,10 +1508,16 @@ def _persist_rejection(
 
     diagnostic = dict(rejection.diagnostic) if rejection.diagnostic else {}
     diagnostic["failure_context"] = available_context(
-        rejection.failure_buffer or FailureBufferContext.capture(target.current_content),
+        rejection.failure_buffer or FailureBufferContext.capture("" if protocol_version == BATCH_PROTOCOL_VERSION else target.current_content),
         observed_target_version=before_version,
         observed_target_hash=before_hash,
     )
+    if protocol_version == BATCH_PROTOCOL_VERSION:
+        if "group_index" in diagnostic and rejection.failure_buffer is not None:
+            diagnostic["failure_context"]["buffer_stage"] = (
+                "scope_local_intermediate_buffer" if rejection.failure_buffer.prior_changes else "scope_local_original")
+        else:
+            diagnostic["failure_context"] = unavailable_context("batch_scope_not_evaluated")
     if "exact_candidates" in diagnostic:
         candidates = {**diagnostic["exact_candidates"], **context_identity(diagnostic["failure_context"])}
         diagnostic["exact_candidates"] = bound_candidates("exact_candidates", candidates)
@@ -1477,7 +1576,7 @@ def _persist_rejection(
         failed_change_id=rejection.failed_change_id,
         diagnostic=diagnostic,
         validation_stage=stage,
-        current_context=_target_context(target),
+        current_context=None if protocol_version == BATCH_PROTOCOL_VERSION else _target_context(target),
         client_request_id=client_request_id,
         near_miss_buffer=rejection.near_miss_buffer,
         code=diagnostic.get("code") if isinstance(diagnostic.get("code"), str) else None,
@@ -1518,6 +1617,7 @@ def _reconstruct_deduplicated_result(
             validation_stage=ValidationStage.ACCEPTED,
             deduplicated=True,
             client_request_id=log.client_request_id,
+            batch_metadata=(log.diagnostic_json or {}).get("batch_metadata"),
             **_warning_fields(_stored_warnings(log.diagnostic_json)),
         )
 
@@ -1540,7 +1640,7 @@ def _reconstruct_deduplicated_result(
         failed_change_id=log.failed_change_id,
         diagnostic=diag,
         validation_stage=stage,
-        current_context=_target_context(target),
+        current_context=None if log.protocol_version == BATCH_PROTOCOL_VERSION else _target_context(target),
         deduplicated=True,
         client_request_id=log.client_request_id,
         code=diag.get("code") if isinstance(diag.get("code"), str) else None,
@@ -1626,7 +1726,7 @@ def _core_rejection(
     stage: ValidationStage = ValidationStage.PROTOCOL_VALIDATION,
     diagnostic_extra: dict[str, Any] | None = None,
 ) -> RejectedCoreResult:
-    is_typed = protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION)
+    is_typed = protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION, BATCH_PROTOCOL_VERSION)
     diagnostic: dict[str, Any] = {
         "format": protocol_version,
         "retryable": reason in RETRYABLE_FAILURE_REASONS,
@@ -1683,7 +1783,7 @@ def _enrich_diagnostic(
     diag["format"] = protocol_version
     diag["validation_stage"] = stage.value
     diag["requires_new_submission"] = True
-    if protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION):
+    if protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION, BATCH_PROTOCOL_VERSION):
         diag.pop("requires_new_pdcp", None)
     else:
         diag["requires_new_pdcp"] = True
@@ -1691,7 +1791,7 @@ def _enrich_diagnostic(
 
 
 MAX_DIFFERING_FIELDS = 10
-_TYPED_PROTOCOLS = (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION)
+_TYPED_PROTOCOLS = (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION, BATCH_PROTOCOL_VERSION)
 
 
 def _conflict_evidence(existing_log, *, protocol_version, pdcp_content_hash, expected_target_version,
@@ -1719,6 +1819,8 @@ def _conflict_evidence(existing_log, *, protocol_version, pdcp_content_hash, exp
         except (TypeError, ValueError):
             old_record = new_record = None
         if isinstance(old_record, dict) and isinstance(new_record, dict) and "evidence_format" not in old_record:
+            if protocol_version == BATCH_PROTOCOL_VERSION:
+                old_record = {key: value for key, value in old_record.items() if key not in {"scope_evidence", "editing_cycle_id"}}
             fields = []
             _diff_paths(old_record, new_record, "", fields, depth=0)
     elif "pdcp_content_hash" in components:

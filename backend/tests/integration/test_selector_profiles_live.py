@@ -119,7 +119,7 @@ def test_real_stdio_rejects_singleton_selector_and_exposes_persisted_attempt():
         input="\n".join(json.dumps(message) for message in messages) + "\n",
         capture_output=True, text=True, encoding="utf-8", timeout=30, cwd=backend,
         env={**os.environ, "PYTHONPATH": str(backend),
-             "PATCHDIFF_DATABASE_URL": settings.database_url},
+             "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url},
     )
     assert process.returncode == 0, process.stderr
     replies = [json.loads(line) for line in process.stdout.splitlines()]

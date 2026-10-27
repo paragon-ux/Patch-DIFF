@@ -369,4 +369,4 @@ def test_live_0004_downgrade_refuses_when_scope_observations_exist(isolated_migr
     with pytest.raises(Exception, match="Cannot downgrade 20261026_0004: recorded scope observations exist"):
         command.downgrade(config, "20261022_0003")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261026_0004"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261027_0005"

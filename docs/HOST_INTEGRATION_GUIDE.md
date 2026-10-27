@@ -6,6 +6,13 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 ## 0. Stdio transport and host refresh
 
+Choose the immutable server profile before starting a session with
+`PATCHDIFF_MCP_PROFILE`: `editor` (default, 7 tools), `unobserved` (5), `observed`
+(6), or `full` (22). Older integrations and trusted initialization/export/audit
+operators must explicitly opt into `full`. Excluded tools are uncallable as well
+as unadvertised. An agent cannot override a profile per request.
+[Exact profile lists and batch examples](STRUCTURAL_BATCH_EDITING.md).
+
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
 
 For older adapter revisions, set PYTHONIOENCODING=utf-8 in the server environment. Literal Unicode can otherwise be misdecoded and persisted even when the call succeeds; an ASCII-escaped request alone does not test this path. This setting remains compatible with the fixed adapter.
@@ -233,6 +240,19 @@ A host skill or system prompt for PatchDIFF should say, at minimum: read before 
 
 
 ## 11. Waymark structural observation workflow (`waymark-engine@4.1.0`)
+
+For multiple independent structures, prefer one `patchdiff_observe_scope` call
+with exact `selections`, followed by one `patchdiff_submit_observed_operations`
+call with `observation_bundle_id`, `groups`, both observed target guards and a
+mandatory `client_request_id`. Each group's match indexes, anchors and sequential
+span offsets use that group's local slice, starting at zero. Submit all groups
+in one target transaction; any failure rejects the whole request, and success
+increments version once. Re-read stale bundles; repeat an identical keyed request
+to recover a lost committed response. SAVE closes the original editing cycle.
+See [limits, errors, replay guarantees and complete Python/JSON/Markdown recipes](STRUCTURAL_BATCH_EDITING.md).
+
+The existing single-scope workflow below remains available, with absolute span
+coordinates and its historical record/replay behavior.
 
 For structured code, configuration, and documentation targets (`.py`, `.ts`, `.js`, `.json`, `.md`, `.yaml`, `.toml`, `.sh`), prefer structural observation and scoped submission:
 
