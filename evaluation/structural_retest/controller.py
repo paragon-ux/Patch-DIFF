@@ -46,11 +46,15 @@ def inputs(manifest):
 
 class Run:
     def __init__(self, destination, arm, replicate, manifest, host, description, database_factory=disposable_database,
-                 session_factory=MCPSession, native_factory=NativeTools, clock=time.monotonic):
+                 session_factory=MCPSession, native_factory=NativeTools, clock=time.monotonic, host_factory=None):
         self.path, self.arm, self.replicate = destination, arm, replicate
         self.manifest, self.host, self.description = manifest, host, description
         self.database_factory, self.session_factory, self.native_factory = database_factory, session_factory, native_factory
         self.clock = clock
+        self.synthetic = host.synthetic if host is not None else False
+        self.host_factory = host_factory
+        self.host_reaped = False
+        self.host_cleanup_attempted = False
         self.targets, self.observations, self.tool_ids = {}, set(), set()
         self.session = self.context_id = None
         self.stage = "PREPARED"
@@ -62,9 +66,9 @@ class Run:
         self.sources = {Path(a["path"]).name: (ROOT / a["path"]).read_bytes()
                         for a in manifest["studies"]["primary"]["artifacts"] if a["role"] == "fixture"}
         self.evidence = Evidence(self.path / "events.jsonl", {"run_id": self.path.name, "arm": arm, "replicate": replicate,
-                                 "synthetic": host.synthetic, "manifest_sha256": digest(manifest), "controller_version": VERSION})
-        self.result = {"run_id": self.path.name, "arm": arm, "replicate": replicate, "synthetic": host.synthetic,
-                       "measured_model_invocations": 0, "outcome": "pending", "failures": []}
+                                 "synthetic": self.synthetic, "manifest_sha256": digest(manifest), "controller_version": VERSION})
+        self.result = {"run_id": self.path.name, "arm": arm, "replicate": replicate, "synthetic": self.synthetic,
+                       "measured_model_invocations": 0, "execution_started": False, "outcome": "pending", "failures": [], "cleanup_failures": []}
 
     def advance(self, stage):
         if STAGES.index(stage) != STAGES.index(self.stage) + 1:
@@ -76,6 +80,63 @@ class Run:
         failure = {"stage": self.stage, "classification": type(exc).__name__, "detail": str(exc)}
         self.result["failures"].append(redact(failure))
         self.evidence.emit("failure", **failure)
+
+    def cleanup_failure(self, event, exc):
+        failure = {"stage": self.stage, "classification": type(exc).__name__, "detail": str(exc)}
+        self.result["cleanup_failures"].append(redact(failure))
+        self.evidence.emit(event, secondary=True, **failure)
+
+    async def reap_host(self):
+        if not self.host_factory or self.host_cleanup_attempted:
+            return
+        self.host_cleanup_attempted = True
+        started = self.clock()
+        try:
+            if self.host is not None:
+                await asyncio.wait_for(self.host.close(graceful=True), 30)
+            self.host_reaped = True
+            process = self.host.process if self.host is not None else None
+            self.evidence.emit("host_process_reaped", pid=process.pid if process else None,
+                               returncode=process.returncode if process else None,
+                               duration_seconds=self.clock() - started)
+        except Exception as exc:
+            self.cleanup_failure("host_process_cleanup_failed", exc)
+
+    async def start_host(self, config, used_hosts):
+        started = self.clock()
+        try:
+            self.host = None
+            self.host = self.host_factory()
+            if not isinstance(self.host, BridgeHost) or self.host in used_hosts:
+                raise ValueError("A new BridgeHost instance is required for every scheduled run")
+            used_hosts.add(self.host)
+            if self.host.synthetic is not self.synthetic:
+                raise ValueError("Host synthetic/live classification changed")
+            if self.host.process is not None:
+                raise ValueError("Host factory must provide an unstarted bridge")
+            await asyncio.wait_for(self.host.start(), 30)
+            self.evidence.emit("host_process_started", pid=self.host.process.pid,
+                               startup_seconds=self.clock() - started)
+            description = await asyncio.wait_for(self.host.describe(), 30)
+            self.evidence.emit("host_description_received", pid=self.host.process.pid, host_evidence=description,
+                               host_evidence_sha256=digest(description), approved_host_evidence_sha256=digest(self.description))
+            errors = validate_host(description, synthetic=self.synthetic)
+            if errors or description != self.description:
+                raise ValueError("Fresh host differs from frozen approved evidence: " + "; ".join(errors))
+            discovery = self.session_factory(config["admin_database_url"], "C")
+            try:
+                await asyncio.wait_for(discovery.start(), 30)
+                errors = await tool_binding_errors(description, config, digest(discovery.schemas))
+                if errors:
+                    raise ValueError("; ".join(errors))
+            finally:
+                await discovery.close()
+            self.description = description
+            self.evidence.emit("host_attestation_verified", pid=self.host.process.pid,
+                               host_evidence_sha256=digest(description), preflight_seconds=self.clock() - started)
+        except Exception as exc:
+            self.evidence.emit("host_preflight_failed", classification=type(exc).__name__, detail=str(exc))
+            raise HostPreflightError(str(exc)) from exc
 
     async def tool_call(self, name, args, *, agent=False, call_id=None):
         call_id = call_id or str(uuid.uuid4())
@@ -154,7 +215,10 @@ class Run:
         if self.context_id in self.used_contexts:
             raise ValueError("Host reused a context")
         self.used_contexts.add(self.context_id)
+        self.result["execution_started"] = True
         self.evidence.emit("context_opened", context_id=self.context_id, visible_specification=spec)
+        if self.host_factory:
+            self.evidence.emit("host_context_opened", pid=self.host.process.pid, context_id=self.context_id)
         self.budget = Budget(self.manifest["conditions"], self.clock)
         results = []
         while True:
@@ -166,7 +230,13 @@ class Run:
             started = self.clock()
             if not self.host.synthetic:
                 self.result["measured_model_invocations"] += 1
-            response = await asyncio.wait_for(self.host.turn(self.context_id, results, limits), remaining)
+            try:
+                response = await asyncio.wait_for(self.host.turn(self.context_id, results, limits), remaining)
+            except (TimeoutError, ConnectionError) as exc:
+                self.evidence.emit("host_turn_timeout" if isinstance(exc, TimeoutError) else "host_turn_disconnected",
+                                   context_id=self.context_id, classification=type(exc).__name__,
+                                   duration_seconds=self.clock() - started)
+                raise
             usage = response.get("usage", {})
             self.evidence.emit("provider_response", metadata=response, duration_seconds=self.clock() - started,
                                usage=usage, missing_usage_fields=[k for k in ("input_tokens", "output_tokens", "cached_tokens", "reasoning_tokens") if usage.get(k) is None])
@@ -230,20 +300,22 @@ class Run:
         self.evidence.emit("audit_integrity", target_file_id=target_id, history=history,
                            observation_linkage="authoritative replay validates accepted scope links; rejected attempts retain request/diagnostic provenance and no accepted linkage")
 
-    async def execute(self, config, used_contexts):
+    async def execute(self, config, used_contexts, used_hosts=None):
         self.used_contexts = used_contexts
         self.evidence.emit("prepared", frozen_configuration=self.manifest, host_evidence=self.description,
                            original_hashes={name: hashlib.sha256(data).hexdigest() for name, data in self.sources.items()},
                            environment={"python": sys.version, "os": platform.platform(), "executable": sys.executable},
                            external_approval=config.get("verified_approval"))
         try:
-            if not self.host.synthetic:
+            if not self.synthetic:
                 authorization = config.get("_live_authorization")
-                if not isinstance(authorization, LiveAuthorization) or authorization.host_sha256 != digest(self.description):
+                if not self.host_factory or not isinstance(authorization, LiveAuthorization) or authorization.host_sha256 != digest(self.description):
                     raise ValueError("Live Run requires independently authorized study entry point")
-            errors = inputs(self.manifest) + validate_host(self.description, synthetic=self.host.synthetic)
+            errors = inputs(self.manifest) + validate_host(self.description, synthetic=self.synthetic)
             if errors:
                 raise ValueError("; ".join(errors))
+            if self.host_factory:
+                await self.start_host(config, used_hosts if used_hosts is not None else set())
             self.advance("PREFLIGHT_VERIFIED")
             started = self.clock()
             if self.arm == "A":
@@ -279,8 +351,12 @@ class Run:
                 self.failure(exc)
             finally:
                 if self.context_id:
-                    await asyncio.wait_for(self.host.close_context(self.context_id), 30)
-                    self.evidence.emit("context_closed", context_id=self.context_id)
+                    try:
+                        await asyncio.wait_for(self.host.close_context(self.context_id), 30)
+                        self.evidence.emit("context_closed", context_id=self.context_id)
+                    except Exception as exc:
+                        self.cleanup_failure("host_context_cleanup_failed", exc)
+                await self.reap_host()
             self.advance("AGENT_FINISHED_OR_BUDGET_EXHAUSTED")
             self.advance("SAVE_AND_EXPORT")
             if self.arm == "A":
@@ -310,11 +386,15 @@ class Run:
             oracle = evaluate.complete_primary(self.exports)
             self.evidence.emit("hidden_oracle", result=oracle)
             self.result["oracle"] = oracle
-            self.result["outcome"] = "passed" if oracle["complete_correct"] and not self.result["failures"] else "failed"
+            self.result["outcome"] = "passed" if oracle["complete_correct"] and not self.result["failures"] and not self.result["cleanup_failures"] else "failed"
+        except HostPreflightError as exc:
+            self.failure(exc)
+            self.result["outcome"] = "blocked_by_host_preflight"
         except Exception as exc:
             self.failure(exc)
             self.result["outcome"] = "failed"
         finally:
+            await self.reap_host()
             if self.session:
                 await self.session.close()
             self.result["last_stage"] = self.stage
@@ -341,41 +421,47 @@ async def tool_binding_errors(description, config, schema_sha256):
     return errors
 
 
-async def run_study(destination, manifest, host, config, **factories):
-    description = await asyncio.wait_for(host.describe(), 30)
-    if not host.synthetic:
-        if config.get("execution_enabled") is not True or description != config.get("host_evidence") or validate_host(description):
+async def run_study(destination, manifest, host, config, *, host_factory=None, **factories):
+    synthetic = host is not None and host.synthetic
+    description = await asyncio.wait_for(host.describe(), 30) if synthetic else config.get("host_evidence", {})
+    if not synthetic:
+        if host is not None or host_factory is None:
+            raise ValueError("Live host execution disabled/unverified: per-run bridge factory required")
+        if config.get("execution_enabled") is not True or validate_host(description):
             raise ValueError("Live host execution disabled/unverified")
         approval = validate_approval(config.get("approval_receipt", {}), reviewed_checkout(),
                                      hashlib.sha256((ROOT / "manifest.json").read_bytes()).hexdigest(), digest(description))
         if manifest != json.loads((ROOT / "manifest.json").read_text(encoding="utf-8")):
             raise ValueError("Live manifest differs from reviewed bytes")
-        config = {**config, "_live_authorization": LiveAuthorization(digest(description), approval)}
-        # Verify ALL arm bindings before the first measured context, not only
-        # when its arm is eventually reached in the balanced order.
-        discovery = MCPSession(config["admin_database_url"], "C")
-        try:
-            await asyncio.wait_for(discovery.start(), 30)
-            binding_errors = await tool_binding_errors(description, config, digest(discovery.schemas))
-            if binding_errors:
-                raise ValueError("; ".join(binding_errors))
-        finally:
-            await discovery.close()
+        config = {**config, "_live_authorization": LiveAuthorization(digest(description), approval), "verified_approval": approval}
     destination.mkdir(parents=True, exist_ok=False)
     plan = [{"replicate": replicate, "arm": arm, "run_id": f"r{replicate}-{arm}", "outcome": "not_started"}
             for replicate, order in enumerate(manifest["conditions"]["arm_orders"], 1) for arm in order]
-    (destination / "plan.json").write_bytes(wire({"synthetic": host.synthetic, "runs": plan}) + b"\n")
-    results, contexts = [], set()
+    (destination / "plan.json").write_bytes(wire({"synthetic": synthetic, "runs": plan}) + b"\n")
+    results, contexts, hosts = [], set(), set()
+    blocked_reason = None
     for item in plan:
-        run = Run(destination / item["run_id"], item["arm"], item["replicate"], manifest, host, description, **factories)
-        result = await run.execute(config, contexts)
+        if blocked_reason is not None:
+            # Scheduling status, never a fabricated task failure/oracle result.
+            result = {**item, "outcome": "not_started", "reason": blocked_reason, "synthetic": synthetic,
+                      "execution_started": False, "archived": False, "measured_model_invocations": 0}
+        else:
+            run = Run(destination / item["run_id"], item["arm"], item["replicate"], manifest, host,
+                      description, host_factory=host_factory, **factories)
+            result = await run.execute(config, contexts, hosts)
+            if result["outcome"] == "blocked_by_host_preflight" or (host_factory and not run.host_reaped):
+                cause = result["failures"][-1] if result["outcome"] == "blocked_by_host_preflight" else result["cleanup_failures"][-1]
+                blocked_reason = {"run_id": item["run_id"], **cause}
         results.append(result)
         # Append one result for EVERY scheduled run, including failed preflight.
         with (destination / "runs.jsonl").open("a", encoding="utf-8", newline="\n") as out:
             out.write(wire(result).decode() + "\n")
-    summary = {"synthetic": host.synthetic, "comparative_results": False if host.synthetic else True,
-               "scheduled": len(plan), "archived": len(results), "measured_model_invocations": sum(r["measured_model_invocations"] for r in results),
-               "results": results, "gate_2": "closed" if host.synthetic else "external_approval_required"}
+    summary = {"synthetic": synthetic, "comparative_results": not synthetic,
+               "scheduled": len(plan), "archived": sum(r.get("archived", False) for r in results),
+               "measured_model_invocations": sum(r["measured_model_invocations"] for r in results),
+               "results": results, "outcome": "passed" if all(r["outcome"] == "passed" for r in results) else "failed",
+               "requires_operator_review": blocked_reason is not None,
+               "gate_2": "closed" if synthetic else "external_approval_required"}
     (destination / "summary.json").write_bytes(wire(summary) + b"\n")
     return summary
 
@@ -390,6 +476,10 @@ def reviewed_checkout():
 class LiveAuthorization:
     def __init__(self, host_sha256, approval):
         self.host_sha256, self.approval = host_sha256, approval
+
+
+class HostPreflightError(RuntimeError):
+    pass
 
 
 async def cli(args):
@@ -421,31 +511,20 @@ async def cli(args):
         raise ValueError("PATCHDIFF_RETEST_ADMIN_URL required (never place credentials in config)")
     if args.dry_run_synthetic:
         host = SyntheticHost()
+        host_factory = None
     else:
         if config.get("execution_enabled") is not True or not args.approval:
             raise ValueError("Live execution disabled: explicit configuration and external approval required")
         command = config.get("host_bridge_command")
         if not isinstance(command, list) or not command or not all(isinstance(s, str) for s in command):
             raise ValueError("Owner-reviewed host bridge command required")
-        host = BridgeHost(command)
-        await host.start()
-        description = await asyncio.wait_for(host.describe(), 30)
-        host_errors = validate_host(description)
-        if host_errors or description != config.get("host_evidence"):
-            await host.close()
-            raise ValueError("Unverified/changed real host evidence: " + "; ".join(host_errors))
-        approval = validate_approval(json.loads(args.approval.read_text()), reviewed_checkout(),
-                                     hashlib.sha256((ROOT / "manifest.json").read_bytes()).hexdigest(), digest(description))
-        config["verified_approval"] = approval
         config["approval_receipt"] = json.loads(args.approval.read_text())
-    try:
-        summary = await run_study(args.destination, manifest, host, config)
-        print(json.dumps({k: v for k, v in summary.items() if k != "results"}, indent=2))
-        # Synthetic no-op host MUST fail correctness: this is not a solved run.
-        return 0 if host.synthetic and summary["measured_model_invocations"] == 0 and summary["archived"] == 9 else int(any(r["outcome"] != "passed" for r in summary["results"]))
-    finally:
-        if isinstance(host, BridgeHost):
-            await host.close()
+        host = None
+        host_factory = lambda: BridgeHost(command)
+    summary = await run_study(args.destination, manifest, host, config, host_factory=host_factory)
+    print(json.dumps({k: v for k, v in summary.items() if k != "results"}, indent=2))
+    # Synthetic no-op host MUST fail correctness: this is not a solved run.
+    return 0 if summary["synthetic"] and summary["measured_model_invocations"] == 0 and summary["archived"] == 9 else int(summary["outcome"] != "passed")
 
 
 if __name__ == "__main__":

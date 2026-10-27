@@ -358,8 +358,8 @@
     "interface_version": "patchdiff-retest-host/1",
     "live_execution_default": "disabled",
     "source_sha256": {
-      "controller.py": "cee778aa845ce938a2c026899bd2028063060651f16ed62a7ad5e4e7cd40017e",
-      "host_adapter.py": "4351486350054cfbf4451763dd4ff620a78950f8eb68359ada9c68b335990ed3",
+      "controller.py": "c0068046715c08f0c6c1194d4bf794134e6b0ecedc3956419e62d81ce84f076a",
+      "host_adapter.py": "e4d8648c44b2f7ff8370eb108c3cda58fb9e1eee55c6c3d8e119c13fa33a23f7",
       "telemetry.py": "16276ad216ece9efe0c9a048ee8870b8b33df0f7e48fdee969dd7b720b57c4c6",
       "preflight.py": "f489e0cb4794e81bf146de7b1586534e7d622f749221b4696b7e9e758ae317f1",
       "mcp_session.py": "0d552bf2befabdee38501d95f0734a5f1ed670fb230c5c362601e400211da5c1",

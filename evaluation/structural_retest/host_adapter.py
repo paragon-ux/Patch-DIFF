@@ -55,12 +55,16 @@ class JsonLinePeer:
         self.counter += 1
         message = {"jsonrpc": "2.0", "id": self.counter, "method": method, "params": params}
         try:
+            if self.process is None or self.process.returncode is not None:
+                raise ConnectionError("Bridge/MCP process is not running")
             request_bytes = wire(message) + b"\n"
             if self.trace:
                 self.trace("jsonrpc_request", message, request_bytes)
             self.process.stdin.write(request_bytes)
             await self.process.stdin.drain()
             response_bytes = await self.process.stdout.readline()
+            if not response_bytes:
+                raise ConnectionError("Bridge/MCP peer disconnected")
             response = json.loads(response_bytes)
             if self.trace:
                 self.trace("jsonrpc_response", response, response_bytes)
@@ -70,14 +74,25 @@ class JsonLinePeer:
         except asyncio.CancelledError:
             await self.close()
             raise
+        except (BrokenPipeError, ConnectionResetError) as exc:
+            raise ConnectionError("Bridge/MCP peer disconnected") from exc
 
-    async def close(self):
-        if self.process and self.process.returncode is None:
-            try:
-                self.process.kill()
-            except ProcessLookupError:
-                pass
-            await self.process.wait()
+    async def close(self, *, graceful=False):
+        if self.process:
+            if graceful and self.process.returncode is None:
+                self.process.stdin.close()
+                try:
+                    await asyncio.wait_for(self.process.wait(), 1)
+                    return
+                except TimeoutError:
+                    pass
+            if self.process.returncode is None:
+                try:
+                    self.process.kill()
+                except ProcessLookupError:
+                    pass
+            # wait() also reaps a peer that exited by itself before cleanup.
+            await asyncio.wait_for(self.process.wait(), 30)
 
 
 class BridgeHost(JsonLinePeer):

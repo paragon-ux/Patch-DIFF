@@ -68,6 +68,21 @@ every scheduled run gets an append-only result, including failed preflight. Proc
 interruption retains the plan and partial evidence, which fails completeness checks.
 Interrupted studies are not automatically resumed or rerun.
 
+Each live scheduled run owns one new bridge process. Before opening its single
+fresh context, the controller obtains a new `host/describe`, validates every frozen
+host field against approved evidence, and verifies native/MCP bindings. Startup
+and attestation overhead are recorded separately from the unchanged task budget.
+The context is closed/cancelled and the process reaped before evidence archival
+and the next process starts. Timeout/disconnect failures remain primary; bounded
+cleanup errors are secondary evidence. The failed task is never retried.
+
+A bridge startup, reattestation or unreaped-process failure stops further live
+execution. The failed preflight is archived as `blocked_by_host_preflight`;
+remaining schedule rows are `not_started` with explicit blocking reasons, no
+fabricated task/oracle outcomes and no model invocations. The study returns failure
+requiring operator review. In-process synthetic tests may still reuse fake hosts;
+real subprocess fixtures additionally verify cross-run failure isolation.
+
 | Arm | Broker allowlist | Mode |
 | --- | --- | --- |
 | A | `run_command` restricted to `rtk read <one confined file>`; `edit_file(Path, Target, Replacement)` replaces every exact occurrence | No Patch-DIFF |
