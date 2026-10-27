@@ -71,7 +71,10 @@ def apply_pdcp_transaction(
                 return _rejected(FailureReason.SPAN_OUT_OF_BOUNDS, "Span is outside the sequential buffer.",
                                  before_hash, change_id, {"span_check": "bounds", "buffer_length": len(current)},
                                  buffer=current, prior_changes=prior, focus=len(current))
-            if running_scope is not None and not (running_scope[0] <= start <= end <= running_scope[1]):
+            if running_scope is not None and not (
+                running_scope[0] < start < running_scope[1] if start == end
+                else running_scope[0] <= start < end <= running_scope[1]
+            ):
                 return _rejected(
                     FailureReason.SPAN_OUT_OF_BOUNDS,
                     f"Span [{start}, {end}) is outside the observed scope [{running_scope[0]}, {running_scope[1]}).",
@@ -90,6 +93,21 @@ def apply_pdcp_transaction(
                     prior_changes=prior,
                     focus=start,
                 )
+            if running_scope is not None and start == end:
+                before = canonicalize_text(change.expected_before or "")
+                after = canonicalize_text(change.expected_after or "")
+                if not before or not after:
+                    return _rejected(
+                        FailureReason.SPAN_EXPECTED_TEXT_MISMATCH,
+                        "Observed insertions require nonempty expected_before and expected_after adjacency guards.",
+                        before_hash, change_id, {"code": "OBSERVED_INSERTION_GUARDS_REQUIRED"},
+                        buffer=current, prior_changes=prior, focus=start)
+                if start - len(before) < running_scope[0] or end + len(after) > running_scope[1]:
+                    return _rejected(
+                        FailureReason.SPAN_OUT_OF_BOUNDS,
+                        "Observed insertion adjacency guards must remain inside the sequential observed scope.",
+                        before_hash, change_id, {"code": "OPERATION_OUTSIDE_OBSERVED_SCOPE"},
+                        buffer=current, prior_changes=prior, focus=start)
             expected = canonicalize_text(change.match_payload)
             actual = current[start:end]
             if actual != expected:

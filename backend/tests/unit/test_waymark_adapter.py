@@ -166,7 +166,7 @@ def test_temp_directory_is_cleaned_up_after_normal_and_error_runs() -> None:
 
 def test_adapter_handles_timeout_nonzero_exit_and_invalid_json() -> None:
     with patch(
-        "app.services.waymark_adapter.subprocess.run",
+        "app.services.waymark_adapter._run_bounded_discovery",
         side_effect=subprocess.TimeoutExpired(cmd=["node"], timeout=0.1),
     ):
         timeout_res = discover_symbols_from_content(filename="slow.py", content="X = 1\n", timeout_seconds=0.1)
@@ -175,14 +175,14 @@ def test_adapter_handles_timeout_nonzero_exit_and_invalid_json() -> None:
         assert timeout_res.error.code == "WAYMARK_TIMEOUT"
 
     completed_bad_json = subprocess.CompletedProcess(args=["node"], returncode=0, stdout=b"not-json", stderr=b"")
-    with patch("app.services.waymark_adapter.subprocess.run", return_value=completed_bad_json):
+    with patch("app.services.waymark_adapter._run_bounded_discovery", return_value=completed_bad_json):
         bad_json_res = discover_symbols_from_content(filename="bad.py", content="X = 1\n")
         assert bad_json_res.ok is False
         assert bad_json_res.error is not None
         assert bad_json_res.error.code == "WAYMARK_INVALID_OUTPUT"
 
     completed_nonzero = subprocess.CompletedProcess(args=["node"], returncode=2, stdout=b"", stderr=b"boom")
-    with patch("app.services.waymark_adapter.subprocess.run", return_value=completed_nonzero):
+    with patch("app.services.waymark_adapter._run_bounded_discovery", return_value=completed_nonzero):
         nonzero_res = discover_symbols_from_content(filename="crash.py", content="X = 1\n")
         assert nonzero_res.ok is False
         assert nonzero_res.error is not None

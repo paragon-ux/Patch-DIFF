@@ -746,6 +746,31 @@ def test_stdio_mcp_subprocess_end_to_end_observe_and_strict_submit() -> None:
         assert obs_payload["status"] == "observed"
         obs_id = obs_payload["observation_id"]
 
+        # E-2: exercise advertised insertion constraints through real stdio.
+        observed_tool = next(t for t in listed["result"]["tools"] if t["name"] == "patchdiff_submit_observed_operations")
+        from jsonschema import Draft202012Validator
+        validator = Draft202012Validator(observed_tool["inputSchema"])
+        at = obs_payload["scope_start"] + 1
+        for position, guards, code in [
+            (obs_payload["scope_start"], {"expected_before": "X", "expected_after": "F"}, "OPERATION_OUTSIDE_OBSERVED_SCOPE"),
+            (obs_payload["scope_end"], {"expected_before": '"', "expected_after": "\n"}, "OPERATION_OUTSIDE_OBSERVED_SCOPE"),
+            (at, {}, "OBSERVED_INSERTION_GUARDS_REQUIRED"),
+            (at, {"expected_before": "X", "expected_after": "R"}, None),
+            (at, {"expected_before": "XF", "expected_after": "R"}, "OPERATION_OUTSIDE_OBSERVED_SCOPE"),
+        ]:
+            arguments = {"target_file_id": tid, "observation_id": obs_id, "intent": "Negative insertion",
+                         "expected_target_version": 0, "expected_current_hash": h0,
+                         "operations": [{"op": "span", "start": position, "end": position,
+                                         "expected_text": "", "replace": "!", **guards}]}
+            assert validator.is_valid(arguments) is bool(guards)
+            negative = rpc(40, "tools/call", {"name": "patchdiff_submit_observed_operations", "arguments": arguments})
+            payload = json.loads(negative["result"]["content"][0]["text"])
+            assert payload["status"] == "rejected" and payload["pdcp_log_id"]
+            if code is not None:
+                assert payload["code"] == code
+            else:
+                assert payload["failure_reason"] == "span_expected_text_mismatch"
+
         # Submit observed operation over stdio (disambiguating '"v1"' within FRAME_SYNC_STREAM!)
         sub_resp = rpc(
             5,
@@ -765,6 +790,23 @@ def test_stdio_mcp_subprocess_end_to_end_observe_and_strict_submit() -> None:
         sub_payload = json.loads(sub_resp["result"]["content"][0]["text"])
         assert sub_payload["status"] == "accepted"
         assert sub_payload["version"] == 1
+
+        fresh = rpc(50, "tools/call", {"name": "patchdiff_observe_scope",
+                                      "arguments": {"target_file_id": tid, "symbol_name": "FRAME_SYNC_STREAM"}})
+        fresh_obs = json.loads(fresh["result"]["content"][0]["text"])
+        positive_args = {"target_file_id": tid, "observation_id": fresh_obs["observation_id"],
+                         "intent": "Guarded interior insertion", "expected_target_version": 1,
+                         "expected_current_hash": fresh_obs["target_current_hash"],
+                         "operations": [{"op": "span", "start": at, "end": at, "expected_text": "",
+                                         "replace": "X", "expected_before": "F", "expected_after": "R"}]}
+        validator.validate(positive_args)
+        positive = rpc(51, "tools/call", {"name": "patchdiff_submit_observed_operations", "arguments": positive_args})
+        assert json.loads(positive["result"]["content"][0]["text"])["status"] == "accepted"
+        exported = rpc(52, "tools/call", {"name": "patchdiff_export_target", "arguments": {"target_file_id": tid}})
+        assert json.loads(exported["result"]["content"][0]["text"])["content"] == 'FXRAME_SYNC_STREAM = "v2"\nOTHER = "v1"\n'
+        with SessionLocal() as session:
+            assert session.query(AppendOnlyPdcpLogs).filter_by(target_file_id=uuid.UUID(tid), status="rejected").count() == 6
+            assert session.query(AppendOnlyManifestLedger).filter_by(target_file_id=uuid.UUID(tid)).count() == 2
 
         # Replay over stdio
         rep_resp = rpc(

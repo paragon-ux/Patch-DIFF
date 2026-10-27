@@ -128,24 +128,22 @@ def replay_target(
             .execution_options(populate_existing=True)
         ).scalars().all()
 
-        obs_by_log_id: dict[uuid.UUID, TargetScopeObservations] = {}
-        if any(
-            isinstance(log.diagnostic_json, dict) and "observation_id" in log.diagnostic_json
-            for log in accepted_logs
-        ):
+        obs_by_log_id: dict[uuid.UUID, list[TargetScopeObservations]] = {}
+        if accepted_logs:
             observations = session.execute(
                 select(TargetScopeObservations)
+                .join(
+                    AppendOnlyPdcpLogs,
+                    TargetScopeObservations.accepted_pdcp_log_id == AppendOnlyPdcpLogs.pdcp_log_id,
+                )
                 .where(
-                    TargetScopeObservations.target_file_id == target.target_file_id,
-                    TargetScopeObservations.accepted_pdcp_log_id.is_not(None),
+                    AppendOnlyPdcpLogs.target_file_id == target.target_file_id,
+                    AppendOnlyPdcpLogs.status == "accepted",
                 )
                 .execution_options(populate_existing=True)
             ).scalars().all()
-            obs_by_log_id = {
-                obs.accepted_pdcp_log_id: obs
-                for obs in observations
-                if obs.accepted_pdcp_log_id is not None
-            }
+            for obs in observations:
+                obs_by_log_id.setdefault(obs.accepted_pdcp_log_id, []).append(obs)
 
         expected_version = initial_snapshot.version
         for replayed_count, log in enumerate(accepted_logs, start=1):
@@ -200,30 +198,39 @@ def replay_target(
                 )
 
             scope_bounds: tuple[int, int] | None = None
-            obs = obs_by_log_id.get(log.pdcp_log_id)
-            if obs is not None:
+            linked_observations = obs_by_log_id.get(log.pdcp_log_id, [])
+            diagnostic = log.diagnostic_json if isinstance(log.diagnostic_json, dict) else {}
+            if "observation_id" in diagnostic or linked_observations:
+                observation_uuid = _try_coerce_uuid(diagnostic.get("observation_id"))
+                if observation_uuid is None or len(linked_observations) != 1:
+                    return _failed(
+                        target, FailureReason.REPLAY_PROTOCOL_INVALID,
+                        "Observed transaction requires exactly one authoritative observation linkage and recorded observation_id.",
+                        replayed=replayed_count - 1, pdcp_log_id=log.pdcp_log_id,
+                    )
+                obs = linked_observations[0]
                 if (
-                    obs.target_file_id != target.target_file_id
+                    obs.observation_id != observation_uuid
+                    or obs.accepted_pdcp_log_id != log.pdcp_log_id
+                    or obs.target_file_id != target.target_file_id
+                    or obs.editing_cycle_id != log.editing_cycle_id
                     or obs.target_version != log.before_version
                     or obs.target_current_hash != log.before_hash
+                    or not 0 <= obs.scope_start <= obs.scope_end <= len(buffer)
+                    or any(type(diagnostic.get(key)) is not int for key in ("scope_start", "scope_end"))
+                    or diagnostic["scope_start"] != obs.scope_start
+                    or diagnostic["scope_end"] != obs.scope_end
+                    or diagnostic.get("observed_scope_hash") != obs.observed_scope_hash
+                    or canonical_sha256(buffer[obs.scope_start:obs.scope_end]) != obs.observed_scope_hash
                 ):
                     return _failed(
                         target,
                         FailureReason.REPLAY_PROTOCOL_INVALID,
-                        "Logged observation metadata does not match replayed transaction preconditions.",
+                        "Authoritative observation identity, target, cycle, preimage or scope integrity does not match the replayed transaction.",
                         replayed=replayed_count - 1,
                         pdcp_log_id=log.pdcp_log_id,
                     )
                 scope_bounds = (obs.scope_start, obs.scope_end)
-            elif (
-                isinstance(log.diagnostic_json, dict)
-                and isinstance(log.diagnostic_json.get("scope_start"), int)
-                and isinstance(log.diagnostic_json.get("scope_end"), int)
-            ):
-                scope_bounds = (
-                    int(log.diagnostic_json["scope_start"]),
-                    int(log.diagnostic_json["scope_end"]),
-                )
 
             result = apply_pdcp_transaction(
                 buffer,

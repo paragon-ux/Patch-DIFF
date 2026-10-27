@@ -302,6 +302,15 @@ def observe_scope(
                     "target_current_hash": target.current_hash,
                     "failure_detail": "observation_id was not found for this target.",
                 }
+            if obs.editing_cycle_id != target.active_editing_cycle_id:
+                return {
+                    "status": "rejected",
+                    "code": "OBSERVATION_CYCLE_MISMATCH",
+                    "target_file_id": str(target.target_file_id),
+                    "target_version": target.version,
+                    "target_current_hash": target.current_hash,
+                    "failure_detail": "observation_id belongs to a closed editing cycle.",
+                }
             if obs.accepted_pdcp_log_id is not None:
                 return {
                     "status": "rejected",
@@ -467,7 +476,9 @@ def observe_scope(
                 "target_current_hash": target.current_hash,
                 "waymark_engine_version": discovery.waymark_engine_version,
                 "language": discovery.language,
-                "candidates": [cand for _, cand in matching],
+                "total_candidates": len(matching),
+                "candidates_truncated": len(matching) > MAX_OBSERVE_CANDIDATES,
+                "candidates": [cand for _, cand in matching[:MAX_OBSERVE_CANDIDATES]],
             }
 
         selected_sym, selected_cand = matching[0]

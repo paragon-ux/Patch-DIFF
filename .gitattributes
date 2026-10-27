@@ -6,3 +6,5 @@ docs/usability/accepted/Devin-Goal-F.md -text
 docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md -text
 # Verification captures retain the exact bytes identified in their manifest.
 docs/usability/release/* -text
+# Preserve immutable benchmark source bytes and SHA-256 hashes on every platform.
+evaluation/structural_retest/supplemental/** -text

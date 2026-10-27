@@ -59,7 +59,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
     "patchdiff_get_manifest_ledger": "Return the newest bounded ledger page displayed oldest-first, with has_more/next_sequence for backward traversal.",
     "patchdiff_observe_scope": "Discover structural symbols via pinned Waymark Engine or select a unique symbol scope to issue a server-persisted observation_id and bounded canonical text slice." + _CODE_POINTS,
-    "patchdiff_submit_observed_operations": "Submit guarded patchdiff-tx/2 match/span operations restricted to a server-issued observed symbol scope. Requires observation_id, expected_target_version, and expected_current_hash." + _CODE_POINTS,
+    "patchdiff_submit_observed_operations": "Submit guarded patchdiff-tx/2 match/span operations restricted to a server-issued observed symbol scope. Requires observation_id, expected_target_version, and expected_current_hash. Zero-width insertions must be strictly inside the sequential scope and carry nonempty expected_before and expected_after guards matching adjacent text entirely inside that scope; either boundary rejects." + _CODE_POINTS,
 }
 
 # Illustrative resources; hosts bind real IDs, guards, parents and returned cursors.
@@ -368,6 +368,20 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             "span_context": {"fields": ["expected_before", "expected_after"], "runtime_version": SPAN_CONTEXT_RUNTIME_VERSION},
         }
     if name == "patchdiff_submit_observed_operations":
+        span_schema = properties["operations"]["items"]["oneOf"][1]
+        span_schema["description"] = (
+            "Nonempty spans must stay within the sequential observed scope. Insertions (start == end) "
+            "must be strictly interior and require both nonempty adjacency guards entirely within that scope. "
+            "The service checks coordinate equality, boundaries and adjacency against the sequential buffer."
+        )
+        span_schema["allOf"] = [{
+            "if": {"properties": {"expected_text": {"const": ""}}, "required": ["expected_text"]},
+            "then": {
+                "required": ["expected_before", "expected_after"],
+                "properties": {key: {"type": "string", "minLength": 1}
+                               for key in ("expected_before", "expected_after")},
+            },
+        }]
         for req_field in ("observation_id", "expected_target_version", "expected_current_hash"):
             if req_field not in schema.setdefault("required", []):
                 schema["required"].append(req_field)
@@ -375,6 +389,9 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
             "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
             "requires_observation": True,
+            "observed_insertion": {"position": "strictly_interior", "boundary_insertions": False,
+                                   "required_guards": ["expected_before", "expected_after"],
+                                   "guards_within_scope": True, "adjacency": "sequential_buffer"},
             "span_context": {"fields": ["expected_before", "expected_after"], "runtime_version": SPAN_CONTEXT_RUNTIME_VERSION},
         }
     if name == "patchdiff_submit_replacement":

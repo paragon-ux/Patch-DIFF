@@ -287,5 +287,7 @@ Server-issued structural scope observations produced by `patchdiff_observe_scope
 
 Retention and lifecycle semantics:
 - Observations are append-only server-issued records.
+- SAVE closes their editing cycle; paging and fresh admission both reject closed-cycle observations even if target version/hash are unchanged.
+- Replay requires the exact authoritative observation for every accepted log recording `observation_id`, with one-to-one accepted-log linkage and matching target, cycle, preimage version/hash, scope bounds and scope hash against the sequential replay buffer. Missing or altered rows fail closed; diagnostic scope offsets are never fallback authority. Historical unobserved transactions retain their original replay path.
 - Under `SELECT ... FOR UPDATE` on `cloud_target_files`, `patchdiff_submit_observed_operations` locks the `target_scope_observations` row, verifies `target_file_id`, `editing_cycle_id`, `target_version`, `target_current_hash`, `waymark_engine_version`, `observed_scope_hash`, and re-verifies Waymark symbol coordinates before restricting `patchdiff-tx/2` operations to `[scope_start, scope_end)`.
 - Downgrading migration `20261026_0004` refuses while any rows exist in `target_scope_observations`.

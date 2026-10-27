@@ -227,6 +227,8 @@ PatchDIFF's guarantees cover the managed target in Postgres. An exported file ed
 
 ## 10. Host skill checklist
 
+For observed operations, keep nonempty edits within the observed scope. Insert only strictly inside the current sequential scope; never insert at either boundary. Supply both nonempty `expected_before` and `expected_after`, matching immediately adjacent text entirely inside that scope. Earlier operations can move the scope end and change those neighbors, so derive later guards from the intermediate buffer. On `OBSERVED_INSERTION_GUARDS_REQUIRED`, mismatching adjacency, or `OPERATION_OUTSIDE_OBSERVED_SCOPE`, re-read and correct the proposal; do not bypass strict admission. SAVE closes the observation's editing cycle, so obtain a fresh observation before paging or submitting again.
+
 A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; check each accepted-edit warning against what you meant before continuing; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; do not treat a local copy as authoritative.
 
 

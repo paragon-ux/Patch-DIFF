@@ -11,6 +11,8 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
+import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -121,6 +123,45 @@ def resolve_node_executable(explicit_node: str | None = None) -> str:
     return str(candidate)
 
 
+def _run_bounded_discovery(
+    argv: list[str], input_bytes: bytes, timeout: float, stdout_limit: int, stderr_limit: int,
+) -> subprocess.CompletedProcess:
+    """Drain both pipes concurrently, retaining at most each cap plus one sentinel byte."""
+    outputs = [bytearray(), bytearray()]
+    limits = [stdout_limit, stderr_limit]
+    # A file-backed stdin avoids blocking a writer while a noisy child fills its pipes.
+    with tempfile.TemporaryDirectory(prefix="patchdiff-waymark-run-") as run_dir, tempfile.TemporaryFile(dir=run_dir) as source:
+        source.write(input_bytes)
+        source.seek(0)
+        child_env = {**os.environ, "TMPDIR": run_dir, "TEMP": run_dir, "TMP": run_dir}
+        # The parent owns Node's temp root, including cleanup after forced termination.
+        with subprocess.Popen(argv, stdin=source, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              shell=False, env=child_env) as proc:
+            def read_pipe(index, pipe):
+                while True:
+                    chunk = pipe.read(min(65536, limits[index] + 1 - len(outputs[index])))
+                    if not chunk:
+                        return
+                    outputs[index].extend(chunk)
+                    if len(outputs[index]) > limits[index]:
+                        proc.kill()
+                        return
+
+            readers = [threading.Thread(target=read_pipe, args=(index, pipe))
+                       for index, pipe in enumerate((proc.stdout, proc.stderr))]
+            for reader in readers:
+                reader.start()
+            try:
+                proc.wait(timeout=timeout)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                proc.wait()
+                for reader in readers:
+                    reader.join()
+            return subprocess.CompletedProcess(argv, proc.returncode, bytes(outputs[0]), bytes(outputs[1]))
+
+
 def discover_symbols_from_content(
     *,
     filename: str,
@@ -212,13 +253,8 @@ def discover_symbols_from_content(
     argv = [resolve_node_executable(node_executable), str(script_path)]
 
     try:
-        completed = subprocess.run(
-            argv,
-            input=input_bytes,
-            capture_output=True,
-            timeout=float(timeout_seconds),
-            shell=False,
-            check=False,
+        completed = _run_bounded_discovery(
+            argv, input_bytes, float(timeout_seconds), max_stdout_bytes, max_stderr_bytes,
         )
     except subprocess.TimeoutExpired:
         return WaymarkDiscoveryResult(

@@ -1,67 +1,147 @@
-# 3-Arm Native vs. Patch-DIFF + Waymark Structural Observation Retest Plan
+# Native vs. Patch-DIFF three-arm replication preregistration
 
-> **Gate 2 Status:** **PREPARED ONLY — DO NOT EXECUTE YET.**
-> Per project governance, the comparative subagent study described in this document must **not** be executed until the Patch-DIFF Waymark structural observation integration PR and these experimental controls are reviewed and approved.
+Gate 2 is CLOSED. Preparation and deterministic tests are authorized. No measured
+agents, comparative study, performance conclusions, merge, or self-approval are
+authorized. The independent reviewer must approve an exact remediation commit
+and a complete manifest before execution.
 
----
+## Three separate studies
 
-## 1. Objective
+1. **Primary replication:** the original native-vs-Patch-DIFF subagent workflow,
+   extended with a Waymark-backed third arm. Preserve the original task prompt,
+   source bytes, task sequence and independent oracle. Authenticate them before
+   execution. No substitute task or reconstructed gold label is accepted.
+2. **Supplemental structural benchmark:** **45 edit targets, 20 scopes, five source
+   files**: three Python modules, one JSON configuration and one Markdown runbook.
+   Exact original fixtures, simulation harness, external verifier and expanded
+   original edit specifications from `Editing-Toolbench/10-26-26` are hash-pinned in
+   `evaluation/structural_retest/manifest.json`. The old harness is simulation
+   evidence, never a live Patch-DIFF runner. TS/JS cases require a separate study.
+3. **Transactional stress suite:** ordinary deterministic tests for ambiguity,
+   stale observations, insertion boundaries/adjacency, atomic rejection, concurrent
+   submissions, SAVE and authoritative replay. These are product correctness tests,
+   not measured-model observations.
 
-Evaluate whether integrating pinned **`waymark-engine@4.1.0`** structural symbol discovery (`patchdiff_observe_scope`) with server-enforced scoped transaction admission (`patchdiff_submit_observed_operations` under `PATCHDIFF_STRICT_OBSERVATION_MODE=1`) resolves the structural discovery and repeated-substring disambiguation bottlenecks observed in prior Patch-DIFF benchmarks while preserving Patch-DIFF's transactional, concurrency, and replay guarantees.
+Report each study separately. Never combine denominators or success rates. For the
+supplemental study report 45-target and five-file accuracy; 20 is a scope count.
+The historical verifier has its own named checks, distinct from the 45 edit targets.
 
----
+## Artifact availability and preparation
 
-## 2. Three Experimental Arms
+The manifest records SHA-256 hashes of exact bytes and labels fixtures, task
+specifications and hidden evaluators. Input changes require a new manifest revision
+and independent review. Keep evaluator/gold files outside agent mounts and context,
+including repository searches.
 
-| Arm | Name | Allowed Read / Discovery Tools | Allowed Write Tools | Server Configuration |
-| --- | --- | --- | --- | --- |
-| **Arm A** | **Native Editing Baseline** | Native file read / search tools (`read_file` / `Get-Content` / `grep`) | Native file edit tools (`edit_file` / `write_file`) | No Patch-DIFF server |
-| **Arm B** | **Patch-DIFF (Unobserved / Text-Selector Mode)** | `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, `patchdiff_get_target` | `patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`, `patchdiff_preview`, `patchdiff_save`, `patchdiff_export_target` | `PATCHDIFF_STRICT_OBSERVATION_MODE=0` |
-| **Arm C** | **Patch-DIFF + Waymark Structural Observation (Strict Mode)** | `patchdiff_observe_scope` (`waymark-engine@4.1.0`), `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, `patchdiff_get_target` | `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_export_target` (all unobserved write tools fail closed with `OBSERVATION_REQUIRED`) | `PATCHDIFF_STRICT_OBSERVATION_MODE=1` |
+The user identified `Editing-Toolbench/10-26-26` as the primary recovery source.
+Its five current fixtures, 45-edit specification and standalone verifier have been
+recovered and hash-pinned. Current source hashes agree with `benchmark_results.json`,
+but all five conflict with the older fixture hashes in `REPORT.md`; line counts
+and byte lengths differ too. These are content differences, not EOL normalization.
+Both original evidence files are archived unchanged. The manifest lists every
+conflict and references recovered primary candidate artifacts without promoting
+them to authenticated original-run inputs. No measured-agent prompt, exact per-arm
+tool instructions, original task sequence or model settings were found there.
+Original-run provenance and independent full-byte collateral checks remain blockers.
+Historical W1-W12 files are separate candidate evidence and are not substituted.
 
----
+The supplied `10-27-26/Remediation-Prompt.md` repeats the continuity handoff and still
+refers to a separate preceding prompt. The connected discussion exposes that
+response as a content-reference marker, not its complete text. Record this gap.
 
-## 3. Benchmark Corpus & Task Oracle
+Preparation commands (no model calls):
 
-### 3.1 Primary Hard-Suite Corpus (`Editing-Toolbench/10-26-26`)
-- **45 structural edit targets** across **20 files** spanning:
-  1. **Python modules**: module-level constants/assignments (`FRAME_SYNC_STREAM`, `VALID_SCOPES`), classes, functions, and methods with repeated body literals.
-  2. **JSON configuration files**: large multi-tenant and policy arrays (`tenants[ten_006]`, `tenants[ten_013]`, `tenants[ten_018]`, nested escaped keys) where identical field/value pairs (`"tier": "standard"`, `"quota": 100`) repeat across dozens of sibling array objects.
-  3. **Markdown operational runbooks**: ATX headings (`# ...`), GFM pipe-table rows (`row:CHK-14-C`), and fenced code blocks (`fence:L...`).
-  4. **TypeScript / JavaScript modules**: exported functions, classes, and methods.
+```powershell
+python evaluation/structural_retest/prepare.py --check-inputs
+python evaluation/structural_retest/prepare.py
+python evaluation/structural_retest/prepare.py --stage supplemental --destination <new-directory>
+```
 
-### 3.2 Transactional & Concurrency Stress Suite
-- **S1 — Repeated-field JSON array update:** Update a single tenant (`tenants[ten_013]`) without mutating identical `"quota": 100` fields in `tenants[ten_006]` or `tenants[ten_018]`.
-- **S2 — Concurrent two-worker race:** Two subagents observe the same target at `version = 0` and submit concurrent scoped edits; verify `SELECT ... FOR UPDATE` serializes admission so the second writer fails closed (`STALE_OBSERVATION_VERSION`) instead of silently overwriting the first writer's changes.
-- **S3 — ABA & no-op version progression:** Verify stale observations are rejected after `A -> B -> A` content restoration and after no-op version increments.
-- **S4 — Out-of-scope collateral write attempt:** Verify edits targeting lines or matches outside the observed symbol's `[scope_start, scope_end)` fail closed (`OPERATION_OUTSIDE_OBSERVED_SCOPE`) with zero target mutation.
+The hash check returns zero. The default readiness check returns 2 while blockers
+remain. Staging creates three byte-identical fixture directories and MCP
+initialization JSONL requests for B/C. It never starts models, edits targets or
+copies evaluators. Existing destinations are refused. Primary staging fails until
+its authenticated originals are available.
 
----
+Install `requirements.lock`, then `pip install --no-deps -e .` and
+`npm --prefix integrations/waymark ci`. Pin Python 3.11, Node 22, PostgreSQL 16.3,
+migration `20261026_0004` and `waymark-engine@4.1.0`. Record exact runtime/OS/host
+builds and repository/manifest hashes. B/C need independent disposable databases,
+migrations and real MCP `patchdiff_initialize_target` calls returning fresh target
+IDs at version 0. Capture initial hashes, canonical text and upload EOL metadata.
 
-## 4. Experimental Controls
+## Frozen model and allowed tools
 
-1. **Model & Decoding Parity:** All three arms use the exact same subagent model (`Model="inherit"`), temperature, and system tool timeout settings.
-2. **Isolated Workspaces:** Each arm runs in a clean, isolated copy of the initial benchmark corpus (`ws_arm_a_native`, `ws_arm_b_patchdiff_unobserved`, `ws_arm_c_patchdiff_waymark_strict`).
-3. **Database Isolation (Arms B & C):** Each Patch-DIFF arm initializes fresh target rows in PostgreSQL at `version = 0`, exports final contents via `patchdiff_save(export_after_save=True)` using `format="original_eol"`, and runs `patchdiff_replay` on every target file before running the external file-level oracle.
-4. **Strict Enforcement in Arm C:** Arm C runs the Patch-DIFF MCP server with `PATCHDIFF_STRICT_OBSERVATION_MODE=1`. Any attempt by the subagent to call `patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`, `patchdiff_submit_pdcp`, or `patchdiff_request_regeneration` is rejected by the server and recorded in `append_only_pdcp_logs` with `code="OBSERVATION_REQUIRED"`.
+Every measured arm uses **Gemini 3.8 Flash High**. Sol 6.1 Extra High is the
+implementation role; engineering costs are excluded from measured runs. Never
+use `Model="inherit"` without verifying the effective setting. No silent model,
+effort, provider, host or tool substitution is allowed.
 
----
+| Arm | Reads and discovery | Editing and final verification | Configuration |
+| --- | --- | --- | --- |
+| A | Native file read/search | Native edits; external final-state oracle | No Patch-DIFF |
+| B | Patch-DIFF read/search | Real unobserved MCP transactions; SAVE/export/replay | Strict mode off |
+| C | Same reads plus `patchdiff_observe_scope` | Real observed MCP transactions; SAVE/export/replay | Strict mode on |
 
-## 5. Pre-Registered Evaluation Metrics
+B/C cannot directly edit files or use Python string-slicing simulation. The
+external evaluator is read-only and cannot repair outputs. C cannot bypass scope
+checks. Observed insertions must be strictly interior with both nonempty adjacent
+guards inside the sequential scope; either boundary rejects. Record exact allowed
+tool names, permissions and host/tool differences as remaining confounds.
 
-1. **Workspace Verification Pass Rate:** `x / 20` files passing `run_all_benchmarks.py` verification checks.
-2. **Edit Target Resolution Rate:** `x / 45` individual edit targets resolved and applied accurately.
-3. **Collateral Damage Rate:** Number of files where bytes outside the intended symbol/object/row/fence scope were modified or corrupted.
-4. **First-Submission Acceptance Rate & Retry Count:** Ratio of accepted transactions on the first submission attempt vs. rejected attempts logged in `append_only_pdcp_logs`.
-5. **Replay & Audit Integrity (Arms B & C):**
-   - `patchdiff_replay` pass rate (`status == "success"` and `materialized_state_matches is True` across all 20 targets).
-   - `target_scope_observations.accepted_pdcp_log_id` 1-to-1 linkage completeness for every accepted transaction in Arm C.
-6. **Efficiency Metrics:** Total MCP tool calls, total input/output characters transferred in tool payloads, and wall-clock time per task.
+The exact provider model identifier, effective High setting, host build, decoding
+settings and output/context limits are unverified. This chat's subagent catalog
+does not offer the requested Gemini model. Unknown fields stay null in the
+manifest and block Gate 2; availability elsewhere requires evidence before approval.
 
----
+## Paired conditions, budgets and isolation
 
-## 6. Execution Gate (Gate 2)
+After original recovery, freeze identical task text and original step order across
+A/B/C. Only tool-use instructions may differ; exact per-arm prompt hashes require
+review. No arm receives hidden labels, solved examples, earlier-arm traces or extra
+hints. Use three fresh replicates per task/arm with balanced orders ABC, BCA, CAB.
+No adaptive stopping, cherry-picking, post-result tuning or task rewriting.
 
-Do **not** launch subagents or execute Arms A, B, or C until:
-1. The Patch-DIFF PR introducing `waymark-engine@4.1.0`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations`, and `PATCHDIFF_STRICT_OBSERVATION_MODE` is reviewed.
-2. Reviewer sign-off is granted on the 3-arm experimental controls and metrics above.
+Preregistered per-task budgets for every arm: three editing attempts, 600 seconds,
+16,000 actual model tokens, 30-second tool timeouts and zero automatic transport
+retries. Every failed call/retry/rejection counts. Lost-response recovery consumes
+an explicit retry; B/C resend identical arguments and idempotency key. No hidden
+harness repair. Reconcile any conflict with original conditions before approval.
+
+Use fresh contexts and independently initialized state for each task/replicate/arm.
+Preserve intentional multi-step task dependencies and original interference timing.
+Pin interference/lost-response controllers independently of agents. Verify seed and
+temperature support; when unsupported record that fact and use identical verified
+provider defaults. Record host configuration and tool permissions before execution.
+
+## Metrics, independent evaluation and reporting
+
+Capture actual provider input/output/cached/reasoning token counts, tool count,
+exact argument/result UTF-8 bytes, attempts, retries, rejections, timeouts, errors
+and failures. Explicitly flag unavailable token fields; never estimate from chars.
+Capture wall-clock start/end and separate planning/tool time, cold startup, warm
+discovery, initialization and database/migration overhead from measured editing.
+
+B/C must retain real JSON-RPC traces, target IDs, accepted/rejected attempt IDs,
+ledger facts and C's authoritative one-to-one observation links. Require SAVE,
+export (`original_eol` when restoring upload bytes), replay success and all four
+materialized-state checks for every target. Synthetic receipts do not count.
+
+Evaluate each arm externally with the hidden original oracle, full-content equality
+and collateral-change checks. The recovered supplemental behavioral verifier may
+miss unrelated byte edits. An independently approved full-byte oracle remains a
+supplemental readiness blocker; its checks do not authenticate primary correctness.
+Report all paired per-task results and failures, then study-specific aggregates
+with denominators and replicate variation. Missing artifacts, telemetry, model
+settings or exhausted budgets must remain visible, never silently excluded.
+
+## Gate 2 checklist
+
+- Independent re-review of the exact remediation commit and its CI evidence.
+- Authenticated original primary prompt, fixtures, oracle, task sequence and hashes.
+- Reviewed exact per-arm prompts, hidden-oracle isolation, fresh-state setup and
+  genuine MCP execution harness (the preparation script is not that harness).
+- Verified Gemini 3.8 Flash High provider/host settings and identical budgets.
+- Full-byte collateral oracle and telemetry bindings, or explicit independently
+  approved supplemental limitations.
+- Explicit independent approval. This document and preparation script grant none.

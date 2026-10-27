@@ -1,0 +1,210 @@
+{
+  "format": "patchdiff-structural-retest/1",
+  "gate_2": "closed",
+  "reviewed_head": "581ee35476171f27a714ed890606b2b525dd13f3",
+  "model": {
+    "display_name": "Gemini 3.8 Flash",
+    "reasoning_effort": "High",
+    "provider_model_id": null,
+    "verified_effective_reasoning": null,
+    "host_version": null,
+    "substitution_allowed": false
+  },
+  "conditions": {
+    "replicates_per_task_per_arm": 3,
+    "arm_orders": [
+      "ABC",
+      "BCA",
+      "CAB"
+    ],
+    "max_edit_attempts_per_task": 3,
+    "wall_clock_budget_seconds": 600,
+    "model_token_budget_per_task": 16000,
+    "automatic_transport_retries": 0,
+    "temperature": null,
+    "seed": null,
+    "tool_timeout_seconds": 30,
+    "fresh_context_per_arm": true,
+    "oracle_visible_to_agents": false
+  },
+  "arms": {
+    "A": {
+      "editing": "native file read/search/edit only",
+      "patchdiff": false
+    },
+    "B": {
+      "editing": "real Patch-DIFF MCP unobserved tools",
+      "strict_observation": false
+    },
+    "C": {
+      "editing": "real Patch-DIFF MCP observed operations",
+      "strict_observation": true
+    }
+  },
+  "studies": {
+    "primary": {
+      "description": "Original native-vs-Patch-DIFF comparative subagent workflow extended to Arm C",
+      "artifacts": [],
+      "missing": [
+        "original measured-agent task prompt and exact per-arm tool instructions",
+        "original native-vs-Patch-DIFF task sequence and host/model/retry configuration",
+        "resolve all five fixture hash conflicts between REPORT.md and current benchmark_results.json/source bytes",
+        "authenticate the recovered verifier as the original comparison oracle and supply full-byte collateral checks"
+      ],
+      "historical_candidates": [
+        {
+          "name": "config.yaml",
+          "sha256": "41544e66c37f6bc5ed1059086f55536416923d9f3eeef25acc592ad4a9f78646",
+          "classification": "recovered W1-W12 historical fixture; NOT authenticated original comparative-subagent input"
+        },
+        {
+          "name": "large.md",
+          "sha256": "49790bcf86e76096dffe390f37c7b7b6ac56efb915995c5a82834e17330936d2",
+          "classification": "recovered W1-W12 historical fixture; NOT authenticated original comparative-subagent input"
+        },
+        {
+          "name": "notes.txt",
+          "sha256": "caaec0ce28fb9a17130dd27b9c7fc7cbe5896535917f82bc3eb2c5483957ff0b",
+          "classification": "recovered W1-W12 historical fixture; NOT authenticated original comparative-subagent input"
+        },
+        {
+          "name": "README.md",
+          "sha256": "2c9a95263f3f79a60b9f627b85c35496cbefc57e9a35bea1d130e08e09300268",
+          "classification": "recovered W1-W12 historical fixture; NOT authenticated original comparative-subagent input"
+        },
+        {
+          "name": "tiny.txt",
+          "sha256": "cd2eca3535741f27a8ae40c31b0c41d4057a7a7b912b33b9aed86485d1c84676",
+          "classification": "recovered W1-W12 historical fixture; NOT authenticated original comparative-subagent input"
+        }
+      ],
+      "recovery_source": "Editing-Toolbench/10-26-26 (explicitly identified by user during remediation)",
+      "recovered_artifacts": [
+        "supplemental/fixtures/matrix_kernel.py",
+        "supplemental/fixtures/schema_defs.py",
+        "supplemental/fixtures/validator_engine.py",
+        "supplemental/fixtures/routing_manifest.json",
+        "supplemental/fixtures/MIGRATION_RUNBOOK.md",
+        "supplemental/evaluator/verify_hard_suite.py",
+        "supplemental/evaluator/original_harness.py",
+        "supplemental/edit_specs.json",
+        "supplemental/evaluator/REPORT.md",
+        "supplemental/evaluator/benchmark_results.json"
+      ],
+      "recovery_status": "Current fixture bytes, original EDIT_SPECS and external verifier recovered; historical measured-agent prompt and original-run byte identity remain unverified",
+      "fixture_hash_conflicts": [
+        {
+          "file": "matrix_kernel.py",
+          "REPORT_md_sha256": "cb8990362835e28735451bf71c87545a1e72b850df44e921b9d72b121b208f02",
+          "current_and_benchmark_results_sha256": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0"
+        },
+        {
+          "file": "schema_defs.py",
+          "REPORT_md_sha256": "94b211a8b67b14820cc29b8a1d78f98a07a0c164fd0a7d9d8b58821240a7c702",
+          "current_and_benchmark_results_sha256": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39"
+        },
+        {
+          "file": "validator_engine.py",
+          "REPORT_md_sha256": "070cf70875f5cb99c92a460b0ce73469688b7683cd364ab1ba5b5e862583862f",
+          "current_and_benchmark_results_sha256": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291"
+        },
+        {
+          "file": "routing_manifest.json",
+          "REPORT_md_sha256": "4c9fd1fa1cb0802e10a1a2ef6f3a884d39c88fb8159e91bd3931797cfbf35933",
+          "current_and_benchmark_results_sha256": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89"
+        },
+        {
+          "file": "MIGRATION_RUNBOOK.md",
+          "REPORT_md_sha256": "09e416301d7d74b7320c3974e6c78137cc2fffa3fb0ba0cc6eb04d377ff18dc8",
+          "current_and_benchmark_results_sha256": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed"
+        }
+      ]
+    },
+    "supplemental": {
+      "description": "Separate structural benchmark: 45 edit targets, 20 scopes, five Python/JSON/Markdown source files",
+      "edit_targets": 45,
+      "scopes": 20,
+      "source_files": 5,
+      "artifacts": [
+        {
+          "path": "supplemental/fixtures/matrix_kernel.py",
+          "role": "fixture",
+          "sha256": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0"
+        },
+        {
+          "path": "supplemental/fixtures/schema_defs.py",
+          "role": "fixture",
+          "sha256": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39"
+        },
+        {
+          "path": "supplemental/fixtures/validator_engine.py",
+          "role": "fixture",
+          "sha256": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291"
+        },
+        {
+          "path": "supplemental/fixtures/routing_manifest.json",
+          "role": "fixture",
+          "sha256": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89"
+        },
+        {
+          "path": "supplemental/fixtures/MIGRATION_RUNBOOK.md",
+          "role": "fixture",
+          "sha256": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed"
+        },
+        {
+          "path": "supplemental/evaluator/verify_hard_suite.py",
+          "role": "evaluator",
+          "sha256": "5d2c6a535e554200b20642e1be2544b9a2485777df686629531213c568be4834"
+        },
+        {
+          "path": "supplemental/evaluator/original_harness.py",
+          "role": "evaluator",
+          "sha256": "7da98578b6219df6de71e02df0ca55851565dccb8e8c8d71d69fea3cd49a14cd"
+        },
+        {
+          "path": "supplemental/edit_specs.json",
+          "role": "task_specification",
+          "sha256": "f693d0e2297c3212fffd674125ce4af4425597c5369de8232f9ac19e114a2ccc"
+        },
+        {
+          "path": "supplemental/evaluator/REPORT.md",
+          "role": "historical_evidence",
+          "sha256": "ef42917814d9e5208a4d522692ccbd2763a18f7884504b6f0550ed0bdf64b663"
+        },
+        {
+          "path": "supplemental/evaluator/benchmark_results.json",
+          "role": "historical_evidence",
+          "sha256": "4bb1bb1a7107d3f3a7057cbf6a29ecb85b31c9842dfb17a8c0e0fdca0df2cb0b"
+        }
+      ],
+      "missing": [
+        "exact measured-agent prompt and host binding; original harness edit specifications recovered, no historical model prompt supplied",
+        "independently approved full-byte collateral oracle",
+        "reviewed measured-run MCP harness and provider telemetry bindings"
+      ]
+    },
+    "stress": {
+      "description": "Deterministic ordinary test suite; no comparative model measurements",
+      "command": "python -m pytest backend/tests/unit/test_observed_insertions.py backend/tests/unit/test_waymark_output_limits.py backend/tests/integration/test_observation_remediation.py backend/tests/integration/test_observed_submission.py",
+      "artifacts": [],
+      "missing": []
+    }
+  },
+  "execution_blockers": [
+    "Independent reviewer approval for Gate 2 has not been granted",
+    "Gemini 3.8 Flash High exact provider identifier/effective setting/host capabilities are unverified",
+    "Requested benchmark model is absent from this chat's available subagent model catalog; no substitution permitted",
+    "Primary recovered artifacts require original-run provenance reconciliation and measured-agent prompt recovery",
+    "No original primary experiment is replaced by W1-W12 or the supplemental hard suite",
+    "Exact per-arm prompts, full-byte collateral oracle, measured-run MCP harness and telemetry bindings require independent review"
+  ],
+  "metrics": [
+    "actual input/output/cached/reasoning model tokens and unavailable-field flags",
+    "tool calls and exact argument/result UTF-8 bytes",
+    "wall-clock planning/tool/initialization/database/discovery/cold/warm time",
+    "attempts, retries, transport errors, rejections, timeouts and failures",
+    "independent task correctness, full-content equality and collateral edits",
+    "B/C real accepted/rejected logs, manifest, SAVE, export and replay checks"
+  ],
+  "provenance": "Supplemental bytes copied unchanged from Editing-Toolbench/10-26-26; edit_specs.json losslessly expands its original EDIT_SPECS assignment. Original harness is archived evidence of simulation, never used as a live transaction runner."
+}
