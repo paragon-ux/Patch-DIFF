@@ -1,0 +1,55 @@
+{
+  "source_commit": "ae3e2f36ab22204601422c5cc06221e482e4cecd",
+  "method": "CI job logs inspected through the GitHub connector; excerpts retain checkout identity, migration steps and actual test/evaluation summaries.",
+  "runs": [
+    {
+      "event": "push",
+      "run_id": 40502991197,
+      "job_id": 122185093730,
+      "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/40502991197",
+      "head_commit": "ae3e2f36ab22204601422c5cc06221e482e4cecd",
+      "executed_commit": "ae3e2f36ab22204601422c5cc06221e482e4cecd",
+      "conclusion": "success",
+      "evidence": [
+        "2026-10-27T12:20:46.8934746Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ae3e2f36ab22204601422c5cc06221e482e4cecd:refs/remotes/origin/feat/waymark-structural-observation",
+        "2026-10-27T12:20:47.9602254Z ae3e2f36ab22204601422c5cc06221e482e4cecd",
+        "2026-10-27T12:21:05.1493353Z INFO  [alembic.runtime.migration] Running upgrade  -> 20260510_0001, initial PatchDIFF MVP schema",
+        "2026-10-27T12:21:05.2603849Z INFO  [alembic.runtime.migration] Running upgrade 20260510_0001 -> 20261020_0002, typed transaction ledger and request deduplication support",
+        "2026-10-27T12:21:05.2698191Z INFO  [alembic.runtime.migration] Running upgrade 20261020_0002 -> 20261022_0003, record source line endings for uploaded targets",
+        "2026-10-27T12:21:05.2714629Z INFO  [alembic.runtime.migration] Running upgrade 20261022_0003 -> 20261026_0004, create target_scope_observations table for server-issued Waymark observations",
+        "2026-10-27T12:21:05.2866008Z INFO  [alembic.runtime.migration] Running upgrade 20261026_0004 -> 20261027_0005, Add observation bundles; preserve historical single-observation linkage.",
+        "2026-10-27T12:21:05.8918730Z INFO  [alembic.runtime.migration] Running downgrade 20261027_0005 -> 20261026_0004, Add observation bundles; preserve historical single-observation linkage.",
+        "2026-10-27T12:21:06.4921161Z INFO  [alembic.runtime.migration] Running upgrade 20261026_0004 -> 20261027_0005, Add observation bundles; preserve historical single-observation linkage.",
+        "2026-10-27T12:21:44.4368189Z 936 passed, 8 warnings in 36.46s",
+        "2026-10-27T12:23:42.1973960Z 540 passed, 27 warnings in 116.18s (0:01:56)",
+        "2026-10-27T12:23:42.6888019Z Verdict equivalence on the shared applier: OK",
+        "2026-10-27T12:23:42.6889219Z Accepted guarded replacement content/hash oracles: OK"
+      ]
+    },
+    {
+      "event": "pull_request",
+      "run_id": 40502998837,
+      "job_id": 122185119286,
+      "url": "https://github.com/paragon-ux/Patch-DIFF/actions/runs/40502998837",
+      "head_commit": "ae3e2f36ab22204601422c5cc06221e482e4cecd",
+      "executed_commit": "e0e59136110894093159c4fd37095163ecbeb1b7",
+      "conclusion": "success",
+      "evidence": [
+        "2026-10-27T12:20:49.3575949Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +e0e59136110894093159c4fd37095163ecbeb1b7:refs/remotes/pull/16/merge",
+        "2026-10-27T12:20:50.1255765Z HEAD is now at e0e5913 Merge ae3e2f36ab22204601422c5cc06221e482e4cecd into f5cc6742f94e080d2eda7486265e79eebf55c8ad",
+        "2026-10-27T12:20:50.1320505Z e0e59136110894093159c4fd37095163ecbeb1b7",
+        "2026-10-27T12:21:02.1092317Z INFO  [alembic.runtime.migration] Running upgrade  -> 20260510_0001, initial PatchDIFF MVP schema",
+        "2026-10-27T12:21:02.1777416Z INFO  [alembic.runtime.migration] Running upgrade 20260510_0001 -> 20261020_0002, typed transaction ledger and request deduplication support",
+        "2026-10-27T12:21:02.1832598Z INFO  [alembic.runtime.migration] Running upgrade 20261020_0002 -> 20261022_0003, record source line endings for uploaded targets",
+        "2026-10-27T12:21:02.1842857Z INFO  [alembic.runtime.migration] Running upgrade 20261022_0003 -> 20261026_0004, create target_scope_observations table for server-issued Waymark observations",
+        "2026-10-27T12:21:02.1935265Z INFO  [alembic.runtime.migration] Running upgrade 20261026_0004 -> 20261027_0005, Add observation bundles; preserve historical single-observation linkage.",
+        "2026-10-27T12:21:02.5488716Z INFO  [alembic.runtime.migration] Running downgrade 20261027_0005 -> 20261026_0004, Add observation bundles; preserve historical single-observation linkage.",
+        "2026-10-27T12:21:02.8974116Z INFO  [alembic.runtime.migration] Running upgrade 20261026_0004 -> 20261027_0005, Add observation bundles; preserve historical single-observation linkage.",
+        "2026-10-27T12:21:27.7287680Z 936 passed, 8 warnings in 23.77s",
+        "2026-10-27T12:22:41.7358725Z 540 passed, 27 warnings in 73.00s (0:01:12)",
+        "2026-10-27T12:22:42.2746687Z Verdict equivalence on the shared applier: OK",
+        "2026-10-27T12:22:42.2747309Z Accepted guarded replacement content/hash oracles: OK"
+      ]
+    }
+  ]
+}

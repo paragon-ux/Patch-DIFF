@@ -1,0 +1,358 @@
+{
+  "source_commit": "ae3e2f36ab22204601422c5cc06221e482e4cecd",
+  "purpose": "Separate executable request/response example; excluded from five-file workflow counts",
+  "operator": [
+    {
+      "tool": "patchdiff_initialize_target",
+      "arguments": {
+        "filename": "example_quotas.py",
+        "content": "def api_quota():\n    return 100\n\ndef etl_quota():\n    return 100\n\ndef ui_quota():\n    return 100\n",
+        "content_type": "text/x-python"
+      },
+      "response": {
+        "active_editing_cycle_id": "ee1a3d4d-7b42-4dba-b28c-7348f4a6c49c",
+        "current_hash": "0909c475b747121cf8b13ffb01d29fa49629ede6dcf156b56e2f53154de977a8",
+        "filename": "example_quotas.py",
+        "source_line_endings": {
+          "cr": 0,
+          "crlf": 0,
+          "lf": 8,
+          "normalized": false,
+          "source_code_points": 97,
+          "source_sha256": "0909c475b747121cf8b13ffb01d29fa49629ede6dcf156b56e2f53154de977a8",
+          "source_utf8_bytes": 97,
+          "style": "lf"
+        },
+        "status": "ok",
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752",
+        "target_type": "text/x-python",
+        "version": 0
+      },
+      "elapsed_seconds": 0.12273909999930765
+    },
+    {
+      "tool": "patchdiff_export_target",
+      "arguments": {
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752"
+      },
+      "response": {
+        "content": "def api_quota():\n    return 200\n\ndef etl_quota():\n    return 200\n\ndef ui_quota():\n    return 200\n",
+        "content_eol": "lf",
+        "content_sha256": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "content_type": "text/x-python",
+        "current_hash": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "filename": "example_quotas.py",
+        "format": "original_text",
+        "hash": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "source_line_endings": {
+          "cr": 0,
+          "crlf": 0,
+          "lf": 8,
+          "normalized": false,
+          "source_code_points": 97,
+          "source_sha256": "0909c475b747121cf8b13ffb01d29fa49629ede6dcf156b56e2f53154de977a8",
+          "source_utf8_bytes": 97,
+          "style": "lf"
+        },
+        "status": "ok",
+        "target_type": "text/x-python",
+        "version": 1
+      },
+      "elapsed_seconds": 0.015711199986981228
+    }
+  ],
+  "editor": [
+    {
+      "tool": "patchdiff_observe_scope",
+      "arguments": {
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752",
+        "selections": [
+          {
+            "symbol_name": "api_quota",
+            "kind": "function"
+          },
+          {
+            "symbol_name": "etl_quota",
+            "kind": "function"
+          },
+          {
+            "symbol_name": "ui_quota",
+            "kind": "function"
+          }
+        ]
+      },
+      "response": {
+        "language": "python",
+        "observation_bundle_id": "17aeb956-2b85-4ad5-aadd-2ae16a0e42c6",
+        "scopes": [
+          {
+            "end": 31,
+            "end_line": 2,
+            "max_chars": 4000,
+            "next_offset": null,
+            "next_start": null,
+            "observation_id": "c6540ed8-1e4d-4774-ba4b-93ce38a40b97",
+            "observed_scope_hash": "4f5e528294bbed485d837e9c1e2e23a2dfe228320cb325a2122ea611d461defe",
+            "offset": 0,
+            "ordinal": 0,
+            "scope_chars": 31,
+            "scope_end": 31,
+            "scope_start": 0,
+            "start": 0,
+            "start_line": 1,
+            "symbol": {
+              "kind": "function",
+              "name": "api_quota",
+              "parent": null
+            },
+            "text": "def api_quota():\n    return 100",
+            "truncated": false
+          },
+          {
+            "end": 64,
+            "end_line": 5,
+            "max_chars": 4000,
+            "next_offset": null,
+            "next_start": null,
+            "observation_id": "6f3c8ffa-35f0-4c26-81e9-1ecef3bb038d",
+            "observed_scope_hash": "93b9e536dc0521912f0618801525d5a500f29a5e208ef5203c67ac86cbd3d77c",
+            "offset": 0,
+            "ordinal": 1,
+            "scope_chars": 31,
+            "scope_end": 64,
+            "scope_start": 33,
+            "start": 33,
+            "start_line": 4,
+            "symbol": {
+              "kind": "function",
+              "name": "etl_quota",
+              "parent": null
+            },
+            "text": "def etl_quota():\n    return 100",
+            "truncated": false
+          },
+          {
+            "end": 96,
+            "end_line": 8,
+            "max_chars": 4000,
+            "next_offset": null,
+            "next_start": null,
+            "observation_id": "24f467bf-f2cf-4f1f-85ab-04cff5f85f9b",
+            "observed_scope_hash": "e957876ffaa3d8d8e2d5aad34eaae167c21d86bd15c56aee91bbada691c6d5ec",
+            "offset": 0,
+            "ordinal": 2,
+            "scope_chars": 30,
+            "scope_end": 96,
+            "scope_start": 66,
+            "start": 66,
+            "start_line": 7,
+            "symbol": {
+              "kind": "function",
+              "name": "ui_quota",
+              "parent": null
+            },
+            "text": "def ui_quota():\n    return 100",
+            "truncated": false
+          }
+        ],
+        "status": "observed_batch",
+        "target_current_hash": "0909c475b747121cf8b13ffb01d29fa49629ede6dcf156b56e2f53154de977a8",
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752",
+        "target_version": 0,
+        "waymark_engine_version": "4.1.0"
+      },
+      "elapsed_seconds": 0.5286925000109477
+    },
+    {
+      "tool": "patchdiff_submit_observed_operations",
+      "arguments": {
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752",
+        "observation_bundle_id": "17aeb956-2b85-4ad5-aadd-2ae16a0e42c6",
+        "expected_target_version": 0,
+        "expected_current_hash": "0909c475b747121cf8b13ffb01d29fa49629ede6dcf156b56e2f53154de977a8",
+        "client_request_id": "exact-batch-example",
+        "intent": "Raise selected quotas to 200",
+        "groups": [
+          {
+            "observation_id": "c6540ed8-1e4d-4774-ba4b-93ce38a40b97",
+            "operations": [
+              {
+                "op": "match",
+                "match": "return 100",
+                "replace": "return 200"
+              }
+            ]
+          },
+          {
+            "observation_id": "6f3c8ffa-35f0-4c26-81e9-1ecef3bb038d",
+            "operations": [
+              {
+                "op": "match",
+                "match": "return 100",
+                "replace": "return 200"
+              }
+            ]
+          },
+          {
+            "observation_id": "24f467bf-f2cf-4f1f-85ab-04cff5f85f9b",
+            "operations": [
+              {
+                "op": "match",
+                "match": "return 100",
+                "replace": "return 200"
+              }
+            ]
+          }
+        ]
+      },
+      "response": {
+        "after_hash": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "after_version": 1,
+        "before_hash": "0909c475b747121cf8b13ffb01d29fa49629ede6dcf156b56e2f53154de977a8",
+        "before_version": 0,
+        "change_count": 3,
+        "client_request_id": "exact-batch-example",
+        "current_hash": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "current_version": 1,
+        "deduplicated": false,
+        "evidence": {
+          "changes": [
+            {
+              "bundle_ordinal": 0,
+              "change_id": "g0:chg_001",
+              "change_index": 1,
+              "group_index": 0,
+              "matched_chars": 10,
+              "matched_sha256": "d2e54258807160cae2cd3e384f807ff7ab8c686f8c79830c0798dd9ba6b1e027",
+              "observation_id": "c6540ed8-1e4d-4774-ba4b-93ce38a40b97",
+              "operation_index": 0,
+              "replacement_chars": 10,
+              "replacement_sha256": "983bc418d9aa82144b7a31c59d3f76a234d2587f6d8fbf35949001cf010c069f",
+              "scope_end": 31,
+              "scope_local_end": 31,
+              "scope_local_start": 21,
+              "scope_start": 0,
+              "span_end": 31,
+              "span_start": 21
+            },
+            {
+              "bundle_ordinal": 1,
+              "change_id": "g1:chg_001",
+              "change_index": 2,
+              "group_index": 1,
+              "matched_chars": 10,
+              "matched_sha256": "d2e54258807160cae2cd3e384f807ff7ab8c686f8c79830c0798dd9ba6b1e027",
+              "observation_id": "6f3c8ffa-35f0-4c26-81e9-1ecef3bb038d",
+              "operation_index": 0,
+              "replacement_chars": 10,
+              "replacement_sha256": "983bc418d9aa82144b7a31c59d3f76a234d2587f6d8fbf35949001cf010c069f",
+              "scope_end": 64,
+              "scope_local_end": 31,
+              "scope_local_start": 21,
+              "scope_start": 33,
+              "span_end": 31,
+              "span_start": 21
+            },
+            {
+              "bundle_ordinal": 2,
+              "change_id": "g2:chg_001",
+              "change_index": 3,
+              "group_index": 2,
+              "matched_chars": 10,
+              "matched_sha256": "d2e54258807160cae2cd3e384f807ff7ab8c686f8c79830c0798dd9ba6b1e027",
+              "observation_id": "24f467bf-f2cf-4f1f-85ab-04cff5f85f9b",
+              "operation_index": 0,
+              "replacement_chars": 10,
+              "replacement_sha256": "983bc418d9aa82144b7a31c59d3f76a234d2587f6d8fbf35949001cf010c069f",
+              "scope_end": 96,
+              "scope_local_end": 30,
+              "scope_local_start": 20,
+              "scope_start": 66,
+              "span_end": 30,
+              "span_start": 20
+            }
+          ]
+        },
+        "group_count": 3,
+        "groups": [
+          {
+            "change_count": 1,
+            "group_index": 0,
+            "observation_id": "c6540ed8-1e4d-4774-ba4b-93ce38a40b97"
+          },
+          {
+            "change_count": 1,
+            "group_index": 1,
+            "observation_id": "6f3c8ffa-35f0-4c26-81e9-1ecef3bb038d"
+          },
+          {
+            "change_count": 1,
+            "group_index": 2,
+            "observation_id": "24f467bf-f2cf-4f1f-85ab-04cff5f85f9b"
+          }
+        ],
+        "manifest_entries_added": 3,
+        "observation_bundle_id": "17aeb956-2b85-4ad5-aadd-2ae16a0e42c6",
+        "pdcp_log_id": "0570cb45-21cd-420e-8cbe-17acbf32bb3c",
+        "status": "accepted",
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752",
+        "validity": {
+          "protocol_valid": true,
+          "semantic": "not_evaluated",
+          "task_correct": "not_evaluated",
+          "transaction_valid": true
+        },
+        "version": 1,
+        "warning_count": 0,
+        "warning_details": [],
+        "warnings": [],
+        "warnings_truncated": false
+      },
+      "elapsed_seconds": 0.5914728000061586
+    },
+    {
+      "tool": "patchdiff_save",
+      "arguments": {
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752"
+      },
+      "response": {
+        "closed_editing_cycle_id": "ee1a3d4d-7b42-4dba-b28c-7348f4a6c49c",
+        "current_hash": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "failure_detail": null,
+        "failure_reason": null,
+        "new_editing_cycle_id": "0ae22780-21fb-4f14-80bc-041d481ee650",
+        "snapshot_id": "5182f5a1-3e2c-4130-9402-0ed8db98a339",
+        "status": "saved",
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752",
+        "version": 1
+      },
+      "elapsed_seconds": 0.04124059999594465
+    },
+    {
+      "tool": "patchdiff_replay",
+      "arguments": {
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752"
+      },
+      "response": {
+        "accepted_transactions_replayed": 1,
+        "current_hash": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "current_version": 1,
+        "failure_detail": null,
+        "failure_reason": null,
+        "materialized_state_checks": {
+          "content_matches": true,
+          "recomputed_hash_matches": true,
+          "stored_hash_matches": true,
+          "version_matches": true
+        },
+        "materialized_state_matches": true,
+        "pdcp_log_id": null,
+        "reconstructed_hash": "4f83a4917150e6f2ec161647d1a639da79fa0377785737030a7e3b4fe5283431",
+        "reconstructed_version": 1,
+        "status": "success",
+        "target_file_id": "54167943-1e55-4daf-9da3-151561ed8752"
+      },
+      "elapsed_seconds": 0.031650799995986745
+    }
+  ]
+}

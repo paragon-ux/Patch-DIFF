@@ -1,0 +1,80 @@
+{
+  "source_commit": "ae3e2f36ab22204601422c5cc06221e482e4cecd",
+  "files": [
+    {
+      "path": "changed_files.json",
+      "bytes": 33269,
+      "sha256": "e26c506e5ef43ff5ac1dad285f5938a6e11c4dd95b8652f50824faac408a5aad"
+    },
+    {
+      "path": "ci-evidence.json",
+      "bytes": 4994,
+      "sha256": "3d7f39a2c62f9ca7ff48329689c60e25cb83b28404bcefea768d0f936f1f5af5"
+    },
+    {
+      "path": "exact_example.json",
+      "bytes": 13014,
+      "sha256": "8e95feeed61c98182629646d484d149c7ba57481281367bde174d605eaac430e"
+    },
+    {
+      "path": "exports/matrix_kernel.py",
+      "bytes": 24312,
+      "sha256": "36dba6340c0d47abcf6bbdc5e34788b8f800bbf0417254c7f791c40a926ab8f7"
+    },
+    {
+      "path": "exports/MIGRATION_RUNBOOK.md",
+      "bytes": 10104,
+      "sha256": "95b08e130e92c0aeeada6d92518e48509f5dd131d4ff96cd6b51d5d0de3f5fbb"
+    },
+    {
+      "path": "exports/routing_manifest.json",
+      "bytes": 6582,
+      "sha256": "84ce22315b1665e9308ccad447267c64ba04c4c660ee66a2be2f4ce14612306e"
+    },
+    {
+      "path": "exports/schema_defs.py",
+      "bytes": 13498,
+      "sha256": "da3e5504f40a5cb0d4da5638fb986e4c4c23af5185aa481d9737838fce3b9c4d"
+    },
+    {
+      "path": "exports/validator_engine.py",
+      "bytes": 21847,
+      "sha256": "90871b4658e10e960585abf05c27031179f7aab16b77d9e97a9a69ed604b1484"
+    },
+    {
+      "path": "focused_integration.txt",
+      "bytes": 750,
+      "sha256": "434da14b03ad9c80d36f24306adeddeeed0b57151f6a64c172f9f9dcb7faed80"
+    },
+    {
+      "path": "offline_eval.txt",
+      "bytes": 3201,
+      "sha256": "86e93aa19e57eeb62fcba29b4d437cdc23f8d7ae650d94084ccd44ee501a450b"
+    },
+    {
+      "path": "requests_responses.json",
+      "bytes": 385496,
+      "sha256": "bd6dee98ce528dc37eabb77cb9d5518567092a2c0b181493222a8e543d0fe9db"
+    },
+    {
+      "path": "results.json",
+      "bytes": 9324,
+      "sha256": "65ed0d93f46bc67dce3d9f5334dddc4336a2a35f614f7f5f5bf01785016ae0ad"
+    },
+    {
+      "path": "tool_catalogs.json",
+      "bytes": 213372,
+      "sha256": "1310dada1134899b8381fff889df4afead468b42cf657d09fa79568873cccc69"
+    },
+    {
+      "path": "unit.txt",
+      "bytes": 2384,
+      "sha256": "8777bdb079b278bffc765a6f10fdc2899d2620eba5798d4b70f504530e919a4f"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 1379,
+      "sha256": "31646a52bb64ec7a12d7da211dcce5f68e8b83cf401b6ab75cfefb31bf1d5023"
+    }
+  ]
+}

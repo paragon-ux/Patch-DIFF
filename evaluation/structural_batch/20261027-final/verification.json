@@ -1,0 +1,36 @@
+{
+  "source_commit": "ae3e2f36ab22204601422c5cc06221e482e4cecd",
+  "runtime_protocol": "patchdiff-observed-batch/1",
+  "runtime_version": "patchdiff-observed-batch-r1",
+  "local_environment": {
+    "python": "3.11.9",
+    "pytest": "8.4.2",
+    "node": "22.19.0",
+    "postgres": "16.3",
+    "waymark": "4.1.0"
+  },
+  "local_unit_passed": 936,
+  "local_focused_integration_passed": 85,
+  "ci_unit_passed_per_run": 936,
+  "ci_integration_passed_per_run": 540,
+  "ci_runs": [
+    40502991197,
+    40502998837
+  ],
+  "complete_gold_files": 5,
+  "behavioral_passed": 20,
+  "behavioral_total": 20,
+  "original_fixture_sha256": {
+    "matrix_kernel.py": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0",
+    "schema_defs.py": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39",
+    "validator_engine.py": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291",
+    "routing_manifest.json": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89",
+    "MIGRATION_RUNBOOK.md": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed"
+  },
+  "original_task_sha256": "a41e9a3413d046ab25090287fae118b47736e6908c28876bc363828e3ea68f34",
+  "frozen_input_validation_errors": [],
+  "measured_model_invocations": 0,
+  "gate2": "closed",
+  "merged": false,
+  "independent_review": "pending"
+}

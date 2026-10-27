@@ -1,0 +1,265 @@
+{
+  "kind": "deterministic_api_capability_check",
+  "model_invocations": 0,
+  "gate2": "closed",
+  "files": [
+    {
+      "filename": "matrix_kernel.py",
+      "target_file_id": "1f51e8ab-3ca7-4ec4-872d-5b0a3d87259a",
+      "group_count": 5,
+      "operation_count": 9,
+      "after_version": 1,
+      "pdcp_log_id": "3b460a7e-b801-4e30-8bbf-56c5d0e98636",
+      "output_sha256": "36dba6340c0d47abcf6bbdc5e34788b8f800bbf0417254c7f791c40a926ab8f7",
+      "replay_checks": {
+        "content_matches": true,
+        "recomputed_hash_matches": true,
+        "stored_hash_matches": true,
+        "version_matches": true
+      }
+    },
+    {
+      "filename": "schema_defs.py",
+      "target_file_id": "02cdae5a-b8a8-4f6e-8e87-540885f13622",
+      "group_count": 2,
+      "operation_count": 4,
+      "after_version": 1,
+      "pdcp_log_id": "95556b88-9f13-4b6b-a0cf-1022c748bb6a",
+      "output_sha256": "da3e5504f40a5cb0d4da5638fb986e4c4c23af5185aa481d9737838fce3b9c4d",
+      "replay_checks": {
+        "content_matches": true,
+        "recomputed_hash_matches": true,
+        "stored_hash_matches": true,
+        "version_matches": true
+      }
+    },
+    {
+      "filename": "validator_engine.py",
+      "target_file_id": "d0172392-72f4-4d48-9bff-1d6abd34b677",
+      "group_count": 5,
+      "operation_count": 21,
+      "after_version": 1,
+      "pdcp_log_id": "3fdfe989-9c7c-4c83-9b46-2ef564d31bab",
+      "output_sha256": "90871b4658e10e960585abf05c27031179f7aab16b77d9e97a9a69ed604b1484",
+      "replay_checks": {
+        "content_matches": true,
+        "recomputed_hash_matches": true,
+        "stored_hash_matches": true,
+        "version_matches": true
+      }
+    },
+    {
+      "filename": "routing_manifest.json",
+      "target_file_id": "11a36b14-255f-4803-aeab-e14182daaa84",
+      "group_count": 4,
+      "operation_count": 16,
+      "after_version": 1,
+      "pdcp_log_id": "f2453651-a72f-443d-9602-de79099a00f1",
+      "output_sha256": "84ce22315b1665e9308ccad447267c64ba04c4c660ee66a2be2f4ce14612306e",
+      "replay_checks": {
+        "content_matches": true,
+        "recomputed_hash_matches": true,
+        "stored_hash_matches": true,
+        "version_matches": true
+      }
+    },
+    {
+      "filename": "MIGRATION_RUNBOOK.md",
+      "target_file_id": "e4aa6b18-22d8-4283-972d-7b641536a0e1",
+      "group_count": 4,
+      "operation_count": 4,
+      "after_version": 1,
+      "pdcp_log_id": "c5399282-34d9-4802-b3a9-0f3052825030",
+      "output_sha256": "95b08e130e92c0aeeada6d92518e48509f5dd131d4ff96cd6b51d5d0de3f5fbb",
+      "replay_checks": {
+        "content_matches": true,
+        "recomputed_hash_matches": true,
+        "stored_hash_matches": true,
+        "version_matches": true
+      }
+    }
+  ],
+  "oracle": {
+    "full_byte": {
+      "passed": true,
+      "differences": [],
+      "reference": {
+        "MIGRATION_RUNBOOK.md": {
+          "length": 10104,
+          "sha256": "95b08e130e92c0aeeada6d92518e48509f5dd131d4ff96cd6b51d5d0de3f5fbb"
+        },
+        "matrix_kernel.py": {
+          "length": 24312,
+          "sha256": "36dba6340c0d47abcf6bbdc5e34788b8f800bbf0417254c7f791c40a926ab8f7"
+        },
+        "routing_manifest.json": {
+          "length": 6582,
+          "sha256": "84ce22315b1665e9308ccad447267c64ba04c4c660ee66a2be2f4ce14612306e"
+        },
+        "schema_defs.py": {
+          "length": 13498,
+          "sha256": "da3e5504f40a5cb0d4da5638fb986e4c4c23af5185aa481d9737838fce3b9c4d"
+        },
+        "validator_engine.py": {
+          "length": 21847,
+          "sha256": "90871b4658e10e960585abf05c27031179f7aab16b77d9e97a9a69ed604b1484"
+        }
+      }
+    },
+    "behavioral": {
+      "workspace": "primary",
+      "passed": 20,
+      "total": 20,
+      "accuracy_pct": 100.0,
+      "checks": [
+        {
+          "check": "matrix_kernel.sync_stream_2nd_overlap",
+          "passed": true,
+          "detail": "got 'HEADER::SYNC::SYNC::CALIB::SYNC::SYNC::TRAILER'"
+        },
+        {
+          "check": "matrix_kernel.k07_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 7, 'stride_offset': 230, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k14_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 14, 'stride_offset': 454, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.k21_updated",
+          "passed": true,
+          "detail": "got {'kernel_id': 21, 'stride_offset': 678, 'accumulator': 252, 'saturation_clips': 0}"
+        },
+        {
+          "check": "matrix_kernel.other_21_kernels_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "matrix_kernel.dispatch_triad_total_saturation_clips",
+          "passed": true,
+          "detail": "got keys=['sync_stream', 'triad_kernels', 'total_accumulator', 'total_saturation_clips', 'k07', 'k14', 'k21'], total_acc=756"
+        },
+        {
+          "check": "schema_defs.dataclass_default_scope",
+          "passed": true,
+          "detail": "got 'GLOBAL'"
+        },
+        {
+          "check": "schema_defs.v1_v2_untouched",
+          "passed": true,
+          "detail": "s1={'wire_version': 'v1', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}, s2={'wire_version': 'v2', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'sec', 'settlement_epoch': 1700000000, 'quorum_required': 2}"
+        },
+        {
+          "check": "schema_defs.v3_updated",
+          "passed": true,
+          "detail": "s3={'wire_version': 'v3', 'envelope_id': 'env_2', 'tenant_id': 'ten_006', 'amount_minor': 5000, 'currency': 'USD', 'epoch_unit': 'ns', 'settlement_epoch': 1700000000000000000, 'quorum_required': 3, 'idempotency_scope': 'TENANT'}"
+        },
+        {
+          "check": "validator_engine.valid_scopes",
+          "passed": true,
+          "detail": "got ('GLOBAL', 'PARTITION', 'TENANT')"
+        },
+        {
+          "check": "validator_engine.v3_critical_rules_04_11_19_27_accept_ns",
+          "passed": true,
+          "detail": "got [(True, 'rule_04: ok'), (True, 'rule_11: ok'), (True, 'rule_19: ok'), (True, 'rule_27: ok')]"
+        },
+        {
+          "check": "validator_engine.other_26_rules_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.version_updated",
+          "passed": true,
+          "detail": "got '2026.10.2-v3'"
+        },
+        {
+          "check": "routing_manifest.canary_tenants_006_013_018_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "routing_manifest.other_17_tenants_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.allowed_scopes",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.gate_14_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.other_19_gates_untouched",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.canary_table_updated",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "check": "runbook.conflict_marker_template_updated",
+          "passed": true,
+          "detail": ""
+        }
+      ]
+    },
+    "complete_correct": true
+  },
+  "profiles": {
+    "editor": {
+      "tool_count": 7,
+      "tools_list_jsonrpc_line_bytes": 21313,
+      "tools_result_utf8_bytes": 21277
+    },
+    "unobserved": {
+      "tool_count": 5,
+      "tools_list_jsonrpc_line_bytes": 7751,
+      "tools_result_utf8_bytes": 7715
+    },
+    "observed": {
+      "tool_count": 6,
+      "tools_list_jsonrpc_line_bytes": 16953,
+      "tools_result_utf8_bytes": 16917
+    },
+    "full": {
+      "tool_count": 22,
+      "tools_list_jsonrpc_line_bytes": 47999,
+      "tools_result_utf8_bytes": 47963
+    }
+  },
+  "editing_tools_calls": {
+    "patchdiff_observe_scope": 5,
+    "patchdiff_submit_observed_operations": 5,
+    "patchdiff_save": 5,
+    "patchdiff_replay": 5
+  },
+  "trusted_lifecycle_tools_calls": {
+    "patchdiff_initialize_target": 5,
+    "patchdiff_export_target": 5,
+    "patchdiff_get_pdcp_log": 5,
+    "patchdiff_get_manifest_ledger": 5
+  },
+  "editing_tools_call_total": 20,
+  "candidate_discovery_calls": 0,
+  "method": "Real stdio tools/call lines counted by explicit role; initialize/export/history are trusted lifecycle calls. tools/list and initialize handshakes are excluded from editing call counts.",
+  "original_exploratory_C": {
+    "observations": 25,
+    "submissions": 20,
+    "save": 5,
+    "replay": 5,
+    "search": 1,
+    "total_mcp_calls": 56
+  },
+  "limitation": "No model timing, context, cost or comparative performance claim. Exact symbols and operation payloads are supplied by the archived exploratory transcript."
+}
