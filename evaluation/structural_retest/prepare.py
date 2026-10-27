@@ -19,10 +19,17 @@ def validate_inputs(manifest: dict, root: Path = ROOT) -> list[str]:
                 errors.append(f"Missing or invalid artifact: {artifact['path']}")
             elif hashlib.sha256(path.read_bytes()).hexdigest() != artifact["sha256"]:
                 errors.append(f"SHA-256 mismatch: {artifact['path']}")
+    for relative, wanted in manifest.get("controller", {}).get("source_sha256", {}).items():
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root.resolve()) or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != wanted:
+            errors.append(f"Controller source pin mismatch: {relative}")
     return errors
 
 
 def stage(manifest: dict, study_name: str, destination: Path) -> dict:
+    errors = validate_inputs(manifest)
+    if errors:
+        raise ValueError("; ".join(errors))
     study = manifest["studies"][study_name]
     fixtures = [item for item in study["artifacts"] if item["role"] == "fixture"]
     if not fixtures:

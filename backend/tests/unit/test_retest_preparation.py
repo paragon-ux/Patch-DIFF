@@ -52,6 +52,10 @@ def test_original_external_oracles_reject_initial_unedited_fixtures(tmp_path):
                                  "--workspace", str(ROOT / study / "fixtures")], capture_output=True, text=True)
         assert result.returncode == 1, result.stderr
         checks = json.loads(result.stdout)
+        if study == "primary":
+            assert not checks["complete_correct"] and not checks["full_byte"]["passed"]
+            assert checks["behavioral"].get("skipped")
+            continue
         assert checks["total"] > 0 and checks["passed"] < checks["total"]
         assert any(item["check"] == "matrix_kernel.sync_stream_2nd_overlap" and not item["passed"]
                    for item in checks["checks"])

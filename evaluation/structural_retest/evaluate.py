@@ -20,7 +20,22 @@ def check(study: str, workspace: Path) -> dict:
     namespace = {"Path": Path, "Any": Any, "importlib": importlib, "json": json, "sys": sys}
     # Preserve original checks without importing backend services or running historical entry points.
     exec(compile(ast.Module(body=functions, type_ignores=[]), str(source), "exec"), namespace)
-    return namespace["check_workspace"](workspace, study)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        return namespace["check_workspace"](workspace, study)
+    finally:
+        sys.dont_write_bytecode = previous
+
+
+def complete_primary(workspace: Path) -> dict:
+    from evaluation.structural_retest.primary.evaluator.full_byte_oracle import compare
+    full_byte = compare(workspace)
+    # The historical verifier imports/executes Python targets. Only execute them
+    # after exact equality with the authenticated reference has been established.
+    behavioral = check("primary", workspace) if full_byte["passed"] else {"skipped": "full-byte failure prevents executing untrusted output"}
+    return {"full_byte": full_byte, "behavioral": behavioral,
+            "complete_correct": full_byte["passed"] and behavioral.get("total", 0) > 0 and behavioral["passed"] == behavioral["total"]}
 
 
 if __name__ == "__main__":
@@ -28,6 +43,8 @@ if __name__ == "__main__":
     parser.add_argument("--study", required=True, choices=["primary", "supplemental"])
     parser.add_argument("--workspace", required=True, type=Path)
     args = parser.parse_args()
-    result = check(args.study, args.workspace)
+    if args.study == "primary":
+        sys.path.insert(0, str(ROOT.parents[1]))
+    result = complete_primary(args.workspace) if args.study == "primary" else check(args.study, args.workspace)
     print(json.dumps(result, indent=2))
-    raise SystemExit(0 if result["total"] > 0 and result["passed"] == result["total"] else 1)
+    raise SystemExit(0 if (result.get("complete_correct") if args.study == "primary" else result["total"] > 0 and result["passed"] == result["total"]) else 1)

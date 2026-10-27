@@ -9,3 +9,6 @@ docs/usability/release/* -text
 # Preserve immutable benchmark source bytes and SHA-256 hashes on every platform.
 evaluation/structural_retest/supplemental/** -text
 evaluation/structural_retest/primary/** -text
+# Execution source pins must be identical in Windows and Linux checkouts.
+evaluation/structural_retest/*.py text eol=lf
+evaluation/structural_retest/*.json text eol=lf

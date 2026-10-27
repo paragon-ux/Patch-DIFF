@@ -1,0 +1,87 @@
+{
+  "execution_enabled": false,
+  "host_bridge_command": null,
+  "rtk_path": null,
+  "host_evidence": {
+    "interface_version": "patchdiff-retest-host/1",
+    "synthetic": false,
+    "arms": {
+      "A": {
+        "provider": null,
+        "exact_provider_model_id": null,
+        "effective_reasoning_setting": null,
+        "host_name": null,
+        "host_version": null,
+        "decoding_settings": null,
+        "context_limit": null,
+        "output_limit": null,
+        "tool_permissions": [
+          "run_command",
+          "edit_file"
+        ],
+        "model_configuration_timestamp": null,
+        "provider_evidence": {},
+        "permission_evidence": {},
+        "capabilities": [],
+        "tool_semantics": {},
+        "usage_contract": {},
+        "native_binding": null,
+        "host_build_sha256": null,
+        "decoding_evidence_sha256": null
+      },
+      "B": {
+        "provider": null,
+        "exact_provider_model_id": null,
+        "effective_reasoning_setting": null,
+        "host_name": null,
+        "host_version": null,
+        "decoding_settings": null,
+        "context_limit": null,
+        "output_limit": null,
+        "tool_permissions": [
+          "patchdiff_read_target",
+          "patchdiff_find_occurrences",
+          "patchdiff_submit_edits",
+          "patchdiff_save",
+          "patchdiff_replay"
+        ],
+        "model_configuration_timestamp": null,
+        "provider_evidence": {},
+        "permission_evidence": {},
+        "capabilities": [],
+        "tool_semantics": {},
+        "usage_contract": {},
+        "mcp_schema_sha256": null,
+        "host_build_sha256": null,
+        "decoding_evidence_sha256": null
+      },
+      "C": {
+        "provider": null,
+        "exact_provider_model_id": null,
+        "effective_reasoning_setting": null,
+        "host_name": null,
+        "host_version": null,
+        "decoding_settings": null,
+        "context_limit": null,
+        "output_limit": null,
+        "tool_permissions": [
+          "patchdiff_observe_scope",
+          "patchdiff_read_target",
+          "patchdiff_find_occurrences",
+          "patchdiff_submit_observed_operations",
+          "patchdiff_save",
+          "patchdiff_replay"
+        ],
+        "model_configuration_timestamp": null,
+        "provider_evidence": {},
+        "permission_evidence": {},
+        "capabilities": [],
+        "tool_semantics": {},
+        "usage_contract": {},
+        "mcp_schema_sha256": null,
+        "host_build_sha256": null,
+        "decoding_evidence_sha256": null
+      }
+    }
+  }
+}

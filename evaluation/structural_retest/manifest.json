@@ -1,7 +1,7 @@
 {
   "format": "patchdiff-structural-retest/1",
   "gate_2": "closed",
-  "reviewed_head": "581ee35476171f27a714ed890606b2b525dd13f3",
+  "reviewed_head": "9e7f9614728ad5098d543c1f2f98774ae0f4fe6c",
   "model": {
     "display_name": "Gemini 3.8 Flash",
     "reasoning_effort": "High",
@@ -128,9 +128,9 @@
         }
       ],
       "missing": [
-        "verified future Gemini 3.8 Flash High provider and effective reasoning/host configuration",
-        "reviewed host tool binding and measured-run MCP/telemetry controller",
-        "independently reviewed full-byte collateral oracle extending the recovered behavioral verifier"
+        "independent review of final full-byte oracle/controller commit and manifest",
+        "owner-verified actual Gemini 3.8 Flash High provider/host/permissions/usage evidence",
+        "external Gate 2 approval bound to exact commit, raw manifest SHA and host-evidence SHA"
       ],
       "historical_candidates": [
         {
@@ -236,7 +236,35 @@
         "Original task changes rule default units/quorum and introduces total_clips; supplemental EDIT_SPECS omits or expresses these differently. Do not substitute the supplemental spec.",
         "Original setup generated all five files as one multi-file task. Preserve that task boundary and one fresh context per arm/replicate."
       ],
-      "evaluation_command": "python evaluation/structural_retest/evaluate.py --study primary --workspace <exported-arm-directory>"
+      "evaluation_command": "python evaluation/structural_retest/evaluate.py --study primary --workspace <exported-arm-directory> (requires BOTH full-byte and original behavioral oracles)",
+      "full_byte_oracle": {
+        "source": "primary/evaluator/full_byte_oracle.py",
+        "reference_manifest": "primary/evaluator/reference_hashes.json",
+        "reference_sha256": "d43bdf7a9586bec87e47961035938e63ef9f3504f3c1a33a7ebab1e1c0886ef6",
+        "expected_files": {
+          "MIGRATION_RUNBOOK.md": {
+            "length": 10104,
+            "sha256": "95b08e130e92c0aeeada6d92518e48509f5dd131d4ff96cd6b51d5d0de3f5fbb"
+          },
+          "matrix_kernel.py": {
+            "length": 24312,
+            "sha256": "36dba6340c0d47abcf6bbdc5e34788b8f800bbf0417254c7f791c40a926ab8f7"
+          },
+          "routing_manifest.json": {
+            "length": 6582,
+            "sha256": "84ce22315b1665e9308ccad447267c64ba04c4c660ee66a2be2f4ce14612306e"
+          },
+          "schema_defs.py": {
+            "length": 13498,
+            "sha256": "da3e5504f40a5cb0d4da5638fb986e4c4c23af5185aa481d9737838fce3b9c4d"
+          },
+          "validator_engine.py": {
+            "length": 21847,
+            "sha256": "90871b4658e10e960585abf05c27031179f7aab16b77d9e97a9a69ed604b1484"
+          }
+        },
+        "representations": "one explicit representation from original task, with original surrounding indentation/EOL; no post-result tolerance"
+      }
     },
     "supplemental": {
       "description": "Separate structural benchmark: 45 edit targets, 20 scopes, five Python/JSON/Markdown source files",
@@ -310,12 +338,10 @@
     }
   },
   "execution_blockers": [
-    "Independent reviewer approval for Gate 2 has not been granted",
-    "Gemini 3.8 Flash High exact provider identifier/effective setting/host capabilities are unverified",
-    "Requested benchmark model is absent from this chat's available subagent model catalog; no substitution permitted",
-    "No original primary experiment is replaced by W1-W12 or the supplemental hard suite",
-    "Exact per-arm prompts, full-byte collateral oracle, measured-run MCP harness and telemetry bindings require independent review",
-    "Primary original artifacts recovered and authenticated; future tool bindings, telemetry and full-byte collateral oracle still require review"
+    "independent review of final full-byte oracle/controller commit and manifest",
+    "owner-verified actual Gemini 3.8 Flash High provider/host/permissions/usage evidence",
+    "external Gate 2 approval bound to exact commit, raw manifest SHA and host-evidence SHA",
+    "Supplemental remains separately gated and is not dispatched by this controller"
   ],
   "metrics": [
     "actual input/output/cached/reasoning model tokens and unavailable-field flags",
@@ -325,5 +351,71 @@
     "independent task correctness, full-content equality and collateral edits",
     "B/C real accepted/rejected logs, manifest, SAVE, export and replay checks"
   ],
-  "provenance": "Supplemental bytes copied unchanged from Editing-Toolbench/10-26-26; edit_specs.json losslessly expands its original EDIT_SPECS assignment. Original harness is archived evidence of simulation, never used as a live transaction runner."
+  "provenance": "Supplemental bytes copied unchanged from Editing-Toolbench/10-26-26; edit_specs.json losslessly expands its original EDIT_SPECS assignment. Original harness is archived evidence of simulation, never used as a live transaction runner.",
+  "study_id": "primary-original-21-five-file-v1",
+  "controller": {
+    "version": "primary-controller/1",
+    "interface_version": "patchdiff-retest-host/1",
+    "live_execution_default": "disabled",
+    "source_sha256": {
+      "controller.py": "cee778aa845ce938a2c026899bd2028063060651f16ed62a7ad5e4e7cd40017e",
+      "host_adapter.py": "4351486350054cfbf4451763dd4ff620a78950f8eb68359ada9c68b335990ed3",
+      "telemetry.py": "16276ad216ece9efe0c9a048ee8870b8b33df0f7e48fdee969dd7b720b57c4c6",
+      "preflight.py": "f489e0cb4794e81bf146de7b1586534e7d622f749221b4696b7e9e758ae317f1",
+      "mcp_session.py": "0d552bf2befabdee38501d95f0734a5f1ed670fb230c5c362601e400211da5c1",
+      "native.py": "8a030903eb143a860546418363871f15a5e79fac1b3849cf2b296caa8a478636",
+      "synthetic.py": "bda3cbe78390f51a627291833ed35f9397cf1db424f249e68b30748438d14ccc",
+      "prepare.py": "2a1e23c5b443976b64bda73ab7487b8c33ed198a8b85b2f49d78d85201c897b0",
+      "evaluate.py": "b51c9350ffc8b93ae22a9fa3898e6a5e6889c6dc8a61dca98aa1071caf326fa9",
+      "freeze.py": "2f705aeeedede5c17bf1b259f41a68076a0e6e79fe24123f6bf2543938e2d046",
+      "host_config.example.json": "61270b024215a58be910179490d57296a29aae5ddcb32a1971c0165c25d7d53a",
+      "primary/evaluator/full_byte_oracle.py": "d630d664d1f6d5eb28dbad44f99d0f002ea9be41bbfcf23d943c6a2ecfa9d120",
+      "primary/evaluator/reference_hashes.json": "d43bdf7a9586bec87e47961035938e63ef9f3504f3c1a33a7ebab1e1c0886ef6"
+    }
+  },
+  "host_contract": {
+    "configuration_example": "host_config.example.json",
+    "interface": "host_adapter.py",
+    "required_fields": [
+      "provider",
+      "exact_provider_model_id",
+      "effective_reasoning_setting",
+      "host_name",
+      "host_version",
+      "decoding_settings",
+      "context_limit",
+      "output_limit",
+      "tool_permissions",
+      "model_configuration_timestamp"
+    ],
+    "required_usage": [
+      "actual input_tokens",
+      "actual output_tokens",
+      "cached_tokens or explicit missing flag",
+      "reasoning_tokens or explicit missing flag"
+    ],
+    "token_accounting": "input includes cached; output includes reasoning; sum input+output only; host hard total-token reservation/cancellation required",
+    "real_host_verification": "pending; no real Gemini binding supplied; declared display name/booleans alone are not verification",
+    "native_binding": "reviewed executable path/hash/version and confined rtk read; controller exact replace-all edit_file broker",
+    "mcp_binding": "real stdio tools/list schema digest plus strict-mode child configuration and independent disposable databases"
+  },
+  "approval_requirements": {
+    "external_review": "PR #16 GitHub review permalink resolved from API, not local approved flag",
+    "binding": [
+      "Gate 2 approved",
+      "exact commit SHA",
+      "raw manifest SHA-256",
+      "host evidence canonical JSON SHA-256",
+      "study_id",
+      "independent_review=true",
+      "live_execution_authorized=true"
+    ],
+    "separate_action": "--execute with execution_enabled=true and clean reviewed checkout",
+    "current_approval": null
+  },
+  "verification_state": {
+    "offline": "implementation and deterministic tests available; see exact-commit evidence report",
+    "external_host": "pending owner evidence and independent review",
+    "measured_sessions": "not executed"
+  }
 }

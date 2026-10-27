@@ -1,165 +1,244 @@
-# Native vs. Patch-DIFF three-arm replication preregistration
+# Native vs. Patch-DIFF primary replication preregistration
 
-Gate 2 is CLOSED. Preparation and deterministic tests are authorized. No measured
-agents, comparative study, performance conclusions, merge, or self-approval are
-authorized. The independent reviewer must approve an exact remediation commit
-and a complete manifest before execution.
+Gate 2 remains **CLOSED**. This revision supplies deterministic infrastructure for
+independent review. The owner conducts Gemini sessions only after implementation
+review, external host verification and explicit Gate 2 authorization. Sol's engineering
+work is excluded from measured costs. No live or alternative model, measured arm,
+merge or self-approval is authorized by this document.
 
-## Three separate studies
+## Separate studies and immutable inputs
 
-1. **Primary replication:** the original native-vs-Patch-DIFF subagent workflow,
-   extended with a Waymark-backed third arm. Preserve the original task prompt,
-   source bytes, task sequence and independent oracle. Authenticate them before
-   execution. No substitute task or reconstructed gold label is accepted.
-2. **Supplemental structural benchmark:** **45 edit targets, 20 scopes, five source
-   files**: three Python modules, one JSON configuration and one Markdown runbook.
-   Exact original fixtures, simulation harness, external verifier and expanded
-   original edit specifications from `Editing-Toolbench/10-26-26` are hash-pinned in
-   `evaluation/structural_retest/manifest.json`. The old harness is simulation
-   evidence, never a live Patch-DIFF runner. TS/JS cases require a separate study.
-3. **Transactional stress suite:** ordinary deterministic tests for ambiguity,
-   stale observations, insertion boundaries/adjacency, atomic rejection, concurrent
-   submissions, SAVE and authoritative replay. These are product correctness tests,
-   not measured-model observations.
+The **primary** replication is the recovered original **21-edit-labeled, five-file
+task**, extended with observed Arm C. Its exact TASK.md, five fixtures, setup,
+verifier, old A/B prompts and provenance remain unchanged and SHA-256 pinned.
+Source hashes match the original scratch target manifest. Historical B-specific
+hints and UUIDs are hidden archival evidence. All arms receive identical TASK.md;
+only the three pinned tool instruction files differ. One complete five-file task
+uses one fresh context and budget.
 
-Report each study separately. Never combine denominators or success rates. For the
-supplemental study report 45-target and five-file accuracy; 20 is a scope count.
-The historical verifier has its own named checks, distinct from the 45 edit targets.
+The **supplemental** study has 45 edit targets, 20 scopes and five files. Its
+historical REPORT.md hash table was stale; the primary scratch manifest authenticates
+the preserved source bytes. It remains independently gated, including its missing
+historical measured prompt/host binding. The primary controller never dispatches it.
+The **stress suite** is ordinary transactional product testing. Never combine these
+studies' denominators, accuracy measures or results.
 
-## Artifact availability and preparation
+`manifest.json` pins inputs, prompts, controller sources, host interface and hidden
+reference hashes. Original bytes are protected by .gitattributes. `freeze.py` is
+an engineering-only pin refresh: changes invalidate approval. Never refresh pins
+to accept changed inputs or tolerance after seeing experimental outcomes.
 
-The manifest records SHA-256 hashes of exact bytes and labels fixtures, task
-specifications and hidden evaluators. Input changes require a new manifest revision
-and independent review. Keep evaluator/gold files outside agent mounts and context,
-including repository searches.
+## Complete-byte oracle and evaluator isolation
 
-The original primary experiment has been recovered from the user-identified
-Antigravity `scratch/hard_suite`: its untouched `source/` files, initial target
-manifest, exact native and PatchDIFF Step 00 prompt payloads, setup script and
-original external verifier are packaged separately under `primary/`. Every source
-hash matches the original target manifest and the historical prompt's initial hash.
-The old supplemental REPORT.md fixture table is stale; the original scratch pins
-resolve its discrepancy in favor of the current source bytes.
+`primary/evaluator/full_byte_oracle.py` verifies every raw source hash and the
+original task hash before reference construction. Explicit byte splices use original
+Python AST symbol boundaries, unique JSON tenant identities and Markdown anchors.
+Overlapping SYNC starts are enumerated advancing one byte; the second is selected
+explicitly. Original-offset splices reject overlap and preserve every other byte.
+No serializer, formatter or diff alignment constructs gold.
 
-The primary prompt's original label is **21 edits across five files**. Preserve
-that label and complete multi-file task boundary. It requests default unit/quorum
-changes and a `total_clips` variable that the supplemental 45-target task omits or
-expresses differently. The common `primary/prompts/TASK.md` is extracted verbatim
-from the original native prompt and copied identically to every arm. Original B
-adds selector/sequential hints and historical UUIDs; keep the exact old prompts as
-hidden provenance, not new measured inputs. Separate per-arm tool instructions
-retain native rtk read/edit_file, original typed-edit-only B, and strict observed C.
-The harness must replace historical IDs with fresh target bindings and verify native
-tool semantics. No solved transcripts or evaluators are exposed to measured agents.
+One representation is frozen: task literals with original surrounding indentation
+and EOL. No post-result tolerance is permitted. The hidden `reference_hashes.json`
+records expected complete-file hashes and lengths. Both exact-byte equality and
+the original 20 behavioral checks must pass. The behavioral verifier imports Python;
+it runs only after byte equality and with bytecode writing disabled. Mismatch reports
+include filename, first differing byte, lengths/hashes and bounded hex context.
+Extra, missing, renamed and nonregular entries fail.
 
-The supplied `10-27-26/Remediation-Prompt.md` repeats the continuity handoff and still
-refers to a separate preceding prompt. The connected discussion exposes that
-response as a content-reference marker, not its complete text. Record this gap.
+Generate gold only in a hidden evaluator directory. Never mount the repository,
+parent run directory, oracle or reference manifest in a measured context.
+`prepare.py --stage` is an archival preparation utility, not the measured sandbox.
+The controller gives A only five target files; B/C receive no native target files.
+Prompts and fresh target mappings are supplied through the broker. The underlying
+host must deny direct filesystem/network access and inherited tools/contexts.
+Path, target and observation checks provide additional broker enforcement.
 
-Preparation commands (no model calls):
+## Controller lifecycle and real tool routes
+
+```text
+PREPARED -> PREFLIGHT_VERIFIED -> INITIALIZED -> AGENT_RUNNING
+ -> AGENT_FINISHED_OR_BUDGET_EXHAUSTED -> SAVE_AND_EXPORT
+ -> REPLAY_VALIDATION -> HIDDEN_ORACLE_EVALUATION -> EVIDENCE_ARCHIVED
+```
+
+Failures retain the exact stage and terminal failure archive. Agent failures and
+budget exhaustion still proceed to export/replay/evaluation where possible. No
+automatic repair or model rerun occurs. A schedule is written before the first arm;
+every scheduled run gets an append-only result, including failed preflight. Process
+interruption retains the plan and partial evidence, which fails completeness checks.
+Interrupted studies are not automatically resumed or rerun.
+
+| Arm | Broker allowlist | Mode |
+| --- | --- | --- |
+| A | `run_command` restricted to `rtk read <one confined file>`; `edit_file(Path, Target, Replacement)` replaces every exact occurrence | No Patch-DIFF |
+| B | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save`, `patchdiff_replay` | Strict observation off |
+| C | `patchdiff_observe_scope`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` | Strict observation on |
+
+Unlisted requests are rejected and recorded before dispatch. A cannot run shell
+expressions/scripts or inspect arbitrary paths. B cannot submit observed operations;
+C cannot use older writes. Target IDs must belong to this arm/context. C submission
+observations must have been acquired through this context's broker. Actual native
+executable path/hash/version and MCP schemas must match reviewed host bindings.
+Prompts and local permission booleans cannot establish underlying host isolation.
+
+Each B/C arm/replicate gets a new randomly named PostgreSQL database migrated to
+head and a real stdio MCP child. Only administrative DB creation uses SQL; target
+initialization, edits, export and audit use real MCP. Before opening a context,
+verify five fresh UUIDs at version zero, canonical LF content/hash and full original
+EOL metadata. Historical IDs are never reused. Context IDs must be fresh across
+all nine runs. Databases are retained, with names recorded for explicit owner
+cleanup; the controller never automatically deletes them.
+
+After closing the host context, guarded SAVE and `original_eol` export run for
+every B/C target. The controller verifies export hashes, replay success and all
+four materialized-state checks. It pages accepted/rejected attempts including
+transaction content and previous-cycle ledger facts, checks transaction hashes
+and accepted-log/ledger membership. C accepted logs need observation markers;
+authoritative replay validates their one-to-one persisted scope links. Rejected
+attempts retain request/diagnostic provenance and do not acquire accepted links.
+Final oracle/evidence results are never sent to a measured context.
+
+## Host interface and unresolved external verification
+
+Every future arm uses **Gemini 3.8 Flash High**, with identical exact provider ID,
+verified effective High, provider, host build, decoding and context/output limits.
+No `inherit`, display-name guess or substitution is accepted.
+
+`host_adapter.py` defines `patchdiff-retest-host/1`. The owner supplies a trusted
+JSON-lines bridge implementing `host/describe`, `host/open`, `host/turn`, `host/close`.
+This is an adapter interface, **not a supplied Gemini connector**. Real connectivity,
+permissions, native bindings and actual provider usage remain unverified.
+
+The bridge must report actual evidence for `provider`, `exact_provider_model_id`,
+`effective_reasoning_setting`, `host_name`, `host_version`, `decoding_settings`,
+`context_limit`, `output_limit`, `tool_permissions`, `model_configuration_timestamp`
+for every arm. Preserve provider-response hashes, host-build/decoding evidence and
+negative permission-probe hashes privately. A typed name or `verified: true` alone
+is not verification; the owner and independent reviewer must inspect original proof.
+
+The host must enforce fresh contexts, broker-only tools, no direct filesystem or
+network, no inherited/other-arm/evaluator access, cancellation and zero transport
+retries. `host/open` acknowledges fresh context and applied permissions. Each turn
+returns provider/request ID, effective model/High, synthetic=false and actual usage.
+Tools route through the controller and results return only to that context.
+
+Actual input includes cached tokens; output includes reasoning. The host must enforce
+the remaining **total** token allowance through hard reservation or cancellation.
+A completion-only cap is insufficient. Current real host support is unresolved;
+a provider without reliable actual input/output telemetry is blocked. No alternative
+token estimator or exception is implemented or approved.
+
+`host_config.example.json` has unresolved placeholders and execution disabled.
+Do not put credentials in configuration or evidence. Supply the administrative DB
+URL via `PATCHDIFF_RETEST_ADMIN_URL`; provider credentials stay in the trusted bridge.
+The owner must implement/verify the bridge, actual native tool semantics, sandbox
+negative probes, provider usage and hard-budget support before Gate 2 approval.
+
+## Frozen budgets and append-only telemetry
+
+Three replicates use balanced orders **ABC, BCA, CAB**. Each complete task permits
+**600 seconds, 16,000 actual model tokens, 96 agent tool calls, 30 seconds per tool,
+two rejected/lost-response editing retries, zero automatic transport retries**.
+Setup/context creation is recorded separately from the task timer. No adaptive
+stopping, cherry-picking, prompt tuning or omitted failures is permitted.
+
+Calls are checked before dispatch; unauthorized requests count. Deadlines/timeouts
+cancel in-flight work. Tokens use input+output totals, never character estimates
+or double-counted breakdowns. Missing input/output blocks; cached/reasoning fields
+can be unavailable only with explicit missing flags. A subsequent edit on a target
+after rejection or loss consumes a retry regardless of a model's retry label.
+Successful distinct edits are initial attempts. B/C rejection recovery needs parent
+log and incremented attempt; lost-response recovery requires an explicit identical
+arguments/same-key retry. Each broker invocation requires a new call ID.
+
+`telemetry.py` writes append-only JSONL with sequence/hash linkage, UTC timestamps,
+frozen config, provider metadata, actual usage/missing flags, tool arguments/results,
+canonical broker UTF-8 sizes/hashes, starts/ends/durations, attempts/request keys,
+outcomes/retries, initialization, cold startup, warm calls, SAVE/export/replay,
+hidden oracle and artifact hashes. Real MCP frames also record exact wire sizes
+and hashes. Sensitive keys, authorization values and credential URLs are redacted.
+
+Native/MCP initialization/transaction and Waymark discovery **round-trip** times
+are observable. Separate SQL execution and internal Waymark child timing are not
+exposed by the public MCP contract and are explicitly flagged unavailable. Do not
+relabel round trips as component CPU/DB times. Independent review must accept that
+limitation or request a separately scoped protocol/instrumentation amendment.
+
+All failures remain in the nine-run denominator. Per-run events/results/exports,
+`runs.jsonl` and `summary.json` preserve unsuccessful outcomes. Chain verification
+requires a terminal archive event. Synthetic usage is labeled synthetic and has
+no experimental interpretation.
+
+## Owner sequence after independent implementation review
+
+1. Fetch the independently reviewed clean commit; record HEAD and raw manifest SHA.
+2. Install pinned requirements/Python 3.11/Node 22/PostgreSQL 16.3, migration head
+   and `waymark-engine@4.1.0`; verify all input/source pins.
+3. Supply the real bridge and host configuration from actual provider/host evidence.
+4. Run offline preflight and verify real `host/describe` evidence without task/model
+   requests. Check the exact Gemini ID and effective High separately for A/B/C.
+5. Verify native path/hash/version, MCP schema digest, negative permission probes,
+   cancellation, actual usage and hard total-token support; archive private proof.
+6. Obtain explicit independent Gate 2 approval bound to exact commit, raw manifest
+   SHA and canonical host-evidence SHA. Supply its PR review permalink and digest.
+7. Only then, the owner enables execution and deliberately uses the separate
+   `--execute --config ... --approval ... --destination <new-private-directory>`.
+   This schedules all three balanced replicates. Sol must never invoke it here.
+8. Run hidden whole-byte and original behavioral oracles for every exported result
+   (automatic in the controller); require both for task correctness.
+9. Inspect histories, ledger, SAVE/export/replay, C authoritative links and telemetry;
+   disclose missing evidence/host limitations without repairing any output.
+10. Archive all runs, failures, exhausted budgets and partial/crashed evidence plus
+    commit/manifest/prompt/host/approval/CI evidence. Keep gold private. Protocol
+    changes or measured reruns require separate review.
+
+Reviewer-authored JSON fenced block (placeholders are not approval):
+
+```json
+{
+  "gate": "Gate 2",
+  "decision": "approved",
+  "study_id": "primary-original-21-five-file-v1",
+  "commit": "<exact reviewed 40-character commit>",
+  "manifest_sha256": "<SHA-256 of raw manifest.json>",
+  "host_evidence_sha256": "<canonical compact UTF-8 JSON SHA-256 of host/describe>",
+  "independent_review": true,
+  "live_execution_authorized": true
+}
+```
+
+The separate receipt contains `review_url` and `review_sha256`, the canonical JSON
+digest of the full GitHub API review response. The controller resolves the PR #16
+review afresh, checks submitted state, exact commit, bindings and digest. A local
+`gate_2: approved` flag is insufficient. Reviewer independence/expertise remains
+a human responsibility; GitHub identity alone cannot prove it. Any bound change
+invalidates approval. This controller never manufactures an approval.
+
+## Offline commands and evidence interpretation
 
 ```powershell
 python evaluation/structural_retest/prepare.py --check-inputs
-python evaluation/structural_retest/prepare.py
-python evaluation/structural_retest/prepare.py --stage supplemental --destination <new-directory>
+python evaluation/structural_retest/controller.py --check-inputs
+python evaluation/structural_retest/controller.py --preflight-offline --config evaluation/structural_retest/host_config.example.json
+python evaluation/structural_retest/controller.py --dry-run-synthetic --destination <new-private-directory>
+python evaluation/structural_retest/primary/evaluator/full_byte_oracle.py --generate-reference <new-hidden-directory>
+python evaluation/structural_retest/evaluate.py --study primary --workspace <hidden-reference-or-export-directory>
+python -m pytest backend/tests/unit -q
+python -m pytest backend/tests/integration -q
+python evaluation/offline_eval.py
 ```
 
-The hash check returns zero. The default readiness check returns 2 while blockers
-remain. Staging creates three byte-identical fixture directories and MCP
-initialization JSONL requests for B/C. It never starts models, edits targets or
-copies evaluators. Existing destinations are refused. Primary staging uses authenticated source files, identical TASK.md and separate TOOLS.md per arm.
+Input checks return zero for frozen bytes. Offline preflight uses real stdio
+`tools/list` without a DB/model request; unresolved example host returns 2. The
+synthetic dry-run uses a deterministic no-op host, independent real MCP databases
+and zero model calls. Exit zero means all nine infrastructure records archived;
+all no-op outputs intentionally fail correctness and remain in evidence. These
+are not Gemini results. Focused real-MCP tests also cover rejection, committed
+response loss, explicit idempotent retry, Waymark, strict mode, SAVE/export/replay
+and original EOL.
 
-Install `requirements.lock`, then `pip install --no-deps -e .` and
-`npm --prefix integrations/waymark ci`. Pin Python 3.11, Node 22, PostgreSQL 16.3,
-migration `20261026_0004` and `waymark-engine@4.1.0`. Record exact runtime/OS/host
-builds and repository/manifest hashes. B/C need independent disposable databases,
-migrations and real MCP `patchdiff_initialize_target` calls returning fresh target
-IDs at version 0. Capture initial hashes, canonical text and upload EOL metadata.
-
-## Frozen model and allowed tools
-
-Every measured arm uses **Gemini 3.8 Flash High**. Sol 6.1 Extra High is the
-implementation role; engineering costs are excluded from measured runs. Never
-use `Model="inherit"` without verifying the effective setting. No silent model,
-effort, provider, host or tool substitution is allowed.
-
-| Arm | Reads and discovery | Editing and final verification | Configuration |
-| --- | --- | --- | --- |
-| A | Native file read/search | Native edits; external final-state oracle | No Patch-DIFF |
-| B | Patch-DIFF read/search | Real unobserved MCP transactions; SAVE/export/replay | Strict mode off |
-| C | Same reads plus `patchdiff_observe_scope` | Real observed MCP transactions; SAVE/export/replay | Strict mode on |
-
-B/C cannot directly edit files or use Python string-slicing simulation. The
-external evaluator is read-only and cannot repair outputs. C cannot bypass scope
-checks. Observed insertions must be strictly interior with both nonempty adjacent
-guards inside the sequential scope; either boundary rejects. Record exact allowed
-tool names, permissions and host/tool differences as remaining confounds.
-
-The exact provider model identifier, effective High setting, host build, decoding
-settings and output/context limits are unverified. This chat's subagent catalog
-does not offer the requested Gemini model. Unknown fields stay null in the
-manifest and block Gate 2; availability elsewhere requires evidence before approval.
-
-## Paired conditions, budgets and isolation
-
-Freeze the recovered identical task text and original step order across
-A/B/C. Only tool-use instructions may differ; exact per-arm prompt hashes require
-review. No arm receives hidden labels, solved examples, earlier-arm traces or extra
-hints. Use three fresh replicates per task/arm with balanced orders ABC, BCA, CAB.
-No adaptive stopping, cherry-picking, post-result tuning or task rewriting.
-
-Preregistered budgets for the complete five-file task in every arm: at most two
-retries of rejected/lost-response editing calls, 96 total tool calls, 600 seconds,
-16,000 actual model tokens, 30-second tool timeouts and zero automatic transport
-retries. Distinct successful edits are initial attempts; every call counts toward
-the 96-call cap. Every failed call/retry/rejection counts. Lost-response recovery consumes
-an explicit retry; B/C resend identical arguments and idempotency key. No hidden
-harness repair. Reconcile any conflict with original conditions before approval.
-
-Use fresh contexts and independently initialized state for each task/replicate/arm.
-Preserve intentional multi-step task dependencies and original interference timing.
-Pin interference/lost-response controllers independently of agents. Verify seed and
-temperature support; when unsupported record that fact and use identical verified
-provider defaults. Record host configuration and tool permissions before execution.
-
-## Metrics, independent evaluation and reporting
-
-Capture actual provider input/output/cached/reasoning token counts, tool count,
-exact argument/result UTF-8 bytes, attempts, retries, rejections, timeouts, errors
-and failures. Explicitly flag unavailable token fields; never estimate from chars.
-Capture wall-clock start/end and separate planning/tool time, cold startup, warm
-discovery, initialization and database/migration overhead from measured editing.
-
-B/C must retain real JSON-RPC traces, target IDs, accepted/rejected attempt IDs,
-ledger facts and C's authoritative one-to-one observation links. Require SAVE,
-export (`original_eol` when restoring upload bytes), replay success and all four
-materialized-state checks for every target. Synthetic receipts do not count.
-
-Evaluate each arm externally with the hidden original oracle, full-content equality
-and collateral-change checks. The recovered supplemental behavioral verifier may
-miss unrelated byte edits. An independently approved full-byte oracle remains a
-supplemental readiness blocker; its checks do not authenticate primary correctness.
-Report all paired per-task results and failures, then study-specific aggregates
-with denominators and replicate variation. Missing artifacts, telemetry, model
-settings or exhausted budgets must remain visible, never silently excluded.
-
-## Gate 2 checklist
-
-- Independent re-review of the exact remediation commit and its CI evidence.
-- Original primary prompt, fixtures, setup, oracle and hashes are recovered and pinned; review the common task extraction and arm-specific tool binding.
-- Reviewed exact per-arm prompts, hidden-oracle isolation, fresh-state setup and
-  genuine MCP execution harness (the preparation script is not that harness).
-- Verified Gemini 3.8 Flash High provider/host settings and identical budgets.
-- Full-byte collateral oracle and telemetry bindings, or explicit independently
-  approved supplemental limitations.
-- Explicit independent approval. This document and preparation script grant none.
-
-## Runnable external oracle
-
-`python evaluation/structural_retest/evaluate.py --study primary --workspace <exported-arm-directory>`
-loads only the original verifier's two pure check functions, without importing
-PatchDIFF services or executing historical workspace/database entry points. Use
-`--study supplemental` for that separate verifier. Exit zero requires all original
-checks to pass. These behavioral checks do not replace the still-required independent
-full-byte collateral oracle. A deterministic negative test confirms each original
-verifier rejects the untouched initial fixtures; this is not a comparative run.
+Verified offline: authenticated inputs, reference/oracles, controller simulations
+and local real-MCP tests (see exact-commit evidence report). Pending external:
+actual Gemini model/High, host build, permissions, tool bindings and usage/hard
+budget support. Not executed: any measured comparative session. Independent review,
+host verification and explicit Gate 2 approval are still required.
