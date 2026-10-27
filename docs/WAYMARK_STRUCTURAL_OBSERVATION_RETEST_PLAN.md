@@ -33,17 +33,24 @@ specifications and hidden evaluators. Input changes require a new manifest revis
 and independent review. Keep evaluator/gold files outside agent mounts and context,
 including repository searches.
 
-The user identified `Editing-Toolbench/10-26-26` as the primary recovery source.
-Its five current fixtures, 45-edit specification and standalone verifier have been
-recovered and hash-pinned. Current source hashes agree with `benchmark_results.json`,
-but all five conflict with the older fixture hashes in `REPORT.md`; line counts
-and byte lengths differ too. These are content differences, not EOL normalization.
-Both original evidence files are archived unchanged. The manifest lists every
-conflict and references recovered primary candidate artifacts without promoting
-them to authenticated original-run inputs. No measured-agent prompt, exact per-arm
-tool instructions, original task sequence or model settings were found there.
-Original-run provenance and independent full-byte collateral checks remain blockers.
-Historical W1-W12 files are separate candidate evidence and are not substituted.
+The original primary experiment has been recovered from the user-identified
+Antigravity `scratch/hard_suite`: its untouched `source/` files, initial target
+manifest, exact native and PatchDIFF Step 00 prompt payloads, setup script and
+original external verifier are packaged separately under `primary/`. Every source
+hash matches the original target manifest and the historical prompt's initial hash.
+The old supplemental REPORT.md fixture table is stale; the original scratch pins
+resolve its discrepancy in favor of the current source bytes.
+
+The primary prompt's original label is **21 edits across five files**. Preserve
+that label and complete multi-file task boundary. It requests default unit/quorum
+changes and a `total_clips` variable that the supplemental 45-target task omits or
+expresses differently. The common `primary/prompts/TASK.md` is extracted verbatim
+from the original native prompt and copied identically to every arm. Original B
+adds selector/sequential hints and historical UUIDs; keep the exact old prompts as
+hidden provenance, not new measured inputs. Separate per-arm tool instructions
+retain native rtk read/edit_file, original typed-edit-only B, and strict observed C.
+The harness must replace historical IDs with fresh target bindings and verify native
+tool semantics. No solved transcripts or evaluators are exposed to measured agents.
 
 The supplied `10-27-26/Remediation-Prompt.md` repeats the continuity handoff and still
 refers to a separate preceding prompt. The connected discussion exposes that
@@ -60,8 +67,7 @@ python evaluation/structural_retest/prepare.py --stage supplemental --destinatio
 The hash check returns zero. The default readiness check returns 2 while blockers
 remain. Staging creates three byte-identical fixture directories and MCP
 initialization JSONL requests for B/C. It never starts models, edits targets or
-copies evaluators. Existing destinations are refused. Primary staging fails until
-its authenticated originals are available.
+copies evaluators. Existing destinations are refused. Primary staging uses authenticated source files, identical TASK.md and separate TOOLS.md per arm.
 
 Install `requirements.lock`, then `pip install --no-deps -e .` and
 `npm --prefix integrations/waymark ci`. Pin Python 3.11, Node 22, PostgreSQL 16.3,
@@ -96,15 +102,17 @@ manifest and block Gate 2; availability elsewhere requires evidence before appro
 
 ## Paired conditions, budgets and isolation
 
-After original recovery, freeze identical task text and original step order across
+Freeze the recovered identical task text and original step order across
 A/B/C. Only tool-use instructions may differ; exact per-arm prompt hashes require
 review. No arm receives hidden labels, solved examples, earlier-arm traces or extra
 hints. Use three fresh replicates per task/arm with balanced orders ABC, BCA, CAB.
 No adaptive stopping, cherry-picking, post-result tuning or task rewriting.
 
-Preregistered per-task budgets for every arm: three editing attempts, 600 seconds,
+Preregistered budgets for the complete five-file task in every arm: at most two
+retries of rejected/lost-response editing calls, 96 total tool calls, 600 seconds,
 16,000 actual model tokens, 30-second tool timeouts and zero automatic transport
-retries. Every failed call/retry/rejection counts. Lost-response recovery consumes
+retries. Distinct successful edits are initial attempts; every call counts toward
+the 96-call cap. Every failed call/retry/rejection counts. Lost-response recovery consumes
 an explicit retry; B/C resend identical arguments and idempotency key. No hidden
 harness repair. Reconcile any conflict with original conditions before approval.
 
@@ -138,10 +146,20 @@ settings or exhausted budgets must remain visible, never silently excluded.
 ## Gate 2 checklist
 
 - Independent re-review of the exact remediation commit and its CI evidence.
-- Authenticated original primary prompt, fixtures, oracle, task sequence and hashes.
+- Original primary prompt, fixtures, setup, oracle and hashes are recovered and pinned; review the common task extraction and arm-specific tool binding.
 - Reviewed exact per-arm prompts, hidden-oracle isolation, fresh-state setup and
   genuine MCP execution harness (the preparation script is not that harness).
 - Verified Gemini 3.8 Flash High provider/host settings and identical budgets.
 - Full-byte collateral oracle and telemetry bindings, or explicit independently
   approved supplemental limitations.
 - Explicit independent approval. This document and preparation script grant none.
+
+## Runnable external oracle
+
+`python evaluation/structural_retest/evaluate.py --study primary --workspace <exported-arm-directory>`
+loads only the original verifier's two pure check functions, without importing
+PatchDIFF services or executing historical workspace/database entry points. Use
+`--study supplemental` for that separate verifier. Exit zero requires all original
+checks to pass. These behavioral checks do not replace the still-required independent
+full-byte collateral oracle. A deterministic negative test confirms each original
+verifier rejects the untouched initial fixtures; this is not a comparative run.

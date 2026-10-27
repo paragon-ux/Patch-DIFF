@@ -24,8 +24,15 @@ def test_committed_original_supplemental_hashes_and_staging(tmp_path):
         assert all(path.name not in {"verify_hard_suite.py", "original_harness.py", "edit_specs.json"} for path in files)
     with pytest.raises(FileExistsError):
         prepare.stage(manifest, "supplemental", destination)
-    with pytest.raises(ValueError, match="no authenticated original fixtures"):
-        prepare.stage(manifest, "primary", tmp_path / "missing-primary")
+    primary = tmp_path / "primary"
+    prepare.stage(manifest, "primary", primary)
+    assert (primary / "A" / "TASK.md").read_bytes() == (primary / "B" / "TASK.md").read_bytes() == (primary / "C" / "TASK.md").read_bytes()
+    assert "21 EDITS ACROSS 5 FILES" in (primary / "A" / "TASK.md").read_text()
+    original = json.loads((ROOT / "primary" / "evaluator" / "targets_manifest.json").read_text())
+    for item in manifest["studies"]["primary"]["artifacts"]:
+        if item["role"] == "fixture":
+            assert original[Path(item["path"]).name]["initial_hash"] == item["sha256"]
+    assert not (primary / "A" / "verify_hard_suite.py").exists()
 
 
 def test_preparation_rejects_changed_hash_and_paths_outside_package():
@@ -35,3 +42,16 @@ def test_preparation_rejects_changed_hash_and_paths_outside_package():
     assert "SHA-256 mismatch" in prepare.validate_inputs(altered)[0]
     altered["studies"]["supplemental"]["artifacts"][0]["path"] = "../../requirements.lock"
     assert "Missing or invalid artifact" in prepare.validate_inputs(altered)[0]
+
+
+def test_original_external_oracles_reject_initial_unedited_fixtures(tmp_path):
+    import subprocess
+    import sys
+    for study in ("primary", "supplemental"):
+        result = subprocess.run([sys.executable, str(ROOT / "evaluate.py"), "--study", study,
+                                 "--workspace", str(ROOT / study / "fixtures")], capture_output=True, text=True)
+        assert result.returncode == 1, result.stderr
+        checks = json.loads(result.stdout)
+        assert checks["total"] > 0 and checks["passed"] < checks["total"]
+        assert any(item["check"] == "matrix_kernel.sync_stream_2nd_overlap" and not item["passed"]
+                   for item in checks["checks"])

@@ -20,11 +20,11 @@ Implementation handoff for independent re-review. This report grants no merge or
 | D-1 | P1 | Replay and live integrity regressions | Pristine replay after SAVE; deleted/unlinked/wrong-ID/target/cycle/version/preimage/bounds/hash evidence rejects; database unique linkage enforced | Fixed; independent recheck pending |
 | E-2 | P2 | MCP schema, core/tool/data/host contracts, stdio | Observed-only insertion conditional schema; real negative and positive stdio calls; unobserved schema/profile unchanged | Fixed; independent recheck pending |
 | F-1 | P2 | Dedicated unit, PostgreSQL and real subprocess tests | Focused negative cases plus full suites and migration/stdin-stdout checks; final counts in verification record below | Added; independent recheck pending |
-| G-1 | P1 | Study plan and manifest | Original primary replication reinstated; supplemental explicitly 45 targets / 20 scopes / five files; three studies separate | Plan corrected; primary execution blocked by missing originals |
-| G-2 | P2 | Hash-pinned supplemental fixtures/specs/evaluator and preparation CLI | SHA-256 validation, path/hash tamper tests, fresh staging without evaluator, primary refusal when originals absent | Preparation implemented; original primary inputs and final execution harness remain blocked |
+| G-1 | P1 | Study plan and manifest | Original primary replication reinstated; supplemental explicitly 45 targets / 20 scopes / five files; three studies separate | Original primary task restored and authenticated; execution remains gated |
+| G-2 | P2 | Separate hash-pinned primary/supplemental fixtures, exact prompts, original oracles, staging and evaluation CLI | Original scratch hashes verified; identical common task across arms; hash/path tamper tests; fresh staging without evaluator; original external checks reject unedited fixtures | Original artifacts recovered and prepared; host/telemetry/full-byte oracle still require review |
 | G-3 | P2 | Preregistration and manifest | Same frozen Gemini 3.8 Flash High and paired conditions/budgets, actual tokens/tool bytes/time, isolation and reporting rules | Preregistered; provider/host/model configuration unverified |
 
-No listed finding was dismissed, merged as a duplicate or silently deferred by priority. G-2 remains explicitly incomplete where originals cannot be authenticated.
+No listed finding was dismissed, merged as a duplicate or silently deferred by priority. Original task/fixture/oracle recovery is complete; host execution and full-byte collateral verification remain Gate 2 blockers.
 
 ## Architecture and compatibility trace
 
@@ -65,8 +65,24 @@ AGENTS.md purity/authority/atomicity invariants -> current architecture A4/A6/A8
 | `docs/PATCHDIFF_CORE_SPEC.md` | ARCH |
 | `docs/WAYMARK_STRUCTURAL_OBSERVATION_RETEST_PLAN.md` | DOC |
 | `docs/reviews/PR16-remediation-20261027.md` | DOC |
+| `evaluation/structural_retest/evaluate.py` | SCRIPT |
 | `evaluation/structural_retest/manifest.json` | SCRIPT |
 | `evaluation/structural_retest/prepare.py` | SCRIPT |
+| `evaluation/structural_retest/primary/evaluator/original_A_prompt.md` | SCRIPT |
+| `evaluation/structural_retest/primary/evaluator/original_B_prompt.md` | SCRIPT |
+| `evaluation/structural_retest/primary/evaluator/prompt_provenance.json` | SCRIPT |
+| `evaluation/structural_retest/primary/evaluator/setup_hard_suite.py` | SCRIPT |
+| `evaluation/structural_retest/primary/evaluator/targets_manifest.json` | SCRIPT |
+| `evaluation/structural_retest/primary/evaluator/verify_hard_suite.py` | SCRIPT |
+| `evaluation/structural_retest/primary/fixtures/MIGRATION_RUNBOOK.md` | SCRIPT |
+| `evaluation/structural_retest/primary/fixtures/matrix_kernel.py` | SCRIPT |
+| `evaluation/structural_retest/primary/fixtures/routing_manifest.json` | SCRIPT |
+| `evaluation/structural_retest/primary/fixtures/schema_defs.py` | SCRIPT |
+| `evaluation/structural_retest/primary/fixtures/validator_engine.py` | SCRIPT |
+| `evaluation/structural_retest/primary/prompts/TASK.md` | SCRIPT |
+| `evaluation/structural_retest/primary/prompts/tools_A.md` | SCRIPT |
+| `evaluation/structural_retest/primary/prompts/tools_B.md` | SCRIPT |
+| `evaluation/structural_retest/primary/prompts/tools_C.md` | SCRIPT |
 | `evaluation/structural_retest/supplemental/edit_specs.json` | SCRIPT |
 | `evaluation/structural_retest/supplemental/evaluator/REPORT.md` | SCRIPT |
 | `evaluation/structural_retest/supplemental/evaluator/benchmark_results.json` | SCRIPT |
@@ -81,7 +97,7 @@ AGENTS.md purity/authority/atomicity invariants -> current architecture A4/A6/A8
 | `integrations/waymark/package-lock.json` | DEP |
 | `integrations/waymark/package.json` | DEP |
 
-This is the complete base-to-current PR inventory, including the original implementation and remediation. Coverage is limited to affected paths and the named findings; it is not a new independent release audit.
+Complete base-to-current PR inventory. This implementation self-review is not independent approval.
 
 ## ARCH
 
@@ -97,7 +113,7 @@ Coverage: affected remediation surfaces inspected: Observed admission vs immutab
 
 Coverage: affected remediation surfaces inspected: Core/tool/host/data contracts and separate-study plan. This is implementation self-review, not independent approval.
 
-- P1: G-1: corrected primary/supplemental distinction; missing primary originals remain an execution blocker.
+- P1: G-1: corrected primary/supplemental distinction; original primary artifacts are recovered; future host configuration remains an execution blocker.
 - P2: E-2 and G-2/G-3 contracts prepared; unresolved artifacts/settings are explicit.
 - P3: None identified within remediation scope.
 - Verification/gaps: see the finding ledger and verification record; independent reviewer recheck remains outstanding.
@@ -157,8 +173,8 @@ Coverage: affected remediation surfaces inspected: Authoritative replay linkage,
 
 Coverage: affected remediation surfaces inspected: Non-model manifest/hash/staging CLI; unchanged original supplemental source bytes. This is implementation self-review, not independent approval.
 
-- P1: G-1 primary execution blocked by missing originals.
-- P2: G-2/G-3 preparation complete where inputs exist; provider identity, measured-run harness, telemetry and full-byte oracle remain unverified.
+- P1: G-1 original primary task restored from authenticated scratch artifacts; execution remains gated.
+- P2: G-2/G-3 original inputs and pure oracle preparation complete; provider identity, measured-run host/controller, telemetry and full-byte collateral oracle remain unverified.
 - P3: None identified within remediation scope.
 - Verification/gaps: see the finding ledger and verification record; independent reviewer recheck remains outstanding.
 - Verdict: submit for independent re-review; Gate 2 remains closed.
@@ -186,19 +202,19 @@ Coverage: affected remediation surfaces inspected: Existing exact npm pin/lock a
 ## Verification record
 
 - Windows, Python 3.11.9, Node 22.19.0, live PostgreSQL 16.3 in isolated `patchdiff_pr16_remediation` and final acceptance database `patchdiff_pr16_final`; pinned requirements installed in the isolated checkout.
-- `python -m pytest backend/tests/unit -q`: 852 passed in both initial and final post-cleanup full runs.
+- `python -m pytest backend/tests/unit -q`: 853 passed in the final artifact-complete run; earlier runtime runs passed 852 before the original-oracle negative test was added.
 - `python -m pytest backend/tests/integration -q`: 452 passed on the final code in fresh isolated patchdiff_pr16_final, with no competing test writer; a separate final 36-test authority/scoped suite passed. The earlier 450-test run also passed. A shared-database concurrent attempt had 12 global snapshot assertion failures and is excluded from acceptance evidence; its details are retained below.
 - Explicit Alembic upgrade head -> downgrade one revision -> upgrade head passed against the empty isolated database; populated migration/downgrade-refusal coverage is in the integration suite.
 - Real stdio observed/strict-mode negative and positive workflow passed in the focused 37-test integration run. Real stdout/stderr over-limit and timeout subprocess cases passed.
 - `PYTHONPATH=.;backend python evaluation/offline_eval.py`: verdict equivalence and guarded replacement oracles OK, with the documented legacy delimiter-collision exception. First attempt without PYTHONPATH failed at import and did not evaluate cases.
 - `python evaluation/structural_retest/prepare.py --check-inputs`: succeeds. Default readiness check intentionally exits 2 with explicit blockers. No measured model invoked.
-- `git diff --cached --check -- . ":(exclude)evaluation/structural_retest/supplemental"`: passed for code, contracts, manifest and preparation script. Archived fixture/evaluator bytes intentionally retain original CRLF/EOF whitespace and literal conflict-marker task content; their exact SHA-256 checks pass. Full unfiltered diff checking reports those preserved data bytes, which were not rewritten to satisfy whitespace checks. GitHub CI has not yet run on the remediation commit; its exact SHA, URLs and completed results will be pinned in the PR remediation comment.
+- `git diff --cached --check -- . ":(exclude)evaluation/structural_retest/supplemental" ":(exclude)evaluation/structural_retest/primary"`: passed for code, contracts, manifest and preparation script. Archived fixture/evaluator bytes intentionally retain original CRLF/EOF whitespace and literal conflict-marker task content; their exact SHA-256 checks pass. Full unfiltered diff checking reports those preserved data bytes, which were not rewritten to satisfy whitespace checks. GitHub CI has not yet run on the remediation commit; its exact SHA, URLs and completed results will be pinned in the PR remediation comment.
 - Initial focused failures: paging/candidate tests reproduced B-1/B-2 before the fixes. The boolean diagnostic tamper initially did not persist because ORM equality treats false like zero; flag_modified now forces the intended corruption, and replay rejects it. These are resolved, not remaining test failures.
 - Non-failing existing warnings: FastAPI/Starlette TestClient deprecation and Alembic path_separator deprecation.
 
 ## Remaining blockers and execution boundary
 
-The user identified Editing-Toolbench/10-26-26 for primary recovery. Current fixtures, EDIT_SPECS and the external verifier are recovered and hash-pinned; all five raw fixture hashes match benchmark_results.json but conflict with REPORT.md. Original measured prompts, task/host sequence, original-run byte identity and independent full-byte oracle remain unverified. Historical W1-W12 files are labeled candidate evidence, not substituted originals. Supplemental exact prompt/host binding, independent full-byte collateral oracle, measured-run MCP harness and telemetry binding require review. Gemini 3.8 Flash High is frozen across all three future measured arms; exact provider identity/effective setting/host availability is unverified and the current subagent catalog lacks it. No substitution is permitted.
+Original primary artifacts were recovered from the user-identified Antigravity scratch/hard_suite: exact native/PatchDIFF prompt payloads, initial source files, target manifest, setup and original external verifier. Every fixture hash matches the original target manifest and transcript initial hash, resolving the stale supplemental REPORT.md table. The common primary task preserves the original 21-edit label and differs from the supplemental 45-target task. Per-arm tool instructions are separate from identical TASK.md and require host verification. Supplemental exact prompt/host binding, independent full-byte collateral oracle, measured-run MCP controller and telemetry binding still require review. Gemini 3.8 Flash High is frozen across future measured arms; provider identity/effective setting/host availability is unverified and the current subagent catalog lacks it. No substitution is permitted.
 
 No comparative subagents were launched, no study executed, no comparative performance conclusions published, no merge performed, and Gate 2 remains CLOSED. Independent review decides closure/approval.
 
@@ -219,6 +235,8 @@ The concurrent full-suite attempt ran 452 tests with 12 failures. Failures were 
 - `test_preview_matches_fresh_submit_verdict_stages_facts_without_any_managed_table_change[absent-patchdiff-tx/2]`
 - `test_preview_matches_fresh_submit_verdict_stages_facts_without_any_managed_table_change[absent-patchdiff-tx/3]`
 
-### Primary recovery update from the user
+### Original primary artifacts recovered and authenticated
 
-The user identified `Editing-Toolbench/10-26-26`. Its current files were inspected; the recovered source bytes, specification and verifier are explicitly referenced for primary recovery, while the primary replication and supplemental structural study remain separate. The manifest records all five REPORT.md hash conflicts and archives REPORT.md/benchmark_results.json unchanged. No original measured-agent prompt or model settings were found. This unresolved provenance prevents silent substitution.
+The final source is Antigravity scratch/hard_suite, supplied by the user. Its five source files match the recorded targets_manifest.json and original prompt hashes. Exact Step 00 prompt payloads were extracted without rewriting text/newlines; transcript hashes and extraction provenance are recorded. Original oracle and setup remain unchanged. TASK.md is the verbatim native task section copied identically to all arms; historical UUIDs and extra B-only hints remain archival evidence. Validator default changes and total_clips distinguish the original 21-edit task from the supplemental 45-target task.
+
+The preparation CLI stages primary fixtures, identical TASK.md and separate per-arm TOOLS.md without copying evaluator/gold/transcript evidence. The external evaluator compiles only the original oracle's two pure check functions, never imports PatchDIFF or runs historical entry points. Both original verifiers reject untouched fixtures in a deterministic negative test. Check totals vary after early section exceptions and are never equated to edit-target counts. No measured agent was launched.

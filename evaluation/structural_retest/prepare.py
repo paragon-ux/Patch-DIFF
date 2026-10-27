@@ -42,6 +42,11 @@ def stage(manifest: dict, study_name: str, destination: Path) -> dict:
         if requests:
             (arm_dir / "initialization.jsonl").write_text(
                 "".join(json.dumps(request, ensure_ascii=True) + "\n" for request in requests), encoding="utf-8")
+        if study.get("task_prompt"):
+            shutil.copyfile(ROOT / study["task_prompt"], arm_dir / "TASK.md")
+            tool_prompt = next(item for item in study["artifacts"]
+                               if item["role"] == "tool_prompt" and item["arm"] == arm)
+            shutil.copyfile(ROOT / tool_prompt["path"], arm_dir / "TOOLS.md")
     receipt = {"study": study_name, "gate_2": "closed", "preparation_only": True,
                "model_invocations": 0, "oracle_copied": False, "fixture_hashes": fixtures,
                "database_setup": "B/C initialization.jsonl contains MCP requests; staging executes no transactions"}

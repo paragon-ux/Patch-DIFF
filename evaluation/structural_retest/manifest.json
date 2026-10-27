@@ -17,7 +17,6 @@
       "BCA",
       "CAB"
     ],
-    "max_edit_attempts_per_task": 3,
     "wall_clock_budget_seconds": 600,
     "model_token_budget_per_task": 16000,
     "automatic_transport_retries": 0,
@@ -25,7 +24,11 @@
     "seed": null,
     "tool_timeout_seconds": 30,
     "fresh_context_per_arm": true,
-    "oracle_visible_to_agents": false
+    "oracle_visible_to_agents": false,
+    "task_boundary": "Primary is the original complete five-file task, not five separate tasks; budgets apply to each complete task replicate equally across arms.",
+    "max_retries_after_rejected_edit_per_task": 2,
+    "max_tool_calls_per_task": 96,
+    "retry_definition": "Only repeat/correct a rejected or lost-response editing call consumes a retry; successful distinct edits are initial attempts. All calls count toward 96-call task cap. Same rule for all arms."
   },
   "arms": {
     "A": {
@@ -44,12 +47,90 @@
   "studies": {
     "primary": {
       "description": "Original native-vs-Patch-DIFF comparative subagent workflow extended to Arm C",
-      "artifacts": [],
+      "artifacts": [
+        {
+          "path": "primary/fixtures/matrix_kernel.py",
+          "role": "fixture",
+          "sha256": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0"
+        },
+        {
+          "path": "primary/fixtures/MIGRATION_RUNBOOK.md",
+          "role": "fixture",
+          "sha256": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed"
+        },
+        {
+          "path": "primary/fixtures/routing_manifest.json",
+          "role": "fixture",
+          "sha256": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89"
+        },
+        {
+          "path": "primary/fixtures/schema_defs.py",
+          "role": "fixture",
+          "sha256": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39"
+        },
+        {
+          "path": "primary/fixtures/validator_engine.py",
+          "role": "fixture",
+          "sha256": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291"
+        },
+        {
+          "path": "primary/evaluator/setup_hard_suite.py",
+          "role": "evaluator",
+          "sha256": "3cbbea3fc37af642fb19aa5d3b17d1f311c556babae20f65180f781476b96652"
+        },
+        {
+          "path": "primary/evaluator/verify_hard_suite.py",
+          "role": "evaluator",
+          "sha256": "2af15308562f9dfb1a6a91dacfc4dcb24f049a49c9604f8ef12481d6aad5f292"
+        },
+        {
+          "path": "primary/evaluator/targets_manifest.json",
+          "role": "evaluator",
+          "sha256": "393b679abccd424ea0d0ba3df9178b33c2cfa57f29f7677fbd0d2552b59d3d93"
+        },
+        {
+          "path": "primary/evaluator/original_A_prompt.md",
+          "role": "historical_prompt",
+          "sha256": "3c78162b09aa997de7db07191d235fafdc3bc83cdfd3437a7f03e0eee7f4a75d"
+        },
+        {
+          "path": "primary/prompts/TASK.md",
+          "role": "task_prompt",
+          "sha256": "a41e9a3413d046ab25090287fae118b47736e6908c28876bc363828e3ea68f34"
+        },
+        {
+          "path": "primary/evaluator/original_B_prompt.md",
+          "role": "historical_prompt",
+          "sha256": "154e0679b4cb20b77fd14e3711519ae0864fe5147f6f809cd077e8aca9cacbf7"
+        },
+        {
+          "path": "primary/evaluator/prompt_provenance.json",
+          "role": "historical_evidence",
+          "sha256": "5a3ea956648f618206a1959046bd624eb037a2f5beb4bcf18a9e3c32636eae01"
+        },
+        {
+          "path": "primary/prompts/tools_A.md",
+          "role": "tool_prompt",
+          "arm": "A",
+          "sha256": "499f67c10646e591a57c71f23ebddcaf323d99c70cbc1c87ad8368240407b7c0"
+        },
+        {
+          "path": "primary/prompts/tools_B.md",
+          "role": "tool_prompt",
+          "arm": "B",
+          "sha256": "a8d714e3b51fe381a1320b3bd827f19c4b47618bdbac85ecd31a9556631cca7c"
+        },
+        {
+          "path": "primary/prompts/tools_C.md",
+          "role": "tool_prompt",
+          "arm": "C",
+          "sha256": "b2f8f9aa96b9ab99c959502217b7fda6c06d6fb416973c76470c5f9a8b056e11"
+        }
+      ],
       "missing": [
-        "original measured-agent task prompt and exact per-arm tool instructions",
-        "original native-vs-Patch-DIFF task sequence and host/model/retry configuration",
-        "resolve all five fixture hash conflicts between REPORT.md and current benchmark_results.json/source bytes",
-        "authenticate the recovered verifier as the original comparison oracle and supply full-byte collateral checks"
+        "verified future Gemini 3.8 Flash High provider and effective reasoning/host configuration",
+        "reviewed host tool binding and measured-run MCP/telemetry controller",
+        "independently reviewed full-byte collateral oracle extending the recovered behavioral verifier"
       ],
       "historical_candidates": [
         {
@@ -78,7 +159,7 @@
           "classification": "recovered W1-W12 historical fixture; NOT authenticated original comparative-subagent input"
         }
       ],
-      "recovery_source": "Editing-Toolbench/10-26-26 (explicitly identified by user during remediation)",
+      "recovery_source": "User-identified Antigravity scratch/hard_suite; source, transcripts and targets_manifest.json",
       "recovered_artifacts": [
         "supplemental/fixtures/matrix_kernel.py",
         "supplemental/fixtures/schema_defs.py",
@@ -91,34 +172,71 @@
         "supplemental/evaluator/REPORT.md",
         "supplemental/evaluator/benchmark_results.json"
       ],
-      "recovery_status": "Current fixture bytes, original EDIT_SPECS and external verifier recovered; historical measured-agent prompt and original-run byte identity remain unverified",
+      "recovery_status": "Original native and PatchDIFF task prompts, five initial fixtures, original setup and external verifier recovered; all source SHA-256 values match recorded initial target hashes",
       "fixture_hash_conflicts": [
         {
           "file": "matrix_kernel.py",
           "REPORT_md_sha256": "cb8990362835e28735451bf71c87545a1e72b850df44e921b9d72b121b208f02",
-          "current_and_benchmark_results_sha256": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0"
+          "current_and_benchmark_results_sha256": "15906b9ab796d45886133a7a2085f1671dd4c6eb0bf359ea689821ad596f3bf0",
+          "resolution": "Original scratch targets_manifest.json and transcript initial_hash authenticate current bytes; REPORT.md fixture table is stale"
         },
         {
           "file": "schema_defs.py",
           "REPORT_md_sha256": "94b211a8b67b14820cc29b8a1d78f98a07a0c164fd0a7d9d8b58821240a7c702",
-          "current_and_benchmark_results_sha256": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39"
+          "current_and_benchmark_results_sha256": "c0c99a1618d4500d8e016d3150be0c9247c8b0154c046b387885e9c47bf8fc39",
+          "resolution": "Original scratch targets_manifest.json and transcript initial_hash authenticate current bytes; REPORT.md fixture table is stale"
         },
         {
           "file": "validator_engine.py",
           "REPORT_md_sha256": "070cf70875f5cb99c92a460b0ce73469688b7683cd364ab1ba5b5e862583862f",
-          "current_and_benchmark_results_sha256": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291"
+          "current_and_benchmark_results_sha256": "1f4b3e1d9052c72d840b9bcda4633744d7960e0d152924b9539419df1e7f5291",
+          "resolution": "Original scratch targets_manifest.json and transcript initial_hash authenticate current bytes; REPORT.md fixture table is stale"
         },
         {
           "file": "routing_manifest.json",
           "REPORT_md_sha256": "4c9fd1fa1cb0802e10a1a2ef6f3a884d39c88fb8159e91bd3931797cfbf35933",
-          "current_and_benchmark_results_sha256": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89"
+          "current_and_benchmark_results_sha256": "dcd050b53b771e9dca92a52c25bd8012e67917fd4ca149624b92c76ba87a2e89",
+          "resolution": "Original scratch targets_manifest.json and transcript initial_hash authenticate current bytes; REPORT.md fixture table is stale"
         },
         {
           "file": "MIGRATION_RUNBOOK.md",
           "REPORT_md_sha256": "09e416301d7d74b7320c3974e6c78137cc2fffa3fb0ba0cc6eb04d377ff18dc8",
-          "current_and_benchmark_results_sha256": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed"
+          "current_and_benchmark_results_sha256": "fc026134e740237e3e4578e5282ebcb829e29281c6d7050964e96efdc850b0ed",
+          "resolution": "Original scratch targets_manifest.json and transcript initial_hash authenticate current bytes; REPORT.md fixture table is stale"
         }
-      ]
+      ],
+      "original_task_label": "21 edits across five files (verbatim original label; not the supplemental 45-target specification)",
+      "task_prompt": "primary/prompts/TASK.md",
+      "historical_ids_reusable": false,
+      "original_run_hashes_verified": true,
+      "original_tool_conditions": {
+        "A": [
+          "rtk read via run_command",
+          "native edit_file"
+        ],
+        "B": [
+          "patchdiff_find_occurrences",
+          "patchdiff_read_target",
+          "patchdiff_submit_edits",
+          "patchdiff_save",
+          "patchdiff_replay"
+        ],
+        "C": [
+          "patchdiff_observe_scope",
+          "patchdiff_find_occurrences",
+          "patchdiff_read_target",
+          "patchdiff_submit_observed_operations",
+          "patchdiff_save",
+          "patchdiff_replay"
+        ]
+      },
+      "task_parity_notes": [
+        "Common TASK.md is extracted verbatim from original native prompt and copied identically to every arm.",
+        "Original B prompt included extra selector/sequential hints and historical UUIDs; archive it as evidence, not a new measured prompt.",
+        "Original task changes rule default units/quorum and introduces total_clips; supplemental EDIT_SPECS omits or expresses these differently. Do not substitute the supplemental spec.",
+        "Original setup generated all five files as one multi-file task. Preserve that task boundary and one fresh context per arm/replicate."
+      ],
+      "evaluation_command": "python evaluation/structural_retest/evaluate.py --study primary --workspace <exported-arm-directory>"
     },
     "supplemental": {
       "description": "Separate structural benchmark: 45 edit targets, 20 scopes, five Python/JSON/Markdown source files",
@@ -181,7 +299,8 @@
         "exact measured-agent prompt and host binding; original harness edit specifications recovered, no historical model prompt supplied",
         "independently approved full-byte collateral oracle",
         "reviewed measured-run MCP harness and provider telemetry bindings"
-      ]
+      ],
+      "evaluation_command": "python evaluation/structural_retest/evaluate.py --study supplemental --workspace <exported-arm-directory>"
     },
     "stress": {
       "description": "Deterministic ordinary test suite; no comparative model measurements",
@@ -194,9 +313,9 @@
     "Independent reviewer approval for Gate 2 has not been granted",
     "Gemini 3.8 Flash High exact provider identifier/effective setting/host capabilities are unverified",
     "Requested benchmark model is absent from this chat's available subagent model catalog; no substitution permitted",
-    "Primary recovered artifacts require original-run provenance reconciliation and measured-agent prompt recovery",
     "No original primary experiment is replaced by W1-W12 or the supplemental hard suite",
-    "Exact per-arm prompts, full-byte collateral oracle, measured-run MCP harness and telemetry bindings require independent review"
+    "Exact per-arm prompts, full-byte collateral oracle, measured-run MCP harness and telemetry bindings require independent review",
+    "Primary original artifacts recovered and authenticated; future tool bindings, telemetry and full-byte collateral oracle still require review"
   ],
   "metrics": [
     "actual input/output/cached/reasoning model tokens and unavailable-field flags",

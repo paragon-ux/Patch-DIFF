@@ -8,3 +8,4 @@ docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md -text
 docs/usability/release/* -text
 # Preserve immutable benchmark source bytes and SHA-256 hashes on every platform.
 evaluation/structural_retest/supplemental/** -text
+evaluation/structural_retest/primary/** -text
