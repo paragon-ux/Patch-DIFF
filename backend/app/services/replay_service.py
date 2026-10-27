@@ -156,6 +156,10 @@ def replay_target(
         expected_version = initial_snapshot.version
         for replayed_count, log in enumerate(accepted_logs, start=1):
             batch_code = "BATCH_REPLAY_INTEGRITY_FAILURE" if log.protocol_version == BATCH_PROTOCOL_VERSION else None
+            if (log.protocol_version == BATCH_PROTOCOL_VERSION) != (log.runtime_version == BATCH_RUNTIME_VERSION):
+                return _failed(target, FailureReason.REPLAY_PROTOCOL_INVALID,
+                    "The batch protocol and runtime must be recorded as their exclusive immutable pair.",
+                    replayed=replayed_count - 1, pdcp_log_id=log.pdcp_log_id, code=batch_code)
             if log.target_file_id != target.target_file_id:
                 return _failed(
                     target,

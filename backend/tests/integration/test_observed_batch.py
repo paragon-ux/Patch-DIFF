@@ -443,3 +443,16 @@ def test_batch_uuid_spelling_keeps_raw_request_identity_and_canonical_replay_ids
     # Only durable IDs are canonicalized. A changed request body retains distinct request identity.
     args["observation_bundle_id"] = args["observation_bundle_id"].lower()
     assert submit(args)["code"] == "request_key_conflict"
+
+
+def test_batch_runtime_cannot_reinterpret_an_unobserved_historical_format():
+    target, _ = initialized()
+    accepted = registry.call("patchdiff_submit_edits", target_file_id=target["target_file_id"],
+                            expected_target_version=0, intent="Unobserved edit",
+                            edits=[{"match": "abcd", "replace": "ABCD", "occurrence_index": 1}])
+    assert accepted["status"] == "accepted"
+    with SessionLocal.begin() as session:
+        log = session.get(AppendOnlyPdcpLogs, uuid.UUID(accepted["pdcp_log_id"]))
+        log.runtime_version = "patchdiff-observed-batch-r1"
+    replay = registry.call("patchdiff_replay", target_file_id=target["target_file_id"])
+    assert replay["status"] == "failed" and replay["failure_reason"] == "replay_protocol_invalid"
