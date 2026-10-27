@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "changed_files.json",
-      "bytes": 33269,
-      "sha256": "e26c506e5ef43ff5ac1dad285f5938a6e11c4dd95b8652f50824faac408a5aad"
+      "bytes": 33469,
+      "sha256": "fd2ab58a905387947c20d8bb3c306d17246ea3f239c9cd23e9f1a6a43baacca7"
     },
     {
       "path": "ci-evidence.json",

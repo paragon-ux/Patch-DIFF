@@ -6,7 +6,7 @@ Date: 2026-10-27. Standard: PR Review Standard v1.1.0. Author: Codex implementat
 - PR base: `f5cc6742f94e080d2eda7486265e79eebf55c8ad`. Remediation baseline: `76415946fa7f24eff6026102f901f3217a435780`.
 - Final implementation source head: [`ae3e2f36ab22204601422c5cc06221e482e4cecd`](https://github.com/paragon-ux/Patch-DIFF/commit/ae3e2f36ab22204601422c5cc06221e482e4cecd). Initial implementation: `6c2353baba6bd6a711fa384767c274adf8dd863e`; final delta reserves the batch runtime exclusively for its protocol.
 - Scope: 61 changed source/test/config/contract files relative to the corrective-review baseline. The complete PR comparison contains 157 paths; the 96 earlier paths were not independently re-reviewed in this implementation task. Their earlier review/evidence records are preserved.
-- Evidence added after the source head is documentation and deterministic run artifacts. Exact final evidence-head identity is supplied by the PR report comment; source execution identities below are pinned separately.
+- Evidence added after the source head is documentation, deterministic run artifacts and attributes preserving every recorded artifact byte. Exact final evidence-head identity is supplied by the PR report comment; source execution identities below are pinned separately.
 
 ## Result and architecture trace
 

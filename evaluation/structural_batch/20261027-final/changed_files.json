@@ -1181,6 +1181,12 @@
       "status": "A",
       "path": "docs/reviews/PR16-structural-batch-remediation-20261027.md",
       "primary_category": "DOC"
+    },
+    {
+      "status": "M",
+      "path": ".gitattributes",
+      "primary_category": "DEP",
+      "reason": "Preserve every manifest-hashed receipt byte, including recorded line endings"
     }
   ]
 }
