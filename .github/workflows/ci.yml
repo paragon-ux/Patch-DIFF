@@ -29,10 +29,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Install pinned dependencies
         run: |
           pip install -r requirements.lock
           pip install --no-deps -e .
+          npm --prefix integrations/waymark ci
       - name: Migrate (upgrade, downgrade one step, upgrade again)
         run: |
           alembic -c backend/app/migrations/alembic.ini upgrade head

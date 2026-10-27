@@ -280,7 +280,7 @@ def test_populated_0002_upgrade_downgrade_upgrade_through_0003_preserves_history
 
 def test_live_0003_downgrade_refuses_when_line_endings_are_recorded(isolated_migrations):
     config, connection = isolated_migrations
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261022_0003")
     connection.commit()
     with Session(bind=connection) as session:
         target = initialize_target(session, filename="crlf.txt", content="one\r\ntwo\r\n", target_type="text/plain")
@@ -296,3 +296,77 @@ def test_live_0003_downgrade_refuses_when_line_endings_are_recorded(isolated_mig
     with Session(bind=connection) as session:
         exported = export_target(session, target_file_id=target.target_file_id, format="original_eol")
         assert exported["content"] == "one\r\ntwo\r\n" and exported["content_eol"] == "crlf"
+
+
+
+def test_migration_0004_mentions_target_scope_observations() -> None:
+    migration = MIGRATIONS / "versions" / "20261026_0004_target_scope_observations.py"
+    content = migration.read_text(encoding="utf-8")
+    assert "target_scope_observations" in content
+    assert "waymark_engine_version" in content
+    assert "observed_scope_hash" in content
+    assert "accepted_pdcp_log_id" in content
+    assert "ix_target_scope_observations_target_version" in content
+
+
+def test_live_postgres_schema_has_0004_table_and_indexes() -> None:
+    with SessionLocal() as session:
+        obs_cols = {
+            row[0]: row[1]
+            for row in session.execute(
+                text(
+                    "SELECT column_name, is_nullable "
+                    "FROM information_schema.columns "
+                    "WHERE table_name = 'target_scope_observations'"
+                )
+            ).all()
+        }
+        assert obs_cols["observation_id"] == "NO"
+        assert obs_cols["target_file_id"] == "NO"
+        assert obs_cols["editing_cycle_id"] == "NO"
+        assert obs_cols["target_version"] == "NO"
+        assert obs_cols["target_current_hash"] == "NO"
+        assert obs_cols["waymark_engine_version"] == "NO"
+        assert obs_cols["symbol_name"] == "NO"
+        assert obs_cols["symbol_kind"] == "NO"
+        assert obs_cols["symbol_parent"] == "YES"
+        assert obs_cols["scope_start"] == "NO"
+        assert obs_cols["scope_end"] == "NO"
+        assert obs_cols["observed_scope_hash"] == "NO"
+        assert obs_cols["accepted_pdcp_log_id"] == "YES"
+
+        indexes = {
+            row[0]
+            for row in session.execute(
+                text("SELECT indexname FROM pg_indexes WHERE tablename = 'target_scope_observations'")
+            ).all()
+        }
+        assert "ix_target_scope_observations_target_version" in indexes
+        assert "ix_target_scope_observations_target_cycle" in indexes
+
+
+def test_live_0004_downgrade_refuses_when_scope_observations_exist(isolated_migrations):
+    from app.services.scope_observation_service import observe_scope
+
+    config, connection = isolated_migrations
+    command.upgrade(config, "head")
+    connection.commit()
+    with Session(bind=connection) as session:
+        target = initialize_target(
+            session,
+            filename="sample.py",
+            content="def alpha():\n    return 1\n",
+            target_type="text/x-python",
+        )
+        observed = observe_scope(
+            session,
+            target_file_id=target.target_file_id,
+            symbol_name="alpha",
+            kind="function",
+        )
+        assert observed["status"] == "observed" and observed["observation_id"]
+    connection.commit()
+    with pytest.raises(Exception, match="Cannot downgrade 20261026_0004: recorded scope observations exist"):
+        command.downgrade(config, "20261022_0003")
+    connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261026_0004"

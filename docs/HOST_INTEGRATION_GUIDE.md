@@ -228,3 +228,15 @@ PatchDIFF's guarantees cover the managed target in Postgres. An exported file ed
 ## 10. Host skill checklist
 
 A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; check each accepted-edit warning against what you meant before continuing; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; do not treat a local copy as authoritative.
+
+
+## 11. Waymark structural observation workflow (`waymark-engine@4.1.0`)
+
+For structured code, configuration, and documentation targets (`.py`, `.ts`, `.js`, `.json`, `.md`, `.yaml`, `.toml`, `.sh`), prefer structural observation and scoped submission:
+
+1. Call `patchdiff_observe_scope(target_file_id, query=..., kind=...)` to list candidate symbols, or call `patchdiff_observe_scope(target_file_id, symbol_name=..., kind=...)` directly when the exact symbol identity is known (`FRAME_SYNC_STREAM`, `tenants[ten_013]`, `row:CHK-14-C`, `fence:L7`).
+2. Inspect the returned `observation_id`, `target_version`, `target_current_hash`, `scope_start`, `scope_end`, and canonical slice `text` (paging with `observation_id` and `next_offset` if `truncated: true`).
+3. Submit edits restricted to that scope via `patchdiff_submit_observed_operations(target_file_id, observation_id, intent, operations, expected_target_version, expected_current_hash, client_request_id=...)`.
+   - `match` operations inside `patchdiff_submit_observed_operations` search only within `[scope_start, scope_end)`, automatically disambiguating strings that repeat in other symbols/objects outside the observed scope.
+   - `span` operations use absolute canonical LF code-point offsets (`[start, end)`) that must lie within `[scope_start, scope_end)`.
+4. Enable `PATCHDIFF_STRICT_OBSERVATION_MODE=1` when the host wants the server to enforce that every edit is backed by a verified structural observation (`OBSERVATION_REQUIRED` on all unobserved write tools).

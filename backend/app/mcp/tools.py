@@ -12,7 +12,16 @@ from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.validity import validity_levels
 from app.mcp.server import registry
 from app.services.export_service import export_target, get_target
-from app.services.pdcp_service import SubmitPDCPResult, submit_edits, submit_pdcp, submit_operations, submit_replacement, preview
+from app.services.pdcp_service import (
+    SubmitPDCPResult,
+    preview,
+    submit_edits,
+    submit_observed_operations,
+    submit_operations,
+    submit_pdcp,
+    submit_replacement,
+)
+from app.services.scope_observation_service import observe_scope
 from app.services.rejection_context import response_current_context
 from app.services.prompt_context_service import build_prompt_context
 from app.services.regeneration_service import (
@@ -174,6 +183,65 @@ def patchdiff_submit_operations(
                                    expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
                                    submission_source=source, parent_pdcp_log_id=parent_pdcp_log_id, attempt=attempt,
                                    client_request_id=client_request_id, include_correlation_id=include_correlation_id)
+    return _submit_result_to_payload(result)
+
+
+@registry.register("patchdiff_observe_scope")
+def patchdiff_observe_scope(
+    *,
+    target_file_id: str,
+    query: str | None = None,
+    symbol_name: str | None = None,
+    kind: str | None = None,
+    observation_id: str | None = None,
+    offset: int = 0,
+    max_chars: int | None = None,
+    include_line_starts: bool = False,
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        return observe_scope(
+            session,
+            target_file_id=target_file_id,
+            query=query,
+            symbol_name=symbol_name,
+            kind=kind,
+            observation_id=observation_id,
+            offset=offset,
+            max_chars=max_chars,
+            include_line_starts=include_line_starts,
+        )
+
+
+@registry.register("patchdiff_submit_observed_operations")
+def patchdiff_submit_observed_operations(
+    *,
+    target_file_id: str,
+    intent: str,
+    operations: list[dict],
+    observation_id: str | None = None,
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
+    source: str = "model_response",
+    parent_pdcp_log_id: str | None = None,
+    attempt: int | None = None,
+    client_request_id: str | None = None,
+    include_correlation_id: bool = False,
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        result = submit_observed_operations(
+            session,
+            target_file_id=target_file_id,
+            observation_id=observation_id,
+            intent=intent,
+            operations=operations,
+            expected_target_version=expected_target_version,
+            expected_current_hash=expected_current_hash,
+            submission_source=source,
+            parent_pdcp_log_id=parent_pdcp_log_id,
+            attempt=attempt,
+            client_request_id=client_request_id,
+            include_correlation_id=include_correlation_id,
+        )
     return _submit_result_to_payload(result)
 
 
@@ -690,6 +758,7 @@ def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:
     return {
         "status": "rejected",
         **invocation,
+        **({"code": result.code} if result.code is not None else {}),
         **({"near_misses": result.near_misses} if result.near_misses is not None else {}),
         "target_file_id": str(result.target_file_id),
         "failure_reason": result.failure_reason.value if result.failure_reason else None,

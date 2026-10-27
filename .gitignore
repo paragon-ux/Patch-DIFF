@@ -8,3 +8,4 @@ pytest-cache-files-*/
 build/
 dist/
 .env
+integrations/waymark/node_modules/

@@ -22,7 +22,7 @@ from app.pdcp.models import SUPPORTED_PROTOCOL_VERSION, ParsedPDCP
 from app.pdcp.parser import PDCPParseError, parse_pdcp
 from app.pdcp.protocol_validator import ProtocolValidationError, validate_pdcp
 from app.pdcp.typed import TYPED_PROTOCOL_VERSION, decode_record, to_parsed_transaction
-from app.storage.models import AppendOnlyPdcpLogs, CloudTargetFiles, TargetSnapshots
+from app.storage.models import AppendOnlyPdcpLogs, CloudTargetFiles, TargetScopeObservations, TargetSnapshots
 from app.storage.repositories import select_target_for_update
 
 
@@ -128,6 +128,25 @@ def replay_target(
             .execution_options(populate_existing=True)
         ).scalars().all()
 
+        obs_by_log_id: dict[uuid.UUID, TargetScopeObservations] = {}
+        if any(
+            isinstance(log.diagnostic_json, dict) and "observation_id" in log.diagnostic_json
+            for log in accepted_logs
+        ):
+            observations = session.execute(
+                select(TargetScopeObservations)
+                .where(
+                    TargetScopeObservations.target_file_id == target.target_file_id,
+                    TargetScopeObservations.accepted_pdcp_log_id.is_not(None),
+                )
+                .execution_options(populate_existing=True)
+            ).scalars().all()
+            obs_by_log_id = {
+                obs.accepted_pdcp_log_id: obs
+                for obs in observations
+                if obs.accepted_pdcp_log_id is not None
+            }
+
         expected_version = initial_snapshot.version
         for replayed_count, log in enumerate(accepted_logs, start=1):
             if log.target_file_id != target.target_file_id:
@@ -180,6 +199,32 @@ def replay_target(
                     reconstructed_hash=buffer_hash,
                 )
 
+            scope_bounds: tuple[int, int] | None = None
+            obs = obs_by_log_id.get(log.pdcp_log_id)
+            if obs is not None:
+                if (
+                    obs.target_file_id != target.target_file_id
+                    or obs.target_version != log.before_version
+                    or obs.target_current_hash != log.before_hash
+                ):
+                    return _failed(
+                        target,
+                        FailureReason.REPLAY_PROTOCOL_INVALID,
+                        "Logged observation metadata does not match replayed transaction preconditions.",
+                        replayed=replayed_count - 1,
+                        pdcp_log_id=log.pdcp_log_id,
+                    )
+                scope_bounds = (obs.scope_start, obs.scope_end)
+            elif (
+                isinstance(log.diagnostic_json, dict)
+                and isinstance(log.diagnostic_json.get("scope_start"), int)
+                and isinstance(log.diagnostic_json.get("scope_end"), int)
+            ):
+                scope_bounds = (
+                    int(log.diagnostic_json["scope_start"]),
+                    int(log.diagnostic_json["scope_end"]),
+                )
+
             result = apply_pdcp_transaction(
                 buffer,
                 parsed,
@@ -189,6 +234,7 @@ def replay_target(
                 allow_replace_all_operations=profile.replace_all_operations,
                 allow_span_context=profile.span_context,
                 collect_warnings=False,
+                scope_bounds=scope_bounds,
             )
             if not isinstance(result, AcceptedCoreResult):
                 return _failed(

@@ -512,3 +512,44 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 ## 5. Convenience & Deprecated Compatibility Wrappers
 
 `patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#3-deprecated-regeneration--prompt-prefix-wrappers) for legacy wrapper specifications.
+
+
+---
+
+## Structural Observation and Scoped Submission (`waymark-engine@4.1.0`)
+
+### `patchdiff_observe_scope`
+Discover structural symbol candidates or select a unique symbol scope in the authoritative PostgreSQL target snapshot using the pinned `waymark-engine@4.1.0` package.
+
+- **Arguments**:
+  - `target_file_id` (UUID string, required)
+  - `query` (string | null, optional): case-insensitive substring filter for candidate discovery when `symbol_name` is omitted.
+  - `symbol_name` (string | null, optional): exact Waymark symbol name (or `parent.name`) to select uniquely and issue a server-persisted `observation_id`.
+  - `kind` (string | null, optional): Waymark symbol kind filter (`function`, `class`, `method`, `variable`, `config_item`, `object`, `section`, `table_row`, `code_block`, etc.).
+  - `observation_id` (UUID string | null, optional): existing server-issued observation UUID for paginating a large observed scope (`mode: "scope_page"`).
+  - `offset` (`integer >= 0`, default `0`): code-point offset within `[scope_start, scope_end)`.
+  - `max_chars` (`integer >= 1 | null`, default `4000`, cap `8000`): maximum code points returned on the page.
+  - `include_line_starts` (`boolean`, default `false`): include 1-based line start offsets within the returned page.
+- **Modes & Fail-Closed Guarantees**:
+  - **Candidate discovery** (`symbol_name` omitted): returns `status: "candidates"`, `observation_id: null`, and bounded structural candidates.
+  - **Exact selection** (`symbol_name` provided):
+    - `0` matches -> `status: "not_found"`, `code: "SCOPE_NOT_FOUND"`, `observation_id: null`.
+    - `> 1` matches -> `status: "ambiguous"`, `code: "AMBIGUOUS_SCOPE_SELECTION"`, `observation_id: null`, plus the matching candidate list (never silently picks the smallest span).
+    - `1` match -> persists a `target_scope_observations` row and returns `status: "observed"`, `observation_id`, `target_version`, `target_current_hash`, `scope_start`, `scope_end`, `observed_scope_hash`, and bounded canonical slice `text`.
+
+### `patchdiff_submit_observed_operations`
+Submit guarded `patchdiff-tx/2` `match`/`span` operations restricted to a server-issued `observation_id`.
+
+- **Arguments**:
+  - `target_file_id` (UUID string, required)
+  - `observation_id` (UUID string, required): server-issued observation UUID from `patchdiff_observe_scope`.
+  - `intent` (non-whitespace string, required)
+  - `operations` (non-empty array of `match` / `span` operations, required)
+  - `expected_target_version` (`integer >= 0`, required)
+  - `expected_current_hash` (64-char lowercase hex SHA-256, required)
+  - `source`, `parent_pdcp_log_id`, `attempt`, `client_request_id`, `include_correlation_id` (optional)
+- **Locked Admission Guarantees**:
+  - Acquires `SELECT ... FOR UPDATE` on `cloud_target_files` and `target_scope_observations`.
+  - Rejects and logs in `append_only_pdcp_logs` any missing (`OBSERVATION_REQUIRED`), malformed (`INVALID_OBSERVATION_ID`), unknown (`UNKNOWN_OBSERVATION_ID`), cross-target (`OBSERVATION_TARGET_MISMATCH`), closed-cycle (`OBSERVATION_CYCLE_MISMATCH`), already-consumed (`OBSERVATION_ALREADY_CONSUMED`), or stale (`STALE_OBSERVATION_VERSION`, `STALE_OBSERVATION_HASH`) observation.
+  - Enforces that every `span` and `match` operation falls strictly within `[scope_start, scope_end)` (adjusting running scope end across sequential operations); out-of-scope or boundary-crossing operations fail closed with `failure_reason: "span_out_of_bounds"` and `code: "OPERATION_OUTSIDE_OBSERVED_SCOPE"`.
+  - When `PATCHDIFF_STRICT_OBSERVATION_MODE=1` is enabled, all unobserved write tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`, `patchdiff_submit_pdcp`, `patchdiff_request_regeneration`) are rejected and logged with `code: "OBSERVATION_REQUIRED"`.

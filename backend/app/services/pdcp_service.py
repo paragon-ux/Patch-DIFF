@@ -49,7 +49,13 @@ from app.pdcp.typed import (
 from app.services.rejection_context import (available_context, unavailable_context, bound_candidates, context_identity,
                                             response_current_context)
 from app.services.near_miss_service import near_misses
+from app.core.config import is_strict_observation_mode_enabled
 from app.services.preview_evidence import bound_preview
+from app.services.scope_observation_service import (
+    ObservationValidationFailure,
+    ValidatedScopeObservation,
+    validate_observation_for_locked_target,
+)
 from app.storage.models import (
     AppendOnlyManifestLedger,
     AppendOnlyPdcpLogs,
@@ -292,6 +298,62 @@ def submit_operations(
 
 
 @_submission_response
+def submit_observed_operations(
+    session: Session,
+    *,
+    target_file_id: uuid.UUID | str,
+    observation_id: uuid.UUID | str | None,
+    intent: Any,
+    operations: Any,
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
+    submission_source: str = "model_response",
+    parent_pdcp_log_id: uuid.UUID | str | None = None,
+    attempt: int | None = None,
+    client_request_id: str | None = None,
+    include_correlation_id: bool = False,
+    _before_final_guard=None,
+) -> SubmitPDCPResult:
+    """Submit a guarded patchdiff-tx/2 transaction restricted to a server-issued observed scope."""
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return _invalid_target_uuid_result(target_file_id)
+    record = build_operations_record(
+        target_file_id=str(target_uuid),
+        intent=intent,
+        operations=operations,
+        expected_target_version=expected_target_version,
+        expected_current_hash=expected_current_hash,
+    )
+
+    def decode(target):
+        typed = parse_operations_record(record)
+        return to_parsed_operations(typed, target_type=target.target_type), typed
+
+    return _submit(
+        session,
+        target_uuid=target_uuid,
+        submitted_target_id=target_file_id,
+        record_content=canonical_record_json(record),
+        raw_record=record,
+        decode=decode,
+        protocol_version=OPERATIONS_PROTOCOL_VERSION,
+        runtime_version=operations_runtime_version(record),
+        guard_required=True,
+        expected_target_version=expected_target_version,
+        expected_current_hash=expected_current_hash,
+        submission_source=submission_source,
+        parent_pdcp_log_id=parent_pdcp_log_id,
+        regeneration_attempt=attempt,
+        regeneration_source="host" if parent_pdcp_log_id is not None else None,
+        client_request_id=client_request_id,
+        _before_final_guard=_before_final_guard,
+        _require_observation=True,
+        _observation_id=observation_id,
+    )
+
+
+@_submission_response
 def submit_replacement(
     session: Session, *, target_file_id: uuid.UUID | str, intent: Any, replacement: Any,
     expected_target_version: int | None = None, expected_current_hash: str | None = None,
@@ -475,6 +537,8 @@ def _submit(
     runtime_version: str | None = None,
     _before_final_guard=None,
     _fresh_admission: Callable[[], dict | None] | None = None,
+    _require_observation: bool = False,
+    _observation_id: Any = None,
 ) -> SubmitPDCPResult:
     """Shared locked validate/apply/commit path for every submission format."""
 
@@ -490,6 +554,7 @@ def _submit(
         "regeneration_attempt": regeneration_attempt,
         "regeneration_source": regeneration_source,
         "client_request_id": client_request_id,
+        **({"observation_id": _observation_id} if (_require_observation or _observation_id is not None) else {}),
     }
     encoding_paths = invalid_text_paths(original_inputs)
     encoding_diagnostic = {}
@@ -521,6 +586,8 @@ def _submit(
             submission_source = "invalid_input"
         if invalid_text_paths(client_request_id):
             client_request_id = None
+        if invalid_text_paths(_observation_id):
+            _observation_id = None
     pdcp_content_hash = canonical_sha256(pdcp_content)
 
     with _transaction(session):
@@ -641,7 +708,11 @@ def _submit(
                 expected_target_version=expected_target_version,
                 expected_current_hash=expected_current_hash,
                 parent_pdcp_log_id=str(parent_uuid) if parent_uuid else (str(parent_pdcp_log_id) if parent_pdcp_log_id else None),
-                identity_domain="patchdiff-invalid-input/1" if encoding_paths else None,
+                identity_domain=(
+                    "patchdiff-invalid-input/1"
+                    if encoding_paths
+                    else (f"observed:{safe_input_text(_observation_id)}" if _require_observation else None)
+                ),
             )
             if validated_req_id is not None
             else None
@@ -828,12 +899,128 @@ def _submit(
                 request_fingerprint=fingerprint,
             )
 
+        if is_strict_observation_mode_enabled() and not _require_observation:
+            rejection = _core_rejection(
+                FailureReason.CONTEXT_MISSING,
+                "Strict observation mode requires a server-issued scope observation via patchdiff_submit_observed_operations.",
+                before_hash,
+                protocol_version=protocol_version,
+                stage=ValidationStage.PRECONDITION_GUARD,
+                diagnostic_extra={"code": "OBSERVATION_REQUIRED"},
+            )
+            return _persist_rejection(
+                session,
+                runtime_version=runtime_version,
+                target=target,
+                current_pdcp=current_pdcp,
+                pdcp_content=pdcp_content,
+                pdcp_content_hash=pdcp_content_hash,
+                expected_target_version=expected_target_version,
+                expected_current_hash=expected_current_hash,
+                submission_source=submission_source,
+                parent_pdcp_log_id=parent_uuid,
+                regeneration_attempt=regeneration_attempt,
+                regeneration_source=regeneration_source,
+                protocol_version=protocol_version,
+                parsed=None,
+                rejection=rejection,
+                before_hash=before_hash,
+                before_version=before_version,
+                stage=ValidationStage.PRECONDITION_GUARD,
+                client_request_id=validated_req_id,
+                request_fingerprint=fingerprint,
+            )
+
+        validated_obs: ValidatedScopeObservation | None = None
+        scope_bounds: tuple[int, int] | None = None
+        if _require_observation:
+            _, version_valid = sanitize_expected_target_version(expected_target_version)
+            _, hash_valid = sanitize_expected_current_hash(expected_current_hash)
+            if not version_valid or not hash_valid:
+                guard_rej, guard_stg = _guard_rejection(
+                    target=target,
+                    expected_target_version=expected_target_version,
+                    expected_current_hash=expected_current_hash,
+                    guard_required=True,
+                    protocol_version=protocol_version,
+                )
+                assert guard_rej is not None and guard_stg is not None
+                return _persist_rejection(
+                    session,
+                    runtime_version=runtime_version,
+                    target=target,
+                    current_pdcp=current_pdcp,
+                    pdcp_content=pdcp_content,
+                    pdcp_content_hash=pdcp_content_hash,
+                    expected_target_version=expected_target_version,
+                    expected_current_hash=expected_current_hash,
+                    submission_source=submission_source,
+                    parent_pdcp_log_id=parent_uuid,
+                    regeneration_attempt=regeneration_attempt,
+                    regeneration_source=regeneration_source,
+                    protocol_version=protocol_version,
+                    parsed=None,
+                    rejection=guard_rej,
+                    before_hash=before_hash,
+                    before_version=before_version,
+                    stage=guard_stg,
+                    client_request_id=validated_req_id,
+                    request_fingerprint=fingerprint,
+                )
+
+            obs_check = validate_observation_for_locked_target(
+                session,
+                target=target,
+                observation_id=_observation_id,
+                expected_target_version=expected_target_version,
+                expected_current_hash=expected_current_hash,
+            )
+            if isinstance(obs_check, ObservationValidationFailure):
+                rejection = _core_rejection(
+                    obs_check.failure_reason,
+                    obs_check.failure_detail,
+                    before_hash,
+                    protocol_version=protocol_version,
+                    stage=obs_check.stage,
+                    diagnostic_extra=obs_check.diagnostic,
+                )
+                return _persist_rejection(
+                    session,
+                    runtime_version=runtime_version,
+                    target=target,
+                    current_pdcp=current_pdcp,
+                    pdcp_content=pdcp_content,
+                    pdcp_content_hash=pdcp_content_hash,
+                    expected_target_version=expected_target_version,
+                    expected_current_hash=expected_current_hash,
+                    submission_source=submission_source,
+                    parent_pdcp_log_id=parent_uuid,
+                    regeneration_attempt=regeneration_attempt,
+                    regeneration_source=regeneration_source,
+                    protocol_version=protocol_version,
+                    parsed=None,
+                    rejection=rejection,
+                    before_hash=before_hash,
+                    before_version=before_version,
+                    stage=obs_check.stage,
+                    client_request_id=validated_req_id,
+                    request_fingerprint=fingerprint,
+                )
+            validated_obs = obs_check
+            scope_bounds = (validated_obs.scope_start, validated_obs.scope_end)
+
         parsed, typed, core_result, stage = _evaluate_proposal(
             target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
             expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
-            runtime_version=runtime_version)
+            runtime_version=runtime_version, scope_bounds=scope_bounds)
 
         if isinstance(core_result, RejectedCoreResult):
+            if validated_obs is not None:
+                obs_diag = dict(core_result.diagnostic or {})
+                obs_diag.setdefault("observation_id", str(validated_obs.observation.observation_id))
+                obs_diag.setdefault("observed_symbol", validated_obs.observation.symbol_name)
+                obs_diag.setdefault("observed_scope", [validated_obs.scope_start, validated_obs.scope_end])
+                core_result = replace(core_result, diagnostic=obs_diag)
             return _persist_rejection(
                 session,
                 runtime_version=runtime_version,
@@ -913,13 +1100,14 @@ def _submit(
             before_version=before_version,
             client_request_id=validated_req_id,
             request_fingerprint=fingerprint,
+            validated_observation=validated_obs,
         )
 
 
 def _evaluate_proposal(
     *, target, decode, protocol_version: str, guard_required: bool,
     expected_target_version, expected_current_hash, encoding_diagnostic: dict | None = None,
-    runtime_version: str | None = None,
+    runtime_version: str | None = None, scope_bounds: tuple[int, int] | None = None,
 ) -> tuple[ParsedPDCP | None, TypedTransaction | None, AcceptedCoreResult | RejectedCoreResult, ValidationStage]:
     """Read-only fresh-proposal evaluator shared by locked submit and advisory preview."""
     if encoding_diagnostic is not None:
@@ -946,6 +1134,7 @@ def _evaluate_proposal(
             allow_span_operations=profile.span_operations,
             allow_replace_all_operations=profile.replace_all_operations,
             allow_span_context=profile.span_context,
+            scope_bounds=scope_bounds,
         )
         if isinstance(core_result, RejectedCoreResult):
             core_result = _enrich_diagnostic(
@@ -1083,9 +1272,23 @@ def _persist_acceptance(
     client_request_id: str | None = None,
     request_fingerprint: str | None = None,
     runtime_version: str | None = None,
+    validated_observation: ValidatedScopeObservation | None = None,
 ) -> SubmitPDCPResult:
     after_version = before_version + 1
     envelope = bounded_warnings(accepted.warnings)
+    accepted_diag: dict[str, Any] | None = None
+    if accepted.warnings:
+        accepted_diag = dict(envelope)
+    if validated_observation is not None:
+        obs_meta = {
+            "observation_id": str(validated_observation.observation.observation_id),
+            "symbol_name": validated_observation.observation.symbol_name,
+            "symbol_kind": validated_observation.observation.symbol_kind,
+            "scope_start": validated_observation.scope_start,
+            "scope_end": validated_observation.scope_end,
+            "observed_scope_hash": validated_observation.observed_scope_hash,
+        }
+        accepted_diag = {**(accepted_diag or {}), **obs_meta}
     log = AppendOnlyPdcpLogs(
         target_file_id=target.target_file_id,
         editing_cycle_id=target.active_editing_cycle_id,
@@ -1099,7 +1302,7 @@ def _persist_acceptance(
         pdcp_content_hash=pdcp_content_hash,
         status="accepted",
         # Accepted rows without warnings leave diagnostic_json unset: SQL NULL as before, never JSON null.
-        **({"diagnostic_json": envelope} if accepted.warnings else {}),
+        **({"diagnostic_json": accepted_diag} if accepted_diag is not None else {}),
         expected_target_version=expected_target_version,
         expected_current_hash=expected_current_hash,
         before_version=before_version,
@@ -1112,6 +1315,8 @@ def _persist_acceptance(
     )
     session.add(log)
     session.flush()
+    if validated_observation is not None:
+        validated_observation.observation.accepted_pdcp_log_id = log.pdcp_log_id
 
     facts_by_id = {fact["change_id"]: fact for fact in accepted.change_facts}
     if typed is None:
@@ -1275,6 +1480,7 @@ def _persist_rejection(
         current_context=_target_context(target),
         client_request_id=client_request_id,
         near_miss_buffer=rejection.near_miss_buffer,
+        code=diagnostic.get("code") if isinstance(diagnostic.get("code"), str) else None,
     )
 
 
@@ -1337,6 +1543,7 @@ def _reconstruct_deduplicated_result(
         current_context=_target_context(target),
         deduplicated=True,
         client_request_id=log.client_request_id,
+        code=diag.get("code") if isinstance(diag.get("code"), str) else None,
     )
 
 

@@ -58,6 +58,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
     "patchdiff_get_manifest_ledger": "Return the newest bounded ledger page displayed oldest-first, with has_more/next_sequence for backward traversal.",
+    "patchdiff_observe_scope": "Discover structural symbols via pinned Waymark Engine or select a unique symbol scope to issue a server-persisted observation_id and bounded canonical text slice." + _CODE_POINTS,
+    "patchdiff_submit_observed_operations": "Submit guarded patchdiff-tx/2 match/span operations restricted to a server-issued observed symbol scope. Requires observation_id, expected_target_version, and expected_current_hash." + _CODE_POINTS,
 }
 
 # Illustrative resources; hosts bind real IDs, guards, parents and returned cursors.
@@ -258,6 +260,10 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "project_id": "Optional project UUID.",
     "context_policy": "Context policy name.",
     "regenerated_pdcp_content": "Regenerated legacy PDCP 0.2.3 text.",
+    "query": "Optional case-insensitive substring filter over Waymark symbol names during candidate discovery.",
+    "symbol_name": "Exact Waymark symbol name (or parent.name) to select uniquely and issue an observation_id.",
+    "kind": "Optional Waymark symbol kind filter (e.g. function, class, method, variable, property, object, section, table_row, code_block).",
+    "observation_id": "Server-issued UUID identifying a verified structural scope observation.",
 }
 
 
@@ -274,7 +280,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                 "minItems": 1,
                 "items": copy.deepcopy(TYPED_EDIT_JSON_SCHEMA),
             }
-        elif name in {"patchdiff_submit_operations", "patchdiff_preview"} and parameter_name == "operations":
+        elif name in {"patchdiff_submit_operations", "patchdiff_submit_observed_operations", "patchdiff_preview"} and parameter_name == "operations":
             properties[parameter_name] = {"type": "array", "minItems": 1, "items": copy.deepcopy(OPERATION_JSON_SCHEMA)}
         else:
             properties[parameter_name] = _schema_for_annotation(type_hints.get(parameter_name, parameter.annotation))
@@ -316,6 +322,11 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["start_line"]["default"] = 1
         properties["offset"]["default"] = 0
         properties["include_line_starts"]["default"] = False
+    if name == "patchdiff_observe_scope":
+        for field, minimum in (("offset", 0), ("max_chars", 1)):
+            properties[field]["minimum"] = minimum
+        properties["offset"]["default"] = 0
+        properties["include_line_starts"]["default"] = False
     if name == "patchdiff_export_target":
         properties["format"].update({"enum": list(EXPORT_FORMATS), "default": "original_text",
                                      "description": "original_text (legacy alias of canonical_lf), canonical_lf, crlf, or original_eol."})
@@ -323,7 +334,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["export_after_save"]["default"] = False
     if name == "patchdiff_preview":
         properties["format"]["enum"] = ["0.2.3", "patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
-    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_replacement"}:
+    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_observed_operations", "patchdiff_submit_replacement"}:
         properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {
         "type": "object",
@@ -354,6 +365,16 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
             "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
+            "span_context": {"fields": ["expected_before", "expected_after"], "runtime_version": SPAN_CONTEXT_RUNTIME_VERSION},
+        }
+    if name == "patchdiff_submit_observed_operations":
+        for req_field in ("observation_id", "expected_target_version", "expected_current_hash"):
+            if req_field not in schema.setdefault("required", []):
+                schema["required"].append(req_field)
+        schema["x-patchdiff-capabilities"] = {
+            "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
+            "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
+            "requires_observation": True,
             "span_context": {"fields": ["expected_before", "expected_after"], "runtime_version": SPAN_CONTEXT_RUNTIME_VERSION},
         }
     if name == "patchdiff_submit_replacement":
