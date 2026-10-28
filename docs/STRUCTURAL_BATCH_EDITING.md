@@ -27,6 +27,20 @@ the service layer, including writes through `full` or the internal registry.
 
 ## Observation contract
 
+External response presentation is independently selected at startup with
+`PATCHDIFF_MCP_RESPONSE_MODE=detailed|compact` (default `detailed`). Input schemas,
+guards, profiles, stored evidence and recovery semantics are unchanged. In compact
+mode candidate entries retain name/kind/parent/start_line/end_line. Batch scopes
+omit duplicate start/end/max_chars/next_start/start_line/end_line fields but retain
+exact text, original bounds/hash, offset/next_offset, truncation and requested
+absolute code-point line_starts. Single observations/pages and failures are
+unchanged. Accepted observed submissions omit evidence/groups; counts, identities,
+all guards/version aliases, validity, request key, deduplication and all existing
+warning fields remain. A presentation object lists actual omissions. Detailed
+sessions and durable logs/ledger retain full evidence. See
+[the response contract](MCP_TOOLS.md#external-response-representations) and
+[editor workflow v1](OBSERVED_EDITOR_WORKFLOW.md).
+
 Extend `patchdiff_observe_scope` with `selections`: 1–32 objects containing required
 nonempty `symbol_name` and optional nonempty `kind`. Exact names and existing
 qualified `parent.name` identities use the existing Waymark selector logic.

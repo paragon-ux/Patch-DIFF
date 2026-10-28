@@ -390,6 +390,17 @@ target document                                   = Markdown / Python / YAML / J
 
 ## 18. Locality Controls: Runtime-Enforced Bounds vs. Host Policies
 
+Structural observation adds an implemented service-level locality contract.
+Read-only Waymark discovery identifies structures; PatchDIFF issues observations
+over a canonical PostgreSQL snapshot. A bundle selects disjoint scopes from one
+target. Each operation group runs sequentially against its original scope-local
+buffer through the same exact applier, followed by descending assembly and one
+guarded per-target commit. This is not AST rewriting or cross-target atomicity.
+Strict observed admission rechecks issued identity, cycle, version/hash, original
+bounds/hash and unused state under the target lock. Accepted durable batches use
+`patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`; replay validates every
+recorded scope without Waymark. See [the batch contract](STRUCTURAL_BATCH_EDITING.md).
+
 To prevent unintended wide-area rewrites while still supporting legitimate whole-file updates, it is important to distinguish **controls enforced directly by the PatchDIFF runtime** from **optional policies that an MCP host or enterprise harness may layer on top**:
 
 | Control Mechanism | Enforced by PatchDIFF Runtime? | Actual Runtime / Host Behavior |
@@ -405,13 +416,14 @@ To prevent unintended wide-area rewrites while still supporting legitimate whole
 
 ## 19. Persistence Architecture, Audit Logs, and Deterministic Replay
 
-PatchDIFF's PostgreSQL persistence substrate maintains five core tables:
+The principal persistence entities include:
 
-1. **`cloud_target_files`**: Canonical `current_content` (LF-normalized), `current_hash` (SHA-256), `current_version` (monotonic integer starting at `0`), and `source_line_endings`.
-2. **`append_only_pdcp_logs`**: Immutable log of every submission attempt admitted into the audited target-submission path (`status = 'accepted' | 'rejected'`; pre-admission MCP argument errors such as `invalid_argument` / `replacement_too_large` return before creating a log row), ordered by `log_sequence`, recording `protocol_version`, `runtime_version`, `pdcp_content` (canonical JSON), `pdcp_hash`, `expected_target_version`, `expected_current_hash`, `base_version`, `resulting_version`, `failure_reason`, `diagnostic_json`, `parent_pdcp_log_id`, and `client_request_id` + `request_fingerprint`.
+1. **`cloud_target_files`**: Canonical `current_content` (LF-normalized), `current_hash` (SHA-256), `version` (monotonic integer starting at `0`), and `source_line_endings`.
+2. **`append_only_pdcp_logs`**: Immutable admitted accepted/rejected attempts, ordered by `log_sequence`, recording protocol/runtime, original transaction content and `pdcp_content_hash`, `before_version`/`after_version`, `before_hash`/`after_hash`, failure diagnostics, retry parent and request key/fingerprint. Submitted guards are retained in applicable canonical transaction records, not separate expected-version/hash columns. Pre-admission MCP argument errors do not create an attempt row.
 3. **`append_only_manifest_ledger`**: Immutable ledger of **accepted** changes only, ordered by `ledger_sequence`, recording `origin`, `editing_cycle_id`, `change_id`, `intent`, `risk`, and `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests).
-4. **`target_snapshots`**: Immutable snapshots (`snapshot_type = 'initial_upload' | 'save_checkpoint'`), storing the full canonical content, hash, and version at creation and at each `SAVE` boundary.
-5. **`editing_cycles`**: Tracks active and completed editing cycles (`status = 'active' | 'saved'`) rotated by `patchdiff_save`.
+4. **`target_snapshots`**: Immutable snapshots (`snapshot_reason = 'initial_upload' | 'save_checkpoint'`), storing full canonical content, hash and version.
+5. **`editing_cycles`**: Active/closed cycles, identified by `cycle_index`, with `closed_at` and `save_snapshot_id` on closure.
+6. **`target_scope_observations`**: Server-issued target/cycle/snapshot/scope evidence, including bundle identity/order and accepted-log linkage. Observations are consumed on acceptance; their authoritative facts are retained in accepted history.
 
 ### 19.1 Versioned Execution Profiles and 4-Component Replay Verification
 
@@ -421,7 +433,7 @@ When `patchdiff_replay(target_file_id)` is invoked, the replay engine loads the 
 1. `content_matches`: Replayed canonical text equals `cloud_target_files.current_content`.
 2. `stored_hash_matches`: Replayed SHA-256 hash equals `cloud_target_files.current_hash`.
 3. `recomputed_hash_matches`: `SHA256(cloud_target_files.current_content)` equals `cloud_target_files.current_hash` (detecting raw out-of-band database corruption such as injected CRLF bytes).
-4. `version_matches`: Replayed version equals `cloud_target_files.current_version`.
+4. `version_matches`: Replayed version equals `cloud_target_files.version`.
 
 ---
 
@@ -437,13 +449,28 @@ Multiple MCP hosts, background workers, or subagents may connect to the same Pat
 
 ## 21. MCP Tool Surface and Host Integration Workflow
 
-PatchDIFF exposes its transaction and inspection lifecycle over MCP (`tools/list` and `tools/call`) across five functional tool groups:
+PatchDIFF exposes transaction and inspection tools through startup profiles, with
+identical advertisement and dispatch permissions: editor (default, seven tools),
+unobserved (five), observed (six), and explicit full compatibility (all 22).
+Trusted initialization/export/history uses full; strict observed service admission
+is independently configured. Structural batching extends two existing tools,
+patchdiff_observe_scope and patchdiff_submit_observed_operations.
 
 1. **Target Initialization & Export (`4` tools):** `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`.
 2. **Authoritative Bounded Reads & Search (`4` tools):** `patchdiff_read_target` (code-point slices, `4,000` default / `8,000` max, returning `next_start`), `patchdiff_read_lines` (1-based inclusive `start_line` / `end_line` ranges with `offset`, `max_chars`, and `include_line_starts`, capped at `4,000` default / `8,000` max Unicode code points per page and returning range-relative `next_offset` and absolute `next_start`), `patchdiff_find_occurrences` (exact substring search with `40` default / `400` max side context, up to `200` results), and `patchdiff_build_prompt_context` (labelled convenience prefix wrapper).
 3. **Guarded Transaction Submission (`3` tools):** `patchdiff_submit_edits` (`tx/1`), `patchdiff_submit_operations` (`tx/2`), and `patchdiff_submit_replacement` (`tx/3`).
 4. **Advisory Dry-Run Preview (`1` tool):** `patchdiff_preview` (`<= 32,768 B` response budget).
 5. **Checkpointing, Replay & Bounded History (`4` tools):** `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, and `patchdiff_get_manifest_ledger`.
+
+These functional examples do not enumerate the compatibility catalog. Immutable
+`PATCHDIFF_MCP_RESPONSE_MODE=detailed|compact` selects external presentation
+independently of profile; detailed remains the default. Compact observed successes
+omit supplementary change evidence or duplicate discovery metadata, preserving
+all warnings, guards, identities, exact source and continuations. Persistence,
+recovery, deterministic verdicts and replay are unchanged. This reduces payload
+overhead but does not prove reduced model latency or eliminate arbitrary host
+spills. [Workflow v1](OBSERVED_EDITOR_WORKFLOW.md) separates model editing from
+trusted host finalization and independent task verification.
 
 ---
 
@@ -454,11 +481,19 @@ During a long editing session (for example, 40 sequential edits to a specificati
 2. The **host's LLM conversation history** (past tool calls, responses, and reasoning turns).
 
 `patchdiff_save(target_file_id)` provides an explicit **cycle boundary** in the persistence substrate:
-1. Under `SELECT ... FOR UPDATE`, it records an immutable `save_checkpoint` row in `target_snapshots` capturing `(current_content, current_hash, current_version)`.
-2. It marks the current row in `editing_cycles` as `status = 'saved'` (`ended_version = current_version`) and opens a fresh `active` editing cycle (`cycle_number + 1`, `started_version = current_version`).
+1. Under `SELECT ... FOR UPDATE`, it records an immutable `save_checkpoint` row in `target_snapshots` capturing content, hash and version.
+2. It closes the current cycle (`status = 'closed'`, `closed_at`, `save_snapshot_id`) and opens the next active `cycle_index`. There are no started/ended-version columns; SAVE does not change target text/hash/version.
 3. Because `patchdiff_get_manifest_ledger` defaults to `include_previous_cycles = False`, querying the ledger immediately after `patchdiff_save` returns an **empty active-cycle ledger (`entries: []`)** for the new cycle, while setting `include_previous_cycles = True` still exposes the complete historical ledger across prior cycles, and `patchdiff_replay` still verifies the full history from `initial_upload`.
 
 **Scope boundary:** `patchdiff_save` rotates the server-side active cycle view and records a durable checkpoint snapshot; it does **not** automatically summarize or truncate the host's in-memory LLM chat transcript. Instead, hosts use `patchdiff_save` as a safe synchronization point at which the host can discard prior edit-turn messages from its prompt window and retain only the new `current_version` / `current_hash` and active slices read via `patchdiff_read_target`.
+
+The trusted host can call existing scalar SAVE, REPLAY and export after editing
+ends. This does not require multi-target transactions or model-managed lifecycle
+turns. Unchanged guards do not make SAVE idempotent: lost or unrecordable receipts
+are explicitly uncertain and must not be blindly retried. Replay reconstructs
+history and checks materialized integrity; an independent evaluator owns task
+correctness. The [operator recipe](HOST_INTEGRATION_GUIDE.md#trusted-scalar-finalization)
+records per-target outcomes without claiming cross-target atomicity.
 
 ---
 

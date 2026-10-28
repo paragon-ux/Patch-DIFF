@@ -36,6 +36,17 @@ startup `PATCHDIFF_MCP_PROFILE=full`.
 
 ## 1. The thesis, restated
 
+External presentation can be selected independently with immutable startup
+`PATCHDIFF_MCP_RESPONSE_MODE=detailed|compact` (default detailed). Compact observed
+success results omit supplementary facts/metadata at the external MCP boundary;
+the registry, deterministic runtime, persistence and request identity remain
+unchanged. Detailed sessions retain full results. The trusted host may finalize
+edited targets using existing scalar SAVE/REPLAY/export rather than asking the
+model to manage lifecycle turns. SAVE remains non-idempotent; uncertain outcomes
+require explicit operator reconciliation. See the
+[representation contract](MCP_TOOLS.md#external-response-representations) and
+[host recipe](HOST_INTEGRATION_GUIDE.md#trusted-scalar-finalization).
+
 From [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (carrying forward the core thesis of `docs/PatchDIFF-Concept-Paper-5.md`, abstract, Section 4, Section 9): PatchDIFF's core contribution is not textual diff syntax by itself, but *"the runtime and lifecycle semantics that make model-generated textual deltas safe to apply repeatedly to one cached authoritative document."*
 
 | Category | Items |

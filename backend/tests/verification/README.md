@@ -10,6 +10,8 @@ From the repository root, with the locked dependencies installed:
 $env:PYTHONPATH = '.;backend'
 python backend/tests/verification/offline_eval.py
 python backend/tests/verification/structural_batch/verify.py --output <new-directory>
+$env:PATCHDIFF_MCP_RESPONSE_MODE = 'compact'
+python backend/tests/verification/structural_batch/verify.py --host-finalize --output <another-new-directory>
 ```
 
 The offline check verifies serialization byte accounting and deterministic verdict /
@@ -17,6 +19,13 @@ replacement equivalence without a model, database or network. The five-file chec
 requires live PostgreSQL, the pinned Waymark npm installation and real stdio MCP.
 It verifies five atomic batches, SAVE and replay, exact full-file bytes and 20
 behavioral assertions. It makes no live-model or comparative performance claim.
+
+The optional host-finalize path runs all five editing batches before the trusted
+full/detailed operator performs scalar SAVE/REPLAY/export. The compact editor
+makes zero SAVE/REPLAY calls. Results record separate role counts and response
+modes; finalization receipts and exports live under finalization/. The existing
+stdio helper has a finite per-RPC deadline, closes/reaps failed startup/timeout
+peers and never automatically resends a call. SAVE timeouts remain uncertain.
 
 `structural_batch/primary/` contains only the original five regression fixtures,
 task text and independent oracle dependencies. Fixture/task identities and expected

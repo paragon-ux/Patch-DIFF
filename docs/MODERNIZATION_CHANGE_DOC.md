@@ -6,6 +6,18 @@ Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP 
 
 ## Transaction formats and compatibility
 
+External `PATCHDIFF_MCP_RESPONSE_MODE` now selects immutable detailed (default) or
+compact presentation. Only observed acceptance, candidate discovery and bundled
+observation successes are projected. Full audit facts, all warnings, guards,
+identities, exact source and continuations remain available as contracted; errors
+and unrelated responses are unchanged. There is no input schema/profile/runtime
+or persistence change. A separate trusted scalar finalization recipe checkpoints,
+replays and exports accepted target states without model lifecycle turns, with
+explicit SAVE uncertainty and partial-failure reporting. See
+[the contract](MCP_TOOLS.md#external-response-representations) and
+[workflow v1](OBSERVED_EDITOR_WORKFLOW.md). No host latency improvement or
+universal spill threshold is established by the deterministic tests.
+
 Structural batches extend the two existing observation tools without adding tool
 names. `patchdiff_observe_scope(selections=...)` issues 1–32 disjoint scopes from
 one snapshot/discovery; `patchdiff_submit_observed_operations(groups=...)`

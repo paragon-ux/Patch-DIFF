@@ -262,3 +262,67 @@ For structured code, configuration, and documentation targets (`.py`, `.ts`, `.j
    - `match` operations inside `patchdiff_submit_observed_operations` search only within `[scope_start, scope_end)`, automatically disambiguating strings that repeat in other symbols/objects outside the observed scope.
    - `span` operations use absolute canonical LF code-point offsets (`[start, end)`) that must lie within `[scope_start, scope_end)`.
 4. Enable `PATCHDIFF_STRICT_OBSERVATION_MODE=1` when the host wants the server to enforce that every edit is backed by a verified structural observation (`OBSERVATION_REQUIRED` on all unobserved write tools).
+
+## Trusted scalar finalization
+
+[Observed editor workflow v1](OBSERVED_EDITOR_WORKFLOW.md) assigns editing to the
+model and scalar SAVE/REPLAY/export to the trusted host. The backend contracts do
+not change and targets need not share a project. This removes model-managed
+lifecycle turns, not backend calls or the need for independent task verification.
+
+Start the editor with resident/observed/strict observation and optional compact
+responses as specified in that brief. `PATCHDIFF_MCP_RESPONSE_MODE` defaults to
+`detailed`; only compact successful observed results omit supplementary evidence
+or duplicate metadata. Warnings, guards, exact source, failure diagnostics and
+stored facts remain authoritative. The existing oneshot default remains intact.
+Verify the actual serving process and tools/list after restart. Host schema
+preloading/output limits are integration-specific; retain ordinary help lookup,
+existing observation paging and authorized spill-file retrieval as fallbacks.
+
+The small standard-library recipe in `examples/host_finalize.py` accepts an
+existing synchronous MCP caller with a finite deadline. The trusted manifest
+contains `filename`, `target_file_id`, `expected_target_version`,
+`expected_current_hash` and `accepted_pdcp_log_id` from the mapping and actual last
+accepted MCP receipt. Do not derive it from model prose or refresh guards to make
+stale work pass. Run it after editing ends, with the editor no longer writing.
+
+For an operator using a repository checkout, reuse the existing verification
+stdio client in a separate detailed/full session. This is an operator/test recipe,
+not a production transport dependency or an agent-launch controller:
+
+```python
+import json
+import os
+from pathlib import Path
+from backend.tests.verification.structural_batch.verify import MCP
+from examples.host_finalize import finalize_targets
+
+targets = json.loads(Path("private/accepted-targets.json").read_text(encoding="utf-8"))
+with MCP("full", os.environ["PATCHDIFF_DATABASE_URL"], response_mode="detailed",
+         rpc_timeout_seconds=30) as operator:
+    result = finalize_targets(operator.call, targets, "private/new-finalization")
+if result["status"] != "complete":
+    raise SystemExit(result)
+```
+
+The client bounds RPC write/read time, reaps a failed peer and never resends a
+timed-out call. The finalizer preflights all target names/identities, requires a
+fresh output directory, and writes root-level manifest/events/results separately
+from `exports/`. SAVE carries both original guards. Replay must verify all four
+materialized-state components and expected versions/hashes; export bytes are
+independently hashed and written as canonical LF. Complete receipts/exports are
+flushed/fsynced locally before success; this is not universal power-loss durability.
+
+SAVE rotates cycles without changing target hash/version. Those guards therefore
+do not make SAVE idempotent. A lost/malformed SAVE response or inability to persist
+its receipt is `save_uncertain`: stop, preserve `save_pending`, and do not retry
+SAVE, continue dependent verification, or automatically rerun in a fresh directory.
+An explicit rejection fails that target. Other domain failures may leave partial
+per-target completion; infrastructure/evidence failures stop subsequent calls.
+If the disk fails, results.json is best-effort and the returned incomplete outcome
+is authoritative about that failure. The operator reconciles uncertain snapshot/
+cycle records manually; no automatic repair or cross-target rollback is provided.
+
+An independent evaluator checks task correctness after exports. Keep gold data,
+full transcripts, actual wire calls, manifests, exports and verification artifacts
+outside the editing model's context and under a private ignored capture directory.

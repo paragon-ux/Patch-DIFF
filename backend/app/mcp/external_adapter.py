@@ -110,20 +110,28 @@ class ExternalMCPAdapter:
     """Minimal JSON-RPC MCP adapter backed by the internal PatchDIFF registry."""
 
     profile: str
+    response_mode: str
     _tool_names: tuple[str, ...]
 
-    def __init__(self, *, profile: str | None = None):
+    def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
         selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
         if selected not in MCP_PROFILES:
             raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, observed or full.")
         object.__setattr__(self, "profile", selected)
+        mode = os.getenv("PATCHDIFF_MCP_RESPONSE_MODE", "detailed") if response_mode is None else response_mode
+        if mode not in {"detailed", "compact"}:
+            raise ValueError(f"Unknown PATCHDIFF_MCP_RESPONSE_MODE: {mode!r}; expected detailed or compact.")
+        object.__setattr__(self, "response_mode", mode)
         object.__setattr__(self, "_tool_names", tuple(sorted(MCP_PROFILES[selected])))
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [
             {
                 "name": name,
-                "description": TOOL_DESCRIPTIONS.get(name, f"PatchDIFF tool {name}."),
+                "description": TOOL_DESCRIPTIONS.get(name, f"PatchDIFF tool {name}.") + (
+                    " This session uses compact success responses; supplementary evidence requires a detailed session."
+                    if self.response_mode == "compact" and name in {"patchdiff_observe_scope", "patchdiff_submit_observed_operations"}
+                    else ""),
                 "inputSchema": _input_schema_for(name),
             }
             for name in self._tool_names
@@ -142,6 +150,10 @@ class ExternalMCPAdapter:
             return _tool_error(f"Invalid arguments for {name}: {exc}")
         except Exception as exc:  # pragma: no cover - defensive transport boundary
             return _tool_error(f"PatchDIFF MCP tool failed: {exc}")
+        if self.response_mode == "compact":
+            projected = _compact_payload(name, payload)
+            if projected is not payload:
+                return _tool_result(projected, compact=True)
         return _tool_result(payload)
 
     def handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
@@ -510,9 +522,36 @@ def _schema_for_annotation(annotation: Any) -> dict[str, Any]:
     return {}
 
 
-def _tool_result(payload: dict[str, Any]) -> dict[str, Any]:
+def _compact_payload(name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Response-only projection; authoritative results and stored facts stay complete."""
+    omitted = []
+    result = dict(payload)
+    if name == "patchdiff_submit_observed_operations" and payload.get("status") == "accepted":
+        for key in ("evidence", "groups"):
+            if key in result:
+                del result[key]
+                omitted.append(key)
+    elif name == "patchdiff_observe_scope" and payload.get("status") == "candidates":
+        fields = {"name", "kind", "parent", "start_line", "end_line"}
+        result["candidates"] = [{key: value for key, value in item.items() if key in fields}
+                                for item in payload["candidates"]]
+        if any(set(item) - fields for item in payload["candidates"]):
+            omitted.append("candidate_details")
+    elif name == "patchdiff_observe_scope" and payload.get("status") == "observed_batch":
+        fields = {"start", "end", "max_chars", "next_start", "start_line", "end_line"}
+        result["scopes"] = [{key: value for key, value in item.items() if key not in fields}
+                            for item in payload["scopes"]]
+        if any(set(item) & fields for item in payload["scopes"]):
+            omitted.append("duplicate_page_metadata")
+    else:
+        return payload
+    result["presentation"] = {"mode": "compact", "omitted": omitted}
+    return result
+
+
+def _tool_result(payload: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
     return {
-        "content": [{"type": "text", "text": _dumps(payload, sort_keys=True)}],
+        "content": [{"type": "text", "text": _dumps(payload, sort_keys=True, **({"separators": (",", ":")} if compact else {}))}],
         "isError": False,
     }
 

@@ -9,6 +9,14 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ## Global Test Invariants
 
+Compact presentation is covered by `test_mcp_response_modes.py`,
+`test_host_finalize.py` and `test_compact_host_workflow.py`: immutable mode/default
+compatibility, preserved schemas/profiles/guards/warnings/source/paging, rich
+keyed recovery, exact per-target lifecycle effects, artifact-name isolation,
+SAVE uncertainty, evidence failures and bounded stdio failure cleanup. CI also
+runs the existing five-file oracle with compact editing and trusted scalar
+finalization. These checks do not invoke a model or establish host spill limits.
+
 Structural batch coverage additionally lives in `test_observed_batch_core.py`,
 `test_mcp_profiles.py`, `test_observed_batch.py`, `test_batch_stdio_profiles.py`,
 `test_batch_migrations.py`, `test_batch_documented_examples.py` and

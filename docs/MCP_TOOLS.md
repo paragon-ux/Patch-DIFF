@@ -590,3 +590,33 @@ scope hash, bundle and ordered group mapping without invoking Waymark. Migration
   - Observation pagination rejects a closed cycle after SAVE with `OBSERVATION_CYCLE_MISMATCH`, even when content, hash and version are unchanged.
   - Replay of an accepted log carrying `observation_id` requires exactly one matching authoritative observation row. Identity, accepted-log linkage, target, editing cycle, preimage version/hash, recorded scope bounds and scope hash must match the replay buffer; missing or altered evidence fails with `replay_protocol_invalid`. Diagnostic offsets never replace a missing row. Genuinely unobserved history retains its existing path.
   - When `PATCHDIFF_STRICT_OBSERVATION_MODE=1` is enabled, all unobserved write tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`, `patchdiff_submit_pdcp`, `patchdiff_request_regeneration`) are rejected and logged with `code: "OBSERVATION_REQUIRED"`.
+## External response representations
+
+`PATCHDIFF_MCP_RESPONSE_MODE` is frozen at external-adapter startup. Unset or
+`detailed` preserves existing result bodies and serialization; `compact` is an
+opt-in presentation contract. Unknown values prevent startup. Trusted embeddings
+can pass response_mode to ExternalMCPAdapter. A request cannot change the mode.
+The mode is independent of profile and does not change tools/list names, callable
+tools, input schemas, request identity, audit, runtime/replay profiles or guards.
+
+Only these successful result shapes are projected:
+
+| Tool/status | Compact projection |
+| --- | --- |
+| patchdiff_submit_observed_operations / accepted | Omit evidence and groups if present; retain every other field, including warnings, warning_details, warning_count, warnings_truncated, validity, all identities/guards/aliases, counts and deduplicated. |
+| patchdiff_observe_scope / candidates | Preserve envelope/count/order/truncation; entries retain name, kind, parent, start_line, end_line. |
+| patchdiff_observe_scope / observed_batch | Preserve envelope/scopes; omit each scope's start, end, max_chars, next_start, start_line and end_line. Keep original bounds/length/hash, observation/ordinal/symbol, exact text, offset, truncated, next_offset and requested absolute line_starts. |
+
+Projected results include `presentation: {mode: "compact", omitted: [...]}`.
+Omission names are evidence, groups, candidate_details, duplicate_page_metadata;
+only actual omissions are listed. Compact JSON uses no optional separator spaces
+and retains existing Unicode safety. Single observed selections/pages, every
+failure/diagnostic and unrelated tools keep their existing representation.
+Mode-specific tool descriptions announce compact presentation.
+
+Exact request recovery uses the receiving session's representation of the same
+stored outcome; the request fingerprint never includes response mode. Full facts
+remain in the detailed representation and append-only persistence, retrievable by
+a separate trusted detailed/full operator. Compact mode does not guarantee that
+arbitrary source-rich responses fit a host's spill limit. Use existing query/kind,
+direct selection and observation pagination; never silently truncate source.
