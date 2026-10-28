@@ -1,0 +1,7 @@
+# Execution direction — 2026-10-28
+
+The user superseded the plan's mandatory statistical qualification sequence: finish the current screening pass, implement one concrete optimization, make a short reproducible comparison, and test representative live workflows. Extend benchmarking only for ambiguous results or a defensible numerical performance claim. This changes measurement process, not transaction correctness, audit, idempotency, replay or ownership requirements.
+
+The instrumentation run completed 20 diagnostic and 60 screening pairs. It was stopped at the screening boundary, before the queued 200-pair qualification. Its original protocol and raw outputs remain preserved under `evaluation/structural_batch/performance/20261028T043419Z-45f354280450-831bca4a-361f-49d1-b788-08f4e4b3211e/`; `STOPPED_AFTER_SCREENING.json` records the user's direction. No qualification or production performance claim follows from that run.
+
+The first optimization is one resident internal Waymark process, retaining fresh parsing and the existing shared result validation. The comparison uses five paired five-file workflows, alternating order, with one warmup per mode and instrumentation disabled. The full workflow includes real stdio MCP, Postgres, exact gold exports, behavioral checks, audit, SAVE and replay. Raw samples are retained and reported descriptively. No additional agent review, pool, model experiment or bulk scheduler is part of this package. The original and frozen final plan documents remain unchanged.

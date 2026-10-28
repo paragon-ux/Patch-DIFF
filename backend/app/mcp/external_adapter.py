@@ -187,24 +187,26 @@ class ExternalMCPAdapter:
 def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
     """Serve newline-delimited JSON-RPC requests over stdio."""
 
-    adapter = ExternalMCPAdapter()
-    for line in input_stream:
-        if not line.strip():
-            continue
-        try:
-            request = json.loads(line)
-        except json.JSONDecodeError as exc:
-            response = _rpc_error(None, -32700, f"Parse error: {exc.msg}")
-        else:
-            if not isinstance(request, dict):
-                response = _rpc_error(None, -32600, "JSON-RPC message must be an object.")
+    from app.services.waymark_worker import serving_worker_owner
+    with serving_worker_owner(prewarm=True):
+        adapter = ExternalMCPAdapter()
+        for line in input_stream:
+            if not line.strip():
+                continue
+            try:
+                request = json.loads(line)
+            except json.JSONDecodeError as exc:
+                response = _rpc_error(None, -32700, f"Parse error: {exc.msg}")
             else:
-                response = adapter.handle_request(request)
-        if response is not None:
-            # The JSON-RPC line stays ASCII: hosts that mis-decode stdout cannot corrupt text, and
-            # U+2028/U+2029/U+0085 cannot split lines. Tool-result text inside it is literal.
-            output_stream.write(json.dumps(response, separators=(",", ":"), sort_keys=True) + "\n")
-            output_stream.flush()
+                if not isinstance(request, dict):
+                    response = _rpc_error(None, -32600, "JSON-RPC message must be an object.")
+                else:
+                    response = adapter.handle_request(request)
+            if response is not None:
+                # The JSON-RPC line stays ASCII: hosts that mis-decode stdout cannot corrupt text, and
+                # U+2028/U+2029/U+0085 cannot split lines. Tool-result text inside it is literal.
+                output_stream.write(json.dumps(response, separators=(",", ":"), sort_keys=True) + "\n")
+                output_stream.flush()
 
 
 def main() -> None:

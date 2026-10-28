@@ -69,6 +69,11 @@ from app.storage.models import (
     CurrentPdcpFiles,
 )
 from app.storage.repositories import select_target_for_update
+from app.services.performance_events import timed
+
+# Instrument service-owned calls, without importing instrumentation into the pure runtime.
+apply_pdcp_transaction = timed("applier")(apply_pdcp_transaction)
+apply_observed_batch = timed("applier")(apply_observed_batch)
 
 _HEX_64_RE = re.compile(r"^[0-9a-f]{64}$")
 

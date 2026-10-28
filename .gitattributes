@@ -18,3 +18,5 @@ evaluation/direct_three_arm/20261027-owner-exploratory/exports/** -text
 evaluation/direct_three_arm/20261027-owner-exploratory/target_mappings/** -text
 # Structural batch receipts, manifests and exports retain their exact recorded bytes.
 evaluation/structural_batch/*/** -text
+# Immutable performance captures are byte-verified, not source-code whitespace/merge syntax.
+evaluation/structural_batch/performance/*/** -diff

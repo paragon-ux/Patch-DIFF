@@ -1,0 +1,39 @@
+{
+  "database": {
+    "database": "patchdiff_perf_40a4ffb7b77c45be8bfa9534718280bc",
+    "postgres_version": "16.3",
+    "database_settings": {
+      "shared_buffers": "128MB",
+      "max_connections": "100",
+      "synchronous_commit": "on",
+      "fsync": "on",
+      "jit": "on"
+    }
+  },
+  "pairs": 5,
+  "all_gold_bytes": true,
+  "behavioral_checks_per_mode": 20,
+  "calls_per_workflow": 40,
+  "editing_calls": 20,
+  "catalog_bytes": {
+    "oneshot": {
+      "full": 47999,
+      "observed": 16953
+    },
+    "resident": {
+      "full": 47999,
+      "observed": 16953
+    }
+  },
+  "medians": {
+    "oneshot": {
+      "seconds": 6.4998432,
+      "editing_seconds": 5.857407099999999
+    },
+    "resident": {
+      "seconds": 2.4630619,
+      "editing_seconds": 1.7698784000000003
+    }
+  },
+  "editing_ratio_resident_over_oneshot": 0.3021607291048629
+}

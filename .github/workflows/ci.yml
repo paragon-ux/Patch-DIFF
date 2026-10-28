@@ -26,6 +26,8 @@ jobs:
       PYTHONPATH: .:backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -43,8 +45,29 @@ jobs:
           alembic -c backend/app/migrations/alembic.ini downgrade -1
           alembic -c backend/app/migrations/alembic.ini upgrade head
       - name: Unit tests
-        run: pytest backend/tests/unit
+        run: pytest backend/tests/unit --junitxml=.ci-results/unit.xml -ra
+      - name: Resident worker lifecycle on Linux
+        run: pytest backend/tests/unit/test_waymark_worker.py --junitxml=.ci-results/worker-linux.xml -ra
       - name: Postgres integration tests
-        run: pytest backend/tests/integration
+        env:
+          PATCHDIFF_WAYMARK_MODE: resident
+        run: pytest backend/tests/integration --junitxml=.ci-results/integration-resident.xml -ra
       - name: Offline evaluation
-        run: python evaluation/offline_eval.py
+        run: python evaluation/offline_eval.py | tee .ci-results/offline-eval.txt
+      - name: Deterministic five-file verification (resident)
+        env:
+          PATCHDIFF_WAYMARK_MODE: resident
+        run: python evaluation/structural_batch/verify.py --output .ci-results/five-file
+      - name: Executed source and environment
+        if: always()
+        run: |
+          mkdir -p .ci-results
+          git rev-parse HEAD > .ci-results/executed-source.txt
+          python --version > .ci-results/environment.txt
+          node --version >> .ci-results/environment.txt
+          uname -a >> .ci-results/environment.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resident-waymark-${{ github.sha }}
+          path: .ci-results/

@@ -34,6 +34,7 @@ from app.services.waymark_adapter import (
     discover_symbols_from_content,
 )
 from app.storage.models import CloudTargetFiles, TargetScopeObservations
+from app.services.performance_events import timed
 
 MAX_OBSERVE_CANDIDATES = 200
 
@@ -78,6 +79,7 @@ def utf16_column_to_code_point_offset(line_text: str, utf16_column: int) -> int:
     return len(prefix)
 
 
+@timed("coordinate_conversion")
 def waymark_span_to_code_point_offsets(
     content: str,
     start: WaymarkPosition,
@@ -574,6 +576,7 @@ def observe_scope(
         }
 
 
+@timed("observation_validation")
 def validate_observation_for_locked_target(
     session: Session,
     *,
@@ -784,6 +787,7 @@ def validate_observation_for_locked_target(
         filename=target.filename,
         content=target.current_content,
         kind=obs.symbol_kind,
+        _locked_submission=True,
     )
     if not discovery.ok:
         return ObservationValidationFailure(
@@ -972,7 +976,8 @@ def validate_bundle_for_locked_target(session, *, target, record, observation_id
             if condition:
                 raise BatchValidationError(code, detail, group_index=index, observation_id=observation_id)
         chosen.append(obs)
-    discovery = discover_symbols_from_content(filename=target.filename, content=target.current_content)
+    discovery = discover_symbols_from_content(filename=target.filename, content=target.current_content,
+                                              _locked_submission=True)
     for index, obs in enumerate(chosen):
         checked = validate_observation_for_locked_target(
             session, target=target, observation_id=obs.observation_id,

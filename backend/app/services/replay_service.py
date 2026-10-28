@@ -31,6 +31,7 @@ from app.pdcp.protocol_validator import ProtocolValidationError, validate_pdcp
 from app.pdcp.typed import TYPED_PROTOCOL_VERSION, decode_record, to_parsed_transaction
 from app.storage.models import AppendOnlyPdcpLogs, CloudTargetFiles, TargetScopeObservations, TargetSnapshots
 from app.storage.repositories import select_target_for_update
+from app.services.performance_events import timed
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +52,7 @@ class ReplayResult:
     code: str | None = None
 
 
+@timed("replay_reconstruct")
 def replay_target(
     session: Session,
     *,

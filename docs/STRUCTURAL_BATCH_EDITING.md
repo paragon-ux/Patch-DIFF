@@ -217,6 +217,8 @@ assert markdown_output.count("state: ready") == 3
 
 ## Deterministic capability evidence
 
+Discovery can use the internal [resident Waymark worker](WAYMARK_WORKER.md) through trusted startup configuration. It retains fresh locked verification and the existing transaction schemas, catalogs and replay profiles.
+
 Run `python evaluation/structural_batch/verify.py --output <new-directory>` with
 live Postgres and pinned Waymark dependencies. The runner issues real stdio MCP
 requests and counts `tools/call` lines separately for trusted lifecycle and

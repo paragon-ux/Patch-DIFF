@@ -11,5 +11,5 @@ def select_target_for_update(target_file_id: uuid.UUID | str) -> Select[tuple[Cl
         select(CloudTargetFiles)
         .where(CloudTargetFiles.target_file_id == target_uuid)
         .with_for_update()
-        .execution_options(populate_existing=True)
+        .execution_options(populate_existing=True, patchdiff_perf_target_lock=str(target_uuid))
     )

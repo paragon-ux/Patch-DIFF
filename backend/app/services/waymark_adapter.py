@@ -8,6 +8,7 @@ over stdin using an explicit argument vector (`shell=False`).
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -23,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.core.input_text import invalid_text_paths
 from app.storage.models import CloudTargetFiles
+from app.services.performance_events import span, bridge_environment, collect_bridge_events, track_child
 
 EXPECTED_WAYMARK_ENGINE_VERSION = "4.1.0"
 WAYMARK_INTEGRATION_DIR = Path(__file__).resolve().parents[3] / "integrations" / "waymark"
@@ -131,12 +133,16 @@ def _run_bounded_discovery(
     limits = [stdout_limit, stderr_limit]
     # A file-backed stdin avoids blocking a writer while a noisy child fills its pipes.
     with tempfile.TemporaryDirectory(prefix="patchdiff-waymark-run-") as run_dir, tempfile.TemporaryFile(dir=run_dir) as source:
-        source.write(input_bytes)
-        source.seek(0)
+        with span("ipc_write", bytes_count=len(input_bytes)):
+            source.write(input_bytes)
+            source.seek(0)
         child_env = {**os.environ, "TMPDIR": run_dir, "TEMP": run_dir, "TMP": run_dir}
+        perf_path = Path(run_dir) / "bridge-events.jsonl"
+        child_env.update(bridge_environment(perf_path))
         # The parent owns Node's temp root, including cleanup after forced termination.
         with subprocess.Popen(argv, stdin=source, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               shell=False, env=child_env) as proc:
+            track_child(proc.pid, active=True)
             def read_pipe(index, pipe):
                 while True:
                     chunk = pipe.read(min(65536, limits[index] + 1 - len(outputs[index])))
@@ -159,6 +165,9 @@ def _run_bounded_discovery(
                 proc.wait()
                 for reader in readers:
                     reader.join()
+                track_child(proc.pid, active=False)
+            if "PATCHDIFF_BRIDGE_PERF_FILE" in child_env:
+                collect_bridge_events(perf_path)
             return subprocess.CompletedProcess(argv, proc.returncode, bytes(outputs[0]), bytes(outputs[1]))
 
 
@@ -174,6 +183,8 @@ def discover_symbols_from_content(
     discover_script: Path | None = None,
     max_stdout_bytes: int = MAX_WAYMARK_STDOUT_BYTES,
     max_stderr_bytes: int = MAX_WAYMARK_STDERR_BYTES,
+    _locked_submission: bool = False,
+    _cancel_event=None,
 ) -> WaymarkDiscoveryResult:
     """Run read-only Waymark symbol discovery against canonical in-memory target text."""
     if invalid_text_paths(
@@ -217,7 +228,7 @@ def discover_symbols_from_content(
                 message="content must be a string.",
             ),
         )
-    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or timeout_seconds <= 0:
+    if isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, (int, float)) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
         return WaymarkDiscoveryResult(
             ok=False,
             waymark_engine_version=None,
@@ -249,13 +260,21 @@ def discover_symbols_from_content(
         "kind": kind,
         "symbol_name": symbol_name,
     }
-    input_bytes = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     argv = [resolve_node_executable(node_executable), str(script_path)]
 
     try:
-        completed = _run_bounded_discovery(
-            argv, input_bytes, float(timeout_seconds), max_stdout_bytes, max_stderr_bytes,
-        )
+        from app.services.waymark_worker import get_process_worker_owner
+        explicit_runner = (discover_script is not None or node_executable is not None or
+                           max_stdout_bytes != MAX_WAYMARK_STDOUT_BYTES or max_stderr_bytes != MAX_WAYMARK_STDERR_BYTES)
+        owner = None if explicit_runner else get_process_worker_owner()
+        if owner is not None and owner.mode == "resident":
+            raw = owner.discover(payload, timeout=float(timeout_seconds), locked=_locked_submission, cancel=_cancel_event)
+            completed = subprocess.CompletedProcess(argv, 0, raw, b"")
+        else:
+            input_bytes = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            completed = _run_bounded_discovery(
+                argv, input_bytes, float(timeout_seconds), max_stdout_bytes, max_stderr_bytes,
+            )
     except subprocess.TimeoutExpired:
         return WaymarkDiscoveryResult(
             ok=False,
@@ -279,6 +298,11 @@ def discover_symbols_from_content(
             ),
         )
 
+    return _decode_discovery_result(completed, max_stdout_bytes, max_stderr_bytes)
+
+
+def _decode_discovery_result(completed, max_stdout_bytes, max_stderr_bytes):
+    """Identical validation for one-shot and resident results."""
     stdout_bytes = completed.stdout or b""
     stderr_bytes = completed.stderr or b""
     if len(stdout_bytes) > max_stdout_bytes:
