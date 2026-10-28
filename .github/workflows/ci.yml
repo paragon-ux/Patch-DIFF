@@ -71,3 +71,5 @@ jobs:
         with:
           name: resident-waymark-${{ github.sha }}
           path: .ci-results/
+          include-hidden-files: true
+          if-no-files-found: error
