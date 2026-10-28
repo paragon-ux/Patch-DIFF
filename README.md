@@ -85,16 +85,16 @@ Instead of weakening exact matching with fuzzy auto-application, PatchDIFF retur
 ## 3. Operational Efficiency: Payload, Context, Tool Calls, and Latency
 
 Claims below use four explicit evidence labels (`docs/MODERNIZATION_ARCHITECTURE.md` Decision A8):
-- **`Measured`**: Deterministic UTF-8 serialization byte counts from `evaluation/offline_eval.py` or local benchmark medians on specified workloads.
+- **`Measured`**: Deterministic UTF-8 serialization byte counts from `backend/tests/verification/offline_eval.py` or local benchmark medians on specified workloads.
 - **`Derived`**: Exact arithmetic or tool-call counts for an explicitly specified interface workflow.
 - **`Illustrative`**: Clearly labeled token or decoding-time illustrations stating their conversion assumptions (not tokenizer measurements).
 - **`Not yet measured`**: Live-model comparative accuracy, retry-turn distributions, and end-to-end agent turn latency (`NOT RUN`).
 
 ### 3.1 Output Payload Size & Scaling (`Measured` + `Derived`)
 
-Reproducible via `PYTHONPATH=backend python evaluation/offline_eval.py` (using a fixed 36-char `target_file_id`, concise `intent`, `expected_target_version: 0`, and compact UTF-8 JSON):
+Reproducible via `PYTHONPATH=backend python backend/tests/verification/offline_eval.py` (using a fixed 36-char `target_file_id`, concise `intent`, `expected_target_version: 0`, and compact UTF-8 JSON):
 
-| Scenario (`evaluation/offline_eval.py`) | `patchdiff-tx/1` Minimal (`typed_min`, MCP `arguments` / Stored) | `patchdiff-tx/1` with Prose (`typed_match`, MCP `arguments` / Stored) | `patchdiff-tx/3` Whole-Target Replacement (`arguments` / Stored / `tools/call` Line) | Verdict & Delimiter Safety |
+| Scenario (`backend/tests/verification/offline_eval.py`) | `patchdiff-tx/1` Minimal (`typed_min`, MCP `arguments` / Stored) | `patchdiff-tx/1` with Prose (`typed_match`, MCP `arguments` / Stored) | `patchdiff-tx/3` Whole-Target Replacement (`arguments` / Stored / `tools/call` Line) | Verdict & Delimiter Safety |
 | --- | --- | --- | --- | --- |
 | **1 tiny edit (`"old" -> "new"`)** | **`151 B`** / **`206 B`** | `327 B` / `382 B` | `232 B` / `290 B` / `341 B` | `accepted` |
 | **5 small edits (`5 × 1-byte edits`)** | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | — | `accepted` (atomic all-or-nothing) |
@@ -140,7 +140,7 @@ End-to-end editing latency consists of **model output decoding time** (typically
    - **PostgreSQL 16+ `LATERAL` History & Ledger Projection (`MCP-001`, 7-run local medians after warmup):**
      Extracting bounded `intent` and per-edit `rationale` in SQL (`pg_input_is_valid` + 4 KB head/tail slices + single-cast `LATERAL ... OFFSET 0`) rather than transferring full `pdcp_content` blobs to Python reduced `50 × 400 KB` (`20 MB`) `tx/3` history reads from `279.6 ms` to **`14.68 ms`** (**19.0× faster** on `patchdiff_get_manifest_ledger(limit=50)`) and from `372.4 ms` to **`22.85 ms`** (**16.3× faster** on `patchdiff_get_pdcp_log(limit=50)`). On a `20 × 1 MB` (`20 MB`) `tx/1` history (5 edits × 200 KB per row), `patchdiff_get_pdcp_log(limit=50)` runs in **`136.72 ms`** (`305.55 ms` baseline, **2.2× faster**), `patchdiff_get_manifest_ledger(limit=50)` runs in **`221.59 ms`** (`305.55 ms` baseline, **1.38× faster**), and `patchdiff_get_manifest_ledger(limit=100)` runs in **`445.33 ms`** vs. `449.92 ms` baseline (**1.01×**, at par while eliminating Python `pdcp_content` transfer).
 
-See [evaluation/README.md](evaluation/README.md) for the complete benchmark tables and reproduction commands.
+See [backend verification](backend/tests/verification/README.md) for reproduction commands and the public CI input boundary. Internal experiment captures remain local in the ignored `evaluation/` directory.
 
 ---
 
@@ -449,10 +449,10 @@ $env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.
 .\.venv\Scripts\python.exe -m pytest backend/tests/integration -q
 
 # Offline evaluation (payload bytes and applier verdict equivalence)
-.\.venv\Scripts\python.exe evaluation/offline_eval.py
+.\.venv\Scripts\python.exe backend/tests/verification/offline_eval.py
 ```
 
-See [evaluation/README.md](evaluation/README.md) for full benchmark tables and reproduction instructions.
+See [backend verification](backend/tests/verification/README.md) for reproduction instructions.
 
 ## Project Layout
 
@@ -483,7 +483,7 @@ Read in order of precedence:
 8. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop, reads, guards, retries, and failure handling)
 9. `docs/LEGACY_COMPATIBILITY.md` (frozen `.pdcp` v0.2.3 format, `patchdiff_submit_pdcp`, deprecated wrappers, and historical replay profiles)
 10. `docs/PatchDIFF-Concept-Paper-6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, operational efficiency bounds, and research hypotheses; supersedes historical `docs/PatchDIFF-Concept-Paper-5.md`)
-11. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `evaluation/README.md`
+11. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `backend/tests/verification/README.md`
 
 ## License
 

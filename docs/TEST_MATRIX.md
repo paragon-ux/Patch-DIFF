@@ -82,9 +82,9 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 
 ---
 
-## 3. Offline Payload & Verdict Accounting Matrix (`evaluation/offline_eval.py`)
+## 3. Offline Payload & Verdict Accounting Matrix (`backend/tests/verification/offline_eval.py`)
 
-Run with: `$env:PYTHONPATH="backend"; python evaluation/offline_eval.py`
+Run with: `$env:PYTHONPATH="backend"; python backend/tests/verification/offline_eval.py`
 
 The original comparison evaluates 5 scenarios across 3 proposal variants:
 1. `pdcp`: PDCP v0.2.3 with 7 mandatory manifest fields per edit.

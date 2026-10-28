@@ -219,12 +219,14 @@ assert markdown_output.count("state: ready") == 3
 
 Discovery can use the internal [resident Waymark worker](WAYMARK_WORKER.md) through trusted startup configuration. It retains fresh locked verification and the existing transaction schemas, catalogs and replay profiles.
 
-Run `python evaluation/structural_batch/verify.py --output <new-directory>` with
+Run `python backend/tests/verification/structural_batch/verify.py --output <new-directory>` with
 live Postgres and pinned Waymark dependencies. The runner issues real stdio MCP
 requests and counts `tools/call` lines separately for trusted lifecycle and
-editing clients. It reuses declarative payloads from the archived exploratory
-transcript; the original five fixtures, task, oracle, transcripts and Gate 2
-manifest remain frozen. Full-byte equality precedes the 20 behavioral checks.
+editing clients. Its pinned declarative operation fixture was extracted from the
+archived exploratory transcript. CI retains only the required original five-file
+inputs and independent oracle under `backend/tests/verification/`; internal
+transcripts, controllers, captures and the Gate 2 manifest remain unchanged in the
+ignored local `evaluation/` directory. Full-byte equality precedes the 20 behavioral checks.
 
 The original exploratory C recorded 25 observations (5 discovery + 20 selected),
 20 editing submissions, 1 search, 5 SAVE and 5 replay: 56 MCP calls. With known

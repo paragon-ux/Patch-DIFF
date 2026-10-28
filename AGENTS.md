@@ -34,7 +34,7 @@ Read project artifacts in this order:
 9. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop and usage guide)
 10. `docs/LEGACY_COMPATIBILITY.md` (frozen `.pdcp` v0.2.3 syntax, `patchdiff_submit_pdcp`, deprecated regeneration wrappers, and historical replay profiles)
 11. `docs/PatchDIFF-Concept-Paper-6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, design rationale, tradeoffs, and research hypotheses)
-12. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `evaluation/README.md` (verification matrix and offline evaluation methodology)
+12. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `backend/tests/verification/README.md` (verification matrix and offline evaluation methodology)
 
 Concept Paper v6 (`docs/PatchDIFF-Concept-Paper-6.md`) is the current explanation of PatchDIFF's theoretical model, design rationale, tradeoffs, and research claims. For executable API schemas, persistence behavior, runtime profiles, and exact limits, use the current normative specifications and implementation (`AGENTS.md` and items 2–10 above). Concept Paper v5 (`docs/PatchDIFF-Concept-Paper-5.md`) remains an unchanged historical record.
 
@@ -185,7 +185,7 @@ Do not claim completion unless relevant tests pass against live Postgres:
 
 - Pure runtime unit tests (`backend/tests/unit/`)
 - Postgres integration tests (`backend/tests/integration/`), including live Alembic `upgrade -> downgrade -> upgrade` and real stdio MCP subprocess E2E workflow
-- Offline payload and verdict equivalence evaluation (`evaluation/offline_eval.py`)
+- Offline payload and verdict equivalence evaluation (`backend/tests/verification/offline_eval.py`)
 
 ## PR Review Standard
 

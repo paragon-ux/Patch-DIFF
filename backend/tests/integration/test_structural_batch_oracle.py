@@ -1,4 +1,4 @@
-from evaluation.structural_batch.verify import run
+from backend.tests.verification.structural_batch.verify import run
 
 
 def test_frozen_five_file_task_uses_five_atomic_batches_over_real_stdio(tmp_path):

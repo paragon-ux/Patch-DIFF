@@ -39,8 +39,8 @@ The product surface is the MCP server, not a standalone frontend, web app, or ri
 
 | Dimension | Measured Value | Source / Verification |
 | --- | --- | --- |
-| **Minimal Typed Transaction Wire Overhead (`patchdiff-tx/1`)** | **`151 B`** wire (`206 B` stored) for 1 edit; **`259 B`** wire (`314 B` stored) for 5 edits; **0%** delimiter collisions | `evaluation/offline_eval.py` |
-| **Whole-Target Guarded Replacement (`patchdiff-tx/3`)** | **`341 B`** `tools/call` line (`290 B` stored) for small rewrite; fresh admission `<= 1 MB` / `1,000,000` code points | `evaluation/offline_eval.py` |
+| **Minimal Typed Transaction Wire Overhead (`patchdiff-tx/1`)** | **`151 B`** wire (`206 B` stored) for 1 edit; **`259 B`** wire (`314 B` stored) for 5 edits; **0%** delimiter collisions | `backend/tests/verification/offline_eval.py` |
+| **Whole-Target Guarded Replacement (`patchdiff-tx/3`)** | **`341 B`** `tools/call` line (`290 B` stored) for small rewrite; fresh admission `<= 1 MB` / `1,000,000` code points | `backend/tests/verification/offline_eval.py` |
 | **65,536-Code-Point Near-Miss Scan (`SVC-001`)** | **`1.7 ms`** median (`585` cells) on varied prose (**58.9× faster**); **`41.9 ms`** median (`142,255` cells, 100% scanned) on repetitive logs (**16.9× faster**) | `backend/tests/unit/test_friction_followup.py` |
 | **20 MB History & Ledger Paging (`MCP-001`, PostgreSQL 16+ `LATERAL`)** | **`14.68 ms`** ledger / **`22.85 ms`** attempt log on `50 × 400 KB` `tx/3` (**16–19× faster**); **`136.72 ms`** log / **`221.59 ms`** ledger on `20 × 1 MB` `tx/1` | `backend/tests/integration/test_friction_followup_live.py` |
 | **Hard Response & Context Caps** | `<= 65,536 B` discovery; `<= 8,000` code points per read; `<= 32,768 B` preview; `<= 18,432 B` rejection enrichment | [MCP_TOOLS.md](MCP_TOOLS.md) |

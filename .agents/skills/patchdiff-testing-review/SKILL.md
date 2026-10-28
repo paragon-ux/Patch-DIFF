@@ -28,7 +28,7 @@ PatchDIFF verification spans four rigorous layers:
    - Launches `backend/app/mcp/external_adapter.py` as a real OS child process over stdin/stdout pipes.
    - Executes full multi-turn editing workflows (`patchdiff_initialize_target` -> `patchdiff_read_target` -> `patchdiff_submit_edits` -> `patchdiff_save` -> `patchdiff_replay` -> `patchdiff_export_target`).
    - Verifies JSON-RPC 2.0 framing, `tools/list` schema advertising, and error handling.
-4. **Offline Evaluation (`evaluation/offline_eval.py`)**:
+4. **Offline Evaluation (`backend/tests/verification/offline_eval.py`)**:
    - Evaluates byte overhead and applier verdict equivalence across 5 canonical scenarios:
      1. 1 tiny edit
      2. 5 small edits
@@ -53,7 +53,7 @@ $env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.
 .\.venv\Scripts\python.exe -m pytest -q
 
 # 4. Offline evaluation
-.\.venv\Scripts\python.exe evaluation/offline_eval.py
+.\.venv\Scripts\python.exe backend/tests/verification/offline_eval.py
 ```
 
 ## Review Checklist
@@ -104,4 +104,4 @@ When testing or reviewing Goal F behavior, cover:
 
 ## Structural batch verification
 
-Cover 2/5/20/32 scopes, one discovery per snapshot, bounded complete issuance, scope-local sequential semantics, atomic rejection/rollback, concurrent writers, committed-response-loss recovery, corrupted all-scope replay authority and populated 0004/0005 roundtrips/refusal. Test exact 7/5/6/22 catalogs and forbidden calls in-process and over real stdio. Run the documented Python/JSON/Markdown examples and `evaluation/structural_batch/verify.py`; the latter is a deterministic five-file oracle check, not authorization for a comparative model run or Gate 2 approval. Preserve frozen experiment bytes.
+Cover 2/5/20/32 scopes, one discovery per snapshot, bounded complete issuance, scope-local sequential semantics, atomic rejection/rollback, concurrent writers, committed-response-loss recovery, corrupted all-scope replay authority and populated 0004/0005 roundtrips/refusal. Test exact 7/5/6/22 catalogs and forbidden calls in-process and over real stdio. Run the documented Python/JSON/Markdown examples and `backend/tests/verification/structural_batch/verify.py`; the latter is a deterministic five-file oracle check, not authorization for a comparative model run or Gate 2 approval. Preserve frozen experiment bytes.

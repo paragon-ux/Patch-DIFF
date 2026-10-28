@@ -515,4 +515,3 @@ def discover_target_symbols(
         timeout_seconds=timeout_seconds,
     )
     return target, result
-

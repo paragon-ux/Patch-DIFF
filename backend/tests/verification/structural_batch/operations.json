@@ -1,0 +1,422 @@
+{
+  "matrix_kernel.py": [
+    {
+      "selection": {
+        "symbol_name": "FRAME_SYNC_STREAM"
+      },
+      "operations": [
+        {
+          "match": "FRAME_SYNC_STREAM = \"HEADER::SYNC::SYNC::SYNC::SYNC::SYNC::TRAILER\"",
+          "op": "match",
+          "replace": "FRAME_SYNC_STREAM = \"HEADER::SYNC::SYNC::CALIB::SYNC::SYNC::TRAILER\""
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "execute_tile_kernel_07"
+      },
+      "operations": [
+        {
+          "match": "stride_offset = (block_id << 4) + lane_id",
+          "op": "match",
+          "replace": "stride_offset = (block_id << 5) + (lane_id * 3)"
+        },
+        {
+          "match": "scaled = cell >> scale_shift",
+          "op": "match",
+          "replace": "scaled = (cell + (1 << (scale_shift - 1))) >> scale_shift"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "execute_tile_kernel_14"
+      },
+      "operations": [
+        {
+          "match": "stride_offset = (block_id << 4) + lane_id",
+          "op": "match",
+          "replace": "stride_offset = (block_id << 5) + (lane_id * 3)"
+        },
+        {
+          "match": "scaled = cell >> scale_shift",
+          "op": "match",
+          "replace": "scaled = (cell + (1 << (scale_shift - 1))) >> scale_shift"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "execute_tile_kernel_21"
+      },
+      "operations": [
+        {
+          "match": "stride_offset = (block_id << 4) + lane_id",
+          "op": "match",
+          "replace": "stride_offset = (block_id << 5) + (lane_id * 3)"
+        },
+        {
+          "match": "scaled = cell >> scale_shift",
+          "op": "match",
+          "replace": "scaled = (cell + (1 << (scale_shift - 1))) >> scale_shift"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "dispatch_kernel_triad"
+      },
+      "operations": [
+        {
+          "match": "total_acc = k07[\"accumulator\"] + k14[\"accumulator\"] + k21[\"accumulator\"]",
+          "op": "match",
+          "replace": "total_acc = k07[\"accumulator\"] + k14[\"accumulator\"] + k21[\"accumulator\"]\n    total_clips = k07[\"saturation_clips\"] + k14[\"saturation_clips\"] + k21[\"saturation_clips\"]"
+        },
+        {
+          "match": "\"total_accumulator\": total_acc,",
+          "op": "match",
+          "replace": "\"total_accumulator\": total_acc,\n        \"total_saturation_clips\": total_clips,"
+        }
+      ]
+    }
+  ],
+  "schema_defs.py": [
+    {
+      "selection": {
+        "symbol_name": "SettlementEnvelope"
+      },
+      "operations": [
+        {
+          "match": "schema_revision: str = \"v3\"",
+          "op": "match",
+          "replace": "schema_revision: str = \"v3\"\n    idempotency_scope: str = \"GLOBAL\""
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "serialize_envelope_v3"
+      },
+      "operations": [
+        {
+          "match": "\"epoch_unit\": \"sec\",",
+          "op": "match",
+          "replace": "\"epoch_unit\": \"ns\","
+        },
+        {
+          "match": "\"settlement_epoch\": env.settlement_epoch_sec,",
+          "op": "match",
+          "replace": "\"settlement_epoch\": env.settlement_epoch_sec * 1_000_000_000,"
+        },
+        {
+          "match": "\"quorum_required\": 2,",
+          "op": "match",
+          "replace": "\"quorum_required\": 3,\n        \"idempotency_scope\": env.idempotency_scope,"
+        }
+      ]
+    }
+  ],
+  "validator_engine.py": [
+    {
+      "selection": {
+        "symbol_name": "VALID_SCOPES"
+      },
+      "operations": [
+        {
+          "match": "VALID_SCOPES = (\"GLOBAL\", \"PARTITION\")",
+          "op": "match",
+          "replace": "VALID_SCOPES = (\"GLOBAL\", \"PARTITION\", \"TENANT\")"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "evaluate_settlement_rule_04"
+      },
+      "operations": [
+        {
+          "match": "unit = packet.get(\"epoch_unit\", \"sec\")",
+          "op": "match",
+          "replace": "unit = packet.get(\"epoch_unit\", \"ns\")"
+        },
+        {
+          "match": "max_drift = 30",
+          "op": "match",
+          "replace": "max_drift = 30_000_000_000"
+        },
+        {
+          "match": "quorum = int(packet.get(\"quorum_required\", 2))",
+          "op": "match",
+          "replace": "quorum = int(packet.get(\"quorum_required\", 3))"
+        },
+        {
+          "match": "if unit != \"sec\":",
+          "op": "match",
+          "replace": "if unit != \"ns\":"
+        },
+        {
+          "match": "if quorum < 2:",
+          "op": "match",
+          "replace": "if quorum < 3:"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "evaluate_settlement_rule_11"
+      },
+      "operations": [
+        {
+          "match": "unit = packet.get(\"epoch_unit\", \"sec\")",
+          "op": "match",
+          "replace": "unit = packet.get(\"epoch_unit\", \"ns\")"
+        },
+        {
+          "match": "max_drift = 30",
+          "op": "match",
+          "replace": "max_drift = 30_000_000_000"
+        },
+        {
+          "match": "quorum = int(packet.get(\"quorum_required\", 2))",
+          "op": "match",
+          "replace": "quorum = int(packet.get(\"quorum_required\", 3))"
+        },
+        {
+          "match": "if unit != \"sec\":",
+          "op": "match",
+          "replace": "if unit != \"ns\":"
+        },
+        {
+          "match": "if quorum < 2:",
+          "op": "match",
+          "replace": "if quorum < 3:"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "evaluate_settlement_rule_19"
+      },
+      "operations": [
+        {
+          "match": "unit = packet.get(\"epoch_unit\", \"sec\")",
+          "op": "match",
+          "replace": "unit = packet.get(\"epoch_unit\", \"ns\")"
+        },
+        {
+          "match": "max_drift = 30",
+          "op": "match",
+          "replace": "max_drift = 30_000_000_000"
+        },
+        {
+          "match": "quorum = int(packet.get(\"quorum_required\", 2))",
+          "op": "match",
+          "replace": "quorum = int(packet.get(\"quorum_required\", 3))"
+        },
+        {
+          "match": "if unit != \"sec\":",
+          "op": "match",
+          "replace": "if unit != \"ns\":"
+        },
+        {
+          "match": "if quorum < 2:",
+          "op": "match",
+          "replace": "if quorum < 3:"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "evaluate_settlement_rule_27"
+      },
+      "operations": [
+        {
+          "match": "unit = packet.get(\"epoch_unit\", \"sec\")",
+          "op": "match",
+          "replace": "unit = packet.get(\"epoch_unit\", \"ns\")"
+        },
+        {
+          "match": "max_drift = 30",
+          "op": "match",
+          "replace": "max_drift = 30_000_000_000"
+        },
+        {
+          "match": "quorum = int(packet.get(\"quorum_required\", 2))",
+          "op": "match",
+          "replace": "quorum = int(packet.get(\"quorum_required\", 3))"
+        },
+        {
+          "match": "if unit != \"sec\":",
+          "op": "match",
+          "replace": "if unit != \"ns\":"
+        },
+        {
+          "match": "if quorum < 2:",
+          "op": "match",
+          "replace": "if quorum < 3:"
+        }
+      ]
+    }
+  ],
+  "routing_manifest.json": [
+    {
+      "selection": {
+        "symbol_name": "manifest_version"
+      },
+      "operations": [
+        {
+          "match": "\"manifest_version\": \"2026.10.1\"",
+          "op": "match",
+          "replace": "\"manifest_version\": \"2026.10.2-v3\""
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "tenants[ten_006]"
+      },
+      "operations": [
+        {
+          "match": "\"wire_version\": \"v2\",",
+          "op": "match",
+          "replace": "\"wire_version\": \"v3\","
+        },
+        {
+          "match": "\"epoch_unit\": \"sec\",",
+          "op": "match",
+          "replace": "\"epoch_unit\": \"ns\","
+        },
+        {
+          "match": "\"max_drift\": 30,",
+          "op": "match",
+          "replace": "\"max_drift\": 30000000000,"
+        },
+        {
+          "match": "\"quorum_size\": 2,",
+          "op": "match",
+          "replace": "\"quorum_size\": 3,"
+        },
+        {
+          "match": "\"idempotency_scope\": \"GLOBAL\",",
+          "op": "match",
+          "replace": "\"idempotency_scope\": \"TENANT\","
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "tenants[ten_013]"
+      },
+      "operations": [
+        {
+          "match": "\"wire_version\": \"v2\",",
+          "op": "match",
+          "replace": "\"wire_version\": \"v3\","
+        },
+        {
+          "match": "\"epoch_unit\": \"sec\",",
+          "op": "match",
+          "replace": "\"epoch_unit\": \"ns\","
+        },
+        {
+          "match": "\"max_drift\": 30,",
+          "op": "match",
+          "replace": "\"max_drift\": 30000000000,"
+        },
+        {
+          "match": "\"quorum_size\": 2,",
+          "op": "match",
+          "replace": "\"quorum_size\": 3,"
+        },
+        {
+          "match": "\"idempotency_scope\": \"GLOBAL\",",
+          "op": "match",
+          "replace": "\"idempotency_scope\": \"TENANT\","
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "tenants[ten_018]"
+      },
+      "operations": [
+        {
+          "match": "\"wire_version\": \"v2\",",
+          "op": "match",
+          "replace": "\"wire_version\": \"v3\","
+        },
+        {
+          "match": "\"epoch_unit\": \"sec\",",
+          "op": "match",
+          "replace": "\"epoch_unit\": \"ns\","
+        },
+        {
+          "match": "\"max_drift\": 30,",
+          "op": "match",
+          "replace": "\"max_drift\": 30000000000,"
+        },
+        {
+          "match": "\"quorum_size\": 2,",
+          "op": "match",
+          "replace": "\"quorum_size\": 3,"
+        },
+        {
+          "match": "\"idempotency_scope\": \"GLOBAL\",",
+          "op": "match",
+          "replace": "\"idempotency_scope\": \"TENANT\","
+        }
+      ]
+    }
+  ],
+  "MIGRATION_RUNBOOK.md": [
+    {
+      "selection": {
+        "symbol_name": "## 1. Executive Summary"
+      },
+      "operations": [
+        {
+          "match": "- **Allowed Idempotency Scopes**: `GLOBAL, PARTITION`",
+          "op": "match",
+          "replace": "- **Allowed Idempotency Scopes**: `GLOBAL, PARTITION, TENANT`"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "## 2.14 Pre-Flight Verification Gate #14"
+      },
+      "operations": [
+        {
+          "match": "| `CHK-14-C` | Clock skew p99 | `<= 30 sec` | Trigger NTP resync |",
+          "op": "match",
+          "replace": "| `CHK-14-C` | Clock skew p99 | `<= 30000000000 ns` | Trigger PTP hardware resync |"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "## 3. Canary Cohort Parameters"
+      },
+      "operations": [
+        {
+          "match": "| `canary-v3` | `v2` | `sec` | `30` | `2` | `GLOBAL` |",
+          "op": "match",
+          "replace": "| `canary-v3` | `v3` | `ns` | `30000000000` | `3` | `TENANT` |"
+        }
+      ]
+    },
+    {
+      "selection": {
+        "symbol_name": "## 4. Literal Patch & Conflict Template"
+      },
+      "operations": [
+        {
+          "match": "=======\nwire_version = \"v3\"\nepoch_unit = \"sec\"\nquorum_required = 2\n>>>>>>> REPLACE",
+          "op": "match",
+          "replace": "=======\nwire_version = \"v3\"\nepoch_unit = \"ns\"\nquorum_required = 3\n>>>>>>> REPLACE"
+        }
+      ]
+    }
+  ]
+}

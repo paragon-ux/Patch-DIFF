@@ -31,7 +31,7 @@ To keep conceptual claims, software guarantees, and empirical questions distinct
 | :--- | :--- |
 | **1. Core Architectural Thesis** | Model-generated edits are untrusted declarative proposals that must be validated against explicit document version/hash preconditions and applied atomically (`all-or-nothing`) by a deterministic server-side runtime over a canonical relational substrate. |
 | **2. Formal Transaction & Lifecycle Mechanisms** | Structured JSON transaction formats (`patchdiff-tx/1` exact match, `patchdiff-tx/2` guarded match/span operations with optional adjacency guards, `patchdiff-tx/3` guarded whole-document replacement), MCP read/search/preview tools, per-target PostgreSQL `SELECT ... FOR UPDATE` serialization, `client_request_id` idempotency, bounded rejection diagnostics (`failure_context`, `exact_candidates`, post-commit `near_misses`), `SAVE` cycle rotation, and profile-dispatched deterministic replay. |
-| **3. Deterministically Enforced & Reference-Measured Properties** | Automated unit and live PostgreSQL/stdio integration verification, deterministic payload byte accounting (`evaluation/offline_eval.py`: `151 B` compact MCP `arguments` for 1 minimal edit, `259 B` for 5 edits), hard response byte/code-point caps, and local reference implementation latency profiles. |
+| **3. Deterministically Enforced & Reference-Measured Properties** | Automated unit and live PostgreSQL/stdio integration verification, deterministic payload byte accounting (`backend/tests/verification/offline_eval.py`: `151 B` compact MCP `arguments` for 1 minimal edit, `259 B` for 5 edits), hard response byte/code-point caps, and local reference implementation latency profiles. |
 | **4. Open Empirical Hypotheses (`H1`–`H7`)** | Live-model comparative trials across model families (`H1`–`H4`, `H7`) and human reviewer usability studies (`H6`) are **designed in §23.2–§23.3 (`NOT RUN`)**. Strict precondition matching enforces **applicability and selection constraints**; it does **not** guarantee semantic correctness (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`) or automatic agent recovery. |
 
 ---
@@ -466,15 +466,15 @@ During a long editing session (for example, 40 sequential edits to a specificati
 
 All quantitative and comparative claims in this paper follow a four-tier classification:
 1. **`Enforced Contract / Hard Cap`**: Deterministic byte, code-point, or row-count bounds enforced in software.
-2. **`Measured (PatchDIFF-only)`**: Deterministic byte counts from `evaluation/offline_eval.py` and local reference workload medians.
+2. **`Measured (PatchDIFF-only)`**: Deterministic byte counts from `backend/tests/verification/offline_eval.py` and local reference workload medians.
 3. **`Analytical Comparison`**: Structural complexity and round-trip comparisons under stated workflow assumptions.
 4. **`Comparative Hypothesis (Not Yet Measured)`**: Live-model token/success trials (`H1`–`H4`, `H7`) and human review studies (`H6`) (`NOT RUN`).
 
 ### 23.1 Deterministic Payload Byte Scaling & Reference Runtime Characteristics (`Measured`)
 
-Reproducible via `PYTHONPATH=backend python evaluation/offline_eval.py`:
+Reproducible via `PYTHONPATH=backend python backend/tests/verification/offline_eval.py`:
 
-| Scenario (`evaluation/offline_eval.py`) | Raw Replacement Text (`B`) | Minimal `patchdiff-tx/1` (`arguments` `B` / Persisted Record `B`) | Rationale-Annotated `patchdiff-tx/1` (`arguments` `B` / Persisted Record `B`) | `patchdiff-tx/3` Whole-Target Rewrite (`arguments` `B` / Persisted Record `B` / JSON-RPC Line `B`) |
+| Scenario (`backend/tests/verification/offline_eval.py`) | Raw Replacement Text (`B`) | Minimal `patchdiff-tx/1` (`arguments` `B` / Persisted Record `B`) | Rationale-Annotated `patchdiff-tx/1` (`arguments` `B` / Persisted Record `B`) | `patchdiff-tx/3` Whole-Target Rewrite (`arguments` `B` / Persisted Record `B` / JSON-RPC Line `B`) |
 | :--- | :--- | :--- | :--- | :--- |
 | **1 tiny edit (`"old" -> "new"`)** | `3 B` | **`151 B`** / **`206 B`** | `327 B` / `382 B` | **`232 B`** / **`290 B`** / **`341 B`** |
 | **5 small edits in 1 transaction (`5 × 1 B`)** | `5 B` | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | — |
@@ -501,7 +501,7 @@ The table below states each of PatchDIFF's seven core research hypotheses (`H1`�
 
 | Research Hypothesis | Established Today (Deterministic Runtime & Offline Measurements) | Open Empirical Evaluation (`NOT RUN` — Experimental Protocol in §23.3) |
 | :--- | :--- | :--- |
-| **H1: PatchDIFF reduces full-document decoding cost** | **Deterministic payload byte accounting (`evaluation/offline_eval.py`):** Localized `patchdiff-tx/1` payloads scale with $O(|\Delta|)$ rather than document size $|T|$ (`151 B` MCP `arguments` for 1 minimal edit, `259 B` for 5 edits, `+28 B` per additional 1-byte edit). | **Live-model token & latency study (`NOT RUN`):** Measure total input + output tokens, wall-clock latency, and API cost across live LLM families when performing single-turn and multi-turn edits via PatchDIFF vs. full-document rewrite, `str_replace`, and `apply_patch`. |
+| **H1: PatchDIFF reduces full-document decoding cost** | **Deterministic payload byte accounting (`backend/tests/verification/offline_eval.py`):** Localized `patchdiff-tx/1` payloads scale with $O(|\Delta|)$ rather than document size $|T|$ (`151 B` MCP `arguments` for 1 minimal edit, `259 B` for 5 edits, `+28 B` per additional 1-byte edit). | **Live-model token & latency study (`NOT RUN`):** Measure total input + output tokens, wall-clock latency, and API cost across live LLM families when performing single-turn and multi-turn edits via PatchDIFF vs. full-document rewrite, `str_replace`, and `apply_patch`. |
 | **H2: PatchDIFF reduces unintended mutation** | **Deterministic locality for localized operations (Invariant 1):** For every accepted `tx/1` and `tx/2` transaction, code points outside the resolved $[s_i, e_i)$ spans are provably invariant (`T_i[0:s_i] == T_{i-1}[0:s_i]` and `T_i[s_i+|r_i|:] == T_{i-1}[e_i:]`). Unintended whole-file rewrites cannot occur via `tx/1` or `tx/2`. | **End-to-end agent edit-fidelity study (`NOT RUN`):** Measure how often live models select an unintended span or over-broad `match` string compared to silent drift in full-file rewrites or misapplied fuzzy diffs. |
 | **H3: PatchDIFF improves stale-context detection** | **Enforced optimistic concurrency guards:** Every submission requires `expected_target_version` and/or `expected_current_hash` evaluated under `SELECT ... FOR UPDATE`. Any version or hash divergence deterministically rejects (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation. | **Multi-agent contention & recovery study (`NOT RUN`):** Measure conflict recovery success rates and wasted turns when multiple live agents concurrently edit shared documents under optimistic locking. |
 | **H4: PatchDIFF supports multi-edit cached-document workflows** | **Multi-edit batching, `SAVE` cycles, and bounded SQL history:** `tx/1` and `tx/2` execute ordered multi-edit batches atomically in memory; `patchdiff_save` rotates active editing cycles (`include_previous_cycles=False` returns an empty active-cycle ledger `entries: []`); SQL `LATERAL` projection bounds 50-row history reads over `20 MB` logs to `14.68–221.59 ms`. | **Long-horizon session study (`NOT RUN`):** Measure cumulative prompt token growth and task completion over 20–100 sequential edits with periodic `patchdiff_save` compaction vs. uncompacted agent loops. |
@@ -642,4 +642,4 @@ PatchDIFF demonstrates that agent document editing is naturally modeled as a **d
    - [PATCHDIFF_CORE_SPEC.md](PATCHDIFF_CORE_SPEC.md) — Deterministic core runtime specification and validation stages.
    - [DATA_MODEL.md](DATA_MODEL.md) — PostgreSQL schema and constraints.
    - [PDCP_FORMAT.md](PDCP_FORMAT.md) — Transaction formats (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`).
-   - [evaluation/README.md](../evaluation/README.md) — Offline payload byte accounting and evaluation methodology.
+   - [backend/tests/verification/README.md](../backend/tests/verification/README.md) — Offline payload byte accounting and evaluation methodology.

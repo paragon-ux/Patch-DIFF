@@ -1,7 +1,0 @@
-INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-INFO  [alembic.runtime.migration] Will assume transactional DDL.
-INFO  [alembic.runtime.migration] Running upgrade  -> 20260510_0001, initial PatchDIFF MVP schema
-INFO  [alembic.runtime.migration] Running upgrade 20260510_0001 -> 20261020_0002, typed transaction ledger and request deduplication support
-INFO  [alembic.runtime.migration] Running upgrade 20261020_0002 -> 20261022_0003, record source line endings for uploaded targets
-INFO  [alembic.runtime.migration] Running upgrade 20261022_0003 -> 20261026_0004, create target_scope_observations table for server-issued Waymark observations
-INFO  [alembic.runtime.migration] Running upgrade 20261026_0004 -> 20261027_0005, Add observation bundles; preserve historical single-observation linkage.
