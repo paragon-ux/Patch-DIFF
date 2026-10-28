@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import atexit
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from functools import wraps
 import json
@@ -96,7 +96,9 @@ class PerformanceRecorder:
         self.instance_id = uuid.uuid4().hex
         self.queue = queue.Queue(maxsize=capacity)
         self.dropped = self.written = 0
-        self.error = None
+        memory_mode = os.getenv("PATCHDIFF_PERF_MEMORY", "1")
+        self.memory_enabled = memory_mode == "1"
+        self.error = None if memory_mode in {"0", "1"} else "invalid_memory_configuration"
         self.closed = False
         self.children = set()
         self._streams = ()
@@ -172,15 +174,18 @@ class PerformanceRecorder:
     def _write(self):
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("ab", buffering=0) as stream, Path(str(self.path) + ".lock").open("a+b", buffering=0) as lock, Path(str(self.path) + ".memory.jsonl").open("ab", buffering=0) as memory:
-                self._streams = (stream, lock, memory)
+            with ExitStack() as stack:
+                stream = stack.enter_context(self.path.open("ab", buffering=0))
+                lock = stack.enter_context(Path(str(self.path) + ".lock").open("a+b", buffering=0))
+                memory = stack.enter_context(Path(str(self.path) + ".memory.jsonl").open("ab", buffering=0)) if self.memory_enabled else None
+                self._streams = (stream, lock) + ((memory,) if memory is not None else ())
                 lock.seek(0, os.SEEK_END)
                 if lock.tell() == 0:
                     lock.write(b"0")
                     lock.flush()
                 next_memory = 0
                 while not self._stop.is_set() or not self.queue.empty():
-                    if time.monotonic() >= next_memory:
+                    if self.memory_enabled and time.monotonic() >= next_memory:
                         for pid in {self.pid} | self.children.copy():
                             measured = process_memory(pid)
                             if measured is not None:
@@ -208,6 +213,7 @@ class PerformanceRecorder:
             self.error = "writer_shutdown_timeout"
         status = {"schema": "patchdiff-perf-status/1", "pid": self.pid, "run_id": self.run_id,
                   "written": self.written, "dropped": self.dropped, "error": self.error,
+                  "memory_sampling_enabled": self.memory_enabled,
                   "valid": self.error is None and self.dropped == 0 and self.queue.empty()}
         try:
             Path(str(self.path) + f".status-{self.pid}-{self.instance_id}.json").write_text(json.dumps(status) + "\n", encoding="ascii")

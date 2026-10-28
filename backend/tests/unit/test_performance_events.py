@@ -123,3 +123,27 @@ def test_recorder_loss_after_engine_configuration_does_not_change_sql(recorded, 
         assert session.execute(text("SELECT 1").execution_options(patchdiff_perf_target_lock=str(uuid.uuid4()))).scalar_one() == 1
         session.commit()
     engine.dispose()
+
+
+def test_memory_sampling_can_be_disabled_without_losing_timing(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATCHDIFF_PERF_MEMORY", "0")
+    monkeypatch.setattr(perf, "process_memory", lambda pid: pytest.fail("Diagnostic RSS sampling disabled"))
+    recorder = perf.PerformanceRecorder(tmp_path / "events.jsonl")
+    monkeypatch.setattr(perf, "get_recorder", lambda: recorder)
+    recorder.children.add(12345)
+    assert perf.timed("rpc")(lambda: 17)() == 17
+    assert [row["event"] for row in rows(recorder)] == ["rpc"]
+    status = json.loads(next(tmp_path.glob("*.status-*.json")).read_text())
+    assert status["valid"] and status["memory_sampling_enabled"] is False
+    assert not list(tmp_path.glob("*.memory.jsonl"))
+
+
+@pytest.mark.parametrize("value", ["", "true", "2"])
+def test_invalid_memory_setting_invalidates_only_telemetry(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("PATCHDIFF_PERF_MEMORY", value)
+    recorder = perf.PerformanceRecorder(tmp_path / "events.jsonl")
+    monkeypatch.setattr(perf, "get_recorder", lambda: recorder)
+    assert perf.timed("rpc")(lambda: "accepted")() == "accepted"
+    recorder.close()
+    status = json.loads(next(tmp_path.glob("*.status-*.json")).read_text())
+    assert not status["valid"] and status["error"] == "invalid_memory_configuration"

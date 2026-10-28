@@ -524,6 +524,18 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 ## Structural Observation and Scoped Submission (`waymark-engine@4.1.0`)
 
 ### `patchdiff_observe_scope`
+
+The public `tools/list` schemas include task-independent examples for filtered
+candidate discovery, direct single selection, batch selection, observation paging,
+and separate single/batch submissions. Bind illustrative IDs, both guards and
+returned cursors to actual receipts. Candidate discovery issues no observation;
+known exact identities can be selected directly. Preserve returned Markdown names
+including punctuation; ambiguous identities reject. Exact match strings can
+include literal newlines. `find_occurrences` indexes the whole current target;
+batch groups instead count overlapping matches from one inside their own
+scope-local sequential buffer after earlier operations. A preceding catalog is
+not mandatory, and single/batch fields cannot be mixed.
+
 Discover structural symbol candidates or select a unique symbol scope in the authoritative PostgreSQL target snapshot using the pinned `waymark-engine@4.1.0` package.
 
 Bundle mode additionally accepts `selections: [{symbol_name, kind?}, ...]`

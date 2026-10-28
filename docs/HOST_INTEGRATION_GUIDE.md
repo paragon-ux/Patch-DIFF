@@ -265,6 +265,17 @@ For structured code, configuration, and documentation targets (`.py`, `.ts`, `.j
 
 ## Trusted scalar finalization
 
+Before finalization, establish terminal editor status, close its editing
+connection, and reconcile unresolved editing RPCs. Preserve accepted receipt
+guards; a fresh read must not refill them. Full transcript export can proceed
+independently of checkpointing a known accepted state. Record transcript evidence
+as pending, truncated or complete, and attach a later full export as a new hashed
+addendum without overwriting the initial result or uncertain SAVE receipts.
+The trusted host renders lifecycle tables; the editor only needs to report
+completion and unresolved issues. Public tool discovery supplies operation
+contracts; a host handoff need not repeat a separate tool tutorial.
+
+
 [Observed editor workflow v1](OBSERVED_EDITOR_WORKFLOW.md) assigns editing to the
 model and scalar SAVE/REPLAY/export to the trusted host. The backend contracts do
 not change and targets need not share a project. This removes model-managed

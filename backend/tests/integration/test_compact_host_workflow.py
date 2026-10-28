@@ -72,3 +72,48 @@ def test_compact_editor_recovery_paging_and_host_scalar_finalization(tmp_path):
                 assert len(snapshots) == 1 and len(cycles) == 2
                 assert sum(c.status == "closed" for c in cycles) == 1
                 assert (tmp_path / "finalization/exports" / item["filename"]).read_bytes() == row.current_content.encode()
+
+
+def test_advertised_observed_examples_execute_over_real_stdio():
+    import copy
+    from jsonschema import validate
+    source = '# ababa\ndef alpha():\n    # ababa\n    return "alpha"\n\ndef beta():\n    return "beta"\n'
+    with MCP("observed", response_mode="compact") as editor, MCP("full") as operator:
+        assert editor.catalog_wire_bytes < 65_536 and operator.catalog_wire_bytes < 65_536
+        schemas = {tool["name"]: tool["inputSchema"] for tool in editor.catalog["tools"]}
+        examples = {name: schema.get("examples", []) for name, schema in schemas.items()}
+        assert len(json.dumps(examples, ensure_ascii=True).encode()) < 8192
+        for name, items in examples.items():
+            for item in items: validate(item, schemas[name])
+        for mode in (0, 1):
+            target = operator.call("patchdiff_initialize_target", filename="example.py", content=source, content_type="text/x-python")
+            tid = target["target_file_id"]
+            observe = copy.deepcopy(examples["patchdiff_observe_scope"])
+            for item in observe: item["target_file_id"] = tid
+            candidates = editor.call("patchdiff_observe_scope", **observe[0])
+            assert candidates["status"] == "candidates" and candidates["observation_id"] is None
+            single = editor.call("patchdiff_observe_scope", **observe[1])
+            bundle = editor.call("patchdiff_observe_scope", **observe[2])
+            observe[3]["observation_id"] = bundle["scopes"][0]["observation_id"]
+            page = editor.call("patchdiff_observe_scope", **observe[3])
+            scope = bundle["scopes"][0]
+            assert scope["text"] + page["text"] == source[scope["scope_start"]:scope["scope_end"]]
+            found = editor.call("patchdiff_find_occurrences", target_file_id=tid, text="aba")
+            assert found["occurrence_count"] == 4
+            arguments = copy.deepcopy(examples["patchdiff_submit_observed_operations"][mode])
+            arguments.update(target_file_id=tid, expected_current_hash=target["current_hash"])
+            if mode == 0: arguments["observation_id"] = single["observation_id"]
+            else:
+                arguments["observation_bundle_id"] = bundle["observation_bundle_id"]
+                for group, observed in zip(arguments["groups"], bundle["scopes"]):
+                    group["observation_id"] = observed["observation_id"]
+            mixed = {**arguments, **({"observation_bundle_id": bundle["observation_bundle_id"], "groups": []} if mode == 0 else {"observation_id": single["observation_id"], "operations": []})}
+            mixed["client_request_id"] = "example-mixed-form"
+            response = editor.rpc("tools/call", {"name": "patchdiff_submit_observed_operations", "arguments": mixed})
+            assert json.loads(response["content"][0]["text"])["status"] != "accepted"
+            accepted = editor.call("patchdiff_submit_observed_operations", **arguments)
+            assert accepted["status"] == "accepted" and accepted["version"] == 1, accepted
+            exported = operator.call("patchdiff_export_target", target_file_id=tid)
+            expected = source.replace('return "alpha"', 'return "gamma"') if mode == 0 else source.replace('    # ababa', '    # abXYZ').replace('return "beta"', 'return "delta"')
+            assert exported["content"] == expected
+            assert operator.call("patchdiff_replay", target_file_id=tid)["status"] == "success"

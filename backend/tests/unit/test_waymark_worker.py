@@ -259,3 +259,42 @@ time.sleep(30)
             process.wait(timeout=3)
         process.stdout.close()
         process.stderr.close()
+
+
+@pytest.mark.parametrize("failure", [None, "cancel", "timeout", "pipe"])
+def test_ipc_trace_encloses_polling_and_records_only_terminal_outcome(tmp_path, monkeypatch, failure):
+    import queue
+    import uuid
+    from app.services import performance_events as perf
+    monkeypatch.setenv("PATCHDIFF_PERF_MEMORY", "0")
+    recorder = perf.PerformanceRecorder(tmp_path / "events.jsonl")
+    monkeypatch.setattr(perf, "get_recorder", lambda: recorder)
+    polls = []
+    class Frames:
+        def empty(self): return True
+        def get(self, timeout):
+            polls.append(timeout)
+            if len(polls) == 1: raise queue.Empty
+            return {"result": "ready"}
+    def write(data):
+        if failure == "pipe": raise BrokenPipeError("closed")
+        return len(data)
+    generation = object.__new__(worker._Generation)
+    generation.id, generation.lock = str(uuid.uuid4()), threading.Lock()
+    generation.error, generation.expected, generation.frames = None, None, Frames()
+    generation.owner = SimpleNamespace(closed=False)
+    generation.proc = SimpleNamespace(stdin=SimpleNamespace(write=write))
+    cancel = threading.Event()
+    if failure == "cancel": cancel.set()
+    try:
+        if failure:
+            with pytest.raises((worker.WaymarkWorkerError, subprocess.TimeoutExpired)):
+                generation.exchange("discover", "1", {}, 0 if failure == "timeout" else 1, "result", cancel)
+        else:
+            assert generation.exchange("discover", "1", {}, 1, "result") == {"result": "ready"}
+            assert len(polls) == 2
+    finally:
+        recorder.close()
+    events = [json.loads(line) for line in recorder.path.read_text().splitlines()]
+    reads = [event for event in events if event["event"] == "ipc_read"]
+    assert len(reads) == 1 and reads[0]["outcome"] == ("error" if failure else "ok")

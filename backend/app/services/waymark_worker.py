@@ -326,27 +326,27 @@ class _Generation:
                 write_errors.append(exc)
         writer = threading.Thread(target=write, daemon=True)
         writer.start()
-        while True:
-            if cancel is not None and cancel.is_set():
-                raise _error("CANCELLED", "Invocation was cancelled.")
-            if self.owner.closed:
-                raise _error("CANCELLED", "Serving process is shutting down.")
-            if self.error:
-                raise self.error
-            if write_errors:
-                raise _error("PROTOCOL_ERROR", "Worker pipe write failed.")
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise subprocess.TimeoutExpired("Waymark worker", timeout)
-            try:
-                with span("ipc_read"):
+        with span("ipc_read"):
+            while True:
+                if cancel is not None and cancel.is_set():
+                    raise _error("CANCELLED", "Invocation was cancelled.")
+                if self.owner.closed:
+                    raise _error("CANCELLED", "Serving process is shutting down.")
+                if self.error:
+                    raise self.error
+                if write_errors:
+                    raise _error("PROTOCOL_ERROR", "Worker pipe write failed.")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired("Waymark worker", timeout)
+                try:
                     value = self.frames.get(timeout=min(.05, remaining))
-                writer.join(timeout=max(0, deadline - time.monotonic()))
-                if writer.is_alive() or self.error:
-                    raise self.error or _error("PROTOCOL_ERROR", "Worker did not consume its control frame.")
-                return value
-            except queue.Empty:
-                continue
+                    writer.join(timeout=max(0, deadline - time.monotonic()))
+                    if writer.is_alive() or self.error:
+                        raise self.error or _error("PROTOCOL_ERROR", "Worker did not consume its control frame.")
+                    return value
+                except queue.Empty:
+                    continue
 
     def close(self):
         self.ready = False

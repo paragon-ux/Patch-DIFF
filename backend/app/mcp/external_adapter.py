@@ -62,8 +62,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
     "patchdiff_get_manifest_ledger": "Return the newest bounded ledger page displayed oldest-first, with has_more/next_sequence for backward traversal.",
-    "patchdiff_observe_scope": "Discover structural symbols via pinned Waymark Engine, select one exact symbol, or use selections to issue a bundle of 1..32 disjoint scopes from one snapshot and discovery pass. Every scope has an observation_id and bounded text. Paginate with observation_id." + _CODE_POINTS,
-    "patchdiff_submit_observed_operations": "Commit one guarded atomic target transaction. Single mode: observation_id + operations (absolute spans). Batch mode: observation_bundle_id + groups, both guards and client_request_id; each group uses scope-local sequential spans and match indexes. At most 32 groups/128 operations. Any failure rejects all groups. Interior insertions require both nonempty adjacency guards within that scope; boundary insertions reject." + _CODE_POINTS,
+    "patchdiff_observe_scope": "Discover structural symbols via pinned Waymark Engine, select one exact symbol, or use selections to issue a bundle of 1..32 disjoint scopes from one snapshot and discovery pass. Candidate query/kind discovery issues no observation. Known exact identities can be selected directly without a preceding catalog. Use returned Markdown names verbatim; ambiguous names reject. Every issued scope has an observation_id and bounded text; page with observation_id + offset." + _CODE_POINTS,
+    "patchdiff_submit_observed_operations": "Commit one guarded atomic target transaction. Single mode: observation_id + operations (absolute spans). Batch mode: observation_bundle_id + groups, both guards and client_request_id; each group uses scope-local sequential spans and 1-based overlapping match indexes, unlike global find_occurrences results. Exact match strings may contain newlines. At most 32 groups/128 operations. Any failure rejects all groups. Interior insertions require both nonempty adjacency guards within that scope; boundary insertions reject." + _CODE_POINTS,
 }
 
 # Illustrative resources; hosts bind real IDs, guards, parents and returned cursors.
@@ -81,6 +81,27 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
     "patchdiff_read_target": [{"target_file_id": _EXAMPLE_TARGET, "start": 0, "length": 120}],
     "patchdiff_find_occurrences": [{"target_file_id": _EXAMPLE_TARGET, "text": "alpha", "context_chars": 20,
                                     "start_occurrence": 1, "max_results": 5}],
+    "patchdiff_observe_scope": [
+        {"target_file_id": _EXAMPLE_TARGET, "query": "alp", "kind": "function"},
+        {"target_file_id": _EXAMPLE_TARGET, "symbol_name": "alpha", "kind": "function"},
+        {"target_file_id": _EXAMPLE_TARGET, "selections": [{"symbol_name": "alpha", "kind": "function"},
+                                                                      {"symbol_name": "beta", "kind": "function"}], "max_chars": 8},
+        {"target_file_id": _EXAMPLE_TARGET, "observation_id": "22222222-2222-4222-8222-222222222222", "offset": 8},
+    ],
+    "patchdiff_submit_observed_operations": [
+        {"target_file_id": _EXAMPLE_TARGET, "observation_id": "22222222-2222-4222-8222-222222222222",
+         "expected_target_version": 0, "expected_current_hash": "0" * 64, "intent": "Update exact multiline text in one scope",
+         "operations": [{"op": "match", "match": '# ababa\n    return "alpha"',
+                         "replace": '# ababa\n    return "gamma"'}]},
+        {"target_file_id": _EXAMPLE_TARGET, "observation_bundle_id": "33333333-3333-4333-8333-333333333333",
+         "expected_target_version": 0, "expected_current_hash": "0" * 64, "client_request_id": "example-observed-batch",
+         "intent": "Update two disjoint scopes atomically", "groups": [
+             {"observation_id": "22222222-2222-4222-8222-222222222222",
+              "operations": [{"op": "match", "match": "aba", "replace": "XYZ", "occurrence_index": 2}]},
+             {"observation_id": "44444444-4444-4444-8444-444444444444",
+              "operations": [{"op": "match", "match": "beta", "replace": "delta", "occurrence_index": 2}]},
+         ]},
+    ],
     "patchdiff_get_pdcp_log": [{"target_file_id": _EXAMPLE_TARGET, "limit": 2},
                                {"target_file_id": _EXAMPLE_TARGET, "limit": 2, "before_sequence": 3}],
     "patchdiff_get_manifest_ledger": [{"target_file_id": _EXAMPLE_TARGET, "limit": 2},
@@ -298,8 +319,8 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "project_id": "Optional project UUID.",
     "context_policy": "Context policy name.",
     "regenerated_pdcp_content": "Regenerated legacy PDCP 0.2.3 text.",
-    "query": "Optional case-insensitive substring filter over Waymark symbol names during candidate discovery.",
-    "symbol_name": "Exact Waymark symbol name (or parent.name) to select uniquely and issue an observation_id.",
+    "query": "Optional case-insensitive substring filter over Waymark symbol names. Candidate results issue no observation; known exact names need no preceding discovery call.",
+    "symbol_name": "Exact returned Waymark symbol name (or parent.name), including Markdown punctuation, to select uniquely and issue an observation_id. Ambiguity rejects.",
     "kind": "Optional Waymark symbol kind filter (e.g. function, class, method, variable, property, object, section, table_row, code_block).",
     "observation_id": "Server-issued UUID identifying a verified structural scope observation.",
 }
@@ -432,6 +453,9 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["observation_bundle_id"] = {"type": "string", "format": "uuid", "description": "Server-issued bundle for an atomic scope-local batch."}
         group_schema = copy.deepcopy(GROUP_JSON_SCHEMA)
         group_schema["properties"]["operations"]["items"] = copy.deepcopy(properties["operations"]["items"])
+        match_schema = group_schema["properties"]["operations"]["items"]["oneOf"][0]
+        match_schema["properties"]["occurrence_index"]["description"] = "One-based overlapping occurrence in this scope's sequential buffer after earlier operations, not the global target."
+        match_schema["properties"]["match"]["description"] = "Exact text, including any literal newlines, inside this group's sequential scope buffer."
         properties["groups"] = {"type": "array", "minItems": 1, "maxItems": MAX_BATCH_SCOPES, "items": group_schema,
                                 "description": "At most 128 operations total. Each group uses its own original scope slice; match indexes and sequential span offsets are scope-local."}
         schema["oneOf"] = [

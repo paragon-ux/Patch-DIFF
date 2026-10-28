@@ -50,7 +50,7 @@ def test_discovery_examples_are_valid_bounded_and_isolated():
     adapter = ExternalMCPAdapter(profile="full")
     tools = adapter.list_tools()
     schemas = {tool["name"]: tool["inputSchema"] for tool in tools}
-    assert len(TOOL_EXAMPLES) == 9 and sum(map(len, TOOL_EXAMPLES.values())) == 13
+    assert len(TOOL_EXAMPLES) == 11 and sum(map(len, TOOL_EXAMPLES.values())) == 19
     assert len(json.dumps({"tools": tools}, ensure_ascii=True, separators=(",", ":")).encode("ascii")) <= 65536
     assert len(json.dumps(TOOL_EXAMPLES, ensure_ascii=True, separators=(",", ":")).encode("ascii")) <= 8192
     for name, examples in TOOL_EXAMPLES.items():

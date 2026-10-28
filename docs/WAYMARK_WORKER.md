@@ -42,3 +42,15 @@ Set these values in the host's MCP server configuration, rather than relying on 
 Use a separate trusted `full`-profile process for fixture initialization, final export and audit inspection. Keep its configuration and the reference evaluator outside the editing agent's context. Disable the agent's native file/shell tools and other MCP servers. Preserve exact request/result and transcript logs in private evidence, and record the executed source SHA, requested model/provider identity, effective reasoning setting and initial target hashes. Model routing and effective High reasoning must be attested by the owner's host; backend tests do not establish them.
 
 For one owner-initiated canary, initialize five fresh targets from the authenticated original fixture bytes, supply only the unchanged original task/tool instructions plus the target mapping, and leave all versions at zero with no attempts. Do not replay archived solution payloads into those targets. After the model finishes, the operator exports the five targets, inspects SAVE/replay and audit results, and runs the independent full-byte and behavioral evaluator. Gate 2 remains closed; this configuration does not authorize a comparative run or merge.
+
+## Optional timing evidence
+
+`PATCHDIFF_PERF_EVENTS` selects an absolute private JSONL path for bounded timing
+events. With recording enabled, `PATCHDIFF_PERF_MEMORY=1` (default) also samples
+diagnostic RSS; `0` keeps timing events and recorder status without RSS samples
+or a memory file. The status receipt records `memory_sampling_enabled`. Other
+values invalidate telemetry (`invalid_memory_configuration`) without changing
+transactions. This setting never disables the worker's independent RSS limits.
+`ipc_read` covers one complete response wait: normal empty polling is included
+in the successful duration; timeout, cancellation and pipe/protocol failures
+produce a failed outcome. Nested durations are not additive CPU measurements.
