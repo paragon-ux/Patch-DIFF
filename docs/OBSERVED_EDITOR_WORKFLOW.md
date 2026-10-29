@@ -26,6 +26,10 @@ Provide the published tool contracts through the host's supported schema/context
 mechanism. Direct typed exposure or preloading may depend on the host. When a
 generic dispatcher requires schema inspection, allow the registered tool-help
 files. If the host spills a result, allow that session's generated result file.
+General repository manuals require a separate explicit grant; registered help
+and spill access do not imply that grant. Record ancillary documentation access
+separately, and describe a run that uses it as MCP editing with documentation
+consultation. Record supported role restrictions separately from instructed policy.
 Neither permission authorizes native target inspection, implementation access,
 other-session evidence, prepared operations, or oracle access.
 
@@ -49,8 +53,11 @@ other-session evidence, prepared operations, or oracle access.
   observation_id/offset paging. Retained line_starts are absolute code points.
   Never edit unseen text based on a truncated preview alone.
 - The trusted host owns SAVE, REPLAY, export and independent task verification.
-  Do not call lifecycle tools. Finish with at most 150 words identifying completed
-  targets and any unresolved failures. The host assembles evidence from receipts.
+  Do not call lifecycle tools. Perform additional reads/searches when needed to
+  resolve editing uncertainty; acceptance alone does not prove task correctness.
+  Send one terminal status identifying completed targets and unresolved issues.
+  The host derives hashes, receipt tables and lifecycle results from captured
+  facts; the terminal message need not duplicate that report.
 
 Generic current-schema example, using a real returned bundle and a unique key:
 

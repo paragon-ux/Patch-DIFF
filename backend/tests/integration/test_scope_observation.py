@@ -227,3 +227,28 @@ def test_observe_scope_pagination_and_continuation_via_observation_id() -> None:
     reconstructed = "".join(chunks)
     assert reconstructed == content[page1["scope_start"] : page1["scope_end"]]
     assert canonical_sha256(reconstructed) == page1["observed_scope_hash"]
+
+
+def test_blank_optional_selectors_are_read_only_admission_failures():
+    from sqlalchemy import func, select
+
+    target = registry.call("patchdiff_initialize_target", filename="selector-contract.py",
+                           content="def example():\n    return 1\n", content_type="text/x-python")
+    target_id = uuid.UUID(target["target_file_id"])
+    def counts():
+        with SessionLocal() as session:
+            current = session.get(CloudTargetFiles, target_id)
+            return (current.version, current.current_hash,
+                    *[session.scalar(select(func.count()).select_from(model).where(model.target_file_id == target_id))
+                      for model in (AppendOnlyPdcpLogs, AppendOnlyManifestLedger, TargetScopeObservations)])
+    before = counts()
+    for field in ("query", "symbol_name", "kind"):
+        for value in ("", " ", "\t\n", "\u00a0", "\u3000"):
+            result = registry.call("patchdiff_observe_scope", target_file_id=str(target_id), **{field: value})
+            assert result["status"] == "invalid_argument"
+            assert result["failure_detail"] == f"{field} must be a non-empty string when provided."
+    assert counts() == before
+    discovered = registry.call("patchdiff_observe_scope", target_file_id=str(target_id), query=None, kind=None, symbol_name=None)
+    assert discovered["status"] == "candidates"
+    observed = registry.call("patchdiff_observe_scope", target_file_id=str(target_id), symbol_name="example")
+    assert observed["status"] == "observed"

@@ -108,3 +108,22 @@ def test_real_postgres_stdio_response_lost_after_commit_recovers_once():
             result = json.loads(rpc("tools/call", {"name": name, "arguments": {"target_file_id": target["target_file_id"]}})["content"][0]["text"])
             assert result["status"] in {"saved", "success"}
     assert state(target)[1] == 1 and len(state(target)[2]) == 1 and len(state(target)[3]) == 4
+
+
+def test_observed_selector_admission_contract_over_real_stdio():
+    from jsonschema import Draft202012Validator
+
+    target = registry.call("patchdiff_initialize_target", filename="stdio-selector.py",
+                           content="def example():\n    return 1\n", content_type="text/x-python")
+    with peer("observed") as (_, rpc):
+        schema = next(tool["inputSchema"] for tool in rpc("tools/list")["tools"]
+                      if tool["name"] == "patchdiff_observe_scope")
+        validator = Draft202012Validator(schema)
+        base = {"target_file_id": target["target_file_id"]}
+        for field in ("query", "symbol_name", "kind"):
+            assert not validator.is_valid({**base, field: ""})
+            assert validator.is_valid({**base, field: None})
+            result = rpc("tools/call", {"name": "patchdiff_observe_scope", "arguments": {**base, field: "\u3000"}})
+            assert json.loads(result["content"][0]["text"])["status"] == "invalid_argument"
+        valid = rpc("tools/call", {"name": "patchdiff_observe_scope", "arguments": {**base, "query": "example"}})
+        assert json.loads(valid["content"][0]["text"])["status"] == "candidates"

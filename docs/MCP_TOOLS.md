@@ -562,6 +562,12 @@ identify `selection_index`. [Exact fields and lifecycle](STRUCTURAL_BATCH_EDITIN
   - `offset` (`integer >= 0`, default `0`): code-point offset within `[scope_start, scope_end)`.
   - `max_chars` (`integer >= 1 | null`, default `4000`, cap `8000`): maximum code points returned on the page.
   - `include_line_starts` (`boolean`, default `false`): include 1-based line start offsets within the returned page.
+The optional top-level `query`, `symbol_name` and `kind` values must be nonblank
+when supplied. Omission/null means that selector or filter is absent; omitting
+`query` removes only the query filter. Discovery advertises `minLength: 1` to
+reject empty strings; the service also rejects whitespace-only strings, including
+Unicode whitespace. Nonblank strings are not implicitly trimmed.
+
 - **Modes & Fail-Closed Guarantees**:
   - **Candidate discovery** (`symbol_name` omitted): returns `status: "candidates"`, `observation_id: null`, and bounded structural candidates.
   - **Exact selection** (`symbol_name` provided):

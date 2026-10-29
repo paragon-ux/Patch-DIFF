@@ -382,6 +382,10 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["offset"]["default"] = 0
         properties["include_line_starts"]["default"] = False
     if name == "patchdiff_observe_scope":
+        for field in ("query", "symbol_name", "kind"):
+            properties[field]["minLength"] = 1
+            properties[field]["description"] = _PARAMETER_DESCRIPTIONS[field] + " Nonblank when supplied; omitted/null means absent."
+        properties["query"]["description"] += " Absence removes only the query filter."
         for field, minimum in (("offset", 0), ("max_chars", 1)):
             properties[field]["minimum"] = minimum
         properties["offset"]["default"] = 0

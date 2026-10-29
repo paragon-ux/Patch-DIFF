@@ -269,10 +269,15 @@ Before finalization, establish terminal editor status, close its editing
 connection, and reconcile unresolved editing RPCs. Preserve accepted receipt
 guards; a fresh read must not refill them. Full transcript export can proceed
 independently of checkpointing a known accepted state. Record transcript evidence
-as pending, truncated or complete, and attach a later full export as a new hashed
-addendum without overwriting the initial result or uncertain SAVE receipts.
-The trusted host renders lifecycle tables; the editor only needs to report
-completion and unresolved issues. Public tool discovery supplies operation
+as pending, clipped or parse-valid, and record coverage through a known terminal
+record separately. Literal clipping-marker text or source pagination does not
+prove transcript clipping. Attach a later export as a new hashed addendum without
+overwriting the initial result or uncertain SAVE receipts. A parent cannot export
+its own future terminal response; the operator can attach it afterward.
+The trusted host performs independent final verification and renders receipt
+tables. The editor may read/search to resolve editing uncertainty, then sends one
+terminal status identifying completed targets and unresolved issues; that message
+need not reproduce hashes or lifecycle tables. Public tool discovery supplies operation
 contracts; a host handoff need not repeat a separate tool tutorial.
 
 
