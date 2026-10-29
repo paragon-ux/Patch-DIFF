@@ -506,7 +506,24 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             schema["allOf"].append({"if": {"properties": {"format": {"const": format_}}}, "then": branch})
     if name in TOOL_EXAMPLES:
         schema["examples"] = copy.deepcopy(TOOL_EXAMPLES[name])
+    _portable_schema_patterns(schema)
     return schema
+
+
+def _portable_schema_patterns(schema: Any) -> None:
+    if isinstance(schema, dict):
+        pattern = schema.get("pattern")
+        suffix = r"(?![\s\S])"
+        if isinstance(pattern, str) and pattern.endswith(suffix):
+            # RE2 hosts reject lookahead; $ alone permits a final LF in other engines.
+            schema["pattern"] = pattern[:-len(suffix)] + "$"
+            schema.setdefault("allOf", []).append({"not": {"type": "string", "pattern": "\n"}})
+        for key, value in schema.items():
+            if key != "examples":
+                _portable_schema_patterns(value)
+    elif isinstance(schema, list):
+        for value in schema:
+            _portable_schema_patterns(value)
 
 
 def _schema_for_annotation(annotation: Any) -> dict[str, Any]:

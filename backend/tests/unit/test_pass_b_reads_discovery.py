@@ -88,3 +88,51 @@ def test_capability_metadata_and_descriptions_derive_from_runtime_constants():
     assert f"runtime {REPLACEMENT_RUNTIME_VERSION}." in TOOL_DESCRIPTIONS["patchdiff_submit_replacement"]
     assert f"{MAX_REPLACEMENT_CHARS:,} code points" in TOOL_DESCRIPTIONS["patchdiff_submit_replacement"]
     assert not [text for text in TOOL_DESCRIPTIONS.values() if re.search(r"\b(runtime|immutable|profile)\d", text)]
+
+
+def test_discovery_patterns_are_portable_and_do_not_mutate_runtime_schemas():
+    import copy
+
+    from app.pdcp.operations import OPERATION_JSON_SCHEMA
+    from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
+
+    original = copy.deepcopy((TYPED_EDIT_JSON_SCHEMA, OPERATION_JSON_SCHEMA))
+
+    def check_patterns(value):
+        if isinstance(value, dict):
+            if "pattern" in value:
+                assert "(?" not in value["pattern"]
+            for child in value.values():
+                check_patterns(child)
+        elif isinstance(value, list):
+            for child in value:
+                check_patterns(child)
+
+    for tool in ExternalMCPAdapter(profile="full").list_tools():
+        Draft202012Validator.check_schema(tool["inputSchema"])
+        check_patterns(tool["inputSchema"])
+    assert (TYPED_EDIT_JSON_SCHEMA, OPERATION_JSON_SCHEMA) == original
+
+
+@pytest.mark.parametrize("field,valid,limit,nullable", [
+    ("expected_current_hash", "a" * 64, 64, True),
+    ("client_request_id", "request-1", 128, True),
+    ("change_id", "change-1", 64, True),
+])
+def test_portable_patterns_preserve_strict_end_and_null(field, valid, limit, nullable):
+    import re
+
+    from app.mcp.external_adapter import _input_schema_for
+
+    properties = _input_schema_for("patchdiff_submit_edits")["properties"]
+    schema = (properties["edits"]["items"]["properties"][field]
+              if field == "change_id" else properties[field])
+    validator = Draft202012Validator(schema)
+    original_pattern = schema["pattern"][:-1] + r"(?![\s\S])"
+    assert validator.is_valid(valid)
+    assert validator.is_valid(None) == nullable
+    cases = ["", "a", "a" * limit, "a" * (limit + 1), "hello world", "é", "🌟"]
+    cases += [valid + suffix for suffix in ("\n", "\r", "\r\n", "\n\n", "\u2028", "\u0085")]
+    cases += ["a\nb", "\n" + valid, "A" * 64, "!" * limit]
+    for value in cases:
+        assert validator.is_valid(value) == bool(re.search(original_pattern, value)), repr(value)
