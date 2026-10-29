@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+from jsonschema import Draft202012Validator
 
 from app.mcp.external_adapter import ExternalMCPAdapter
 from app.pdcp.typed import ALLOWED_TYPED_EDIT_FIELDS, REQUIRED_TYPED_EDIT_FIELDS, TYPED_EDIT_JSON_SCHEMA
@@ -45,7 +48,14 @@ def test_subprocess_initialize_and_list_new_tools_with_complete_schema() -> None
     edits = submit_edits_schema["properties"]["edits"]
     assert edits["type"] == "array"
     assert edits["minItems"] == 1
-    assert edits["items"] == TYPED_EDIT_JSON_SCHEMA
+    advertised = copy.deepcopy(edits["items"])
+    runtime = copy.deepcopy(TYPED_EDIT_JSON_SCHEMA)
+    wire_id = Draft202012Validator(advertised["properties"].pop("change_id"))
+    runtime_id = Draft202012Validator(runtime["properties"].pop("change_id"))
+    assert advertised == runtime
+    # The wire regex is portable; its identifier domain must remain identical.
+    for value in (None, "chg_001", "a" * 64, "a" * 65, "", "chg_001\n", "two words", "é", 1):
+        assert wire_id.is_valid(value) == runtime_id.is_valid(value)
     assert set(edits["items"]["properties"].keys()) == set(ALLOWED_TYPED_EDIT_FIELDS)
     assert set(edits["items"]["required"]) == set(REQUIRED_TYPED_EDIT_FIELDS)
     assert edits["items"]["additionalProperties"] is False
