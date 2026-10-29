@@ -17,6 +17,10 @@ from typing import Any, TextIO, get_args, get_origin, get_type_hints
 
 from app.mcp import tools as _registered_tools  # noqa: F401 - imports register tool handlers
 from app.mcp.server import registry
+from app.mcp.editor_contracts import (
+    EDITOR_V2_TOOLS, EDITOR_V2_ROUTES, ContractArgumentError,
+    tool_declaration, normalize_arguments, project_result, is_success,
+)
 from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
 from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
@@ -26,7 +30,9 @@ from app.pdcp.observed_batch import (SELECTION_JSON_SCHEMA, GROUP_JSON_SCHEMA, M
                                      MAX_BATCH_OPERATIONS, BATCH_ERROR_CODES, BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION)
 
 
-PROTOCOL_VERSION = "2024-11-05"
+PROTOCOL_VERSION = "2024-11-05"  # Legacy fallback for clients without a revision.
+SUPPORTED_PROTOCOL_VERSIONS = (PROTOCOL_VERSION, "2025-06-18", "2025-11-25")
+LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[-1]
 SERVER_NAME = "patchdiff-mvp"
 SERVER_VERSION = "0.2.2"
 EXPECTED_TOOL_NAMES = registry.names()
@@ -142,6 +148,7 @@ MCP_PROFILES = {
     "observed": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_observed_operations"},
     "observed_editor": frozenset({"patchdiff_read_target", "patchdiff_find_occurrences",
                                   "patchdiff_observe_scope", "patchdiff_submit_observed_operations"}),
+    "observed_v2": EDITOR_V2_TOOLS,
     "full": frozenset(EXPECTED_TOOL_NAMES),
 }
 
@@ -153,12 +160,16 @@ class ExternalMCPAdapter:
     profile: str
     response_mode: str
     _tool_names: tuple[str, ...]
+    _protocol_version: str
+    _initialized: bool
 
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
         selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
         if selected not in MCP_PROFILES:
-            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, observed, observed_editor or full.")
+            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, observed, observed_editor, observed_v2 or full.")
         object.__setattr__(self, "profile", selected)
+        object.__setattr__(self, "_protocol_version", PROTOCOL_VERSION)
+        object.__setattr__(self, "_initialized", False)
         mode = os.getenv("PATCHDIFF_MCP_RESPONSE_MODE", "detailed") if response_mode is None else response_mode
         if mode not in {"detailed", "compact"}:
             raise ValueError(f"Unknown PATCHDIFF_MCP_RESPONSE_MODE: {mode!r}; expected detailed or compact.")
@@ -166,6 +177,15 @@ class ExternalMCPAdapter:
         object.__setattr__(self, "_tool_names", tuple(sorted(MCP_PROFILES[selected])))
 
     def list_tools(self) -> list[dict[str, Any]]:
+        if self.profile == "observed_v2":
+            declarations = []
+            for name in self._tool_names:
+                declaration = tool_declaration(name, _input_schema_for(EDITOR_V2_ROUTES[name]))
+                if self._protocol_version == PROTOCOL_VERSION:
+                    for key in ("outputSchema", "annotations", "_meta"):
+                        declaration.pop(key, None)
+                declarations.append(declaration)
+            return declarations
         return [
             {
                 "name": name,
@@ -182,6 +202,8 @@ class ExternalMCPAdapter:
         if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
+        if self.profile == "observed_v2":
+            return self._call_editor_tool(name, args)
         argument_error = _argument_error(name, args)
         if argument_error is not None:
             return {"content": [{"type": "text", "text": _dumps(argument_error, sort_keys=True)}], "isError": True}
@@ -197,6 +219,31 @@ class ExternalMCPAdapter:
                 return _tool_result(projected, compact=True)
         return _tool_result(payload)
 
+    def _call_editor_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        try:
+            normalized = normalize_arguments(name, arguments)
+        except ContractArgumentError as exc:
+            payload = {"status": "invalid_argument", "code": exc.code, "failure_detail": exc.detail}
+        else:
+            route = EDITOR_V2_ROUTES[name]
+            payload = _argument_error(route, normalized)
+            if payload is None:
+                try:
+                    if name in {"patchdiff_commit_bundle", "patchdiff_commit_observation"}:
+                        payload = _registered_tools.submit_editor_operations(**normalized)
+                    else:
+                        payload = registry.call(route, **normalized)
+                except Exception:  # An infrastructure failure cannot establish a transaction outcome.
+                    payload = {"status": "outcome_unknown", "code": "execution_failed",
+                               "failure_detail": "Tool execution failed; transaction outcome is unknown."}
+        success = is_success(name, payload)
+        projected = project_result(name, payload, arguments=arguments)
+        result = {"content": [{"type": "text", "text": _dumps(projected, sort_keys=True, separators=(",", ":"))}],
+                  "isError": not success}
+        if self._protocol_version != PROTOCOL_VERSION:
+            result["structuredContent"] = projected
+        return result
+
     def handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
         request_id = request.get("id")
         method = request.get("method")
@@ -207,13 +254,21 @@ class ExternalMCPAdapter:
             return _rpc_error(request_id, -32600, "Invalid JSON-RPC request.")
 
         if method == "initialize":
+            params = request.get("params", {})
+            if not isinstance(params, dict):
+                return _rpc_error(request_id, -32602, "initialize params must be an object.")
+            requested = params.get("protocolVersion", PROTOCOL_VERSION)
+            if not isinstance(requested, str):
+                return _rpc_error(request_id, -32602, "protocolVersion must be a string.")
+            negotiated = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else LATEST_PROTOCOL_VERSION
+            if self._initialized and negotiated != self._protocol_version:
+                return _rpc_error(request_id, -32602, "A connection cannot renegotiate its protocol revision.")
+            object.__setattr__(self, "_protocol_version", negotiated)
+            object.__setattr__(self, "_initialized", True)
             return _rpc_result(
                 request_id,
-                {
-                    "protocolVersion": PROTOCOL_VERSION,
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-                },
+                {"protocolVersion": negotiated, "capabilities": {"tools": {}},
+                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION}},
             )
         if method == "tools/list":
             return _rpc_result(request_id, {"tools": self.list_tools()})

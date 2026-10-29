@@ -345,3 +345,7 @@ cycle records manually; no automatic repair or cross-target rollback is provided
 An independent evaluator checks task correctness after exports. Keep gold data,
 full transcripts, actual wire calls, manifests, exports and verification artifacts
 outside the editing model's context and under a private ignored capture directory.
+
+## Purpose-specific observed interface
+
+For the opt-in eight-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.

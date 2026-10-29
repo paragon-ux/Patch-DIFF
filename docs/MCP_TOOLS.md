@@ -647,3 +647,7 @@ remain in the detailed representation and append-only persistence, retrievable b
 a separate trusted detailed/full operator. Compact mode does not guarantee that
 arbitrary source-rich responses fit a host's spill limit. Use existing query/kind,
 direct selection and observation pagination; never silently truncate source.
+
+## Versioned editor profile
+
+The opt-in `observed_v2` external profile exposes eight purposes through the existing services. Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 22 handlers retain their contracts.
