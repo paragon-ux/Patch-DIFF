@@ -8,7 +8,10 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 Choose the immutable server profile before starting a session with
 `PATCHDIFF_MCP_PROFILE`: `editor` (default, 7 tools), `unobserved` (5), `observed`
-(6), or `full` (22). Older integrations and trusted initialization/export/audit
+(6), `observed_editor` (4), or `full` (22). Use `observed_editor` for delegated
+editing when the host owns lifecycle work; it rejects SAVE/replay as well as
+other excluded tools before dispatch. Older integrations and trusted
+initialization/export/audit
 operators must explicitly opt into `full`. Excluded tools are uncallable as well
 as unadvertised. An agent cannot override a profile per request.
 [Exact profile lists and batch examples](STRUCTURAL_BATCH_EDITING.md).

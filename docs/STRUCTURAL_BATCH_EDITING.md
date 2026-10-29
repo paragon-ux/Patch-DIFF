@@ -18,10 +18,15 @@ The same immutable profile controls both `tools/list` and `tools/call`.
 | `editor` (default) | 7 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
 | `unobserved` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save`, `patchdiff_replay` |
 | `observed` | 6 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
+| `observed_editor` (delegated role) | 4 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations` |
 | `full` (explicit compatibility) | 22 | All registered tools, including initialization, export, history and legacy submissions |
 
 Older integrations and trusted lifecycle operators that initialize/export targets
 must explicitly select `full`. The internal registry retains all 22 handlers.
+Delegated editors use
+`observed_editor` when the host owns SAVE/replay; these lifecycle tools are
+uncallable on that editor connection. Existing profile defaults/counts are
+unchanged; use a separate full session for trusted finalization.
 `PATCHDIFF_STRICT_OBSERVATION_MODE=1` independently rejects unobserved writes at
 the service layer, including writes through `full` or the internal registry.
 

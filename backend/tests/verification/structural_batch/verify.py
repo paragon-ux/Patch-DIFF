@@ -50,7 +50,7 @@ class MCP:
         self.rpc_timeout_seconds, self.closed = rpc_timeout_seconds, False
         self.profile, self.sequence, self.calls, self.events = profile, 0, Counter(), []
         env = {**os.environ, "PYTHONPATH": str(REPO / "backend"), "PATCHDIFF_MCP_PROFILE": profile,
-               "PATCHDIFF_STRICT_OBSERVATION_MODE": "1" if profile == "observed" else "0"}
+               "PATCHDIFF_STRICT_OBSERVATION_MODE": "1" if profile in {"observed", "observed_editor"} else "0"}
         if database_url: env["PATCHDIFF_DATABASE_URL"] = database_url
         if response_mode is not None: env["PATCHDIFF_MCP_RESPONSE_MODE"] = response_mode
         self.response_mode = env.get("PATCHDIFF_MCP_RESPONSE_MODE", "detailed")
@@ -142,13 +142,13 @@ def run(destination, database_url=None, *, host_finalize=False):
     expected()  # authenticates frozen task/source hashes before using their content
     plan = original_plan()
     profiles = {}
-    for profile in ("editor", "unobserved", "observed", "full"):
+    for profile in ("editor", "unobserved", "observed", "observed_editor", "full"):
         with MCP(profile, database_url) as client:
             profiles[profile] = {"tool_count": len(client.catalog["tools"]),
                                  "tools_list_jsonrpc_line_bytes": client.catalog_wire_bytes,
                                  "tools_result_utf8_bytes": len(json.dumps(client.catalog, sort_keys=True, separators=(",", ":")).encode("utf-8"))}
     files, manifest = [], []
-    with MCP("full", database_url, response_mode="detailed" if host_finalize else None) as lifecycle, MCP("observed", database_url) as editor:
+    with MCP("full", database_url, response_mode="detailed" if host_finalize else None) as lifecycle, MCP("observed_editor" if host_finalize else "observed", database_url) as editor:
         for name, groups in plan.items():
             content = (PRIMARY / "fixtures" / name).read_bytes()
             assert sha(content) == SOURCE_HASHES[name]

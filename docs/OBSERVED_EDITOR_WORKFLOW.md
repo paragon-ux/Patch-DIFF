@@ -11,16 +11,18 @@ The trusted host configures the actual editor MCP process before startup:
 
 ```text
 PATCHDIFF_WAYMARK_MODE=resident
-PATCHDIFF_MCP_PROFILE=observed
+PATCHDIFF_MCP_PROFILE=observed_editor
 PATCHDIFF_STRICT_OBSERVATION_MODE=1
 PATCHDIFF_MCP_RESPONSE_MODE=compact
 ```
 
 Preserve required Node executable configuration. Restart and record effective
 configuration and tools/list; a prompt alone does not configure the server.
-Exactly six tools remain advertised and callable: patchdiff_read_target,
-patchdiff_find_occurrences, patchdiff_observe_scope,
-patchdiff_submit_observed_operations, patchdiff_save, patchdiff_replay.
+Exactly four tools are advertised and callable: patchdiff_read_target,
+patchdiff_find_occurrences, patchdiff_observe_scope and
+patchdiff_submit_observed_operations. SAVE/replay are rejected on this connection;
+the trusted host uses a separate full session for lifecycle work. Existing
+observed (six-tool) and default editor profiles retain their behavior.
 
 Provide the published tool contracts through the host's supported schema/context
 mechanism. Direct typed exposure or preloading may depend on the host. When a
@@ -77,8 +79,10 @@ arguments = {
 
 The strings above illustrate syntax; construct actual operations from the task
 and authoritative observations. Do not seed a live canary with this example or
-archived solutions. Lifecycle ownership is role policy unless the host supports
-a four-tool role allowlist; the server's observed profile still exposes six.
+archived solutions. The observed_editor server profile enforces this four-tool
+role at both advertisement and dispatch. Host-side hiding alone is not a
+substitute for that server boundary; strict observation admission remains a
+separate setting.
 
 ## Host compatibility and evidence
 

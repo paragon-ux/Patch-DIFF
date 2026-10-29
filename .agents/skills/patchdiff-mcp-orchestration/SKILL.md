@@ -24,7 +24,7 @@ The PatchDIFF MCP service provides deterministic validation, authoritative bound
 
 ## Tool Surface Overview
 
-PatchDIFF retains 22 internal tool handlers. The external adapter defaults to the 7-tool editor profile; explicit unobserved/observed/full profiles expose 5/6/22 tools and enforce identical lists for advertisement and calls. Trusted lifecycle clients and older integrations select PATCHDIFF_MCP_PROFILE=full before startup. The existing functional areas include:
+PatchDIFF retains 22 internal tool handlers. The external adapter defaults to the 7-tool editor profile; explicit unobserved/observed/full profiles expose 5/6/22 tools and enforce identical lists for advertisement and calls. Opt-in observed_editor exposes only read_target, find_occurrences, observe_scope and submit_observed_operations (4 tools), denying lifecycle calls on delegated editor connections. Trusted lifecycle clients and older integrations select PATCHDIFF_MCP_PROFILE=full before startup. The existing functional areas include:
 
 1. **Target Lifecycle**:
    - `patchdiff_handle_upload`: register uploaded file content as a target.

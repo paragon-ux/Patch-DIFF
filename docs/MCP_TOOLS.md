@@ -18,7 +18,11 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
 The 22 internal tools are organized into the groups below. External stdio MCP
 defaults to the **7-tool `editor` profile**; `unobserved` exposes 5, `observed` 6,
-and explicitly selected `full` exposes all 22. Both advertisement and dispatch
+`observed_editor` 4, and explicitly selected `full` exposes all 22. The opt-in
+`observed_editor` profile contains only read_target, find_occurrences,
+observe_scope and submit_observed_operations (all with the `patchdiff_` prefix);
+SAVE/replay belong to the separate trusted host session in that role. Both
+advertisement and dispatch
 enforce the immutable startup `PATCHDIFF_MCP_PROFILE`. Initialization, export,
 legacy and administrative tools require `full` at the external boundary.
 See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_EDITING.md).

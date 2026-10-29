@@ -30,8 +30,12 @@ single uniqueness; replay verifies every recorded scope without Waymark.
 [Limits, error codes, evidence and examples](STRUCTURAL_BATCH_EDITING.md).
 
 External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
-`unobserved` has 5, `observed` 6, and explicit compatibility `full` 22. Profiles
-filter both discovery and calls and remain immutable for a session; the internal
+`unobserved` has 5, `observed` 6, opt-in `observed_editor` 4, and explicit
+compatibility `full` 22. The four-tool delegated role excludes SAVE/replay at
+both advertisement and dispatch while preserving the existing profiles and all
+request shapes. Observation/submission descriptions clarify route inputs, returned
+authority and the scopes-to-groups mapping; service validation and durable
+transaction/replay formats are unchanged. Profiles filter both discovery and calls and remain immutable for a session; the internal
 registry keeps all 22 handlers. Trusted lifecycle operators and older integrations
 must opt into `full` before starting their session.
 

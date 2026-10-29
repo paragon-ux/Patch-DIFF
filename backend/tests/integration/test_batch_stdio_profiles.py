@@ -53,7 +53,7 @@ def peer(profile):
         process.stderr.close()
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("observed", 6), ("full", 22)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("observed", 6), ("observed_editor", 4), ("full", 22)])
 def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count):
     with peer(profile) as (_, rpc):
         listed = rpc("tools/list")["tools"]
@@ -67,6 +67,22 @@ def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count):
         override = rpc("tools/call", {"name": "patchdiff_read_target", "arguments": {"target_file_id": "x", "profile": "full"}})
         assert override["isError"]
 
+
+
+def test_delegated_editor_stdio_denies_lifecycle_and_every_unadvertised_route():
+    allowed = {"patchdiff_read_target", "patchdiff_find_occurrences",
+               "patchdiff_observe_scope", "patchdiff_submit_observed_operations"}
+    with peer("observed_editor") as (_, rpc):
+        assert {tool["name"] for tool in rpc("tools/list")["tools"]} == allowed
+        for name in set(registry.names()) - allowed:
+            result = rpc("tools/call", {"name": name, "arguments": {}, "profile": "full"})
+            assert result["isError"]
+            assert "Unknown PatchDIFF MCP tool" in result["content"][0]["text"]
+        override = rpc("tools/call", {"name": "patchdiff_observe_scope",
+            "arguments": {"target_file_id": "target", "profile": "full"}})
+        assert override["isError"]
+        assert json.loads(override["content"][0]["text"])["code"] == "unknown_argument"
+        assert {tool["name"] for tool in rpc("tools/list")["tools"]} == allowed
 
 def test_unknown_profile_fails_startup_without_advertisement():
     completed = subprocess.run([sys.executable, "-m", "app.mcp.external_adapter"], cwd=ROOT,

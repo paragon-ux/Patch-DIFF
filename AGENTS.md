@@ -141,7 +141,9 @@ refusing destructive downgrade. See [the batch contract](docs/STRUCTURAL_BATCH_E
 
 External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default `editor`
 advertises and permits exactly 7 tools; `unobserved` 5, `observed` 6 and explicit
-compatibility `full` all 22. Trusted lifecycle/legacy clients opt into `full`;
+compatibility `full` all 22. Opt-in `observed_editor` advertises and permits only
+the four observed editing/read tools; that profile rejects SAVE/replay.
+Trusted lifecycle/legacy clients opt into `full`;
 the internal registry retains all handlers. Strict observed service admission
 remains independent. The frozen comparative Gate 2 stays closed.
 
