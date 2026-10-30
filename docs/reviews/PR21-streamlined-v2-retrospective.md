@@ -54,14 +54,16 @@ PR 20 introduced `observed_v2` to simplify tool definitions into purpose-specifi
 7. `patchdiff_commit_observation` (single-scope commit)
 8. `patchdiff_read_observation` (read existing observation)
 
-### The PR 20slim Canary Probe: Uncovering Friction
-While PR 20 was functionally correct, canary testing with Gemini 3.8 Flash High uncovered two major friction points:
+### The PR 20slim Canary Probe (Commit `01f32c7`): Uncovering Friction
+While PR 20 was functionally correct, canary testing on commit `01f32c701fbe36f960cf9ce103e0396534d8dadb` (an unpublished exploratory commit on `codex/mcp-editor-interface-v2`) with Gemini 3.8 Flash High uncovered two major friction points:
 
-1. **Dual-Path Ambiguity**: Having both batch tools (`observe_scopes`, `commit_bundle`) and singular tools (`observe_one`, `commit_observation`, `read_observation`) created hesitation in model planning. The agent frequently made redundant calls probing observation state or debating between singular and batch endpoints, expanding planner steps to 41–45.
-2. **Commit Receipt Bloat & Truncation**: When committing a bundle, the server returned both the `scopes` confirmation array and the raw `changes` array containing runtime-derived span facts (`span_start`, `span_end`, char counts, SHA-256 digests). For multi-edit transactions, receipt payloads exceeded 10–12 KB.
+1. **Dual-Path Ambiguity**: Having both batch tools (`observe_scopes`, `commit_bundle`) and singular tools (`observe_one`, `commit_observation`, `read_observation`) created hesitation in model planning. Even with receipt slimming explorations, the agent frequently made redundant calls probing observation state or debating between singular and batch endpoints, expanding planner steps to 45.
+2. **Commit Receipt Bloat & Truncation**: In PR 20 (`097065e`), when committing a bundle, the server returned both the `scopes` confirmation array and the raw `changes` array containing runtime-derived span facts (`span_start`, `span_end`, char counts, SHA-256 digests). For multi-edit transactions, receipt payloads exceeded 10–12 KB.
    - Host tool output limits truncated the response.
    - The editor agent was forced to read external tool spill files just to check if its commit had succeeded.
    - Each truncated response caused context explosion, driving cache read tokens to over 2.6 million tokens.
+
+Exploratory commit `01f32c7` proved that slimming receipts was essential, but demonstrated that as long as the 8-tool surface remained, planner hesitation and dual-path confusion persisted.
 
 ---
 
@@ -97,11 +99,11 @@ We evaluated whether candidate metadata in `patchdiff_list_scopes` should be sim
 
 The canary benchmark evaluates the complete workflow: 21 exact edits across 5 targets (`matrix_kernel.py`, `schema_defs.py`, `validator_engine.py`, `routing_manifest.json`, `MIGRATION_RUNBOOK.md`).
 
-- **PR 20 (8 tools, verbose)**: Commit [`097065e`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20-gemini-20261030T000843Z-d2ba12ccea`
-- **PR 20slim (8 tools, trimmed docstrings)**: Commit [`097065e`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20slim-gemini-20261030T023726Z-23f740dcea`
-- **PR 21 Streamlined (5 tools, compact receipts)**: Commit [`f2720b8`](file:///home/paragon-ux/Patch-DIFF) / [`cf40b2f`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-v2-streamlined`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6`
+- **PR 20 (8 tools, verbose)**: Commit [`097065ec58cb8b8dbe71bddbc4d81c706fad64ef`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20-gemini-20261030T000843Z-d2ba12ccea`
+- **PR 20slim (8 tools, exploratory receipt slimming)**: Commit [`01f32c701fbe36f960cf9ce103e0396534d8dadb`](file:///home/paragon-ux/Patch-DIFF) (unpublished exploratory commit on `codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20slim-gemini-20261030T023726Z-23f740dcea`
+- **PR 21 Streamlined (5 tools, compact receipts)**: Commit [`f2720b8b71e3ae8713e5312cdcf8ec94b48f091c`](file:///home/paragon-ux/Patch-DIFF) / [`c039adf`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-v2-streamlined`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6`
 
-| Metric | PR 20 (`097065e`) | PR 20slim (`097065e`) | PR 21 Streamlined (`f2720b8`) | PR 21 Delta vs PR 20 |
+| Metric | PR 20 (`097065e`) | PR 20slim (`01f32c7`) | PR 21 Streamlined (`f2720b8`) | PR 21 Delta vs PR 20 |
 | :--- | :---: | :---: | :---: | :---: |
 | **Planner Steps** | 41 | 45 | **24** | **-41.5%** |
 | **Total MCP Calls** | 35 | 34 | **16** | **-54.3%** |
