@@ -60,7 +60,6 @@ def test_recovery_after_later_commit_keeps_transaction_distinct_from_current(sin
     with strict_observation_mode():
         recovered = call(adapter, name, args)
     assert recovered["transaction"] == {**first["transaction"], "deduplicated": True}
-    assert recovered["changes"] == first["changes"]
     assert recovered["current"]["version"] == 2 and recovered["transaction"]["after"]["version"] == 1
     assert len(state(target)[2]) == len(before_recovery[2]) == 2
     assert len(state(target)[3]) == len(before_recovery[3])
@@ -102,6 +101,8 @@ def test_candidate_selection_paging_and_mixed_sequential_operations():
     tid = target["target_file_id"]
     candidates = call(adapter, "patchdiff_list_scopes", {"target_file_id": tid})
     assert len(candidates["candidates"]) == 2 and not state(target)[4]
+    assert all(set(item) <= {"name", "kind", "parent", "start_line", "end_line"} for item in candidates["candidates"])
+    assert candidates["presentation"] == {"mode": "compact", "omitted": ["candidate_details"]}
     observed = call(adapter, "patchdiff_observe_scopes", {"target_file_id": tid, "selections": selectors, "max_chars": 40})
     scope = observed["scopes"][0]
     page = call(adapter, "patchdiff_read_observation", {"target_file_id": tid, "observation_id": scope["observation_id"], "offset": scope["next_offset"], "max_chars": 100})
@@ -114,7 +115,7 @@ def test_candidate_selection_paging_and_mixed_sequential_operations():
               {"op": "span", "start": start, "end": start + 4, "expected_text": "abcd", "replace": "ABCD"},
               {"op": "match", "match": "abcd", "replace": "DONE"}]}]})
     assert "'ABCD DONE'" in state(target)[0]
-    assert result["changes"]["coordinate_space"] == "scope_local_sequential_code_points"
+    assert "changes" not in result and "scopes" not in result
     assert result["transaction"]["operation_count"] == 2
     call(adapter, "patchdiff_read_observation", {"target_file_id": tid, "observation_id": scope["observation_id"]}, ok=False)
 
@@ -130,7 +131,6 @@ def test_large_single_scope_compatibility_and_absolute_span():
     start = content.index("abcd")
     accepted = call(adapter, "patchdiff_commit_observation", {"snapshot": observed["snapshot"], "intent": "large", "client_request_id": "large",
           "operations": [{"op": "span", "start": start, "end": start + 4, "expected_text": "abcd", "replace": "DONE"}]})
-    assert accepted["changes"]["coordinate_space"] == "target_absolute_sequential_code_points"
     assert accepted["transaction"]["before"]["version"] == 0 and accepted["transaction"]["after"]["version"] == 1
     assert state(target)[0] == content.replace("abcd", "DONE")
     saved = registry.call("patchdiff_save", target_file_id=tid)

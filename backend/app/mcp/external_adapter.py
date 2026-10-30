@@ -233,6 +233,8 @@ class ExternalMCPAdapter:
                         payload = _registered_tools.submit_editor_operations(**normalized)
                     else:
                         payload = registry.call(route, **normalized)
+                        if name == "patchdiff_list_scopes":
+                            payload = _compact_payload(route, payload)
                 except Exception:  # An infrastructure failure cannot establish a transaction outcome.
                     payload = {"status": "outcome_unknown", "code": "execution_failed",
                                "failure_detail": "Tool execution failed; transaction outcome is unknown."}

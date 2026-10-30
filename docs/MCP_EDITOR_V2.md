@@ -67,12 +67,15 @@ New-profile commit results distinguish:
   after version can be lower than current.
 - `transaction.pdcp_log_id`, request key, deduplication flag and operation/group
   counts: existing durable result metadata.
-- `scopes`, `changes`, `warnings`: items plus total and truncated flags. Change
-  facts come from immutable runtime evidence and explicitly identify scope-local
-  or target-absolute sequential code-point coordinates. Scope summaries use
-  existing group IDs/counts; no Waymark reparse is needed to decorate a receipt.
+- `warnings`: items plus total and truncated flags.
 - `validity` and diagnostics: validation evidence, not task correctness. Task and
   semantic correctness remain `not_evaluated`.
+
+Receipts omit per-change span/hash facts and group lists. An editor cannot check
+offsets or digests, and the first v2 canary listed them per change (3-8 KB per
+commit, 2 of 5 truncated) before 19 read-back searches, against 4-8 for the
+~900-byte compact receipts of the PR18/PR19 runs. The facts remain unchanged in
+the append-only log and manifest ledger for trusted full-profile clients.
 
 The entire logical commit/error JSON is capped at 8,192 UTF-8 bytes when serialized
 compactly, including metadata, diagnostics and all collections.
@@ -81,11 +84,13 @@ remain available. Oversized invalid identity echoes become null with byte/hash
 omission metadata, never a shortened string pretending to be an authentic ID.
 This cap is a server presentation choice, not a measured host limit. Observation
 and text/search results keep the existing service bounds and paging semantics.
+`list_scopes` always applies the compact candidate projection (name, kind, parent
+and line bounds, with `presentation.omitted: ["candidate_details"]`).
 
 Receipts do not invent final-text snippets from intermediate spans or echo a
 proposed replacement as independently verified text. Additional reads can resolve
 task uncertainty; host-owned behavioral/full-byte verification remains separate.
-Both detailed and compact startup response modes use this same v2 receipt.
+Both detailed and compact startup response modes use this same v2 presentation.
 
 Definitive tool failures set `isError: true`, retaining their domain/audit data.
 Accepted transactions with advisory warnings remain successful. Infrastructure

@@ -191,24 +191,23 @@ def test_paging_never_invents_bundle_or_fresh_snapshot():
     assert project_result("patchdiff_read_observation", payload) == payload
 
 
-@pytest.mark.parametrize("name,coordinates", [(BATCH, "scope_local_sequential_code_points"), (SINGLE, "target_absolute_sequential_code_points")])
-def test_receipt_original_state_survives_recovery_and_does_not_use_proposal_as_evidence(name, coordinates):
+@pytest.mark.parametrize("name", [BATCH, SINGLE])
+def test_receipt_original_state_survives_recovery_and_does_not_use_proposal_as_evidence(name):
     original = accepted()
     before = copy.deepcopy(original)
     receipt = project_result(name, original, arguments={"intent": "UNTRUSTED CLAIM", "groups": ["invented"]})
     assert original == before
     assert receipt["transaction"]["before"] == {"version": 7, "hash": "a" * 64}
     assert receipt["transaction"]["after"] == {"version": 8, "hash": "b" * 64}
-    assert receipt["changes"]["coordinate_space"] == coordinates
-    assert receipt["changes"]["items"] == original["evidence"]["changes"]
-    assert receipt["scopes"]["items"][0]["operation_count"] == 1
-    assert "change_count" not in receipt["scopes"]["items"][0]
+    assert receipt["transaction"]["operation_count"] == receipt["transaction"]["group_count"] == 1
+    # Uncheckable per-change span/hash facts and group lists stay in the ledger, not the receipt.
+    assert "changes" not in receipt and "scopes" not in receipt
+    assert "c" * 64 not in json.dumps(receipt)
     assert "UNTRUSTED" not in json.dumps(receipt)
     recovered = copy.deepcopy(original)
     recovered.update(deduplicated=True, current_version=11, current_hash="f" * 64)
     second = project_result(name, recovered)
-    assert second["transaction"]["after"] == receipt["transaction"]["after"]
-    assert second["changes"] == receipt["changes"]
+    assert second["transaction"] == {**receipt["transaction"], "deduplicated": True}
     assert second["current"] == {"version": 11, "hash": "f" * 64}
     assert second["transaction"]["deduplicated"]
     assert receipt["validity"] == VALIDITY
@@ -245,9 +244,8 @@ def test_whole_receipt_bounds_all_collections_unicode_and_diagnostics(name):
     assert receipt["validity"] == VALIDITY
     assert receipt["presentation"]["truncated"]
     assert receipt["warnings"]["total"] == 20
-    assert receipt["scopes"]["total"] == 32
-    assert receipt["changes"]["total"] == 128
-    assert receipt["changes"]["truncated"]
+    assert receipt["transaction"]["group_count"] == 32
+    assert receipt["transaction"]["operation_count"] == 128
     assert receipt["warnings"]["truncated"]
     assert "diagnostic" in receipt["presentation"]["omitted_fields"]
     Draft202012Validator(declaration(name)["outputSchema"]).validate(receipt)

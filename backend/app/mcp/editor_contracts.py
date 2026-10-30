@@ -182,9 +182,7 @@ def _output_schema(name: str) -> dict:
                                      "operation_count": {"type": ["integer", "null"]},
                                      "group_count": {"type": ["integer", "null"]}},
                                     ("pdcp_log_id", "client_request_id", "deduplicated", "before", "after")),
-            "current": state, "validity": {"type": "object"}, "warnings": collection, "scopes": collection,
-            "changes": _object({**collection["properties"], "coordinate_space": {"enum": ["scope_local_sequential_code_points", "target_absolute_sequential_code_points"]}},
-                               ("items", "total", "truncated", "coordinate_space")),
+            "current": state, "validity": {"type": "object"}, "warnings": collection,
         })
     elif name in {"patchdiff_observe_scopes", "patchdiff_observe_one"}:
         commit = "patchdiff_commit_bundle" if name == "patchdiff_observe_scopes" else "patchdiff_commit_observation"
@@ -278,8 +276,8 @@ def _optional(result: dict, key: str, value: Any) -> None:
         result[key] = value[:lo]
 
 
-def _collection(result: dict, key: str, items: list, total: int, truncated: bool = False, **extra: Any) -> None:
-    result[key] = {"items": [], "total": total, "truncated": truncated, **extra}
+def _collection(result: dict, key: str, items: list, total: int, truncated: bool = False) -> None:
+    result[key] = {"items": [], "total": total, "truncated": truncated}
     for item in items:
         result[key]["items"].append(copy.deepcopy(item))
         if not _fits(result):
@@ -320,13 +318,10 @@ def _receipt(name: str, payload: dict) -> dict:
     for key in ("validation_stage", "outcome"):
         if key in payload:
             result[key] = _header(result, key, payload[key])
-    # Reserve collection shells and omission metadata before admitting optional
+    # Reserve the collection shell and omission metadata before admitting optional
     # content, so all later trimming preserves whole-result rather than per-list bounds.
     if name in _COMMIT_TOOLS:
-        for key in ("warnings", "scopes", "changes"):
-            result[key] = {"items": [], "total": 0, "truncated": False}
-        result["changes"]["coordinate_space"] = ("scope_local_sequential_code_points" if name == "patchdiff_commit_bundle"
-                                                   else "target_absolute_sequential_code_points")
+        result["warnings"] = {"items": [], "total": 0, "truncated": False}
     diagnostic = payload.get("diagnostic")
     if isinstance(diagnostic, dict):
         essential = {key: _header(result, "diagnostic." + key, diagnostic[key]) for key in
@@ -344,23 +339,17 @@ def _receipt(name: str, payload: dict) -> dict:
         details = payload.get("warning_details")
         warnings = details if isinstance(details, list) and details else payload.get("warnings", [])
         _collection(result, "warnings", warnings, payload.get("warning_count", len(warnings)), payload.get("warnings_truncated", False))
-        scopes = []
-        for group in payload.get("groups", []):
-            scopes.append({("operation_count" if key == "change_count" else key): copy.deepcopy(value) for key, value in group.items()})
-        _collection(result, "scopes", scopes, payload.get("group_count", len(scopes)))
-        facts = (payload.get("evidence") or {}).get("changes", [])
-        _collection(result, "changes", facts, payload.get("change_count", payload.get("manifest_entries_added", len(facts))),
-                    coordinate_space=result["changes"]["coordinate_space"])
+        # Per-change span/hash facts and group lists stay in the audit log and ledger only:
+        # editors cannot check them, and listing them prompted per-change read-back.
     for key in ("failure_detail", "current_context", "near_misses", "error"):
         if key in payload:
             _optional(result, key, payload[key])
     # Metadata can grow while arrays are filled. Finish by dropping whole entries,
     # keeping totals/flags intact and preserving mandatory outcome/identity fields.
-    for key in ("changes", "scopes", "warnings"):
-        while not _fits(result) and isinstance(result.get(key), dict) and result[key].get("items"):
-            result[key]["items"].pop()
-            result[key]["truncated"] = True
-            _omit(result, key)
+    while not _fits(result) and isinstance(result.get("warnings"), dict) and result["warnings"].get("items"):
+        result["warnings"]["items"].pop()
+        result["warnings"]["truncated"] = True
+        _omit(result, "warnings")
     if not _fits(result):
         for key in ("failure_detail", "current_context", "near_misses", "error", "diagnostic"):
             if key in result:
