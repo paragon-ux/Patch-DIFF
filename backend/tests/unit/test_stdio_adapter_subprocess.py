@@ -11,7 +11,7 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from app.mcp.external_adapter import ExternalMCPAdapter
+from app.mcp.external_adapter import ExternalMCPAdapter, _portable_schema_patterns
 from app.pdcp.typed import ALLOWED_TYPED_EDIT_FIELDS, REQUIRED_TYPED_EDIT_FIELDS, TYPED_EDIT_JSON_SCHEMA
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -24,7 +24,7 @@ def _rpc(*messages: str) -> list[dict]:
         capture_output=True,
         text=True,
         cwd=BACKEND,
-        env={"PATCHDIFF_MCP_PROFILE": "full", "PYTHONPATH": str(BACKEND), "SYSTEMROOT": _systemroot()},
+        env={**os.environ, "PATCHDIFF_MCP_PROFILE": "full", "PYTHONPATH": str(BACKEND), "SYSTEMROOT": _systemroot()},
         timeout=60,
     )
     assert completed.returncode == 0, completed.stderr
@@ -50,6 +50,7 @@ def test_subprocess_initialize_and_list_new_tools_with_complete_schema() -> None
     assert edits["minItems"] == 1
     advertised = copy.deepcopy(edits["items"])
     runtime = copy.deepcopy(TYPED_EDIT_JSON_SCHEMA)
+    _portable_schema_patterns(runtime)
     wire_id = Draft202012Validator(advertised["properties"].pop("change_id"))
     runtime_id = Draft202012Validator(runtime["properties"].pop("change_id"))
     assert advertised == runtime

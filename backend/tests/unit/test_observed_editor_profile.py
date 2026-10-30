@@ -80,7 +80,7 @@ def _without_descriptions(value):
 
 @pytest.mark.parametrize("name,expected", [
     ("patchdiff_observe_scope", "ed81ef007af185df12f9c4fd3e8ea2e96c475285295c36e13fc08bf746b7e8d8"),
-    ("patchdiff_submit_observed_operations", "b9c9d808fb254031d68f2b0d562559ef6874e6debd044b625679bdf942f22aa1"),
+    ("patchdiff_submit_observed_operations", "972d51ff004b5f3272ac6fccef29ff1f0253ac0ebb88469d704200f229ea22f6"),
 ])
 def test_description_revision_preserves_request_contract_and_examples(name, expected):
     # Baseline bc2423f: pin domains, alternatives, examples and capabilities, but allow prose changes.

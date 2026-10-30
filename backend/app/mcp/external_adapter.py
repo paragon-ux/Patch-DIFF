@@ -604,8 +604,30 @@ def _portable_schema_patterns(schema: Any) -> None:
             schema["pattern"] = pattern[:-len(suffix)] + "$"
             schema.setdefault("allOf", []).append({"not": {"type": "string", "pattern": "\n"}})
         if "enum" in schema and isinstance(schema["enum"], list):
-            # OpenAPI / Gemini hosts reject null/empty values in enum declarations.
-            schema["enum"] = [v for v in schema["enum"] if v is not None and v != ""]
+            has_none = any(v is None for v in schema["enum"])
+            types = schema.get("type")
+            is_nullable = has_none or (isinstance(types, list) and "null" in types) or types == "null"
+            clean_enum = [v for v in schema["enum"] if v is not None and v != ""]
+            if is_nullable and clean_enum:
+                # OpenAPI / Gemini hosts reject null/empty values in enum declarations.
+                # In standard JSON Schema, an enum constraint without null rejects null
+                # even if type includes "null". Using anyOf preserves null acceptance
+                # while keeping enum strictly non-null strings.
+                non_null_type = "string"
+                if isinstance(types, list):
+                    non_null_types = [t for t in types if t != "null"]
+                    if non_null_types:
+                        non_null_type = non_null_types[0]
+                elif isinstance(types, str) and types != "null":
+                    non_null_type = types
+                schema.pop("type", None)
+                schema.pop("enum", None)
+                schema["anyOf"] = [
+                    {"type": "null"},
+                    {"type": non_null_type, "enum": clean_enum},
+                ]
+            else:
+                schema["enum"] = clean_enum
         for key, value in schema.items():
             if key != "examples":
                 _portable_schema_patterns(value)

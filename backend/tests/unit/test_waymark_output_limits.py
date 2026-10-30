@@ -24,7 +24,7 @@ def test_real_noisy_child_output_is_bounded_and_reaped(tmp_path, monkeypatch, st
         return child
 
     monkeypatch.setattr(adapter.subprocess, "Popen", track)
-    completed = adapter._run_bounded_discovery([shutil.which("node"), str(script)], b"{}", 5, 4096, 4096)
+    completed = adapter._run_bounded_discovery([adapter.resolve_node_executable(), str(script)], b"{}", 5, 4096, 4096)
     assert len(getattr(completed, stream)) == 4097
     assert len(completed.stdout) <= 4097 and len(completed.stderr) <= 4097
     assert children[0].returncode is not None
@@ -63,6 +63,6 @@ def test_real_hung_child_times_out_is_reaped_and_closes_pipes(tmp_path, monkeypa
 def test_simultaneous_pipes_at_inclusive_limits_do_not_deadlock(tmp_path):
     script = tmp_path / "both.mjs"
     script.write_text("process.stdout.write('o'.repeat(131072)); process.stderr.write('e'.repeat(131072));", encoding="utf-8")
-    completed = adapter._run_bounded_discovery([shutil.which("node"), str(script)], b"{}", 5, 131072, 131072)
+    completed = adapter._run_bounded_discovery([adapter.resolve_node_executable(), str(script)], b"{}", 5, 131072, 131072)
     assert completed.returncode == 0
     assert completed.stdout == b"o" * 131072 and completed.stderr == b"e" * 131072

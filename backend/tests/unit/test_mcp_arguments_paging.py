@@ -190,4 +190,18 @@ def test_discovery_agrees_with_bounds_nullable_history_and_legacy_key_lookup():
     assert Draft202012Validator(schemas["patchdiff_get_pdcp_log"]).is_valid(
         {"target_file_id": str(TARGET), "client_request_id": "legacy\n"})
     assert "pattern" in schemas["patchdiff_submit_edits"]["properties"]["client_request_id"]
-    assert schemas["patchdiff_get_pdcp_log"]["properties"]["status"]["enum"] == ["accepted", "rejected", None]
+    status_schema = schemas["patchdiff_get_pdcp_log"]["properties"]["status"]
+    if "enum" in status_schema:
+        assert status_schema["enum"] == ["accepted", "rejected"]
+    else:
+        enum_branch = next(b for b in status_schema["anyOf"] if "enum" in b)
+        assert enum_branch["enum"] == ["accepted", "rejected"]
+    assert Draft202012Validator(schemas["patchdiff_get_pdcp_log"]).is_valid(
+        {"target_file_id": str(TARGET), "status": None}
+    )
+    assert Draft202012Validator(schemas["patchdiff_get_pdcp_log"]).is_valid(
+        {"target_file_id": str(TARGET), "status": "accepted"}
+    )
+    assert not Draft202012Validator(schemas["patchdiff_get_pdcp_log"]).is_valid(
+        {"target_file_id": str(TARGET), "status": "invalid"}
+    )

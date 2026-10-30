@@ -21,6 +21,7 @@ import uuid
 from app.services.performance_events import (
     bridge_environment, collect_bridge_events, process_memory, span, track_child,
 )
+from app.services.waymark_adapter import resolve_node_executable
 
 PROTOCOL = "patchdiff-waymark-worker/1"
 ENGINE_VERSION = "4.1.0"
@@ -380,7 +381,7 @@ class WaymarkWorkerOwner:
             raise ValueError("Unknown PATCHDIFF_WAYMARK_MODE; expected oneshot or resident")
         if os.getenv("PATCHDIFF_WAYMARK_WORKERS", "1") != "1":
             raise ValueError("Only one resident Waymark worker is supported in this release")
-        self.node = node or os.getenv("PATCHDIFF_NODE_BINARY") or shutil.which("node") or "node"
+        self.node = resolve_node_executable(node)
         self.script = script or BRIDGE / "worker.mjs"
         self.condition = threading.Condition()
         self.lifecycle = threading.RLock()

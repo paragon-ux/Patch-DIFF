@@ -121,7 +121,16 @@ def observe_authoritative_target(
 
 
 def resolve_node_executable(explicit_node: str | None = None) -> str:
-    candidate = explicit_node or os.getenv("PATCHDIFF_NODE_BINARY") or shutil.which("node") or "node"
+    fallback_local = Path.home() / ".local" / "bin" / "node"
+    fallback_runtime = Path.home() / ".local" / "share" / "patchdiff-runtime" / "node-v22.19.0-linux-x64" / "bin" / "node"
+    candidate = (
+        explicit_node
+        or os.getenv("PATCHDIFF_NODE_BINARY")
+        or shutil.which("node")
+        or (str(fallback_local) if fallback_local.is_file() and os.access(fallback_local, os.X_OK) else None)
+        or (str(fallback_runtime) if fallback_runtime.is_file() and os.access(fallback_runtime, os.X_OK) else None)
+        or "node"
+    )
     return str(candidate)
 
 
