@@ -53,7 +53,7 @@ def peer(profile):
         process.stderr.close()
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("observed", 6), ("observed_editor", 4), ("full", 22)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("full", 22)])
 def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count):
     with peer(profile) as (_, rpc):
         listed = rpc("tools/list")["tools"]

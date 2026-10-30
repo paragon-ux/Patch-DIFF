@@ -146,6 +146,7 @@ MCP_PROFILES = {
     "editor": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_edits", "patchdiff_submit_observed_operations"},
     "unobserved": _BASE_EDITOR_TOOLS | {"patchdiff_submit_edits"},
     "unobserved_editor": frozenset({"patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_submit_edits"}),
+    "hybrid_editor": frozenset({"patchdiff_submit_edits"}),
     "observed": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_observed_operations"},
     "observed_editor": frozenset({"patchdiff_read_target", "patchdiff_find_occurrences",
                                   "patchdiff_observe_scope", "patchdiff_submit_observed_operations"}),
@@ -167,7 +168,7 @@ class ExternalMCPAdapter:
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
         selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
         if selected not in MCP_PROFILES:
-            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, unobserved_editor, observed, observed_editor, observed_v2 or full.")
+            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, unobserved_editor, hybrid_editor, observed, observed_editor, observed_v2 or full.")
         object.__setattr__(self, "profile", selected)
         object.__setattr__(self, "_protocol_version", PROTOCOL_VERSION)
         object.__setattr__(self, "_initialized", False)
