@@ -603,6 +603,9 @@ def _portable_schema_patterns(schema: Any) -> None:
             # RE2 hosts reject lookahead; $ alone permits a final LF in other engines.
             schema["pattern"] = pattern[:-len(suffix)] + "$"
             schema.setdefault("allOf", []).append({"not": {"type": "string", "pattern": "\n"}})
+        if "enum" in schema and isinstance(schema["enum"], list):
+            # OpenAPI / Gemini hosts reject null/empty values in enum declarations.
+            schema["enum"] = [v for v in schema["enum"] if v is not None and v != ""]
         for key, value in schema.items():
             if key != "examples":
                 _portable_schema_patterns(value)
