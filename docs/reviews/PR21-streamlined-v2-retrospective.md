@@ -102,29 +102,42 @@ The canary benchmark evaluates the complete workflow: 21 exact edits across 5 ta
 For full architectural confound analysis, tool interface granularity decomposition, and attestation proofs, see the authoritative comparative report:
 👉 [`docs/reviews/PR21_BENCHMARK_REPORT.md`](file:///home/paragon-ux/Patch-DIFF/docs/reviews/PR21_BENCHMARK_REPORT.md)
 
-- **Arm A (Native Baseline - Zero MCP)**: Direct `read_file` / `edit_file` workspace operations, Capsule: `/home/paragon-ux/patchdiff-test/control/arm_a_native/results/RESULT.json`
+- **Arm C (Native Baseline - Zero MCP)**: Direct `read_file` / `edit_file` workspace operations, Capsule: `/home/paragon-ux/patchdiff-test/control/arm_a_native/results/RESULT.json`
+- **Arm B (Hybrid: PatchDIFF Edit + Native Observation)**: Native `read_file` + `patchdiff_submit_edits`, Capsule: `/home/paragon-ux/patchdiff-test/control/arm_b_unobserved/results/RESULT.json`
 - **PR 20 (8 tools, verbose)**: Commit [`097065ec58cb8b8dbe71bddbc4d81c706fad64ef`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20-gemini-20261030T000843Z-d2ba12ccea`
 - **PR 20slim (8 tools, exploratory receipt slimming)**: Commit [`01f32c701fbe36f960cf9ce103e0396534d8dadb`](file:///home/paragon-ux/Patch-DIFF) (unpublished exploratory commit on `codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20slim-gemini-20261030T023726Z-23f740dcea`
-- **PR 21 Streamlined (5 tools, compact receipts)**: Commit [`f2720b8b71e3ae8713e5312cdcf8ec94b48f091c`](file:///home/paragon-ux/Patch-DIFF) / [`c039adf`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-v2-streamlined`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6`
+- **Arm A (PR 21 Streamlined, 5 tools, compact receipts)**: Commit [`f2720b8b71e3ae8713e5312cdcf8ec94b48f091c`](file:///home/paragon-ux/Patch-DIFF) / [`c039adf`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-v2-streamlined`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6`
 
-| Metric | Arm A: Native Baseline (`read_file` / `edit_file`) | PR 20 (`097065e`) | PR 20slim (`01f32c7`) | PR 21 Streamlined (`f2720b8`) | PR 21 Delta vs Native Baseline |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Planner Steps** | **54** | 41 | 45 | **24** | **-55.6%** |
-| **Total Tool Invocations**| **53** (20 edit, 18 read, 14 run, 1 msg) | 35 | 34 | **16** (6 list, 5 obs, 5 commit) | **-69.8%** |
-| **Accepted Transactions** | N/A (direct write) | 5 | 5 | **5** | 100% first-pass |
-| **Rejections / Retries** | N/A | 0 / 0 | 0 / 0 | **0 / 0** | Clean |
-| **Post-Commit Unnecessary Reads** | N/A | 0 | 0 | **0** | Clean |
-| **Output Tokens** | **22,656** | 27,015 | 29,631 | **24,566** | **+8.4%** |
-| **Input Tokens (uncached)** | **164,156** | 147,580 | 137,593 | **61,158** | **-62.7%** |
-| **Cache Read Tokens** | **2,822,368** | 2,635,563 | 2,339,653 | **968,816** | **-65.7% (-1.85M tokens)** |
-| **Total Input Tokens** | **2,986,524** | 2,783,143 | 2,477,246 | **1,029,974** | **-65.5% (-1.96M tokens)** |
-| **Full-Byte Correctness** | 100.0% (0 diffs) | 100.0% (0 diffs) | 100.0% (0 diffs) | **100.0% (0 diffs)** | Byte-identical |
-| **Behavioral Tests** | 20 / 20 passed | 20 / 20 passed | 20 / 20 passed | **20 / 20 passed** | 100.0% |
+| Metric | Arm C: Native Baseline | Arm B: Hybrid (Native Obs + PatchDIFF Tx) | PR 20 (`097065e`) | PR 20slim (`01f32c7`) | Arm A: PR 21 Streamlined | PR 21 Delta vs Native Baseline |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Planner Steps** | **54** | **19** | 41 | 45 | **24** | **-55.6%** |
+| **Total Tool Invocations**| **53** (20 edit, 18 read, 14 run, 1 msg) | **18** (11 read, 5 edit, 1 run, 1 msg) | 35 | 34 | **16** (6 list, 5 obs, 5 commit) | **-69.8%** |
+| **Accepted Transactions** | N/A (direct write) | **5** | 5 | 5 | **5** | 100% first-pass |
+| **Rejections / Retries** | N/A | **0 / 0** | 0 / 0 | 0 / 0 | **0 / 0** | Clean |
+| **Post-Commit Unnecessary Reads** | N/A | **0** | 0 | 0 | **0** | Clean |
+| **Output Tokens** | **22,656** | **39,620** | 27,015 | 29,631 | **24,566** | **+8.4%** |
+| **Input Tokens (uncached)** | **164,156** | **117,858** | 147,580 | 137,593 | **61,158** | **-62.7%** |
+| **Cache Read Tokens** | **2,822,368** | **1,257,649** | 2,635,563 | 2,339,653 | **968,816** | **-65.7% (-1.85M tokens)** |
+| **Total Input Tokens** | **2,986,524** | **1,375,507** | 2,783,143 | 2,477,246 | **1,029,974** | **-65.5% (-1.96M tokens)** |
+| **Full-Byte Correctness** | 100.0% (0 diffs) | **100.0% (0 diffs)** | 100.0% (0 diffs) | 100.0% (0 diffs) | **100.0% (0 diffs)** | Byte-identical |
+| **Behavioral Tests** | 20 / 20 passed | **20 / 20 passed** | 20 / 20 passed | 20 / 20 passed | **20 / 20 passed** | 100.0% |
 
 ---
 
 ## 5. Canary Attestation Evidence
 
+### Arm B (Hybrid: PatchDIFF Edit + Native Observation) Attestation Evidence
+- **Workspace**: `/home/paragon-ux/patchdiff-test/control/arm_b_unobserved/workspace/`
+- **Results Capsule**: [`/home/paragon-ux/patchdiff-test/control/arm_b_unobserved/results/RESULT.json`](file:///home/paragon-ux/patchdiff-test/control/arm_b_unobserved/results/RESULT.json)
+- **Database**: `patchdiff_control_arm_b` (Alembic schema: `20261027_0005`)
+- **Editing Session ID**: `0b48e006b6244995a5963c0c8e7143f4`
+- **Subagent ID**: `03af83c4-af77-4e47-b21a-8e895e0cde44`
+- **Transcript**: `/home/paragon-ux/.gemini/antigravity/brain/03af83c4-af77-4e47-b21a-8e895e0cde44/.system_generated/logs/transcript_full.jsonl` (38 rows, terminal step 37)
+- **Full-Byte Evaluation**: 0 byte differences across all 5 exported files against frozen reference hashes.
+- **Behavioral Evaluation**: 20/20 checks passed.
+- **Replay Verification**: 5/5 targets verified against PostgreSQL append-only manifest ledger and SAVE snapshots.
+
+### Arm A (PR 21 Streamlined `observed_v2`) Canary Attestation Evidence
 - **Canary Packet Root**: [`/home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6`](file:///home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6)
 - **Database**: `patchdiff_pr21streamlined_ece81ddcc6` (Alembic schema: `20261027_0005`)
 - **Source Commit**: `f2720b8b71e3ae8713e5312cdcf8ec94b48f091c`
