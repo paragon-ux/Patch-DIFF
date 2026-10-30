@@ -95,29 +95,31 @@ We evaluated whether candidate metadata in `patchdiff_list_scopes` should be sim
 
 ---
 
-## 4. Empirical Benchmark: PR 20 vs PR 20slim vs PR 21
+## 4. Empirical Benchmark: Native Baseline vs PR 20 vs PR 20slim vs PR 21
 
 The canary benchmark evaluates the complete workflow: 21 exact edits across 5 targets (`matrix_kernel.py`, `schema_defs.py`, `validator_engine.py`, `routing_manifest.json`, `MIGRATION_RUNBOOK.md`).
 
+For full architectural confound analysis, tool interface granularity decomposition, and attestation proofs, see the authoritative comparative report:
+👉 [`docs/reviews/PR21_BENCHMARK_REPORT.md`](file:///home/paragon-ux/Patch-DIFF/docs/reviews/PR21_BENCHMARK_REPORT.md)
+
+- **Arm A (Native Baseline - Zero MCP)**: Direct `read_file` / `edit_file` workspace operations, Capsule: `/home/paragon-ux/patchdiff-test/control/arm_a_native/results/RESULT.json`
 - **PR 20 (8 tools, verbose)**: Commit [`097065ec58cb8b8dbe71bddbc4d81c706fad64ef`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20-gemini-20261030T000843Z-d2ba12ccea`
 - **PR 20slim (8 tools, exploratory receipt slimming)**: Commit [`01f32c701fbe36f960cf9ce103e0396534d8dadb`](file:///home/paragon-ux/Patch-DIFF) (unpublished exploratory commit on `codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20slim-gemini-20261030T023726Z-23f740dcea`
 - **PR 21 Streamlined (5 tools, compact receipts)**: Commit [`f2720b8b71e3ae8713e5312cdcf8ec94b48f091c`](file:///home/paragon-ux/Patch-DIFF) / [`c039adf`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-v2-streamlined`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6`
 
-| Metric | PR 20 (`097065e`) | PR 20slim (`01f32c7`) | PR 21 Streamlined (`f2720b8`) | PR 21 Delta vs PR 20 |
-| :--- | :---: | :---: | :---: | :---: |
-| **Planner Steps** | 41 | 45 | **24** | **-41.5%** |
-| **Total MCP Calls** | 35 | 34 | **16** | **-54.3%** |
-| **Tool Breakdown** | 8 list, 8 obs, 5 commit, 10 read_obs, 4 read_target | 9 list, 7 obs, 5 commit, 9 read_obs, 4 read_target | **6 list, 5 obs, 5 commit** | Unambiguous |
-| **Accepted Transactions** | 5 | 5 | **5** | 100% first-pass |
-| **Rejections / Retries** | 0 / 0 | 0 / 0 | **0 / 0** | Clean |
-| **Post-Commit Unnecessary Reads** | 0 | 0 | **0** | Clean |
-| **Output Tokens** | 27,015 | 29,631 | **24,566** | **-9.1%** |
-| **Input Tokens (uncached)** | 147,580 | 137,593 | **91,904** | **-37.7%** |
-| **Cache Read Tokens** | 2,635,563 | 2,339,653 | **968,816** | **-63.2% (-1.66M tokens)** |
-| **RPC Interval Sum** | ~8.1 s | ~8.3 s | **3.96 s** | **-51.1%** |
-| **Editor Record Span** | ~360 s | ~380 s | **177.0 s** | **-50.8%** |
-| **Full-Byte Correctness** | 100.0% (0 diffs) | 100.0% (0 diffs) | **100.0% (0 diffs)** | Byte-identical |
-| **Behavioral Tests** | 20 / 20 passed | 20 / 20 passed | **20 / 20 passed** | 100.0% |
+| Metric | Arm A: Native Baseline (`read_file` / `edit_file`) | PR 20 (`097065e`) | PR 20slim (`01f32c7`) | PR 21 Streamlined (`f2720b8`) | PR 21 Delta vs Native Baseline |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Planner Steps** | **54** | 41 | 45 | **24** | **-55.6%** |
+| **Total Tool Invocations**| **53** (20 edit, 18 read, 14 run, 1 msg) | 35 | 34 | **16** (6 list, 5 obs, 5 commit) | **-69.8%** |
+| **Accepted Transactions** | N/A (direct write) | 5 | 5 | **5** | 100% first-pass |
+| **Rejections / Retries** | N/A | 0 / 0 | 0 / 0 | **0 / 0** | Clean |
+| **Post-Commit Unnecessary Reads** | N/A | 0 | 0 | **0** | Clean |
+| **Output Tokens** | **22,656** | 27,015 | 29,631 | **24,566** | **+8.4%** |
+| **Input Tokens (uncached)** | **164,156** | 147,580 | 137,593 | **61,158** | **-62.7%** |
+| **Cache Read Tokens** | **2,822,368** | 2,635,563 | 2,339,653 | **968,816** | **-65.7% (-1.85M tokens)** |
+| **Total Input Tokens** | **2,986,524** | 2,783,143 | 2,477,246 | **1,029,974** | **-65.5% (-1.96M tokens)** |
+| **Full-Byte Correctness** | 100.0% (0 diffs) | 100.0% (0 diffs) | 100.0% (0 diffs) | **100.0% (0 diffs)** | Byte-identical |
+| **Behavioral Tests** | 20 / 20 passed | 20 / 20 passed | 20 / 20 passed | **20 / 20 passed** | 100.0% |
 
 ---
 
