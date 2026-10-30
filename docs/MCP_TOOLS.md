@@ -650,4 +650,4 @@ direct selection and observation pagination; never silently truncate source.
 
 ## Versioned editor profile
 
-The opt-in `observed_v2` external profile exposes eight purposes through the existing services. Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 22 handlers retain their contracts.
+The opt-in `observed_v2` external profile exposes five purpose-specific tools through the existing services (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`). Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 22 handlers retain their contracts.

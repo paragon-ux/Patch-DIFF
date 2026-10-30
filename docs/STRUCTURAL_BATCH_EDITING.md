@@ -270,4 +270,4 @@ direct three-arm run still requires owner authorization.
 
 ## Versioned external view
 
-Opt-in `observed_v2` separates candidate listing, selection, paging and the two commit forms into eight external purposes. It lowers unchanged values into the batch/single services described here and retains the two single-scope paths for scopes above batch limits. See [the v2 contract](MCP_EDITOR_V2.md); existing profile catalogs and durable formats remain unchanged.
+Opt-in `observed_v2` separates candidate listing, selection, paging and bundle commit into five external purpose-specific tools. It lowers unchanged values into the structural batch services described here. See [the v2 contract](MCP_EDITOR_V2.md); existing profile catalogs and durable formats remain unchanged.

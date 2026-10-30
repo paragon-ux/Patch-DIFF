@@ -348,4 +348,4 @@ outside the editing model's context and under a private ignored capture director
 
 ## Purpose-specific observed interface
 
-For the opt-in eight-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
+For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
