@@ -1,9 +1,9 @@
 # Versioned observed editor interface
 
-`PATCHDIFF_MCP_PROFILE=observed_v2` selects eight external tool purposes at process
+`PATCHDIFF_MCP_PROFILE=observed_v2` selects five external tool purposes at process
 startup. It is opt-in. The existing editor (7), unobserved (5), observed (6),
 observed_editor (4) and full (22) profiles retain their tool sets, argument contracts
-and response presentation. The internal registry still has22 handlers. These
+and response presentation. The internal registry still has 22 handlers. These
 external aliases dispatch to the existing observation and observed-submission
 services; they introduce no transaction format, runtime, migration or replay path.
 
@@ -13,18 +13,11 @@ services; they introduce no transaction format, runtime, migration or replay pat
 | `patchdiff_find_occurrences` | Exact target-wide search | find_occurrences |
 | `patchdiff_list_scopes` | Candidate identities without observation authority | observe_scope candidate mode |
 | `patchdiff_observe_scopes` | Issue 1..32 disjoint scopes on one snapshot | observe_scope selections mode |
-| `patchdiff_read_observation` | Page one issued scope | observe_scope observation_id mode |
 | `patchdiff_commit_bundle` | Atomic scope-local grouped operations | submit_observed_operations batch mode |
-| `patchdiff_observe_one` | Issue a single scope, including one above the batch size cap | observe_scope symbol_name mode |
-| `patchdiff_commit_observation` | Single-scope operations with absolute sequential spans | submit_observed_operations single mode |
 
-The first six are the common bundle workflow. The last two preserve single-scope
-capabilities: batch issuance caps the combined selected text at 65,536 code points,
-so replacing every single request with a one-group bundle would lose capability.
-All eight remain available for the connection. The common six carry
-`_meta: {"antigravity/alwaysLoad": true}` on modern connections. This is a host hint;
-selective loading by a particular IDE has not been established. Budget for all
-eight declarations unless actual host evidence shows otherwise.
+All five tools carry `_meta: {"antigravity/alwaysLoad": true}` on modern connections.
+This is a host hint; selective loading by a particular IDE has not been established.
+Budget for all five declarations unless actual host evidence shows otherwise.
 
 ## Explicit snapshots and route boundaries
 
@@ -67,10 +60,11 @@ New-profile commit results distinguish:
   after version can be lower than current.
 - `transaction.pdcp_log_id`, request key, deduplication flag and operation/group
   counts: existing durable result metadata.
-- `scopes`, `changes`, `warnings`: items plus total and truncated flags. Change
-  facts come from immutable runtime evidence and explicitly identify scope-local
-  or target-absolute sequential code-point coordinates. Scope summaries use
-  existing group IDs/counts; no Waymark reparse is needed to decorate a receipt.
+- `scopes`, `warnings`: items plus total and truncated flags. Scope summaries
+  confirm each participating group ID and its accepted operation count without
+  reparsing. Per-change span/hash facts remain in the append-only log and
+  manifest ledger for trusted verification, keeping the editor receipt compact
+  (~800 bytes) and well under the presentation cap.
 - `validity` and diagnostics: validation evidence, not task correctness. Task and
   semantic correctness remain `not_evaluated`.
 

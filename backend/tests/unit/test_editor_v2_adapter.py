@@ -23,7 +23,7 @@ def test_negotiated_contract_and_error_channels(revision):
     modern = revision != "2024-11-05"
     declarations = adapter.list_tools()
     assert {t["name"] for t in declarations} == EDITOR_V2_TOOLS
-    assert len(declarations) == 8 and len(registry.names()) == 22
+    assert len(declarations) == 5 and len(registry.names()) == 22
     for declaration in declarations:
         assert ("outputSchema" in declaration) == modern
         assert ("annotations" in declaration) == modern
@@ -66,20 +66,17 @@ def test_alias_routes_and_profile_denials_are_exact(monkeypatch):
         "patchdiff_find_occurrences": {"target_file_id": "raw", "text": "a"},
         "patchdiff_list_scopes": {"target_file_id": "raw"},
         "patchdiff_observe_scopes": {"target_file_id": "raw", "selections": None},
-        "patchdiff_read_observation": {"target_file_id": "raw", "observation_id": "OID"},
-        "patchdiff_observe_one": {"target_file_id": "raw", "symbol_name": "alpha"},
         "patchdiff_commit_bundle": {"snapshot": {"target_file_id": "RAW", "observation_bundle_id": "BID"}},
-        "patchdiff_commit_observation": {"snapshot": {"target_file_id": "RAW", "observation_id": "OID"}},
     }
     for name, arguments in examples.items():
         adapter.call_tool(name, arguments)
         assert seen[-1][0] == ("commit" if name.startswith("patchdiff_commit") else EDITOR_V2_ROUTES[name])
-    assert seen[-1][1] == {"target_file_id": "RAW", "observation_id": "OID", "operations": None, "intent": None}
+    assert seen[-1][1] == {"target_file_id": "RAW", "observation_bundle_id": "BID", "groups": None, "intent": None}
     count = len(seen)
     for name in registry.names():
         if name not in EDITOR_V2_TOOLS:
             assert adapter.call_tool(name, {})["isError"]
-    for name in ("patchdiff_read_observation", "patchdiff_observe_one"):
+    for name in ("patchdiff_read_observation", "patchdiff_observe_one", "patchdiff_commit_observation"):
         assert adapter.call_tool(name, {"target_file_id": "raw"})["isError"]
     assert len(seen) == count
     for profile in MCP_PROFILES.keys() - {"observed_v2"}:

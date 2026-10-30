@@ -143,7 +143,7 @@ External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default `editor`
 advertises and permits exactly 7 tools; `unobserved` 5, `observed` 6 and explicit
 compatibility `full` all 22. Opt-in `observed_editor` advertises and permits only
 the four observed editing/read tools; that profile rejects SAVE/replay. Opt-in
-`observed_v2` exposes eight purpose-specific external tools through the same
+`observed_v2` exposes five purpose-specific external tools through the same
 services with explicit snapshots and bounded typed receipts; see
 [the v2 contract](docs/MCP_EDITOR_V2.md). It also denies lifecycle calls; all legacy
 profiles and the internal 22 handlers retain their contracts.

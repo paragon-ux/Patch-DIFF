@@ -229,7 +229,7 @@ class ExternalMCPAdapter:
             payload = _argument_error(route, normalized)
             if payload is None:
                 try:
-                    if name in {"patchdiff_commit_bundle", "patchdiff_commit_observation"}:
+                    if name == "patchdiff_commit_bundle":
                         payload = _registered_tools.submit_editor_operations(**normalized)
                     else:
                         payload = registry.call(route, **normalized)

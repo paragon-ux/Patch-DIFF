@@ -16,7 +16,6 @@ BUNDLE = "22222222-2222-4222-8222-222222222222"
 SCOPE = "33333333-3333-4333-8333-333333333333"
 LOG = "44444444-4444-4444-8444-444444444444"
 BATCH = "patchdiff_commit_bundle"
-SINGLE = "patchdiff_commit_observation"
 VALIDITY = {"protocol_valid": True, "transaction_valid": True,
             "task_correct": "not_evaluated", "semantic": "not_evaluated"}
 
@@ -27,18 +26,14 @@ def declaration(name):
 
 def snapshot(name=BATCH):
     return {"target_file_id": TARGET, "expected_target_version": 7, "expected_current_hash": "a" * 64,
-            ("observation_bundle_id" if name == BATCH else "observation_id"): BUNDLE if name == BATCH else SCOPE}
+            "observation_bundle_id": BUNDLE}
 
 
 def proposal(name=BATCH):
     operations = [{"op": "match", "match": "red", "replace": "blue", "occurrence_index": 2},
                   {"op": "span", "start": 10, "end": 12, "expected_text": "xy", "replace": "z"}]
-    result = {"snapshot": snapshot(name), "intent": "Update color", "client_request_id": "edit-1"}
-    if name == BATCH:
-        result["groups"] = [{"observation_id": SCOPE, "operations": operations}]
-    else:
-        result["operations"] = operations
-    return result
+    return {"snapshot": snapshot(name), "intent": "Update color", "client_request_id": "edit-1",
+            "groups": [{"observation_id": SCOPE, "operations": operations}]}
 
 
 def accepted():
@@ -77,32 +72,31 @@ def test_declarations_have_valid_examples_and_do_not_modify_legacy_schema(name):
 
 
 def test_catalog_and_mutating_annotations_are_honest():
-    assert len(EDITOR_V2_TOOLS) == 8 and len(EDITOR_V2_EAGER_TOOLS) == 6
+    assert len(EDITOR_V2_TOOLS) == 5 and len(EDITOR_V2_EAGER_TOOLS) == 5
     for name in EDITOR_V2_TOOLS:
         annotations = declaration(name)["annotations"]
-        writes = name in {BATCH, SINGLE, "patchdiff_observe_one", "patchdiff_observe_scopes"}
+        writes = name in {BATCH, "patchdiff_observe_scopes"}
         assert annotations["readOnlyHint"] is not writes
         assert not annotations["openWorldHint"]
         if writes:
             assert annotations["idempotentHint"] is False
-            assert annotations["destructiveHint"] == (name in {BATCH, SINGLE})
+            assert annotations["destructiveHint"] == (name == BATCH)
 
 
-@pytest.mark.parametrize("name", [BATCH, SINGLE])
-def test_normalization_preserves_values_order_metadata_and_exact_retry(name):
-    args = proposal(name)
+def test_normalization_preserves_values_order_metadata_and_exact_retry():
+    args = proposal(BATCH)
     args.update({"source": "client", "parent_pdcp_log_id": LOG, "attempt": 3, "include_correlation_id": True})
     before = copy.deepcopy(args)
-    normalized = normalize_arguments(name, args)
+    normalized = normalize_arguments(BATCH, args)
     assert normalized == {**args["snapshot"], **{key: value for key, value in args.items() if key != "snapshot"}}
     assert args == before
-    assert normalize_arguments(name, copy.deepcopy(args)) == normalized
-    Draft202012Validator(declaration(name)["inputSchema"]).validate(args)
+    assert normalize_arguments(BATCH, copy.deepcopy(args)) == normalized
+    Draft202012Validator(declaration(BATCH)["inputSchema"]).validate(args)
     for key, bad in [("expected_target_version", "7"), ("expected_current_hash", "BAD"),
                      ("target_file_id", TARGET.upper())]:
         changed = copy.deepcopy(args)
         changed["snapshot"][key] = bad
-        assert normalize_arguments(name, changed)[key] == bad
+        assert normalize_arguments(BATCH, changed)[key] == bad
 
 
 def test_batch_supports_one_many_and_mixed_ordered_operations():
@@ -118,22 +112,21 @@ def test_batch_supports_one_many_and_mixed_ordered_operations():
     assert len(declaration(BATCH)["inputSchema"]["properties"]["groups"]["items"]["properties"]["operations"]["items"]["oneOf"]) == 2
 
 
-@pytest.mark.parametrize("name", [BATCH, SINGLE])
-def test_known_target_missing_operational_fields_are_audited_by_service(name):
+def test_known_target_missing_operational_fields_are_audited_by_service():
     # A valid advertised request requires more, but admission remains authoritative.
-    result = normalize_arguments(name, {"snapshot": {"target_file_id": TARGET}})
+    result = normalize_arguments(BATCH, {"snapshot": {"target_file_id": TARGET}})
     assert result["target_file_id"] == TARGET
     assert result["intent"] is None
     assert "expected_current_hash" not in result
     assert "expected_target_version" not in result
     assert "client_request_id" not in result
-    assert result["observation_bundle_id" if name == BATCH else "observation_id"] is None
-    assert result["groups" if name == BATCH else "operations"] is None
-    args = proposal(name)
+    assert result["observation_bundle_id"] is None
+    assert result["groups"] is None
+    args = proposal(BATCH)
     args["snapshot"]["expected_target_version"] = None
     args["client_request_id"] = None
-    assert normalize_arguments(name, args)["expected_target_version"] is None
-    assert normalize_arguments(name, args)["client_request_id"] is None
+    assert normalize_arguments(BATCH, args)["expected_target_version"] is None
+    assert normalize_arguments(BATCH, args)["client_request_id"] is None
 
 
 @pytest.mark.parametrize("name,args,code", [
@@ -141,13 +134,11 @@ def test_known_target_missing_operational_fields_are_audited_by_service(name):
     (BATCH, {"snapshot": {}}, "missing_target"),
     (BATCH, {"snapshot": {"target_file_id": TARGET, "observation_id": SCOPE}}, "unknown_snapshot_field"),
     (BATCH, {"snapshot": snapshot(), "operations": []}, "unknown_argument"),
-    (SINGLE, {"snapshot": snapshot(SINGLE), "groups": []}, "unknown_argument"),
     ("patchdiff_list_scopes", {"target_file_id": TARGET, "selections": []}, "unknown_argument"),
     ("patchdiff_observe_scopes", {"target_file_id": TARGET, "query": "x"}, "unknown_argument"),
-    ("patchdiff_observe_one", {"target_file_id": TARGET}, "missing_identity"),
-    ("patchdiff_observe_one", {"target_file_id": TARGET, "symbol_name": None}, "missing_identity"),
-    ("patchdiff_read_observation", {"target_file_id": TARGET}, "missing_identity"),
-    ("patchdiff_read_observation", {"target_file_id": TARGET, "observation_id": None}, "missing_identity"),
+    ("patchdiff_observe_one", {"target_file_id": TARGET}, "unknown_tool"),
+    ("patchdiff_commit_observation", {"target_file_id": TARGET}, "unknown_tool"),
+    ("patchdiff_read_observation", {"target_file_id": TARGET}, "unknown_tool"),
 ])
 def test_unroutable_or_mixed_envelopes_fail_without_guessing(name, args, code):
     with pytest.raises(ContractArgumentError) as exc:
@@ -161,58 +152,45 @@ def test_route_errors_do_not_echo_untrusted_unknown_field_names():
         normalize_arguments(BATCH, {"secret-value" * 1000: 1})
     assert "secret-value" not in str(exc.value)
     assert normalize_arguments("patchdiff_observe_scopes", {"target_file_id": TARGET}) == {"target_file_id": TARGET, "selections": None}
-    assert normalize_arguments("patchdiff_read_observation", {"target_file_id": TARGET, "observation_id": 123})["observation_id"] == 123
 
 
-@pytest.mark.parametrize("name,identity,status,commit", [
-    ("patchdiff_observe_scopes", "observation_bundle_id", "observed_batch", BATCH),
-    ("patchdiff_observe_one", "observation_id", "observed", SINGLE),
-])
-def test_observation_snapshot_is_directly_reusable_and_source_is_unchanged(name, identity, status, commit):
-    source = {"status": status, "target_file_id": TARGET, "target_version": 7, "target_current_hash": "a" * 64,
-              identity: BUNDLE if commit == BATCH else SCOPE, "text": "exact\r\n\u03bb", "offset": 0,
+def test_observation_snapshot_is_directly_reusable_and_source_is_unchanged():
+    source = {"status": "observed_batch", "target_file_id": TARGET, "target_version": 7, "target_current_hash": "a" * 64,
+              "observation_bundle_id": BUNDLE, "text": "exact\r\n\u03bb", "offset": 0,
               "truncated": True, "next_offset": 9, "scope_end": 100000,
               "scopes": [{"observation_id": SCOPE, "text": "exact", "next_offset": None}]}
     original = copy.deepcopy(source)
-    projected = project_result(name, source)
+    projected = project_result("patchdiff_observe_scopes", source)
     assert source == original
-    assert projected["snapshot"] == snapshot(commit)
+    assert projected["snapshot"] == snapshot(BATCH)
     assert projected["text"] == source["text"]
-    assert projected["scope_end"] == 100000  # Compatibility observation does not shrink to a batch limit.
-    args = proposal(commit)
+    assert projected["scope_end"] == 100000
+    args = proposal(BATCH)
     args["snapshot"] = projected["snapshot"]
-    assert normalize_arguments(commit, args)[identity] == source[identity]
-    Draft202012Validator(declaration(name)["outputSchema"]).validate(projected)
+    assert normalize_arguments(BATCH, args)["observation_bundle_id"] == source["observation_bundle_id"]
+    Draft202012Validator(declaration("patchdiff_observe_scopes")["outputSchema"]).validate(projected)
 
 
-def test_paging_never_invents_bundle_or_fresh_snapshot():
-    payload = {"status": "observed", "mode": "scope_page", "observation_id": SCOPE,
-               "text": "page", "offset": 4, "next_offset": 8, "truncated": True}
-    assert project_result("patchdiff_read_observation", payload) == payload
-
-
-@pytest.mark.parametrize("name,coordinates", [(BATCH, "scope_local_sequential_code_points"), (SINGLE, "target_absolute_sequential_code_points")])
-def test_receipt_original_state_survives_recovery_and_does_not_use_proposal_as_evidence(name, coordinates):
+def test_receipt_original_state_survives_recovery_and_does_not_use_proposal_as_evidence():
     original = accepted()
     before = copy.deepcopy(original)
-    receipt = project_result(name, original, arguments={"intent": "UNTRUSTED CLAIM", "groups": ["invented"]})
+    receipt = project_result(BATCH, original, arguments={"intent": "UNTRUSTED CLAIM", "groups": ["invented"]})
     assert original == before
     assert receipt["transaction"]["before"] == {"version": 7, "hash": "a" * 64}
     assert receipt["transaction"]["after"] == {"version": 8, "hash": "b" * 64}
-    assert receipt["changes"]["coordinate_space"] == coordinates
-    assert receipt["changes"]["items"] == original["evidence"]["changes"]
+    assert "changes" not in receipt
     assert receipt["scopes"]["items"][0]["operation_count"] == 1
     assert "change_count" not in receipt["scopes"]["items"][0]
     assert "UNTRUSTED" not in json.dumps(receipt)
     recovered = copy.deepcopy(original)
     recovered.update(deduplicated=True, current_version=11, current_hash="f" * 64)
-    second = project_result(name, recovered)
+    second = project_result(BATCH, recovered)
     assert second["transaction"]["after"] == receipt["transaction"]["after"]
-    assert second["changes"] == receipt["changes"]
+    assert second["scopes"] == receipt["scopes"]
     assert second["current"] == {"version": 11, "hash": "f" * 64}
     assert second["transaction"]["deduplicated"]
     assert receipt["validity"] == VALIDITY
-    Draft202012Validator(declaration(name)["outputSchema"]).validate(second)
+    Draft202012Validator(declaration(BATCH)["outputSchema"]).validate(second)
 
 
 def test_missing_original_versions_are_not_inferred_from_alias_or_current():
@@ -220,13 +198,12 @@ def test_missing_original_versions_are_not_inferred_from_alias_or_current():
     del payload["before_version"]
     del payload["after_version"]
     payload["current_version"] = 99
-    result = project_result(SINGLE, payload)
+    result = project_result(BATCH, payload)
     assert result["transaction"]["before"]["version"] is None
     assert result["transaction"]["after"]["version"] is None
 
 
-@pytest.mark.parametrize("name", [BATCH, SINGLE])
-def test_whole_receipt_bounds_all_collections_unicode_and_diagnostics(name):
+def test_whole_receipt_bounds_all_collections_unicode_and_diagnostics():
     payload = accepted()
     payload["evidence"]["changes"] *= 128
     payload["groups"] *= 32
@@ -238,7 +215,7 @@ def test_whole_receipt_bounds_all_collections_unicode_and_diagnostics(name):
                               "failure_context": {"text": "\U0001f642" * 20000}}
     payload["failure_detail"] = "\U0001f642" * 10000
     payload["current_context"] = {"text": "x" * 10000}
-    receipt = project_result(name, payload)
+    receipt = project_result(BATCH, payload)
     assert encoded_size(receipt) <= MAX_RECEIPT_BYTES
     assert receipt["transaction"]["pdcp_log_id"] == LOG
     assert receipt["code"] == "SOME_CODE"
@@ -246,11 +223,10 @@ def test_whole_receipt_bounds_all_collections_unicode_and_diagnostics(name):
     assert receipt["presentation"]["truncated"]
     assert receipt["warnings"]["total"] == 20
     assert receipt["scopes"]["total"] == 32
-    assert receipt["changes"]["total"] == 128
-    assert receipt["changes"]["truncated"]
+    assert "changes" not in receipt
     assert receipt["warnings"]["truncated"]
     assert "diagnostic" in receipt["presentation"]["omitted_fields"]
-    Draft202012Validator(declaration(name)["outputSchema"]).validate(receipt)
+    Draft202012Validator(declaration(BATCH)["outputSchema"]).validate(receipt)
 
 
 def test_rejection_preserves_stage_log_code_and_does_not_turn_unknown_into_rejected():

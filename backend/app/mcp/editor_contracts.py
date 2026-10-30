@@ -15,15 +15,12 @@ EDITOR_V2_ROUTES = {
     "patchdiff_find_occurrences": "patchdiff_find_occurrences",
     "patchdiff_list_scopes": "patchdiff_observe_scope",
     "patchdiff_observe_scopes": "patchdiff_observe_scope",
-    "patchdiff_read_observation": "patchdiff_observe_scope",
-    "patchdiff_observe_one": "patchdiff_observe_scope",
     "patchdiff_commit_bundle": "patchdiff_submit_observed_operations",
-    "patchdiff_commit_observation": "patchdiff_submit_observed_operations",
 }
 EDITOR_V2_TOOLS = frozenset(EDITOR_V2_ROUTES)
-EDITOR_V2_EAGER_TOOLS = EDITOR_V2_TOOLS - {"patchdiff_observe_one", "patchdiff_commit_observation"}
+EDITOR_V2_EAGER_TOOLS = EDITOR_V2_TOOLS
 MAX_RECEIPT_BYTES = 8192
-_COMMIT_TOOLS = frozenset({"patchdiff_commit_bundle", "patchdiff_commit_observation"})
+_COMMIT_TOOLS = frozenset({"patchdiff_commit_bundle"})
 _GUARDS = ("target_file_id", "expected_target_version", "expected_current_hash")
 _OPTIONAL_SUBMIT = ("source", "parent_pdcp_log_id", "attempt", "client_request_id", "include_correlation_id")
 _FIELDS = {
@@ -31,18 +28,13 @@ _FIELDS = {
     "patchdiff_find_occurrences": ("target_file_id", "text", "context_chars", "start_occurrence", "max_results"),
     "patchdiff_list_scopes": ("target_file_id", "query", "kind"),
     "patchdiff_observe_scopes": ("target_file_id", "selections", "max_chars", "include_line_starts"),
-    "patchdiff_read_observation": ("target_file_id", "observation_id", "offset", "max_chars", "include_line_starts"),
-    "patchdiff_observe_one": ("target_file_id", "symbol_name", "kind", "offset", "max_chars", "include_line_starts"),
 }
 _DESCRIPTIONS = {
     "patchdiff_read_target": "Read bounded canonical LF text by Unicode code-point offset; returns version, hash and next_start.",
     "patchdiff_find_occurrences": "Find exact overlapping occurrences in the current target, with code-point spans, bounded context and pagination. These indexes are target-wide.",
     "patchdiff_list_scopes": "List structural candidates, optionally filtered by query/kind. Returns names and bounds, not observation authority.",
-    "patchdiff_observe_scopes": "Observe 1..32 exact disjoint scopes on one target snapshot. Returns a copyable snapshot and scopes with IDs/text. Total scopes <=65,536 code points, initial text <=32,768; page truncated scopes with read_observation.",
-    "patchdiff_read_observation": "Page an issued observation by scope-relative code-point offset. Returns exact text and next_offset; stale, consumed or closed-cycle observations reject.",
-    "patchdiff_observe_one": "Observe one exact structural identity, including scopes above the batch size limit. Returns a single-observation snapshot and bounded text; page with read_observation. Ambiguous identities reject.",
+    "patchdiff_observe_scopes": "Observe 1..32 exact disjoint scopes on one target snapshot. Returns a copyable snapshot and scopes with IDs/text. Total scopes <=65,536 code points, initial text <=32,768.",
     "patchdiff_commit_bundle": "Commit 1..32 groups atomically on one target using the explicit observed snapshot. At most 128 ordered match/span operations total. Each group uses its scope-local sequential buffer; overlapping match indexes start at 1 within that buffer. All groups commit or reject together. Exact keyed retries recover the original outcome.",
-    "patchdiff_commit_observation": "Commit ordered match/span operations within one observed scope using its explicit snapshot. Span coordinates are target-absolute sequential Unicode code points. The transaction commits or rejects atomically. An identical keyed retry recovers its original outcome.",
 }
 
 
@@ -62,7 +54,7 @@ def _known(name: str) -> None:
 
 
 def _snapshot_fields(name: str) -> tuple[str, ...]:
-    return (*_GUARDS, "observation_bundle_id" if name == "patchdiff_commit_bundle" else "observation_id")
+    return (*_GUARDS, "observation_bundle_id")
 
 
 def normalize_arguments(name: str, arguments: dict) -> dict:
@@ -71,7 +63,7 @@ def normalize_arguments(name: str, arguments: dict) -> dict:
     if not isinstance(arguments, dict):
         raise ContractArgumentError("invalid_arguments", "Tool arguments must be an object.")
     if name in _COMMIT_TOOLS:
-        operation_field = "groups" if name == "patchdiff_commit_bundle" else "operations"
+        operation_field = "groups"
         allowed = {"snapshot", "intent", operation_field, *_OPTIONAL_SUBMIT}
         if arguments.keys() - allowed:
             raise ContractArgumentError("unknown_argument", "Unknown field in commit envelope.")
@@ -97,9 +89,6 @@ def normalize_arguments(name: str, arguments: dict) -> dict:
         raise ContractArgumentError("missing_target", "target_file_id is required.")
     if name == "patchdiff_find_occurrences" and "text" not in arguments:
         raise ContractArgumentError("missing_argument", "text is required.")
-    identity = {"patchdiff_observe_one": "symbol_name", "patchdiff_read_observation": "observation_id"}.get(name)
-    if identity and arguments.get(identity) is None:
-        raise ContractArgumentError("missing_identity", f"{identity} must be supplied and non-null for this route.")
     result = dict(arguments)
     if name == "patchdiff_observe_scopes":
         result.setdefault("selections", None)
@@ -116,7 +105,7 @@ def _object(properties: dict, required: tuple | list = ()) -> dict:
 def _input_schema(name: str, legacy: dict) -> dict:
     properties = legacy["properties"]
     if name in _COMMIT_TOOLS:
-        operation_field = "groups" if name == "patchdiff_commit_bundle" else "operations"
+        operation_field = "groups"
         fields = ("intent", operation_field, *_OPTIONAL_SUBMIT)
         chosen = {key: copy.deepcopy(properties[key]) for key in fields}
         snapshot = {key: copy.deepcopy(properties[key]) for key in _snapshot_fields(name)}
@@ -124,26 +113,14 @@ def _input_schema(name: str, legacy: dict) -> dict:
         snapshot[identity]["description"] = "Observation identity returned in this snapshot; copy the exact value."
         chosen["snapshot"] = _object(snapshot, _snapshot_fields(name))
         chosen["snapshot"]["description"] = "Explicit target, both guards and observation identity returned by observation; copied without refreshing or inferring values."
-        required = ["snapshot", "intent", operation_field]
-        if name == "patchdiff_commit_bundle":
-            required.append("client_request_id")
-            chosen["client_request_id"]["type"] = "string"
-            chosen["groups"]["description"] = "Pair each returned scope observation_id with ordered operations in that scope's sequential local buffer; at most 128 operations total."
-        else:
-            chosen["operations"]["description"] = "Ordered exact match/span operations within this observation; span offsets are target-absolute and sequential."
+        required = ["snapshot", "intent", operation_field, "client_request_id"]
+        chosen["client_request_id"]["type"] = "string"
+        chosen["groups"]["description"] = "Pair each returned scope observation_id with ordered operations in that scope's sequential local buffer; at most 128 operations total."
         result = _object(chosen, required)
     else:
         chosen = {key: copy.deepcopy(properties[key]) for key in _FIELDS[name]}
         required = ["target_file_id"]
-        required += {"patchdiff_find_occurrences": ["text"], "patchdiff_observe_scopes": ["selections"],
-                     "patchdiff_observe_one": ["symbol_name"], "patchdiff_read_observation": ["observation_id"]}.get(name, [])
-        for key in ("symbol_name", "observation_id"):
-            if key in required:
-                chosen[key]["type"] = "string"
-        if name == "patchdiff_observe_one":
-            chosen["symbol_name"]["description"] = "Exact structural name or parent.name, including punctuation; must select uniquely."
-        if name == "patchdiff_read_observation":
-            chosen["observation_id"]["description"] = "Issued scope UUID to page; copied from an observation result."
+        required += {"patchdiff_find_occurrences": ["text"], "patchdiff_observe_scopes": ["selections"]}.get(name, [])
         result = _object(chosen, required)
     examples = []
     for example in legacy.get("examples", []):
@@ -183,11 +160,9 @@ def _output_schema(name: str) -> dict:
                                      "group_count": {"type": ["integer", "null"]}},
                                     ("pdcp_log_id", "client_request_id", "deduplicated", "before", "after")),
             "current": state, "validity": {"type": "object"}, "warnings": collection, "scopes": collection,
-            "changes": _object({**collection["properties"], "coordinate_space": {"enum": ["scope_local_sequential_code_points", "target_absolute_sequential_code_points"]}},
-                               ("items", "total", "truncated", "coordinate_space")),
         })
-    elif name in {"patchdiff_observe_scopes", "patchdiff_observe_one"}:
-        commit = "patchdiff_commit_bundle" if name == "patchdiff_observe_scopes" else "patchdiff_commit_observation"
+    elif name == "patchdiff_observe_scopes":
+        commit = "patchdiff_commit_bundle"
         properties["snapshot"] = _object({key: ({"type": "integer"} if key == "expected_target_version" else {"type": "string"})
                                            for key in _snapshot_fields(commit)}, _snapshot_fields(commit))
         properties.update({"scopes": {"type": "array", "items": {"type": "object"}}, "text": {"type": "string"},
@@ -206,7 +181,7 @@ def _output_schema(name: str) -> dict:
 
 def tool_declaration(name: str, legacy_schema: dict) -> dict:
     _known(name)
-    writes = name in _COMMIT_TOOLS or name in {"patchdiff_observe_scopes", "patchdiff_observe_one"}
+    writes = name in _COMMIT_TOOLS or name == "patchdiff_observe_scopes"
     annotations = {"readOnlyHint": not writes, "openWorldHint": False}
     if writes:
         annotations.update({"destructiveHint": name in _COMMIT_TOOLS, "idempotentHint": False})
@@ -222,8 +197,7 @@ def is_success(name: str, payload: dict) -> bool:
     statuses = {
         "patchdiff_read_target": {"ok"}, "patchdiff_find_occurrences": {"ok"},
         "patchdiff_list_scopes": {"candidates"}, "patchdiff_observe_scopes": {"observed_batch", "observed"},
-        "patchdiff_observe_one": {"observed"}, "patchdiff_read_observation": {"observed", "observed_page"},
-        "patchdiff_commit_bundle": {"accepted"}, "patchdiff_commit_observation": {"accepted"},
+        "patchdiff_commit_bundle": {"accepted"},
     }
     return isinstance(payload, dict) and payload.get("status") in statuses[name]
 
@@ -323,10 +297,8 @@ def _receipt(name: str, payload: dict) -> dict:
     # Reserve collection shells and omission metadata before admitting optional
     # content, so all later trimming preserves whole-result rather than per-list bounds.
     if name in _COMMIT_TOOLS:
-        for key in ("warnings", "scopes", "changes"):
+        for key in ("warnings", "scopes"):
             result[key] = {"items": [], "total": 0, "truncated": False}
-        result["changes"]["coordinate_space"] = ("scope_local_sequential_code_points" if name == "patchdiff_commit_bundle"
-                                                   else "target_absolute_sequential_code_points")
     diagnostic = payload.get("diagnostic")
     if isinstance(diagnostic, dict):
         essential = {key: _header(result, "diagnostic." + key, diagnostic[key]) for key in
@@ -348,15 +320,12 @@ def _receipt(name: str, payload: dict) -> dict:
         for group in payload.get("groups", []):
             scopes.append({("operation_count" if key == "change_count" else key): copy.deepcopy(value) for key, value in group.items()})
         _collection(result, "scopes", scopes, payload.get("group_count", len(scopes)))
-        facts = (payload.get("evidence") or {}).get("changes", [])
-        _collection(result, "changes", facts, payload.get("change_count", payload.get("manifest_entries_added", len(facts))),
-                    coordinate_space=result["changes"]["coordinate_space"])
     for key in ("failure_detail", "current_context", "near_misses", "error"):
         if key in payload:
             _optional(result, key, payload[key])
     # Metadata can grow while arrays are filled. Finish by dropping whole entries,
     # keeping totals/flags intact and preserving mandatory outcome/identity fields.
-    for key in ("changes", "scopes", "warnings"):
+    for key in ("scopes", "warnings"):
         while not _fits(result) and isinstance(result.get(key), dict) and result[key].get("items"):
             result[key]["items"].pop()
             result[key]["truncated"] = True
@@ -379,8 +348,8 @@ def project_result(name: str, payload: dict, *, arguments: dict | None = None) -
     if name in _COMMIT_TOOLS or not is_success(name, payload):
         return _receipt(name, payload)
     result = copy.deepcopy(payload)
-    if name in {"patchdiff_observe_scopes", "patchdiff_observe_one"}:
-        identity = "observation_bundle_id" if name == "patchdiff_observe_scopes" else "observation_id"
+    if name == "patchdiff_observe_scopes":
+        identity = "observation_bundle_id"
         result["snapshot"] = {"target_file_id": result.pop("target_file_id"),
                               "expected_target_version": result.pop("target_version"),
                               "expected_current_hash": result.pop("target_current_hash"),

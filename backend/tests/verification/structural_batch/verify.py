@@ -175,7 +175,7 @@ def run(destination, database_url=None, *, host_finalize=False, editor_v2=False)
                 assert receipt["status"] == "accepted" and receipt["transaction"]["after"]["version"] == 1, receipt
                 assert receipt["current"] == receipt["transaction"]["after"]
                 assert receipt["scopes"]["total"] == len(groups)
-                assert receipt["changes"]["total"] == sum(len(g["operations"]) for g in groups)
+                assert receipt["transaction"]["operation_count"] == sum(len(g["operations"]) for g in groups)
                 accepted = {"after_version": receipt["transaction"]["after"]["version"],
                             "after_hash": receipt["transaction"]["after"]["hash"],
                             "pdcp_log_id": receipt["transaction"]["pdcp_log_id"],
