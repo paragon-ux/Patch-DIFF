@@ -97,7 +97,11 @@ We evaluated whether candidate metadata in `patchdiff_list_scopes` should be sim
 
 The canary benchmark evaluates the complete workflow: 21 exact edits across 5 targets (`matrix_kernel.py`, `schema_defs.py`, `validator_engine.py`, `routing_manifest.json`, `MIGRATION_RUNBOOK.md`).
 
-| Metric | PR 20 (8 tools, verbose) | PR 20slim (8 tools, trimmed) | PR 21 Streamlined (5 tools, compact) | PR 21 Delta vs PR 20 |
+- **PR 20 (8 tools, verbose)**: Commit [`097065e`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20-gemini-20261030T000843Z-d2ba12ccea`
+- **PR 20slim (8 tools, trimmed docstrings)**: Commit [`097065e`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-interface-v2`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr20slim-gemini-20261030T023726Z-23f740dcea`
+- **PR 21 Streamlined (5 tools, compact receipts)**: Commit [`f2720b8`](file:///home/paragon-ux/Patch-DIFF) / [`cf40b2f`](file:///home/paragon-ux/Patch-DIFF) (`codex/mcp-editor-v2-streamlined`), Packet: `/home/paragon-ux/patchdiff-test/canary/pr21streamlined-gemini-20261030T160705Z-ece81ddcc6`
+
+| Metric | PR 20 (`097065e`) | PR 20slim (`097065e`) | PR 21 Streamlined (`f2720b8`) | PR 21 Delta vs PR 20 |
 | :--- | :---: | :---: | :---: | :---: |
 | **Planner Steps** | 41 | 45 | **24** | **-41.5%** |
 | **Total MCP Calls** | 35 | 34 | **16** | **-54.3%** |
@@ -151,3 +155,24 @@ All core PatchDIFF invariants remain preserved:
    - `backend/tests/unit/`: 1,015 passed, 0 failed.
    - `backend/tests/integration/test_editor_v2.py`: 12/12 passed against live Postgres.
    - `backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize`: 20/20 passed.
+
+---
+
+## 7. Artifact Classification: Internal Evaluation vs. Public PR Boundary
+
+In accordance with project hygiene established in PR 17 (`4b18e36` *chore: keep internal evaluation local and extract public CI verification*), we enforce a strict separation between public repository code and internal evaluation artifacts:
+
+| Artifact Type | Location | Scope / Policy |
+| :--- | :--- | :--- |
+| **Pure Runtime & MCP Adapters** | `backend/app/mcp/`, `backend/app/core/` | **Public** (committed to PR) |
+| **Normative Specifications & Docs** | `docs/MCP_EDITOR_V2.md`, `docs/MCP_TOOLS.md`, etc. | **Public** (committed to PR) |
+| **Automated Unit & Integration Tests** | `backend/tests/unit/`, `backend/tests/integration/` | **Public** (committed to PR) |
+| **Offline Verification Replay Harness** | `backend/tests/verification/structural_batch/` | **Public** (committed to PR) |
+| **Distilled Retrospective & Attestation** | `docs/reviews/PR21-streamlined-v2-retrospective.md` | **Public** (committed to PR; records hashes & metrics) |
+| **Raw JSONL Transcripts** | `/home/paragon-ux/patchdiff-test/canary/.../capture/` | **Internal / Local Only** (excluded from Git; contains multi-MB conversation logs) |
+| **Raw MCP Wire Traces** | `/home/paragon-ux/patchdiff-test/canary/.../capture/live/` | **Internal / Local Only** (excluded from Git; raw stdio buffers) |
+| **Temporary PostgreSQL Databases** | Local Postgres container (`patchdiff_pr21streamlined_...`) | **Internal / Local Only** (ephemeral evaluation state) |
+| **Full Export Target Dumps & Snapshots** | `/home/paragon-ux/patchdiff-test/canary/.../results/` | **Internal / Local Only** (attested by SHA-256 digests in public reports) |
+
+This boundary keeps the public Git repository lean, prevents multi-megabyte log bloat, and allows reproducible verification via the public test suite while keeping internal research telemetry safely localized.
+
