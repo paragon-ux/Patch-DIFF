@@ -22,6 +22,14 @@ The host (e.g., Claude Desktop, custom agent runner) owns planning, prompt build
 
 The PatchDIFF MCP service provides deterministic validation, authoritative bounded reads, exact search, atomic target updates, append-only logging with idempotency, manifest recording, and replay.
 
+### Working-Tree vs. PostgreSQL Substrate in Git Environments
+
+PatchDIFF operates against an authoritative PostgreSQL substrate. Workspace files on disk are not mutated by transaction submission tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_commit_bundle`) until the host explicitly exports them.
+When orchestrating in an active Git repository:
+- State-dependent Git working tree commands (`git diff`, `git status`) inspect disk files and therefore do NOT reflect database transactions.
+- Agents must NOT expect `git diff` to show transaction results.
+- Disk synchronization occurs only when the host exports (`patchdiff_export_target`) or finalizes the target. Repository history commands (`git log`, `git show <commit>`) operate on committed git objects.
+
 ## Tool Surface Overview
 
 PatchDIFF retains 22 internal tool handlers. The external adapter defaults to the 7-tool editor profile; explicit unobserved/observed/full profiles expose 5/6/22 tools and enforce identical lists for advertisement and calls. Opt-in observed_editor exposes only read_target, find_occurrences, observe_scope and submit_observed_operations (4 tools), denying lifecycle calls on delegated editor connections. Trusted lifecycle clients and older integrations select PATCHDIFF_MCP_PROFILE=full before startup. The existing functional areas include:
