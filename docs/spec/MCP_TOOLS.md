@@ -43,6 +43,7 @@ See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_E
 | | `patchdiff_submit_pdcp` | **Frozen legacy input** (`0.2.3`). Raw `.pdcp` text with 7 required manifest fields. |
 | **4. Checkpoint, Replay & Audit** | `patchdiff_save` | Snapshot current target and rotate editing cycle without target mutation; optional version and hash guards. |
 | | `patchdiff_replay` | Deterministically reconstruct target from initial snapshot + accepted logs, reporting component checks. |
+| | `patchdiff_finalize_target` | Atomic single-roundtrip SAVE checkpoint, replay verification, and format export under row locking. |
 | | `patchdiff_get_pdcp_log` | Bounded newest-first page of append-only attempts (accepted/rejected), filtering by status, hash, or request ID. |
 | | `patchdiff_get_manifest_ledger` | Retrieve accepted-only manifest ledger entries with `origin`, `derived` facts and their attempt identity. |
 | **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
@@ -455,6 +456,47 @@ Replays accepted logs against the initial snapshot, dispatching on `(protocol_ve
       "recomputed_hash_matches": true,
       "version_matches": true
     }
+  }
+  ```
+
+### `patchdiff_finalize_target`
+Atomically executes SAVE checkpointing, deterministic replay verification, and format export in a single PostgreSQL session and transaction under `SELECT ... FOR UPDATE` row locking. Available on the `full` profile.
+- **Arguments**:
+  - `target_file_id` (`string`, required): UUID of the canonical target.
+  - `client_request_id` (`string`, required): Durable client request identity (1–128 printable ASCII characters without whitespace).
+  - `expected_target_version` (`integer`, optional): Expected current target version (guard requirement: at least one guard must be provided).
+  - `expected_current_hash` (`string`, optional): Expected SHA-256 hash.
+  - `format` (`string`, optional, default `"original_eol"`): Output line-ending format (`"original_eol"`, `"canonical_lf"`, `"crlf"`, `"original_text"`).
+- **Database Atomicity & Rollback**: Direct outer transaction ownership. If replay verification fails (`materialized_state_matches is not True`) or export fails, the entire transaction rolls back cleanly, leaving zero snapshots created and zero editing cycle mutations.
+- **Durable Keyed Recovery**: Re-invocations with identical `(target_file_id, client_request_id)` and matching fingerprint recover the original completed receipt directly with `is_idempotent_replay: true`. Conflicting arguments under the same request key reject with `code: "request_key_conflict"`.
+- **Bounded Delivery**: Inline content is capped at 1 MiB (`MAX_INLINE_EXPORT_BYTES = 1,048,576`). For larger exports, `content_delivery` is `"deferred"`, and `exported_content` is null.
+- **Returns**:
+  ```json
+  {
+    "status": "ok",
+    "target_file_id": "UUID",
+    "client_request_id": "req-123",
+    "finalization_id": "UUID",
+    "filename": "main.py",
+    "version": 2,
+    "current_hash": "sha256...",
+    "snapshot_id": "UUID",
+    "closed_editing_cycle_id": "UUID",
+    "new_editing_cycle_id": "UUID",
+    "materialized_state_matches": true,
+    "materialized_state_checks": {
+      "content_matches": true,
+      "stored_hash_matches": true,
+      "recomputed_hash_matches": true,
+      "version_matches": true
+    },
+    "exported_content": "...",
+    "content_sha256": "sha256...",
+    "content_bytes": 1024,
+    "content_delivery": "inline",
+    "format": "original_eol",
+    "source_line_endings": {"eol": "lf", "uniform": true},
+    "is_idempotent_replay": false
   }
   ```
 

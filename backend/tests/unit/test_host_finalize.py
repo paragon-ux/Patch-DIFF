@@ -120,3 +120,109 @@ def test_evidence_failure_returns_incomplete_without_false_receipt(tmp_path, mon
         assert result["evidence_error"] and not (tmp_path / "run/results.json").exists()
     else:
         assert result["targets"][1]["status"] == "not_attempted" and len(calls) == 3
+
+
+def test_safe_write_back_file_success(tmp_path):
+    auth_root = tmp_path / "project"
+    auth_root.mkdir()
+    target_path = auth_root / "src" / "app.py"
+    content = b"print('hello world')\n"
+    content_hash = hashlib.sha256(content).hexdigest()
+
+    # Initial write
+    written = finalizer.safe_write_back_file(
+        target_path,
+        content,
+        expected_sha256=content_hash,
+        authorized_root=auth_root,
+    )
+    assert written == target_path.resolve()
+    assert target_path.read_bytes() == content
+
+    # Second write with matched preimage
+    new_content = b"print('hello world modified')\n"
+    new_hash = hashlib.sha256(new_content).hexdigest()
+    finalizer.safe_write_back_file(
+        target_path,
+        new_content,
+        expected_sha256=new_hash,
+        preimage_sha256=content_hash,
+        authorized_root=auth_root,
+    )
+    assert target_path.read_bytes() == new_content
+
+
+def test_safe_write_back_preimage_mismatch_fails_without_overwrite(tmp_path):
+    auth_root = tmp_path / "project"
+    auth_root.mkdir()
+    target_path = auth_root / "config.yaml"
+    initial_bytes = b"mode: prod\n"
+    target_path.write_bytes(initial_bytes)
+    initial_hash = hashlib.sha256(initial_bytes).hexdigest()
+
+    # External modification occurs
+    target_path.write_bytes(b"mode: external_change\n")
+
+    # Attempt write-back expecting initial_hash as preimage
+    new_bytes = b"mode: patchdiff_update\n"
+    new_hash = hashlib.sha256(new_bytes).hexdigest()
+    with pytest.raises(finalizer.PreimageMismatchError):
+        finalizer.safe_write_back_file(
+            target_path,
+            new_bytes,
+            expected_sha256=new_hash,
+            preimage_sha256=initial_hash,
+            authorized_root=auth_root,
+        )
+    # File on disk remains external_change (not overwritten)
+    assert target_path.read_bytes() == b"mode: external_change\n"
+
+
+def test_safe_write_back_path_escape_rejected(tmp_path):
+    auth_root = tmp_path / "project"
+    auth_root.mkdir()
+    escape_path = tmp_path / "outside.txt"
+
+    content = b"malicious write\n"
+    content_hash = hashlib.sha256(content).hexdigest()
+
+    with pytest.raises(finalizer.PathEscapeError):
+        finalizer.safe_write_back_file(
+            escape_path,
+            content,
+            expected_sha256=content_hash,
+            authorized_root=auth_root,
+        )
+    assert not escape_path.exists()
+
+
+def test_finalize_single_target_success(tmp_path):
+    content = "def test():\n    pass\n"
+    content_bytes = content.encode("utf-8")
+    content_hash = hashlib.sha256(content_bytes).hexdigest()
+    tid = str(uuid.uuid4())
+
+    def mock_call(name, **args):
+        assert name == "patchdiff_finalize_target"
+        assert args["target_file_id"] == tid
+        assert args["client_request_id"] == "req-single"
+        return {
+            "status": "ok",
+            "target_file_id": tid,
+            "version": 1,
+            "filename": "test.py",
+            "exported_content": content,
+            "content_sha256": content_hash,
+        }
+
+    dest_file = tmp_path / "test.py"
+    res = finalizer.finalize_single_target(
+        mock_call,
+        target_file_id=tid,
+        expected_target_version=1,
+        client_request_id="req-single",
+        destination_path=dest_file,
+    )
+    assert res["status"] == "ok"
+    assert dest_file.read_text(encoding="utf-8") == content
+

@@ -47,7 +47,7 @@ def test_populated_historical_observation_upgrade_downgrade_upgrade(isolated_mig
 @pytest.mark.parametrize("accepted,remove_links", [(False, False), (True, False), (True, True)])
 def test_downgrade_refuses_bundle_and_accepted_batch_evidence(isolated_migrations, accepted, remove_links):
     config, connection = isolated_migrations
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261027_0005")
     connection.commit()
     with Session(bind=connection) as session:
         target = initialize_target(session, filename="migrate.py", content="def a():\n    return 1\n\ndef b():\n    return 1\n", target_type="text/x-python")

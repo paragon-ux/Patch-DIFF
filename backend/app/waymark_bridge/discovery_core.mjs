@@ -1,0 +1,155 @@
+/** Shared fresh evaluator; retains no document or symbol state. */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+export function recordTiming(event, start, telemetry = process.env) {
+  if (!telemetry.PATCHDIFF_BRIDGE_PERF_FILE) return;
+  try {
+    const row = { event, start_ns: String(start), duration_ns: String(process.hrtime.bigint() - start),
+      pid: process.pid, invocation_id: telemetry.PATCHDIFF_BRIDGE_PERF_INVOCATION };
+    const output = JSON.stringify(row) + "\n";
+    const target = telemetry.PATCHDIFF_BRIDGE_PERF_FILE;
+    if (Buffer.byteLength(output, "ascii") > 2048 || (fs.existsSync(target) && fs.statSync(target).size + output.length > 65536)) return;
+    fs.appendFileSync(target, output, { encoding: "ascii", mode: 0o600 });
+  } catch { /* Missing telemetry invalidates benchmark evidence in Python, never discovery. */ }
+}
+
+const importStart = process.hrtime.bigint();
+const { discoverSymbolsInFile } = await import("waymark-engine");
+recordTiming("bridge_import", importStart);
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const waymarkPkgPath = path.join(__dirname, "node_modules", "waymark-engine", "package.json");
+const waymarkPkg = JSON.parse(fs.readFileSync(waymarkPkgPath, "utf8"));
+export const WAYMARK_ENGINE_VERSION = String(waymarkPkg.version || "4.1.0");
+
+function sanitizeTempFilename(rawFilename) {
+  const raw = typeof rawFilename === "string" ? rawFilename.trim() : "";
+  const base = path.posix.basename(raw.replace(/\\/g, "/")).replace(/[\x00-\x1f]/g, "");
+  if (!base || base === "." || base === ".." || base.startsWith(".")) {
+    const ext = path.posix.extname(base);
+    return ext ? `target${ext}` : "target.txt";
+  }
+  return base;
+}
+
+function matchesFilter(symbol, { query, kind, symbol_name: symbolName }) {
+  if (typeof kind === "string" && kind.length > 0) {
+    const isObjectAlias =
+      kind === "object" &&
+      (symbol.kind === "config_item" || symbol.kind === "config_block" || symbol.kind === "property");
+    if (symbol.kind !== kind && !isObjectAlias) {
+      return false;
+    }
+  }
+  if (typeof symbolName === "string" && symbolName.length > 0) {
+    const qualified = symbol.parent ? `${symbol.parent}.${symbol.name}` : null;
+    if (symbol.name !== symbolName && qualified !== symbolName) {
+      return false;
+    }
+  }
+  if (typeof query === "string" && query.length > 0) {
+    const q = query.toLowerCase();
+    const nameMatch = String(symbol.name || "").toLowerCase().includes(q);
+    const parentMatch = symbol.parent ? String(symbol.parent).toLowerCase().includes(q) : false;
+    const qualifiedMatch = symbol.parent
+      ? `${symbol.parent}.${symbol.name}`.toLowerCase().includes(q)
+      : false;
+    const sigMatch = symbol.signature ? String(symbol.signature).toLowerCase().includes(q) : false;
+    if (!nameMatch && !parentMatch && !qualifiedMatch && !sigMatch) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function evaluateDiscovery(payload, requestRoot = os.tmpdir(), telemetry = process.env) {
+  let tmpDir = null;
+  try {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw Object.assign(new Error("Input payload must be a JSON object."), {
+        code: "INVALID_INPUT",
+      });
+    }
+    const { filename, content, query = null, kind = null, symbol_name = null } = payload;
+    if (typeof filename !== "string" || filename.trim().length === 0) {
+      throw Object.assign(new Error("filename must be a non-empty string."), {
+        code: "INVALID_INPUT",
+      });
+    }
+    if (typeof content !== "string") {
+      throw Object.assign(new Error("content must be a string."), {
+        code: "INVALID_INPUT",
+      });
+    }
+
+    const safeName = sanitizeTempFilename(filename);
+    tmpDir = fs.mkdtempSync(path.join(requestRoot, "patchdiff-waymark-"));
+    const targetPath = path.join(tmpDir, safeName);
+    const writeStart = process.hrtime.bigint();
+    fs.writeFileSync(targetPath, content, { encoding: "utf8", mode: 0o600 });
+    recordTiming("bridge_temp_write", writeStart, telemetry);
+
+    const discoverStart = process.hrtime.bigint();
+    const outline = await discoverSymbolsInFile(tmpDir, safeName);
+    recordTiming("bridge_discover", discoverStart, telemetry);
+    const rawSymbols = Array.isArray(outline?.symbols) ? outline.symbols : [];
+    const filtered = rawSymbols
+      .filter((sym) => matchesFilter(sym, { query, kind, symbol_name }))
+      .map((sym) => ({
+        name: String(sym.name),
+        kind: String(sym.kind),
+        parent: sym.parent != null ? String(sym.parent) : null,
+        signature: sym.signature != null ? String(sym.signature) : null,
+        start: {
+          line: Number(sym.start.line),
+          column: Number(sym.start.column),
+        },
+        end: {
+          line: Number(sym.end.line),
+          column: Number(sym.end.column),
+        },
+      }));
+
+    const response = {
+      ok: true,
+      waymark_engine_version: WAYMARK_ENGINE_VERSION,
+      language: outline?.language ?? null,
+      symbols: filtered,
+      error: null,
+    };
+    return response;
+  } catch (err) {
+    const code =
+      err && typeof err === "object" && typeof err.code === "string" && err.code.length > 0
+        ? err.code
+        : "WAYMARK_DISCOVERY_ERROR";
+    const message =
+      err && typeof err === "object" && typeof err.message === "string"
+        ? err.message
+        : String(err);
+    const response = {
+      ok: false,
+      waymark_engine_version: WAYMARK_ENGINE_VERSION,
+      language: null,
+      symbols: [],
+      error: {
+        code,
+        message,
+      },
+    };
+    return response;
+  } finally {
+    if (tmpDir) {
+      const cleanupStart = process.hrtime.bigint();
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch (error) {
+        if (requestRoot !== os.tmpdir()) throw error;
+      }
+      recordTiming("bridge_cleanup", cleanupStart, telemetry);
+    }
+  }
+}

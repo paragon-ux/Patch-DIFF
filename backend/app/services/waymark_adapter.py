@@ -27,8 +27,94 @@ from app.storage.models import CloudTargetFiles
 from app.services.performance_events import span, bridge_environment, collect_bridge_events, track_child
 
 EXPECTED_WAYMARK_ENGINE_VERSION = "4.1.0"
-WAYMARK_INTEGRATION_DIR = Path(__file__).resolve().parents[3] / "integrations" / "waymark"
-WAYMARK_DISCOVER_SCRIPT = WAYMARK_INTEGRATION_DIR / "discover.mjs"
+REQUIRED_BRIDGE_FILES = (
+    "discover.mjs",
+    "discovery_core.mjs",
+    "worker.mjs",
+    "package.json",
+    "package-lock.json",
+)
+
+
+class WaymarkBridgeError(RuntimeError):
+    """Bridge resolution or availability failure."""
+
+    def __init__(self, message: str, code: str = "WAYMARK_BRIDGE_UNAVAILABLE"):
+        self.code = code
+        super().__init__(message)
+
+
+def get_waymark_bridge_dir(override: str | Path | None = None) -> Path:
+    """Resolve the authoritative Waymark bridge directory.
+
+    Order of precedence:
+    1. Explicit override passed as argument, or env var PATCHDIFF_WAYMARK_BRIDGE_DIR.
+       If provided:
+         - Canonicalized to absolute path.
+         - Fails closed (raises WaymarkBridgeError) if directory does not exist or lacks
+           required files.
+    2. Bundled package resources: app/waymark_bridge.
+       If directory exists and contains all required bridge files.
+    3. Source-file-anchored developer checkout: repo_root/integrations/waymark.
+       If directory exists and contains all required bridge files.
+    4. Cache directory: ~/.cache/patchdiff/waymark-bridge-4.1.0.
+       If directory exists and contains all required bridge files.
+    5. If none of the candidates exist or are complete, raises WaymarkBridgeError.
+    """
+    env_override = override or os.getenv("PATCHDIFF_WAYMARK_BRIDGE_DIR")
+    if env_override:
+        path = Path(env_override).resolve()
+        if not path.is_dir():
+            raise WaymarkBridgeError(
+                f"Configured PATCHDIFF_WAYMARK_BRIDGE_DIR={env_override!r} does not exist or is not a directory."
+            )
+        missing = [f for f in REQUIRED_BRIDGE_FILES if not (path / f).is_file()]
+        if missing:
+            raise WaymarkBridgeError(
+                f"Configured PATCHDIFF_WAYMARK_BRIDGE_DIR={env_override!r} is missing required files: {missing}"
+            )
+        return path
+
+    # Candidate 1: Bundled package directory
+    pkg_candidate = Path(__file__).resolve().parent.parent / "waymark_bridge"
+    if pkg_candidate.is_dir() and all((pkg_candidate / f).is_file() for f in REQUIRED_BRIDGE_FILES):
+        if (pkg_candidate / "node_modules" / "waymark-engine" / "package.json").is_file():
+            return pkg_candidate
+
+    # Candidate 2: Repo checkout
+    repo_candidate = Path(__file__).resolve().parents[3] / "integrations" / "waymark"
+    if repo_candidate.is_dir() and all((repo_candidate / f).is_file() for f in REQUIRED_BRIDGE_FILES):
+        if (repo_candidate / "node_modules" / "waymark-engine" / "package.json").is_file():
+            return repo_candidate
+
+    # Candidate 3: Cache directory
+    from app.waymark_bridge.bootstrap import get_default_bridge_cache_dir
+    cache_candidate = get_default_bridge_cache_dir()
+    if cache_candidate.is_dir() and all((cache_candidate / f).is_file() for f in REQUIRED_BRIDGE_FILES):
+        if (cache_candidate / "node_modules" / "waymark-engine" / "package.json").is_file():
+            return cache_candidate
+
+    # Candidate 4: Packaged or repo checkout directory even without node_modules
+    if pkg_candidate.is_dir() and all((pkg_candidate / f).is_file() for f in REQUIRED_BRIDGE_FILES):
+        return pkg_candidate
+    if repo_candidate.is_dir() and all((repo_candidate / f).is_file() for f in REQUIRED_BRIDGE_FILES):
+        return repo_candidate
+
+    raise WaymarkBridgeError("No valid Waymark bridge directory found in package, repo, or cache.")
+
+
+def __getattr__(name: str) -> Any:
+    if name == "WAYMARK_INTEGRATION_DIR":
+        try:
+            return get_waymark_bridge_dir()
+        except WaymarkBridgeError:
+            return Path(__file__).resolve().parents[3] / "integrations" / "waymark"
+    if name == "WAYMARK_DISCOVER_SCRIPT":
+        try:
+            return get_waymark_bridge_dir() / "discover.mjs"
+        except WaymarkBridgeError:
+            return (Path(__file__).resolve().parents[3] / "integrations" / "waymark") / "discover.mjs"
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 DEFAULT_WAYMARK_TIMEOUT_SECONDS = 15.0
 MAX_WAYMARK_STDOUT_BYTES = 2 * 1024 * 1024
@@ -249,7 +335,24 @@ def discover_symbols_from_content(
             ),
         )
 
-    script_path = discover_script if discover_script is not None else WAYMARK_DISCOVER_SCRIPT
+    try:
+        bridge_dir = get_waymark_bridge_dir()
+        default_script = bridge_dir / "discover.mjs"
+    except WaymarkBridgeError as exc:
+        if discover_script is None:
+            return WaymarkDiscoveryResult(
+                ok=False,
+                waymark_engine_version=None,
+                language=None,
+                symbols=(),
+                error=WaymarkAdapterError(
+                    code="WAYMARK_BRIDGE_UNAVAILABLE",
+                    message=str(exc),
+                ),
+            )
+        default_script = discover_script
+
+    script_path = discover_script if discover_script is not None else default_script
     if not script_path.is_file():
         return WaymarkDiscoveryResult(
             ok=False,

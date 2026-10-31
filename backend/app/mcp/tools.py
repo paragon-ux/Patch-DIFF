@@ -38,6 +38,7 @@ from app.services.read_service import (
     read_target,
     read_lines,
 )
+from app.services.finalize_service import finalize_target
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
 from app.services.target_service import initialize_target
@@ -404,6 +405,52 @@ def patchdiff_replay(*, target_file_id: str) -> dict[str, Any]:
         "failure_detail": result.failure_detail,
         "pdcp_log_id": str(result.pdcp_log_id) if result.pdcp_log_id else None,
         **({"code": result.code} if result.code else {}),
+    }
+
+
+@registry.register("patchdiff_finalize_target")
+def patchdiff_finalize_target(
+    *,
+    target_file_id: str,
+    client_request_id: str,
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
+    format: str = "original_eol",
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        result = finalize_target(
+            session,
+            target_file_id=target_file_id,
+            client_request_id=client_request_id,
+            expected_target_version=expected_target_version,
+            expected_current_hash=expected_current_hash,
+            format=format,
+        )
+    return {
+        "status": result.status,
+        "target_file_id": str(result.target_file_id),
+        "client_request_id": result.client_request_id,
+        "finalization_id": str(result.finalization_id) if result.finalization_id else None,
+        "filename": result.filename,
+        "version": result.version,
+        "current_hash": result.current_hash,
+        "snapshot_id": str(result.snapshot_id) if result.snapshot_id else None,
+        "closed_editing_cycle_id": str(result.closed_editing_cycle_id) if result.closed_editing_cycle_id else None,
+        "new_editing_cycle_id": str(result.new_editing_cycle_id) if result.new_editing_cycle_id else None,
+        "materialized_state_matches": result.materialized_state_matches,
+        "materialized_state_checks": result.materialized_state_checks,
+        "exported_content": result.exported_content,
+        "content_sha256": result.content_sha256,
+        "content_bytes": result.content_bytes,
+        "content_delivery": result.content_delivery,
+        "format": result.format,
+        "source_line_endings": result.source_line_endings,
+        "failure_reason": result.failure_reason.value if result.failure_reason else None,
+        "failure_code": result.failure_code,
+        "failure_detail": result.failure_detail,
+        "is_idempotent_replay": result.is_idempotent_replay,
+        **({"lock_hold_ms": result.lock_hold_ms} if result.lock_hold_ms is not None else {}),
+        **({"replay_ms": result.replay_ms} if result.replay_ms is not None else {}),
     }
 
 

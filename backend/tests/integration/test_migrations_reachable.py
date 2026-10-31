@@ -369,4 +369,81 @@ def test_live_0004_downgrade_refuses_when_scope_observations_exist(isolated_migr
     with pytest.raises(Exception, match="Cannot downgrade 20261026_0004: recorded scope observations exist"):
         command.downgrade(config, "20261022_0003")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261027_0005"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0006"
+
+
+def test_migration_0006_mentions_target_finalizations() -> None:
+    migration_file = MIGRATIONS / "versions" / "20261031_0006_target_finalizations.py"
+    assert migration_file.is_file()
+    source = migration_file.read_text(encoding="utf-8")
+    assert "target_finalizations" in source
+    assert "client_request_id" in source
+    assert "request_fingerprint" in source
+    assert "uq_target_finalizations_target_key" in source
+
+
+def test_live_postgres_schema_has_0006_table_and_indexes() -> None:
+    with engine.connect() as connection:
+        columns = connection.execute(
+            text(
+                """
+                SELECT column_name, data_type, is_nullable
+                FROM information_schema.columns
+                WHERE table_name = 'target_finalizations'
+                ORDER BY column_name;
+                """
+            )
+        ).mappings().all()
+        by_name = {col["column_name"]: col for col in columns}
+        assert "finalization_id" in by_name
+        assert "client_request_id" in by_name
+        assert "request_fingerprint" in by_name
+        assert "source_line_endings" in by_name
+        assert by_name["client_request_id"]["is_nullable"] == "NO"
+
+        indexes = connection.execute(
+            text(
+                """
+                SELECT indexname
+                FROM pg_indexes
+                WHERE tablename = 'target_finalizations'
+                ORDER BY indexname;
+                """
+            )
+        ).scalars().all()
+        assert "ix_target_finalizations_target_key" in indexes
+        assert "ix_target_finalizations_target_created" in indexes
+        assert "uq_target_finalizations_target_key" in indexes
+
+
+def test_live_0006_downgrade_refuses_when_finalizations_exist(isolated_migrations):
+    config, connection = isolated_migrations
+    command.upgrade(config, "head")
+    connection.commit()
+    with Session(bind=connection) as session:
+        target = initialize_target(
+            session,
+            filename="sample.py",
+            content="def alpha():\n    return 1\n",
+            target_type="text/x-python",
+        )
+        fin_id = uuid.uuid4()
+        connection.execute(
+            text(
+                """
+                INSERT INTO target_finalizations (
+                    finalization_id, target_file_id, client_request_id, fingerprint_version,
+                    request_fingerprint, status, failure_detail, created_at
+                ) VALUES (
+                    :fin_id, :tid, 'req-001', 1, 'fp001', 'failed', 'forced failure', now()
+                )
+                """
+            ),
+            {"fin_id": fin_id, "tid": target.target_file_id},
+        )
+    connection.commit()
+    with pytest.raises(Exception, match="Cannot downgrade 20261031_0006: target finalization records exist"):
+        command.downgrade(config, "20261027_0005")
+    connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0006"
+

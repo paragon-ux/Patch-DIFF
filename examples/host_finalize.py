@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import ntpath
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
@@ -50,9 +51,10 @@ def _manifest(targets):
         for key in ("target_file_id", "accepted_pdcp_log_id"):
             item[key] = str(uuid.UUID(item[key]))
         name = item["filename"]
+        is_reserved = ntpath.isreserved(name) if hasattr(ntpath, "isreserved") else PureWindowsPath(name).is_reserved()
         if (not isinstance(name, str) or not name or name in {".", ".."}
                 or PurePosixPath(name).name != name or PureWindowsPath(name).name != name
-                or PureWindowsPath(name).is_reserved() or name.endswith((".", " "))
+                or is_reserved or name.endswith((".", " "))
                 or any(char in '<>:"/\\|?*' or ord(char) < 32 for char in name)):
             raise ValueError("filename must be a safe Windows/POSIX basename")
         name.encode("utf-8")
@@ -161,3 +163,132 @@ def finalize_targets(call_tool, targets, output_dir) -> dict:
         report.update(status="uncertain" if "save_uncertain" in statuses else "failed",
                       evidence_error=str(exc), phase="evidence")
     return report
+
+
+class HostWriteBackError(Exception):
+    """Host disk write-back failure."""
+
+
+class PreimageMismatchError(HostWriteBackError):
+    """Destination file on disk does not match the expected preimage hash."""
+
+
+class PathEscapeError(HostWriteBackError):
+    """Target destination escapes authorized directory boundary."""
+
+
+def safe_write_back_file(
+    destination_path: Path | str,
+    data: bytes,
+    *,
+    expected_sha256: str,
+    preimage_sha256: str | None = None,
+    authorized_root: Path | str | None = None,
+) -> Path:
+    """Safely and atomically write exported bytes to a local destination file.
+
+    Guarantees:
+    1. Authorized directory containment: checks realpath against authorized_root if provided.
+    2. Symlink escape detection: rejects target paths that resolve outside authorized root.
+    3. Preimage conflict check: if destination file exists and preimage_sha256 is supplied,
+       verifies existing disk bytes match preimage; rejects with PreimageMismatchError if changed.
+    4. Same-directory temp file + fsync: writes data to temp file in destination's directory.
+    5. Atomic replace: renames temp file to destination via os.replace.
+    6. Directory fsync: syncs parent directory on POSIX systems where supported.
+    7. Post-write verification: reads back destination and confirms sha256 matches expected_sha256.
+    """
+    dest = Path(destination_path).resolve()
+    if authorized_root is not None:
+        auth_root = Path(authorized_root).resolve()
+        try:
+            dest.relative_to(auth_root)
+        except ValueError:
+            raise PathEscapeError(f"Destination {dest} is outside authorized root {auth_root}.")
+
+    # Preimage check
+    if dest.is_file():
+        if preimage_sha256 is not None:
+            actual_preimage = hashlib.sha256(dest.read_bytes()).hexdigest()
+            if actual_preimage != preimage_sha256:
+                raise PreimageMismatchError(
+                    f"Destination {dest} on disk has hash {actual_preimage}, expected {preimage_sha256}."
+                )
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = dest.parent / f".tmp-{dest.name}-{uuid.uuid4().hex}"
+
+    try:
+        with temp_path.open("wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+
+        os.replace(temp_path, dest)
+
+        # Sync parent directory on POSIX
+        if hasattr(os, "O_DIRECTORY") and hasattr(os, "fsync"):
+            try:
+                dir_fd = os.open(str(dest.parent), os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except OSError:
+                pass  # Some filesystems or OSes do not support directory fsync
+
+        # Post-write byte & hash verification
+        installed_bytes = dest.read_bytes()
+        installed_hash = hashlib.sha256(installed_bytes).hexdigest()
+        if installed_hash != expected_sha256:
+            raise HostWriteBackError(
+                f"Installed file {dest} hash {installed_hash} does not match expected {expected_sha256}."
+            )
+        return dest
+    except Exception:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        raise
+
+
+def finalize_single_target(
+    call_tool,
+    *,
+    target_file_id: str,
+    client_request_id: str,
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
+    format: str = "original_eol",
+    destination_path: Path | str | None = None,
+    preimage_sha256: str | None = None,
+    authorized_root: Path | str | None = None,
+) -> dict:
+    """Execute single-target atomic finalization via patchdiff_finalize_target and optional disk write-back."""
+    args = {
+        "target_file_id": target_file_id,
+        "client_request_id": client_request_id,
+        "format": format,
+    }
+    if expected_target_version is not None:
+        args["expected_target_version"] = expected_target_version
+    if expected_current_hash is not None:
+        args["expected_current_hash"] = expected_current_hash
+
+    receipt = call_tool("patchdiff_finalize_target", **args)
+    if receipt.get("status") != "ok":
+        return receipt
+
+    if destination_path is not None and receipt.get("exported_content") is not None:
+        raw_bytes = receipt["exported_content"].encode("utf-8")
+        safe_write_back_file(
+            destination_path,
+            raw_bytes,
+            expected_sha256=receipt["content_sha256"],
+            preimage_sha256=preimage_sha256,
+            authorized_root=authorized_root,
+        )
+        receipt["written_destination"] = str(destination_path)
+    return receipt
+

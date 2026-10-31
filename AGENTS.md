@@ -139,17 +139,16 @@ replay verifies every authoritative scope without Waymark. Additive migration
 `20261027_0005` follows `20261026_0004`, preserving historical single linkage and
 refusing destructive downgrade. See [the batch contract](docs/spec/STRUCTURAL_BATCH_EDITING.md).
 
-External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default `editor`
-advertises and permits exactly 7 tools; `unobserved` 5, `observed` 6 and explicit
-compatibility `full` all 22. Opt-in `observed_editor` advertises and permits only
-the four observed editing/read tools; that profile rejects SAVE/replay. Opt-in
-`observed_v2` exposes five purpose-specific external tools through the same
-services with explicit snapshots and bounded typed receipts; see
-[the v2 contract](docs/spec/MCP_EDITOR_V2.md). It also denies lifecycle calls; all legacy
-profiles and the internal 22 handlers retain their contracts.
-Trusted lifecycle/legacy clients opt into `full`;
-the internal registry retains all handlers. Strict observed service admission
-remains independent. The frozen comparative Gate 2 stays closed.
+External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default `observed_v2`
+exposes five purpose-specific external tools through the same services with
+explicit snapshots and bounded typed receipts (see [the v2 contract](docs/spec/MCP_EDITOR_V2.md));
+legacy profiles `editor` (7 tools), `unobserved` (5 tools), `observed` (6 tools),
+and `observed_editor` (4 tools) remain available with advisory stderr notices;
+explicit compatibility `full` advertises and permits all 23 tools (including
+`patchdiff_finalize_target`). Editing profiles deny lifecycle calls;
+trusted lifecycle/legacy clients opt into `full`; the internal registry retains
+all handlers. Strict observed service admission remains independent. The frozen
+comparative Gate 2 stays closed.
 
 PatchDIFF must always preserve:
 
@@ -192,6 +191,8 @@ Do not claim completion unless relevant tests pass against live Postgres:
 - Pure runtime unit tests (`backend/tests/unit/`)
 - Postgres integration tests (`backend/tests/integration/`), including live Alembic `upgrade -> downgrade -> upgrade` and real stdio MCP subprocess E2E workflow
 - Offline payload and verdict equivalence evaluation (`backend/tests/verification/offline_eval.py`)
+
+Always execute integration tests and verification suites with `PATCHDIFF_WAYMARK_MODE=resident` (the same mode enforced in GitHub Actions CI) to use a persistent in-memory Node.js worker and avoid repeated cold-boot subprocess spawning overhead.
 
 ## PR Review Standard
 

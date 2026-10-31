@@ -64,6 +64,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_request_regeneration": "DEPRECATED: use patchdiff_submit_edits with parent_pdcp_log_id. Submit regenerated .pdcp content as a new attempt (guards pass through when supplied).",
     "patchdiff_save": "Create a SAVE snapshot and advance the editing cycle without mutating target content. Optional expected_target_version and expected_current_hash guards; prefer the version guard.",
     "patchdiff_replay": "Replay accepted logs (dispatching on protocol_version and runtime_version), verify hash/version chain, and report component-level materialized_state_checks.",
+    "patchdiff_finalize_target": (
+        "Atomically checkpoint, replay-verify, and export target in a single database transaction under "
+        "SELECT ... FOR UPDATE row locking. format: original_eol (default), canonical_lf, crlf, original_text. "
+        "If replay verification fails, the SAVE checkpoint and cycle rotation are rolled back atomically."
+    ),
     "patchdiff_export_target": "Export the current target content and metadata. format: original_text (default, legacy alias of canonical LF), canonical_lf, crlf, or original_eol (restore the uniform line endings recorded at upload).",
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
@@ -138,6 +143,7 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
     "patchdiff_read_lines": [{"target_file_id": _EXAMPLE_TARGET, "start_line": 1, "end_line": 1, "max_chars": 120}],
     "patchdiff_preview": [{"target_file_id": _EXAMPLE_TARGET, "format": "patchdiff-tx/1", "intent": "Preview an exact edit",
                            "expected_target_version": 4, "edits": [{"match": "Final", "replace": "Reviewed"}]}],
+    "patchdiff_finalize_target": [{"target_file_id": _EXAMPLE_TARGET, "client_request_id": "finalize-req-1", "expected_target_version": 2, "format": "original_eol"}],
 }
 
 
@@ -155,6 +161,9 @@ MCP_PROFILES = {
 }
 
 
+_WARNED_LEGACY_PROFILES: set[str] = set()
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class ExternalMCPAdapter:
     """Minimal JSON-RPC MCP adapter backed by the internal PatchDIFF registry."""
@@ -166,9 +175,16 @@ class ExternalMCPAdapter:
     _initialized: bool
 
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
-        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
+        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "observed_v2") if profile is None else profile
         if selected not in MCP_PROFILES:
-            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, unobserved_editor, hybrid_editor, observed, observed_editor, observed_v2 or full.")
+            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected observed_v2 (default), full, or legacy profiles (editor, unobserved, unobserved_editor, hybrid_editor, observed, observed_editor).")
+        if selected in {"editor", "unobserved", "unobserved_editor", "hybrid_editor", "observed", "observed_editor"}:
+            if selected not in _WARNED_LEGACY_PROFILES:
+                _WARNED_LEGACY_PROFILES.add(selected)
+                sys.stderr.write(
+                    f"[PATCHDIFF NOTICE] MCP profile {selected!r} is a legacy compatibility profile. "
+                    "Consider migrating to 'observed_v2' (5-tool default agent profile) or 'full' (trusted host profile).\n"
+                )
         object.__setattr__(self, "profile", selected)
         object.__setattr__(self, "_protocol_version", PROTOCOL_VERSION)
         object.__setattr__(self, "_initialized", False)
@@ -590,6 +606,20 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                 irrelevant.remove("intent")
             branch["not"] = {"anyOf": [{"required": [other]} for other in sorted(irrelevant)]}
             schema["allOf"].append({"if": {"properties": {"format": {"const": format_}}}, "then": branch})
+    if name == "patchdiff_finalize_target":
+        if "client_request_id" not in schema.setdefault("required", []):
+            schema["required"].append("client_request_id")
+        schema["anyOf"] = [
+            {"required": ["expected_target_version"], "properties": {"expected_target_version": {"type": "integer"}}},
+            {"required": ["expected_current_hash"], "properties": {"expected_current_hash": {"type": "string"}}},
+        ]
+        schema["properties"]["client_request_id"] = {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": r"^[!-~]{1,128}$",
+            "description": "Required durable idempotency key (1-128 printable ASCII characters without whitespace).",
+        }
     if name in TOOL_EXAMPLES:
         schema["examples"] = copy.deepcopy(TOOL_EXAMPLES[name])
     _portable_schema_patterns(schema)

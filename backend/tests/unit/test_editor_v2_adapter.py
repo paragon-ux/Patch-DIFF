@@ -23,7 +23,7 @@ def test_negotiated_contract_and_error_channels(revision):
     modern = revision != "2024-11-05"
     declarations = adapter.list_tools()
     assert {t["name"] for t in declarations} == EDITOR_V2_TOOLS
-    assert len(declarations) == 5 and len(registry.names()) == 22
+    assert len(declarations) == 5 and len(registry.names()) == 23
     for declaration in declarations:
         assert ("outputSchema" in declaration) == modern
         assert ("annotations" in declaration) == modern

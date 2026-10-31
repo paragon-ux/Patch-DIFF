@@ -21,11 +21,14 @@ import uuid
 from app.services.performance_events import (
     bridge_environment, collect_bridge_events, process_memory, span, track_child,
 )
-from app.services.waymark_adapter import resolve_node_executable
+from app.services.waymark_adapter import (
+    get_waymark_bridge_dir,
+    resolve_node_executable,
+    WaymarkBridgeError,
+)
 
 PROTOCOL = "patchdiff-waymark-worker/1"
 ENGINE_VERSION = "4.1.0"
-BRIDGE = Path(__file__).resolve().parents[3] / "integrations" / "waymark"
 RESULT_LIMIT = 2 * 1024 * 1024
 CONTROL_LIMIT = 4096
 STDERR_LIMIT = 65536
@@ -36,6 +39,12 @@ MAX_WAITING = 8
 RSS_LIMIT = 1024 ** 3
 MAX_REQUESTS = 10000
 MAX_AGE = 3600
+
+
+def __getattr__(name: str) -> Any:
+    if name == "BRIDGE":
+        return get_waymark_bridge_dir()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class WaymarkWorkerError(RuntimeError):
@@ -195,7 +204,7 @@ class _Generation:
         self.ready = False
         digest = hashlib.sha256()
         for name in ("discovery_core.mjs", "worker.mjs"):
-            raw = (BRIDGE / name).read_bytes()
+            raw = (self.owner.bridge_dir / name).read_bytes()
             digest.update(f"{name}\0{len(raw)}\0".encode("ascii"))
             digest.update(raw)
         self.bridge_hash = digest.hexdigest()
@@ -374,15 +383,16 @@ class _Generation:
 
 
 class WaymarkWorkerOwner:
-    def __init__(self, *, mode=None, node=None, script=None):
+    def __init__(self, *, mode=None, node=None, script=None, bridge_dir=None):
         self.pid = os.getpid()
         self.mode = mode or os.getenv("PATCHDIFF_WAYMARK_MODE", "oneshot")
         if self.mode not in ("oneshot", "resident"):
             raise ValueError("Unknown PATCHDIFF_WAYMARK_MODE; expected oneshot or resident")
         if os.getenv("PATCHDIFF_WAYMARK_WORKERS", "1") != "1":
             raise ValueError("Only one resident Waymark worker is supported in this release")
+        self.bridge_dir = Path(bridge_dir).resolve() if bridge_dir else get_waymark_bridge_dir()
         self.node = resolve_node_executable(node)
-        self.script = script or BRIDGE / "worker.mjs"
+        self.script = script or (self.bridge_dir / "worker.mjs")
         self.condition = threading.Condition()
         self.lifecycle = threading.RLock()
         self.waiting = deque()
