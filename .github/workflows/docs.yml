@@ -8,6 +8,11 @@ on:
       - 'docs/**'
       - 'zensical.toml'
       - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'zensical.toml'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,16 +35,18 @@ jobs:
           python-version: "3.11"
       - name: Install documentation dependencies
         run: |
-          pip install zensical
+          pip install zensical==0.0.74
       - name: Build documentation site
         run: |
           zensical build
       - name: Upload pages artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

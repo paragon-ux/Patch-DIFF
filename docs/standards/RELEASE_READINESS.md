@@ -8,7 +8,7 @@ This checklist distinguishes reviewed code from a published release. Neither mer
 | --- | --- | --- |
 | Python distribution | `patchdiff-mvp` `0.1.0` | Package metadata; candidate first tag `v0.1.0` |
 | MCP server advertisement | `patchdiff-mvp` `0.2.2` | Stdio server information |
-| MCP wire protocol | `2024-11-05` | JSON-RPC initialization contract |
+| MCP wire protocol | `2024-11-05`, `2025-06-18`, `2025-11-25` | Supported negotiated revisions (`2024-11-05` legacy default; `2025-11-25` latest) |
 | Legacy transaction | `0.2.3` | Frozen declarative `.pdcp` format |
 | Typed matches | `patchdiff-tx/1` / runtime `patchdiff-mvp-0.2.2` | Existing guarded match submissions |
 | Match/span operations | `patchdiff-tx/2` / runtime `patchdiff-mvp-0.3.0` | Sequential span and match operations |

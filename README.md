@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml/badge.svg)](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-Zensical-purple.svg)](https://paragon-ux.github.io/Patch-DIFF/)
-[![tests](https://img.shields.io/badge/tests-1581%20passed-success)](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml)
-[![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/)
+[![tests](https://img.shields.io/badge/tests-1583%20passed%2C%201%20skipped-success)](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml)
+[![python](https://img.shields.io/badge/python-%3E%3D3.11%20(CI%3A%203.11)-blue)](https://www.python.org/)
 [![postgres](https://img.shields.io/badge/postgres-16.3--alpine-336791.svg?logo=postgresql&logoColor=white)](https://hub.docker.com/_/postgres)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-8A2BE2.svg)](https://modelcontextprotocol.io/)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -27,14 +27,14 @@ xychart-beta
 
 > **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime ($n=3$ per arm across 4 experimental conditions, Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized_benchmark_report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
 
-### How Empirical Hypotheses Drive Faster Time Elapsed
+### How Validated Hypotheses and Operational Mechanisms Drive Faster Time Elapsed
 
-When agent throughput is constrained, every redundant turn, prefill token, and verification step compounds into severe wall-clock delays. PatchDIFF completes tasks in **3 minutes flat (1.66× faster Time Elapsed in Git environments)** by validating four core architectural hypotheses:
+When agent throughput is constrained, every redundant turn, prefill token, and verification step compounds into severe wall-clock delays. PatchDIFF completes tasks in **3 minutes flat (1.66× faster Time Elapsed in Git environments)** by validating core research hypotheses and eliminating operational friction:
 
-1. **Batch Editing Hypothesis (`H2`)**: Submitting multiple edits in a single atomic batch rather than $N$ separate tool calls cuts interaction steps by **-55.8%** (24.2 vs. 54.8 turns, $p < 0.00001$) and tool invocations by **-57.8%** (22.7 vs. 53.8 calls, $p < 0.00001$).
-2. **Verification Elimination Hypothesis (`H5`)**: Providing cryptographic receipts (`after_hash`) under PostgreSQL row locks gives the model immediate verification, completely eliminating the **10.0 exploratory `git diff` / `git status` commands** per task seen in the control baseline.
-3. **Context & Token Reduction Hypothesis (`H1`)**: Emitting targeted patches instead of full-file rewrites or repetitive surrounding context cuts total context window tokens by **-64.8%** (876K vs. 2.49M, saving 1.61M tokens/task, $p < 0.00001$), drastically reducing prompt prefill and generation overhead.
-4. **Reliability & Turnaround Predictability (`H7`)**: The model achieved **100.0% full-byte accuracy** against the oracle reference (0 byte diffs across all 12 runs × 5 canary files = 60 targets evaluated) with zero transaction rejections, collapsing Time Elapsed standard deviation from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** (and $\pm 14\text{s}$ in Git).
+1. **Decoding & Context Reduction (`H1`)**: Emitting targeted patches instead of full-file rewrites cuts total context tokens by **-64.8%** (876K vs. 2.49M, saving 1.61M tokens/task, Welch $t=10.292, \text{df}=7.17, p < 0.00002$), drastically reducing model prefill and generation overhead.
+2. **Reliability & Turnaround Predictability (`H7`)**: The model reliably generated valid declarative transactions, achieving **100.0% full-byte accuracy** against the oracle reference (0 byte diffs across all 12 runs × 5 canary files = 60 targets evaluated; 240/240 test assertions passed) with zero rejections, collapsing Time Elapsed standard deviation from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** ($\pm 14\text{s}$ in Git).
+3. **Structural Batching (Operational Finding)**: Submitting multi-scope edits in a single atomic bundle (`observed_v2`) rather than sequential roundtrips cuts interaction steps by **-55.8%** (24.2 vs. 54.8 turns, $p < 0.00001$) and tool invocations by **-57.8%** (22.7 vs. 53.8 calls, $p < 0.00001$).
+4. **Authoritative State Confirmation (Operational Finding)**: Receiving cryptographic receipts (`after_hash`) under PostgreSQL row locks confirms atomic transaction application directly to the agent, eliminating the **10.0 exploratory `git diff` / `git status` commands** per task observed in the control baseline canary. Independent semantic and task validation remain host responsibilities.
 
 | Operating Environment | Paradigm ($n=3$ per cell) | Mean Time Elapsed | Mean Steps | Mean Tool Calls | Git Commands | Mean Context Tokens | Full-Byte Match |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -124,7 +124,7 @@ External MCP defaults to the **7-tool `editor` profile**: `patchdiff_read_target
 
 Configure the profile via `PATCHDIFF_MCP_PROFILE`:
 - **`editor`** (default, 7 tools): Recommended for interactive agent workflows.
-- **`observed_v2`** (5 tools): Streamlined editing with explicit AST snapshots and compact receipts (`<= 2 KB`). See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
+- **`observed_v2`** (5 tools): Streamlined editing with explicit AST snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte hard ceiling). See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
 - **`hybrid_editor`** (1 tool): Minimal single-tool editing (`patchdiff_submit_edits`).
 - **`observed_editor`** (4 tools): Pure editing and reading tools for delegated subagents.
 - **`unobserved`** (5 tools): Direct text reads and submissions without structural AST observation.

@@ -42,6 +42,7 @@ nav = [
     ]},
     { "Legacy" = [
         { "Legacy Compatibility" = "legacy/LEGACY_COMPATIBILITY.md" },
+        { "Historical Archive Index" = "legacy/ARCHIVE_INDEX.md" },
         { "Legacy Benchmark Report" = "legacy/git_benchmark_report.md" },
         { "Concept Paper v5" = "legacy/PatchDIFF-Concept-Paper-5.md" },
         { "Protocol Spec v0.2.3" = "legacy/PatchDIFF-Protocol-Spec-v0.2.3.md" },

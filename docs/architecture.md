@@ -86,22 +86,24 @@ PatchDIFF enforces a strict separation of concerns across four distinct operatio
 └──────────────────────────────┬──────────────────────────────┘
                                │ Internal service calls
 ┌──────────────────────────────▼──────────────────────────────┐
-│             Tier 3: Pure Deterministic Core Runtime         │
-│     (backend/app/core/, backend/app/pdcp/)                  │
-│  - Parsers (tx/1, tx/2, tx/3, legacy .pdcp v0.2.3)          │
-│  - Overlapping match enumerator & disambiguator             │
-│  - In-memory sequential applier & change_facts calculator   │
-│  - Zero LLM calls, zero network I/O, zero fuzzy guessing    │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ SELECT ... FOR UPDATE
-┌──────────────────────────────▼──────────────────────────────┐
-│           Tier 4: PostgreSQL Canonical Substrate            │
-│     (backend/app/storage/, migrations 0001–0005)            │
-│  - cloud_target_files (authoritative canonical LF text)     │
-│  - append_only_pdcp_logs (all accepted & rejected attempts) │
-│  - append_only_manifest_ledger (derived span/hash facts)    │
-│  - client_request_id idempotency & retry lineage            │
-└─────────────────────────────────────────────────────────────┘
+│             Tier 3: Transaction Service Layer               │
+│     (backend/app/services/)                                 │
+│  - Owns SQLAlchemy session, per-target row lock & retry key │
+│  - Invokes Pure Core Runtime for in-memory simulation       │
+│  - Atomically commits accepted mutations or logs rejections │
+│  - Manages SAVE checkpoints, replay, and target exports     │
+└──────────────┬───────────────────────────────▲──────────────┘
+               │                               │ Pure in-memory
+               │ SELECT ... FOR UPDATE         │ evaluation (no I/O)
+               │ atomic commit/audit           │
+┌──────────────▼──────────────┐ ┌──────────────┴──────────────┐
+│ Tier 4: PostgreSQL Substrate│ │ Pure Deterministic Core     │
+│ (backend/app/storage/)      │ │ (backend/app/core/, pdcp/)  │
+│ - cloud_target_files        │ │ - Exact match enumerator    │
+│ - append_only_pdcp_logs     │ │ - Sequential tx applier     │
+│ - append_only_manifest_ledger│ │ - Change facts & validity   │
+│ - client_request_id recovery│ │ - Zero DB/network/LLM I/O   │
+└─────────────────────────────┘ └─────────────────────────────┘
 ```
 
 ---

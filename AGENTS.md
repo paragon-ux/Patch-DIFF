@@ -118,7 +118,7 @@ The PatchDIFF MCP service provides:
 
 ## Goal F diagnostics, preview and admission
 
-Recorded decisions: `docs/usability/F01-decision.md`, `docs/usability/PASS-A-decision.md`, `docs/usability/PASS-B-decision.md`. Normative contract: `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
+Recorded decisions: `docs/usability/F01-decision.md`, `docs/usability/PASS-A-decision.md`, `docs/usability/PASS-B-decision.md`. Normative contract: `docs/spec/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
 
 - Rejection evidence is bounded: immutable `diagnostic.failure_context` (at most 256 code points of the actual failing buffer, as a prefix or a window around a known failure location), bounded exact candidates and the near-miss query. `current_context` and near misses are response-only; near misses run after a service-owned commit releases the lock and are omitted for caller-owned transactions. No fuzzy application or automatic choice is permitted.
 - Submission correlation is opt-in UUID invocation metadata, never request identity.

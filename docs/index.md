@@ -36,7 +36,7 @@ Authoritative technical specifications and tool schemas:
 - [**MCP_TOOLS.md**](spec/MCP_TOOLS.md): Complete Model Context Protocol tool contracts, schemas, byte budgets, and request/response representations.
 - [**DATA_MODEL.md**](spec/DATA_MODEL.md): PostgreSQL relational substrate, row-locking concurrency model (`SELECT ... FOR UPDATE`), and Alembic migrations `20260510_0001` through `20261027_0005`.
 - [**PDCP_FORMAT.md**](spec/PDCP_FORMAT.md): Declarative transaction input formats: typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), and guarded sole replacement (`patchdiff-tx/3`).
-- [**MCP_EDITOR_V2.md**](spec/MCP_EDITOR_V2.md): Streamlined 5-tool `observed_v2` editor profile with explicit reusable snapshots and bounded receipts (`<= 2 KB`).
+- [**MCP_EDITOR_V2.md**](spec/MCP_EDITOR_V2.md): Streamlined 5-tool `observed_v2` editor profile with explicit reusable snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte logical ceiling).
 - [**STRUCTURAL_BATCH_EDITING.md**](spec/STRUCTURAL_BATCH_EDITING.md): Multi-scope AST observation and atomic batch execution contracts.
 - [**WAYMARK_WORKER.md**](spec/WAYMARK_WORKER.md): Resident worker process architecture and IPC lifecycle for external AST engines.
 
@@ -85,6 +85,7 @@ Engineering governance and release requirements:
 Frozen legacy formats and historical records:
 
 - [**LEGACY_COMPATIBILITY.md**](legacy/LEGACY_COMPATIBILITY.md): Frozen `.pdcp` v0.2.3 wire syntax, legacy submission tool (`patchdiff_submit_pdcp`), deprecated regeneration wrappers, and historical replay profiles.
+- [**ARCHIVE_INDEX.md**](legacy/ARCHIVE_INDEX.md): Commit-pinned archive index and tree links for the 61 historical scratch files pruned in PR #22 Phase 1.
 - [**git_benchmark_report.md**](legacy/git_benchmark_report.md): Legacy baseline 2×2 factorial evaluation ($N=12$); superseded by the modernized benchmark due to prompt confounds in early iterations.
 - [**PatchDIFF-Concept-Paper-5.md**](legacy/PatchDIFF-Concept-Paper-5.md): Historical v0.2.3 conceptual whitepaper.
 - [**PatchDIFF-Protocol-Spec-v0.2.3.md**](legacy/PatchDIFF-Protocol-Spec-v0.2.3.md): Historical v0.2.3 protocol specification.

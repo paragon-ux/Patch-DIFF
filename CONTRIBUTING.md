@@ -99,7 +99,7 @@ python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-
 
 All pull requests must undergo a formal category review following [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_STANDARD.md):
 
-1. **Category Mapping:** Every changed file must map to a primary category (`ARCH`, `TX`, `CORE`, `MCP`, `PERSIST`, `MIGRATE`, `TEST`, `BENCH`, `DOC`, `CONFIG`).
+1. **Category Mapping:** Every changed file must map to one of the ten primary review categories defined in [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_STANDARD.md): `ARCH`, `DOC`, `SKILL`, `MCP`, `RUN`, `SVC`, `DB`, `SCRIPT`, `TEST`, `DEP`.
 2. **Category Coverage Statements:** Each category must have an explicit coverage statement detailing the scope of changes reviewed.
 3. **P1/P2/P3 Findings:** Any defect must be categorized by severity:
    - **P1 (Blocker):** State corruption, silent mutation, concurrency bug, broken replay.

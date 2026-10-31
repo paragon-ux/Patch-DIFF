@@ -61,7 +61,7 @@ Frozen `.pdcp` v0.2.3 submission (`patchdiff_submit_pdcp`) and the deprecated re
 .\.venv\Scripts\python.exe -c "from app.mcp import tools; from app.mcp.server import registry; print('\n'.join(registry.names()))"
 ```
 
-Expected tool surface (20 tools):
+Expected internal tool surface (22 registered handlers):
 
 ```text
 patchdiff_build_prompt_context
@@ -74,6 +74,7 @@ patchdiff_get_regeneration_context
 patchdiff_get_target
 patchdiff_handle_upload
 patchdiff_initialize_target
+patchdiff_observe_scope
 patchdiff_preview
 patchdiff_read_lines
 patchdiff_read_target
@@ -81,9 +82,12 @@ patchdiff_replay
 patchdiff_request_regeneration
 patchdiff_save
 patchdiff_submit_edits
+patchdiff_submit_observed_operations
 patchdiff_submit_operations
 patchdiff_submit_pdcp
 patchdiff_submit_replacement
 ```
+
+*(Note: The five tools exposed under the external `observed_v2` profile—`patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_read_target`, and `patchdiff_find_occurrences`—are external purpose-specific aliases mapped to these underlying registry handlers by `backend/app/mcp/external_adapter.py`; they do not add separate handlers to the internal registry).*
 
 The three regeneration tools (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are deprecated compatibility wrappers. Modern host workflows use `patchdiff_read_target` / `patchdiff_find_occurrences` and host-owned retries.

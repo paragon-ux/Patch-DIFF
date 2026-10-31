@@ -77,7 +77,7 @@ Welch's two-sample unequal variances $t$-tests were conducted comparing the pool
 - **Modernized PatchDIFF**: $875,635 \pm 165,749$ tokens
 - **Reduction**: **-64.8%** (2.84× reduction)
 - **Welch's $t$-statistic**: $t = 10.292$, $df = 7.17$
-- **Significance**: **$p < 0.00001$ ($1.4 \times 10^{-5}$)** — overwhelmingly rejects the null hypothesis.
+- **Significance**: **$p < 0.00002$ ($1.5 \times 10^{-5}$)** — overwhelmingly rejects the null hypothesis.
 
 ### 4. Turnaround Time
 - **Control**: $255.3 \pm 96.0\text{s}$ ($4\text{m } 15\text{s}$)
@@ -121,7 +121,7 @@ Welch's $t$-test between **Modernized Git PatchDIFF ($n=3$)** and **Modernized N
 - **Turnaround Time**: $183.3 \pm 14.0\text{s}$ (Git) vs. $206.7 \pm 20.7\text{s}$ (Non-Git) — $p = 0.21$ (statistically indistinguishable).
 - **Context Tokens**: $750,230 \pm 30,670$ (Git) vs. $1,001,039 \pm 143,395$ (Non-Git) — $p = 0.10$.
 
-**Conclusion**: Operating inside a Git repository imposes **zero operational tax** on PatchDIFF. When extraneous prompt friction is eliminated, Git PatchDIFF performs at full parity with (and slightly faster than) Non-Git PatchDIFF.
+**Conclusion**: No statistically significant operational penalty from the active Git repository was detected in this $n=3$ sample ($p = 0.21$). When extraneous prompt friction is eliminated, Git PatchDIFF operates without the exploratory command loops seen in unguided agents.
 
 ---
 

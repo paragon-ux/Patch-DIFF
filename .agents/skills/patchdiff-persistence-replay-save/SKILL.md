@@ -48,6 +48,15 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
 3. `20261022_0003_source_line_endings.py`:
    - Adds nullable JSONB `source_line_endings` to `cloud_target_files`, written at upload before LF canonicalization; existing targets keep NULL.
    - Guarded downgrade: refuses while any target has recorded line endings.
+4. `20261026_0004_target_scope_observations.py`:
+   - Adds `target_scope_observations` table for durable AST observation authority, binding target file ID, editing cycle ID, scope identity, character bounds, and content hash.
+   - Adds unique constraint `uq_target_scope_observations_identity` and indexes.
+   - Guarded downgrade: refuses to downgrade while observation rows exist.
+5. `20261027_0005_observation_bundles.py`:
+   - Adds paired `observation_bundle_id` (UUID) and `bundle_ordinal` to `target_scope_observations`.
+   - Adds unique constraint `uq_target_scope_observations_bundle_ordinal` and indexes.
+   - Partial unique index on `accepted_pdcp_log_id` ensuring historical single-observation linkage remains unique while batch observations link atomically.
+   - Guarded downgrade: refuses while bundled observations or batch records exist.
 
 Migrations must always run cleanly on live Postgres:
 ```powershell
