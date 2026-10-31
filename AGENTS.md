@@ -38,7 +38,7 @@ Read project artifacts in this order:
 
 Concept Paper v6 (`docs/PatchDIFF-Concept-Paper-6.md`) is the current explanation of PatchDIFF's theoretical model, design rationale, tradeoffs, and research claims. For executable API schemas, persistence behavior, runtime profiles, and exact limits, use the current normative specifications and implementation (`AGENTS.md` and items 2–10 above). Concept Paper v5 (`docs/PatchDIFF-Concept-Paper-5.md`) remains an unchanged historical record.
 
-Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/phase_prompts/`, `docs/Archive/`) are preserved untouched for historical context. Goal F decision records, accepted plans, verification captures and the earlier as-built reconciliation record (`docs/usability/`, including `docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md`) and review reports (`docs/reviews/`) are likewise preserved at their recorded revisions.
+Historical design records (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`) are preserved untouched for historical context. Goal F decision records, accepted plans, verification captures and the earlier as-built reconciliation record (`docs/usability/`, including `docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md`) and review reports (`docs/reviews/`) are likewise preserved at their recorded revisions.
 
 If ambiguity remains, preserve PatchDIFF’s locked invariants and choose the simplest deterministic behavior.
 
