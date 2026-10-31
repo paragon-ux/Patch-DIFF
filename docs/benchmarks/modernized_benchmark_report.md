@@ -112,16 +112,16 @@ The following table details the exact tool invocation frequencies averaged per r
 
 ---
 
-## 4. Cross-Environment Equivalence
+## 4. Cross-Environment Operational Comparison (Git vs. Non-Git)
 
 A critical question of this study was whether an active Git repository imposes an architectural or psychological penalty on the agent. 
 
 Welch's $t$-test between **Modernized Git PatchDIFF ($n=3$)** and **Modernized Non-Git PatchDIFF ($n=3$)**:
 - **Steps**: $21.7 \pm 1.2$ (Git) vs. $26.7 \pm 2.5$ (Non-Git) — difference is not statistically significant at $p = 0.06$.
-- **Turnaround Time**: $183.3 \pm 14.0\text{s}$ (Git) vs. $206.7 \pm 20.7\text{s}$ (Non-Git) — $p = 0.21$ (statistically indistinguishable).
-- **Context Tokens**: $750,230 \pm 30,670$ (Git) vs. $1,001,039 \pm 143,395$ (Non-Git) — $p = 0.10$.
+- **Turnaround Time**: $183.3 \pm 14.0\text{s}$ (Git) vs. $206.7 \pm 20.7\text{s}$ (Non-Git) — observed difference is not statistically significant ($p = 0.21$).
+- **Context Tokens**: $750,230 \pm 30,670$ (Git) vs. $1,001,039 \pm 143,395$ (Non-Git) — difference is not statistically significant ($p = 0.10$).
 
-**Conclusion**: No statistically significant operational penalty from the active Git repository was detected in this $n=3$ sample ($p = 0.21$). When extraneous prompt friction is eliminated, Git PatchDIFF operates without the exploratory command loops seen in unguided agents.
+**Conclusion**: In this $n=3$ sample, no statistically significant operational penalty from the active Git repository was detected ($p = 0.21$). While this small sample size cannot prove population equivalence or a zero-cost guarantee, point estimates indicate that when extraneous prompt friction is eliminated, Git PatchDIFF operates smoothly without the exploratory Git command loops seen in unguided agents.
 
 ---
 

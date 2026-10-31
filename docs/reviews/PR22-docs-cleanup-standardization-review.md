@@ -130,48 +130,46 @@ PR #22 executes the comprehensive 4-phase Documentation Cleanup and Repository S
 
 ---
 
-## 4. Delta Review & Remediation Closure Record: Gate 1 (`PR22_MERGE`)
+## 4. Implementation Remediation & Delta Tracking: Gate 1 (`PR22_MERGE`)
 
-- **Delta Evaluation Date**: 2026-10-31
-- **Evaluated Delta**: Base commit `5e58568` through commit `bea27c4` and the PR22 remediation delta.
-- **Review Sources**:
-  1. PR #22 Remote Review 1 (ChatGPT Sol, review ID `5722112561`)
-  2. PR #22 Remote Review 2 (Independent Second Review, review ID `5722157949`)
-  3. Canonical Triaged Findings Ledger (`TRIAGED_FINDINGS_LEDGER_REVISED_v2.jsonl`, gate `PR22_MERGE`)
+- **Historical Reviewed Head SHA**: `5e58568`
+- **External Independent Review Evaluation**: Review #5722457841 evaluated commit `4513196`.
+  - **13 findings verified closed**: `PR22-ARCH-001`, `PR22-ARCH-002`, `PR22-ARCH-003`, `PR22-DOC-001`, `PR22-DOC-003`, `PR22-DOC-005`, `PR22-DOC-007`, `PR22-DOC-008`, `PR22-DOC-010`, `PR22-SKILL-001`, `PR22-SVC-001`, `PR22-SCRIPT-001`, `PR22-DEP-002` (plus `PR22-MCP-001` superseded).
+  - **8 findings tracked for remediation**: `PR22-DOC-002`, `PR22-DOC-004`, `PR22-DOC-006`, `PR22-DOC-009`, `PR22-MCP-002`, `PR22-SCRIPT-002`, `PR22-DEP-001`, `PR22-DEP-003`.
+- **Current Delta Implementation**: Remediates the remaining 8 items per reviewer specifications without self-certifying review closure.
 
-| Finding ID | Pri | Category | Finding Summary & Remediation Applied | Status |
+| Finding ID | Pri | Category | Finding Summary & Remediation Applied | Review Status |
 | :--- | :---: | :---: | :--- | :---: |
-| **`PR22-ARCH-001`** | P2 | ARCH | Stale contract path `docs/MCP_TOOLS.md` in `AGENTS.md:121` corrected to `docs/spec/MCP_TOOLS.md`. | **CLOSED** |
-| **`PR22-ARCH-002`** | P2 | ARCH | Architecture flowchart in `docs/architecture.md` redrawn to route `SELECT ... FOR UPDATE` through Tier 3 Service Layer, keeping Tier 3 Pure Core Runtime 100% in-memory with zero DB I/O. | **CLOSED** |
-| **`PR22-ARCH-003`** | P2 | ARCH | Reconciled `docs/papers/MODERNIZATION_ARCHITECTURE.md:35` to cite the completed modernized empirical benchmark ($N=12$, $n=3$/cell) while noting narrow canary scope. | **CLOSED** |
-| **`PR22-DOC-001`** | P2 | DOC | Replaced `<=2 KB` promise in `README.md` and `docs/index.md` with authoritative 8,192 UTF-8 byte logical ceiling (`MAX_RECEIPT_BYTES`), noting ~800 B to ~2 KB representative sample. | **CLOSED** |
-| **`PR22-DOC-002`** | P2 | DOC | Softened Git operational tax claim in `modernized_benchmark_report.md` to state no difference was detected in the $n=3$ sample ($p=0.21$) without asserting population zero tax. | **CLOSED** |
-| **`PR22-DOC-003`** | P2 | DOC | Replaced outdated review categories in `CONTRIBUTING.md:102` with standard v1.1.0 categories (`ARCH`, `DOC`, `SKILL`, `MCP`, `RUN`, `SVC`, `DB`, `SCRIPT`, `TEST`, `DEP`). | **CLOSED** |
-| **`PR22-DOC-004`** | P2 | DOC | Preserved historical review head SHA `5e58568` and appended this dated delta-review closure section per PR Review Standard v1.1.0 without self-referential commit rewriting. | **CLOSED** |
-| **`PR22-DOC-005`** | P3 | DOC | Updated test badge in `README.md` to `1583 passed, 1 skipped` (1,022 unit + 561 integration). | **CLOSED** |
-| **`PR22-DOC-006`** | P3 | DOC | Authored `docs/legacy/ARCHIVE_INDEX.md` providing commit-pinned pre-prune tree links to commit `2afcda6` for all 5 pruned directory families. | **CLOSED** |
-| **`PR22-DOC-007`** | P2 | DOC | Restored canonical research hypothesis IDs in `README.md` per Concept Paper v6 (H2 = unintended mutation reduction, H5 = deterministic replay); presented batching and Git command reductions as operational findings. | **CLOSED** |
-| **`PR22-DOC-008`** | P2 | DOC | Updated `README_INTERNAL_MCP.md:58-87` list from 20 to 22 registered handlers (adding `patchdiff_observe_scope` and `patchdiff_submit_observed_operations`). | **CLOSED** |
-| **`PR22-DOC-009`** | P2 | DOC | Reconciled context-token $p$-value bound to $p < 0.00002$ ($p \approx 1.5 \times 10^{-5}$, Welch $t=10.292, \text{df}=7.17$) in `README.md` and `modernized_benchmark_report.md`. | **CLOSED** |
-| **`PR22-DOC-010`** | P2 | DOC | Clarified in `README.md:35` that transaction receipts confirm authoritative transaction state transition, explicitly noting that task correctness and semantic validation remain independent host responsibilities. | **CLOSED** |
-| **`PR22-SKILL-001`** | P3 | SKILL | Updated migration inventory in `.agents/skills/patchdiff-persistence-replay-save/SKILL.md:32-52` to include `0004` and `0005` in the primary numbered list. | **CLOSED** |
-| **`PR22-MCP-001`** | P2 | MCP | glama.json tool count finding superseded by `PR22-MCP-002` (Glama schema compliance). | **SUPERSEDED** |
-| **`PR22-MCP-002`** | P2 | MCP | Rewrote `glama.json` to conform to vendor `$schema: https://glama.ai/mcp/schemas/server.json` with required `maintainers` array; validated with Draft-07 schema. | **CLOSED** |
-| **`PR22-SVC-001`** | P3 | SVC | Updated writer thread in `waymark_worker.py` to catch `(OSError, ValueError)` on closed streams; added unit regression test in `test_waymark_worker.py`. | **CLOSED** |
-| **`PR22-SCRIPT-001`** | P2 | SCRIPT | Added pull_request `zensical build` verification check to `.github/workflows/ci.yml`. | **CLOSED** |
-| **`PR22-SCRIPT-002`** | P3 | SCRIPT | Synchronized `mkdocs.yml` navigation with `zensical.toml` 1:1. | **CLOSED** |
-| **`PR22-DEP-001`** | P2 | DEP | Pinned `zensical==0.0.74` in `.github/workflows/docs.yml` and `.github/workflows/ci.yml`. | **CLOSED** |
-| **`PR22-DEP-002`** | P2 | DEP | Qualified Python badge in `README.md` to `Python >=3.11 (CI: 3.11)` to reflect tested CI support. | **CLOSED** |
-| **`PR22-DEP-003`** | P3 | DEP | Updated `docs/standards/RELEASE_READINESS.md:11` to list all supported negotiated revisions (`2024-11-05`, `2025-06-18`, `2025-11-25`). | **CLOSED** |
+| **`PR22-ARCH-001`** | P2 | ARCH | Stale contract path `docs/MCP_TOOLS.md` in `AGENTS.md:121` corrected to `docs/spec/MCP_TOOLS.md`. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-ARCH-002`** | P2 | ARCH | Architecture flowchart in `docs/architecture.md` redrawn to route `SELECT ... FOR UPDATE` through Tier 3 Service Layer, keeping Tier 3 Pure Core Runtime 100% in-memory with zero DB I/O. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-ARCH-003`** | P2 | ARCH | Reconciled `docs/papers/MODERNIZATION_ARCHITECTURE.md:35` to cite the completed modernized empirical benchmark ($N=12$, $n=3$/cell) while noting narrow canary scope. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-DOC-001`** | P2 | DOC | Replaced `<=2 KB` promise in `README.md` and `docs/index.md` with authoritative 8,192 UTF-8 byte logical ceiling (`MAX_RECEIPT_BYTES`), noting ~800 B to ~2 KB representative sample. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-DOC-002`** | P2 | DOC | Replaced equivalence claims in `docs/benchmarks/modernized_benchmark_report.md:115-126` with operational comparison noting no statistically significant difference was detected ($p=0.21$), explicitly disclaiming population zero-tax equivalence. | **REMEDIATED** (Awaiting Recheck) |
+| **`PR22-DOC-003`** | P2 | DOC | Replaced outdated review categories in `CONTRIBUTING.md:102` with standard v1.1.0 categories (`ARCH`, `DOC`, `SKILL`, `MCP`, `RUN`, `SVC`, `DB`, `SCRIPT`, `TEST`, `DEP`). | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-DOC-004`** | P2 | DOC | Framed Section 4 as implementation remediation and delta tracking with external review linkage per PR Review Standard v1.1.0, rather than a self-certifying review. | **REMEDIATED** (Awaiting Recheck) |
+| **`PR22-DOC-005`** | P3 | DOC | Updated test badge in `README.md` to `1583 passed, 1 skipped` (1,022 unit + 561 integration). | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-DOC-006`** | P3 | DOC | Updated `docs/legacy/ARCHIVE_INDEX.md` with exact file deletion counts (16 Archive, 1 optimization, 8 gemini-remediation, 30 remediation, 6 phase_prompts = 61 Phase 1 files + 3 root plans in Phase 2 = 64 total files). | **REMEDIATED** (Awaiting Recheck) |
+| **`PR22-DOC-007`** | P2 | DOC | Restored canonical research hypothesis IDs in `README.md` per Concept Paper v6 (H2 = unintended mutation reduction, H5 = deterministic replay); presented batching and Git command reductions as operational findings. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-DOC-008`** | P2 | DOC | Updated `README_INTERNAL_MCP.md:58-87` list from 20 to 22 registered handlers (adding `patchdiff_observe_scope` and `patchdiff_submit_observed_operations`). | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-DOC-009`** | P2 | DOC | Reconciled context-token $p$-value bound to $p < 0.00002$ ($p \approx 1.5 \times 10^{-5}$, Welch $t=10.292, \text{df}=7.17$) across `README.md`, `modernized_benchmark_report.md`, and Concept Paper v6:539. | **REMEDIATED** (Awaiting Recheck) |
+| **`PR22-DOC-010`** | P2 | DOC | Clarified in `README.md:35` that transaction receipts confirm authoritative transaction state transition, explicitly noting that task correctness and semantic validation remain independent host responsibilities. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-SKILL-001`** | P3 | SKILL | Updated migration inventory in `.agents/skills/patchdiff-persistence-replay-save/SKILL.md:32-52` to include `0004` and `0005` in the primary numbered list. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-MCP-001`** | P2 | MCP | glama.json tool count finding superseded by `PR22-MCP-002` (Glama schema compliance). | **SUPERSEDED** (Review #5722457841) |
+| **`PR22-MCP-002`** | P2 | MCP | Rewrote `glama.json` to conform to vendor `$schema: https://glama.ai/mcp/schemas/server.json` with required `maintainers` array. Documented in `RELEASE_READINESS.md` that static schema validity is verified in PR review, while live directory claiming/refresh requires post-merge to default `main`. | **REMEDIATED** (Awaiting Recheck) |
+| **`PR22-SVC-001`** | P3 | SVC | Updated writer thread in `waymark_worker.py` to catch `(OSError, ValueError)` on closed streams; added unit regression test in `test_waymark_worker.py`. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-SCRIPT-001`** | P2 | SCRIPT | Added pull_request `zensical build` verification check to `.github/workflows/ci.yml`. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-SCRIPT-002`** | P3 | SCRIPT | Removed unused `mkdocs.yml`, making `zensical.toml` the sole authoritative site configuration and eliminating dual-config drift. | **REMEDIATED** (Awaiting Recheck) |
+| **`PR22-DEP-001`** | P2 | DEP | Fully locked all transitive docs dependencies in `docs-requirements.lock` and referenced it in both `.github/workflows/docs.yml` and `.github/workflows/ci.yml`. | **REMEDIATED** (Awaiting Recheck) |
+| **`PR22-DEP-002`** | P2 | DEP | Qualified Python badge in `README.md` to `Python >=3.11 (CI: 3.11)` to reflect tested CI support. | **VERIFIED CLOSED** (Review #5722457841) |
+| **`PR22-DEP-003`** | P3 | DEP | Documented wire protocol negotiation fallback semantics in `RELEASE_READINESS.md:11` (omitted `protocolVersion` falls back to `2024-11-05`, unsupported revision negotiates `2025-11-25`, supported revisions `2024-11-05`, `2025-06-18`, `2025-11-25`, referencing `test_editor_v2_adapter.py`). | **REMEDIATED** (Awaiting Recheck) |
 
 ---
 
-## 5. Final Conclusion & Recommendation
+## 5. Implementation Status & Next Steps
 
-All 21 actionable open findings across both independent reviews and the canonical triaged ledger have been resolved and verified:
-- Unit test suite: **1,022 passed, 1 skipped**.
-- Static documentation site: **`zensical build` completed in 1.43s with zero issues or missing page warnings**.
-- Vendor schema validation: **`glama.json` validated against official Glama server schema**.
-- CI workflow: **pull request docs gate added with pinned dependency**.
+All 21 actionable findings from the external reviews and canonical triaged ledger have been implemented:
+- **13 findings** verified closed by external review (`#5722457841`)
+- **1 finding** superseded (`PR22-MCP-001`)
+- **8 findings** remediated in this delta revision with verified unit tests, static build checks, and schema validation.
 
-**Recommendation**: **Approve and merge PR #22 into `main`**. Gate 1 (`PR22_MERGE`) is completely satisfied. Gate 2 (`PR23_DESIGN` & implementation) may now proceed from the merged baseline.
+Once final reviewer recheck on the remediated items is complete, PR #22 satisfies all Gate 1 (`PR22_MERGE`) prerequisites. Gate 2 (`PR23_DESIGN` & implementation) may then proceed from the merged baseline.

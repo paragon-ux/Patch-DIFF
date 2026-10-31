@@ -7,18 +7,18 @@ on:
     paths:
       - 'docs/**'
       - 'zensical.toml'
+      - 'docs-requirements.lock'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'docs/**'
       - 'zensical.toml'
+      - 'docs-requirements.lock'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: "pages"
@@ -35,7 +35,7 @@ jobs:
           python-version: "3.11"
       - name: Install documentation dependencies
         run: |
-          pip install zensical==0.0.74
+          pip install -r docs-requirements.lock
       - name: Build documentation site
         run: |
           zensical build
@@ -47,6 +47,9 @@ jobs:
 
   deploy:
     if: github.event_name != 'pull_request'
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

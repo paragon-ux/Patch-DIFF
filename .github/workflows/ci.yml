@@ -69,7 +69,7 @@ jobs:
         run: python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize --output .ci-results/five-file-v2
       - name: Build documentation site check
         run: |
-          pip install zensical==0.0.74
+          pip install -r docs-requirements.lock
           zensical build
       - name: Executed source and environment
         if: always()
