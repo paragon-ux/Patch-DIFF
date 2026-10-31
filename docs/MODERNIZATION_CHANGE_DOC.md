@@ -6,6 +6,39 @@ Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP 
 
 ## Transaction formats and compatibility
 
+External `PATCHDIFF_MCP_RESPONSE_MODE` now selects immutable detailed (default) or
+compact presentation. Only observed acceptance, candidate discovery and bundled
+observation successes are projected. Full audit facts, all warnings, guards,
+identities, exact source and continuations remain available as contracted; errors
+and unrelated responses are unchanged. There is no input schema/profile/runtime
+or persistence change. A separate trusted scalar finalization recipe checkpoints,
+replays and exports accepted target states without model lifecycle turns, with
+explicit SAVE uncertainty and partial-failure reporting. See
+[the contract](MCP_TOOLS.md#external-response-representations) and
+[workflow v1](OBSERVED_EDITOR_WORKFLOW.md). No host latency improvement or
+universal spill threshold is established by the deterministic tests.
+
+Structural batches extend the two existing observation tools without adding tool
+names. `patchdiff_observe_scope(selections=...)` issues 1–32 disjoint scopes from
+one snapshot/discovery; `patchdiff_submit_observed_operations(groups=...)`
+requires both guards and a request key, evaluates scope-local tx/2 operations
+through the shared applier and commits one target increment. The internal durable
+pair is `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`; historical
+single-scope and unobserved records/profiles retain their semantics. Migration
+0005 adds bundles and many-to-one accepted linkage while preserving historical
+single uniqueness; replay verifies every recorded scope without Waymark.
+[Limits, error codes, evidence and examples](STRUCTURAL_BATCH_EDITING.md).
+
+External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
+`unobserved` has 5, `observed` 6, opt-in `observed_editor` 4, and explicit
+compatibility `full` 22. The four-tool delegated role excludes SAVE/replay at
+both advertisement and dispatch while preserving the existing profiles and all
+request shapes. Observation/submission descriptions clarify route inputs, returned
+authority and the scopes-to-groups mapping; service validation and durable
+transaction/replay formats are unchanged. Profiles filter both discovery and calls and remain immutable for a session; the internal
+registry keeps all 22 handlers. Trusted lifecycle operators and older integrations
+must opt into `full` before starting their session.
+
 | Tool | Stored protocol | Runtime for new submissions | Behavior |
 | --- | --- | --- | --- |
 | `patchdiff_submit_edits` | `patchdiff-tx/1` | `patchdiff-mvp-0.2.2` | Typed exact matches with intent and required version/hash guard. |
@@ -47,12 +80,25 @@ Discovery examples are deep-copied per result and bounded: 65,536 compact ASCII-
 
 SAVE snapshots current target state and rotates editing cycles without mutating content; optional version and hash guards are both checked. Replay checks initial snapshot ownership/hash, accepted-log ownership/content hashes, contiguous versions, before/after hashes and recorded execution profiles. Materialized health reports independent raw `content_matches`, `stored_hash_matches`, `recomputed_hash_matches` and `version_matches`; successful reconstruction can coexist with unhealthy storage. CRLF/bare-CR corruption is visible even if canonical hashes agree. Replay never repairs target or history.
 
-Migrations are `20260510_0001`, `20261020_0002` and `20261022_0003`. Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses existing typed ledger rows rather than discarding information. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
+Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004` (observations) and `20261027_0005` (bundles). Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses existing typed ledger rows rather than discarding information. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
 
 ## Verification scope
 
-[TEST_MATRIX.md](TEST_MATRIX.md) maps unit, live PostgreSQL, populated migration preservation/refusal and real stdio workflows (`1,226` automated tests: `816` unit + `410` live PostgreSQL/stdio integration, plus `235/235` live stdio friction checks at `PR #14`). [Evaluation documentation](../evaluation/README.md) records deterministic byte accounting (`151 B` wire for 1 minimal `tx/1` edit, `259 B` for 5 edits, `341 B` `tools/call` line for small `tx/3` replacement), `SVC-001` 65,536-code-point near-miss latency (`1.7 ms` on varied prose, `41.9 ms` with 100% scan coverage on repetitive logs), and `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger latency over 20 MB substrates (`14.68 ms` ledger / `22.85 ms` log on `50 × 400 KB` `tx/3`; `136.72 ms` log / `221.59 ms` ledger on `20 × 1 MB` `tx/1`). Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
+[TEST_MATRIX.md](TEST_MATRIX.md) maps unit, live PostgreSQL, populated migration preservation/refusal and real stdio workflows (`1,226` automated tests: `816` unit + `410` live PostgreSQL/stdio integration, plus `235/235` live stdio friction checks at `PR #14`). [Verification documentation](../backend/tests/verification/README.md) provides the current reproduction commands. Recorded deterministic byte accounting (`151 B` wire for 1 minimal `tx/1` edit, `259 B` for 5 edits, `341 B` `tools/call` line for small `tx/3` replacement), `SVC-001` 65,536-code-point near-miss latency (`1.7 ms` on varied prose, `41.9 ms` with 100% scan coverage on repetitive logs), and `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger latency over 20 MB substrates (`14.68 ms` ledger / `22.85 ms` log on `50 × 400 KB` `tx/3`; `136.72 ms` log / `221.59 ms` ledger on `20 × 1 MB` `tx/1`). Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
 
 Offline replacement cases measure serialized bytes and accepted content/hash oracles, not live transport, persistence or timing. No live-model comparison, representative sanitized dataset or production performance threshold has been established. No editing adapter, optional typed guards or normalized request-identity behavior is introduced.
 
 Historical source and verification records remain preserved in Git and internal archives; they do not establish verification of a later revision.
+
+## PR20: opt-in purpose-specific editor contract
+
+Decision: add `observed_v2` with eight external purposes, six common bundle paths and two single-scope compatibility paths. The latter preserve scopes above the batch issuance cap. Reusable explicit snapshots remove result-to-argument field renaming; bounded receipts preserve immutable transaction evidence separately from current state. Modern MCP revisions are negotiated with text fallback and optional structured results/output schemas. Existing profiles,22 internal handlers, services, transaction formats, migrations and replay runtimes retain their contracts.
+
+[The full contract](MCP_EDITOR_V2.md) records compatibility, audited admission/recovery ordering, response limits, host-loading uncertainty and actual verification paths. This is a tool/schema/data change; the rejected prompt-only proposal is not implemented. Static bytes and backend correctness do not establish model-time savings.
+
+## PR21: streamlined five-tool observed editor surface & receipt compaction
+
+Decision: streamline `observed_v2` to five external purpose-specific tools (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`), eliminating dual-path confusion by pruning redundant singular tools (`patchdiff_observe_one`, `patchdiff_commit_observation`, and `patchdiff_read_observation`). Resolve commit receipt bloat and client response truncation by preserving the authoritative `scopes` confirmation array while dropping raw `changes` span facts (reducing receipt payload size from ~12 KB to ~2 KB). Retain rich candidate symbol and selector metadata in `patchdiff_list_scopes` for non-blind scope discovery.
+
+[The PR 21 retrospective](reviews/PR21-streamlined-v2-retrospective.md) records the full architectural narrative across PR 19, 20, 20slim, and 21, and documents the empirical 5-file canary benchmark (24 planner steps vs 41 in PR 20, 16 MCP calls vs 35, 968K cache tokens vs 2.64M, 0 rejections/retries, and 100% full-byte correctness). Existing profiles, internal handlers, services, transaction formats, migrations, and replay runtimes retain their contracts.
+

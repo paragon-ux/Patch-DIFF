@@ -27,7 +27,7 @@ turns. Those require a live-model study (see docs/MODERNIZATION_CHANGE_DOC.md),
 which has NOT been run. Bytes are a deterministic measure of wire/storage size, not
 model inference cost.
 
-Run from the repo root:  PYTHONPATH=backend python evaluation/offline_eval.py
+Run from the repo root:  PYTHONPATH=backend python backend/tests/verification/offline_eval.py
 """
 
 from __future__ import annotations

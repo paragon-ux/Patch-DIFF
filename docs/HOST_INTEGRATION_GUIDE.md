@@ -6,6 +6,16 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 ## 0. Stdio transport and host refresh
 
+Choose the immutable server profile before starting a session with
+`PATCHDIFF_MCP_PROFILE`: `editor` (default, 7 tools), `unobserved` (5), `observed`
+(6), `observed_editor` (4), or `full` (22). Use `observed_editor` for delegated
+editing when the host owns lifecycle work; it rejects SAVE/replay as well as
+other excluded tools before dispatch. Older integrations and trusted
+initialization/export/audit
+operators must explicitly opt into `full`. Excluded tools are uncallable as well
+as unadvertised. An agent cannot override a profile per request.
+[Exact profile lists and batch examples](STRUCTURAL_BATCH_EDITING.md).
+
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
 
 For older adapter revisions, set PYTHONIOENCODING=utf-8 in the server environment. Literal Unicode can otherwise be misdecoded and persisted even when the call succeeds; an ASCII-escaped request alone does not test this path. This setting remains compatible with the fixed adapter.
@@ -225,6 +235,130 @@ With `core.autocrlf=true`, git converts line endings on checkout and on commit, 
 
 PatchDIFF's guarantees cover the managed target in Postgres. An exported file edited elsewhere, a shell, another database writer, or another editor can change content PatchDIFF never sees. A skill or instruction asking the model to "use PatchDIFF" is guidance, not enforcement. Re-importing an edited export is a **new upload and a new target**; nothing is merged or synchronized.
 
+In environments with an active version control system (e.g. Git repository), the workspace files on disk are NOT updated by PatchDIFF transactions until the host exports or syncs them. State-dependent Git commands that inspect the working tree (such as `git diff` or `git status`) inspect disk files, not the canonical Postgres substrate, and will not show in-flight or accepted PatchDIFF transactions. Repository inspection commands that read history (`git log`, `git show <commit>`) operate on committed history.
+
 ## 10. Host skill checklist
 
-A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; check each accepted-edit warning against what you meant before continuing; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; do not treat a local copy as authoritative.
+For observed operations, keep nonempty edits within the observed scope. Insert only strictly inside the current sequential scope; never insert at either boundary. Supply both nonempty `expected_before` and `expected_after`, matching immediately adjacent text entirely inside that scope. Earlier operations can move the scope end and change those neighbors, so derive later guards from the intermediate buffer. On `OBSERVED_INSERTION_GUARDS_REQUIRED`, mismatching adjacency, or `OPERATION_OUTSIDE_OBSERVED_SCOPE`, re-read and correct the proposal; do not bypass strict admission. SAVE closes the observation's editing cycle, so obtain a fresh observation before paging or submitting again.
+
+A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; check each accepted-edit warning against what you meant before continuing; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; and do not treat a local copy as authoritative.
+
+### Host Prompt Hygiene & Friction Prevention
+
+Empirical $2\times2$ factorial evaluation ($N=24$ live model runs across Non-Git and Git environments) identified three critical prompt hygiene principles that govern agent efficiency:
+
+1. **Omit Obsolete Schema and Spill Permissions**: When MCP tools are eagerly delivered via `tools/list` (e.g. `observed_v2`), do NOT include legacy permissions clauses such as `"Registered help/schema resources and this session's spills are allowed"`. Empirical trials showed that LLMs interpret this phrase as an instruction to inspect local disk schemas and help files via native filesystem tools, wasting 5–6 tool calls upfront before beginning edits.
+2. **Explicitly Forbid Post-Commit Verification Audits**: Host prompts should state:
+   > *"The host performs independent final verification after you report completion. Do NOT perform post-commit verification audits or read-back loops once all targets are committed. Send your completion message immediately after committing all files."*
+   Ambiguous phrasing such as *"Read/search/observe when needed to resolve editing uncertainty"* causes models to launch into redundant post-commit read loops (`find_occurrences`, `read_target`), adding 9–12 unnecessary tool invocations per session.
+3. **Harmonize Prompts Across Git and Non-Git Environments**: Do not inject cautionary warnings into editor prompts regarding `git diff` or `git status` vs. PostgreSQL substrate state. Adding negative warnings about version control inadvertently primes the model with Git terminology and cognitive load. An identical, harmonized prompt achieves complete cross-environment performance parity ($21.7 \pm 1.2$ steps in Git vs. $26.7 \pm 2.5$ steps in Non-Git, $p=0.06$).
+
+
+## 11. Waymark structural observation workflow (`waymark-engine@4.1.0`)
+
+For multiple independent structures, prefer one `patchdiff_observe_scope` call
+with exact `selections`, followed by one `patchdiff_submit_observed_operations`
+call with `observation_bundle_id`, `groups`, both observed target guards and a
+mandatory `client_request_id`. Each group's match indexes, anchors and sequential
+span offsets use that group's local slice, starting at zero. Submit all groups
+in one target transaction; any failure rejects the whole request, and success
+increments version once. Re-read stale bundles; repeat an identical keyed request
+to recover a lost committed response. SAVE closes the original editing cycle.
+See [limits, errors, replay guarantees and complete Python/JSON/Markdown recipes](STRUCTURAL_BATCH_EDITING.md).
+
+The existing single-scope workflow below remains available, with absolute span
+coordinates and its historical record/replay behavior.
+
+For structured code, configuration, and documentation targets (`.py`, `.ts`, `.js`, `.json`, `.md`, `.yaml`, `.toml`, `.sh`), prefer structural observation and scoped submission:
+
+1. Call `patchdiff_observe_scope(target_file_id, query=..., kind=...)` to list candidate symbols, or call `patchdiff_observe_scope(target_file_id, symbol_name=..., kind=...)` directly when the exact symbol identity is known (`FRAME_SYNC_STREAM`, `tenants[ten_013]`, `row:CHK-14-C`, `fence:L7`).
+2. Inspect the returned `observation_id`, `target_version`, `target_current_hash`, `scope_start`, `scope_end`, and canonical slice `text` (paging with `observation_id` and `next_offset` if `truncated: true`).
+3. Submit edits restricted to that scope via `patchdiff_submit_observed_operations(target_file_id, observation_id, intent, operations, expected_target_version, expected_current_hash, client_request_id=...)`.
+   - `match` operations inside `patchdiff_submit_observed_operations` search only within `[scope_start, scope_end)`, automatically disambiguating strings that repeat in other symbols/objects outside the observed scope.
+   - `span` operations use absolute canonical LF code-point offsets (`[start, end)`) that must lie within `[scope_start, scope_end)`.
+4. Enable `PATCHDIFF_STRICT_OBSERVATION_MODE=1` when the host wants the server to enforce that every edit is backed by a verified structural observation (`OBSERVATION_REQUIRED` on all unobserved write tools).
+
+## Trusted scalar finalization
+
+Before finalization, establish terminal editor status, close its editing
+connection, and reconcile unresolved editing RPCs. Preserve accepted receipt
+guards; a fresh read must not refill them. Full transcript export can proceed
+independently of checkpointing a known accepted state. Record transcript evidence
+as pending, clipped or parse-valid, and record coverage through a known terminal
+record separately. Literal clipping-marker text or source pagination does not
+prove transcript clipping. Attach a later export as a new hashed addendum without
+overwriting the initial result or uncertain SAVE receipts. A parent cannot export
+its own future terminal response; the operator can attach it afterward.
+The trusted host performs independent final verification and renders receipt
+tables. The editor focuses strictly on proposal generation and execution, sending one
+terminal status immediately upon completing all target commits. It should be explicitly
+instructed not to perform post-commit audit loops or re-read targets after commit; that
+message need not reproduce hashes or lifecycle tables. Public tool discovery supplies operation
+contracts; a host handoff need not repeat a separate tool tutorial.
+
+
+[Observed editor workflow v1](OBSERVED_EDITOR_WORKFLOW.md) assigns editing to the
+model and scalar SAVE/REPLAY/export to the trusted host. The backend contracts do
+not change and targets need not share a project. This removes model-managed
+lifecycle turns, not backend calls or the need for independent task verification.
+
+Start the editor with resident/observed/strict observation and optional compact
+responses as specified in that brief. `PATCHDIFF_MCP_RESPONSE_MODE` defaults to
+`detailed`; only compact successful observed results omit supplementary evidence
+or duplicate metadata. Warnings, guards, exact source, failure diagnostics and
+stored facts remain authoritative. The existing oneshot default remains intact.
+Verify the actual serving process and tools/list after restart. Host schema
+preloading/output limits are integration-specific; retain ordinary help lookup,
+existing observation paging and authorized spill-file retrieval as fallbacks.
+
+The small standard-library recipe in `examples/host_finalize.py` accepts an
+existing synchronous MCP caller with a finite deadline. The trusted manifest
+contains `filename`, `target_file_id`, `expected_target_version`,
+`expected_current_hash` and `accepted_pdcp_log_id` from the mapping and actual last
+accepted MCP receipt. Do not derive it from model prose or refresh guards to make
+stale work pass. Run it after editing ends, with the editor no longer writing.
+
+For an operator using a repository checkout, reuse the existing verification
+stdio client in a separate detailed/full session. This is an operator/test recipe,
+not a production transport dependency or an agent-launch controller:
+
+```python
+import json
+import os
+from pathlib import Path
+from backend.tests.verification.structural_batch.verify import MCP
+from examples.host_finalize import finalize_targets
+
+targets = json.loads(Path("private/accepted-targets.json").read_text(encoding="utf-8"))
+with MCP("full", os.environ["PATCHDIFF_DATABASE_URL"], response_mode="detailed",
+         rpc_timeout_seconds=30) as operator:
+    result = finalize_targets(operator.call, targets, "private/new-finalization")
+if result["status"] != "complete":
+    raise SystemExit(result)
+```
+
+The client bounds RPC write/read time, reaps a failed peer and never resends a
+timed-out call. The finalizer preflights all target names/identities, requires a
+fresh output directory, and writes root-level manifest/events/results separately
+from `exports/`. SAVE carries both original guards. Replay must verify all four
+materialized-state components and expected versions/hashes; export bytes are
+independently hashed and written as canonical LF. Complete receipts/exports are
+flushed/fsynced locally before success; this is not universal power-loss durability.
+
+SAVE rotates cycles without changing target hash/version. Those guards therefore
+do not make SAVE idempotent. A lost/malformed SAVE response or inability to persist
+its receipt is `save_uncertain`: stop, preserve `save_pending`, and do not retry
+SAVE, continue dependent verification, or automatically rerun in a fresh directory.
+An explicit rejection fails that target. Other domain failures may leave partial
+per-target completion; infrastructure/evidence failures stop subsequent calls.
+If the disk fails, results.json is best-effort and the returned incomplete outcome
+is authoritative about that failure. The operator reconciles uncertain snapshot/
+cycle records manually; no automatic repair or cross-target rollback is provided.
+
+An independent evaluator checks task correctness after exports. Keep gold data,
+full transcripts, actual wire calls, manifests, exports and verification artifacts
+outside the editing model's context and under a private ignored capture directory.
+
+## Purpose-specific observed interface
+
+For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.

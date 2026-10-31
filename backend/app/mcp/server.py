@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.performance_events import span
+
 
 ToolHandler = Callable[..., dict[str, Any]]
 
@@ -30,7 +32,8 @@ class ToolRegistry:
         return self._tools[name]
 
     def call(self, name: str, **kwargs) -> dict[str, Any]:
-        return self._tools[name](**kwargs)
+        with span("rpc", target_id=kwargs.get("target_file_id")):
+            return self._tools[name](**kwargs)
 
 
 registry = ToolRegistry()

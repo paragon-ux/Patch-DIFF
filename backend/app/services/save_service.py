@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.failures import FailureReason
 from app.storage.models import CloudTargetFiles, EditingCycles, TargetSnapshots
 from app.storage.repositories import select_target_for_update
+from app.services.performance_events import timed
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,7 @@ class SaveResult:
     failure_detail: str | None = None
 
 
+@timed("task")
 def save_target(
     session: Session,
     *,

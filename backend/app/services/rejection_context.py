@@ -18,7 +18,7 @@ _CONTEXT_BYTES = min(4096, (8192 - _WRAPPER_BYTES) // 2)
 
 
 def unavailable_context(
-    reason: Literal["invalid_target_id", "target_not_found", "unlocked_local_state", "same_as_failure_context"],
+    reason: Literal["invalid_target_id", "target_not_found", "unlocked_local_state", "same_as_failure_context", "batch_scope_not_evaluated"],
 ) -> dict:
     return {
         "available": False,

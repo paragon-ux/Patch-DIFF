@@ -28,7 +28,7 @@ PatchDIFF verification spans four rigorous layers:
    - Launches `backend/app/mcp/external_adapter.py` as a real OS child process over stdin/stdout pipes.
    - Executes full multi-turn editing workflows (`patchdiff_initialize_target` -> `patchdiff_read_target` -> `patchdiff_submit_edits` -> `patchdiff_save` -> `patchdiff_replay` -> `patchdiff_export_target`).
    - Verifies JSON-RPC 2.0 framing, `tools/list` schema advertising, and error handling.
-4. **Offline Evaluation (`evaluation/offline_eval.py`)**:
+4. **Offline Evaluation (`backend/tests/verification/offline_eval.py`)**:
    - Evaluates byte overhead and applier verdict equivalence across 5 canonical scenarios:
      1. 1 tiny edit
      2. 5 small edits
@@ -53,7 +53,7 @@ $env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.
 .\.venv\Scripts\python.exe -m pytest -q
 
 # 4. Offline evaluation
-.\.venv\Scripts\python.exe evaluation/offline_eval.py
+.\.venv\Scripts\python.exe backend/tests/verification/offline_eval.py
 ```
 
 ## Review Checklist
@@ -101,3 +101,11 @@ When testing or reviewing Goal F behavior, cover:
 - Diagnostics: failure versus current context, intermediate-buffer labeling, exact-key recovery, near misses only after a service-owned commit, banded near-miss results equal to an unbanded Levenshtein reference.
 - Discovery: every advertised example executed over real stdio and PostgreSQL; capability metadata equal to the runtime constants.
 - Friction follow-up: warnings persisted and recovered; 0.5.0 span context beside unchanged 0.3.0 records and replay; every export format; retryable values; near misses beyond 256 code points versus a pruned-equals-unpruned reference; key-conflict fields; history joins and content budget; literal tool text inside pure-ASCII JSON-RPC lines on the real stdio wire; SQL NULL for accepted rows without warnings.
+
+## Structural batch verification
+
+Cover 2/5/20/32 scopes, one discovery per snapshot, bounded complete issuance, scope-local sequential semantics, atomic rejection/rollback, concurrent writers, committed-response-loss recovery, corrupted all-scope replay authority and populated 0004/0005 roundtrips/refusal. Test exact editor/unobserved/observed/full 7/5/6/22 catalogs plus opt-in observed_editor (4), with forbidden calls including SAVE/replay denied in-process and over real stdio. Run the documented Python/JSON/Markdown examples and `backend/tests/verification/structural_batch/verify.py`; the latter is a deterministic five-file oracle check, not authorization for a comparative model run or Gate 2 approval. Preserve frozen experiment bytes.
+
+## Versioned observed editor view
+
+Opt-in observed_v2 exposes 8 external purposes; no registry/runtime/migration is added. Follow docs/MCP_EDITOR_V2.md for exact names, explicit snapshot normalization, distinct transaction/current receipt states, 8192-byte whole logical commit/error bound, negotiated 2025 output schemas/structured results and 2024 text fallback. Preserve all old profile contracts. Do not prevalidate operational inputs in a way that bypasses known-target audit or exact keyed recovery. Verify large single-scope compatibility, audited malformed values, conflict logging, post-advance recovery, real stdio denials and deterministic five-file --editor-v2 --host-finalize. No model coaching or inferred performance claims.

@@ -8,6 +8,7 @@ Tool fields and byte budgets are in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-
 
 - **Span operations (`patchdiff-tx/2`, profile `patchdiff-mvp-0.3.0`).** A span carries non-bool integer `start`/`end` with `0 <= start <= end`, in code points of the sequential canonical buffer, plus the exact `expected_text` and `replace`. The applier rejects with `span_out_of_bounds` when `end` exceeds the buffer length, and with `span_expected_text_mismatch` unless `buffer[start:end] == canonicalize_text(expected_text)`. `start == end` with an empty `expected_text` inserts. Match operations keep the 0.2.2 exact-match and selector rules. Span facts add `operation: "span"`. Both span failures are transaction-applicability failures, and their diagnostics report `span_check`, `buffer_length` and up to 64 code points of `actual_text`.
 - **Span context (`patchdiff-mvp-0.5.0`).** Optional `expected_before`/`expected_after` must equal `buffer[start-len(expected_before):start]` and `buffer[end:end+len(expected_after)]` after canonicalization; a mismatch is `span_expected_text_mismatch` with `span_check` naming the field. Only a profile with `span_context` accepts them; 0.3.0 rejects the fields at decoding and the applier refuses them under any other profile.
+- **Observed scope admission.** When the service supplies authoritative `scope_bounds`, nonempty edits must stay inside the running scope. Zero-width spans require `scope_start < start < scope_end` and both nonempty adjacent guards wholly inside that scope, checked against the current sequential buffer. Either boundary rejects. Missing guards return `span_expected_text_mismatch` with `OBSERVED_INSERTION_GUARDS_REQUIRED`; scope violations return `span_out_of_bounds` with `OPERATION_OUTSIDE_OBSERVED_SCOPE`. This additional observed-admission policy does not change unobserved historical runtime profiles.
 - **Sole replacement (`patchdiff-tx/3`, profile `patchdiff-mvp-0.4.0`).** Exactly one `replace_all` replaces the whole buffer `[0, len(buffer))`; any other operation count or kind rejects. The single fact covers the full original span with `operation: "replace_all"`. Fresh size admission is enforced by the service, not by decoding or replay.
 - **Profile gates.** `RuntimeProfile.span_operations` and `RuntimeProfile.replace_all_operations` default to false, so every historical profile and 0.2.2 reject both operation kinds; 0.3.0 enables spans only, 0.4.0 enables both, and 0.5.0 enables spans plus `RuntimeProfile.span_context`. Profiles never change after they write history.
 - **Failure evidence.** For `match_ambiguous` and `disambiguation_invalid` the pure applier captures at most five exact candidates (20 code points of context per side, 64-point match preview). When such a failure follows earlier simulated changes, `failure_detail` adds that selectors count the sequential buffer. For `match_absent` it captures the near-miss query (the canonical query of at most 64 code points, otherwise `match_too_large`). For `sequential_match_invalid` it instead records each original occurrence (up to five) with the earlier change that overlapped it, and no near-miss query. Near-miss ranking itself is service-side and response-only.
@@ -236,6 +237,18 @@ If any check or edit fails:
 - By default, manifest ledger reads filter to the active editing cycle.
 
 ## Deterministic Replay
+
+The additional immutable internal pair `patchdiff-observed-batch/1` /
+`patchdiff-observed-batch-r1` validates a canonical batch envelope and authoritative
+scope evidence. `app.pdcp.observed_batch` applies each group's parsed tx/2 changes
+through `apply_pdcp_transaction` to its original scope-local buffer, then assembles
+results in descending original scope order. Both global guards are validated
+under the target lock before substituting each real slice hash for local
+application. A failure returns no assembled target. Runtime facts retain ordered
+group/operation indices, observation IDs, original scope bounds and sequential
+local coordinates. Replay checks all exact authoritative links and hashes, never
+calls Waymark and changes no storage. Historical profiles and branches below
+remain unchanged. [Batch contract](STRUCTURAL_BATCH_EDITING.md).
 
 Replay reconstructs canonical target state from the `initial_upload` snapshot plus ordered accepted log entries:
 1. Verify initial snapshot content against `initial_snapshot.content_hash`.

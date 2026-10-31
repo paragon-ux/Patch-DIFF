@@ -258,3 +258,56 @@ For both `patchdiff_submit_edits` and `patchdiff_submit_pdcp`, execution proceed
 5. Post-simulation commit guard: verify target version and hash have not diverged.
 6. Commit: update `cloud_target_files`, insert `append_only_pdcp_logs`, insert `append_only_manifest_ledger` rows (with `origin` and `derived_json`), update `current_pdcp_files`.
 7. On any rejection: target is not mutated; a rejected row is inserted into `append_only_pdcp_logs`; zero rows are inserted into `append_only_manifest_ledger`.
+
+
+### `target_scope_observations` (Migration `20261026_0004`)
+Server-issued structural scope observations produced by `patchdiff_observe_scope` over the pinned `waymark-engine@4.1.0` package.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `observation_id` | UUID | PK | Server-issued opaque observation reference |
+| `target_file_id` | UUID | FK -> `cloud_target_files.target_file_id` NOT NULL | Owning target |
+| `editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Active editing cycle when observed |
+| `target_version` | BIGINT | NOT NULL | Canonical target version observed |
+| `target_current_hash` | VARCHAR(64) | NOT NULL | SHA-256 of canonical LF target content observed |
+| `waymark_engine_version` | TEXT | NOT NULL | Pinned Waymark release (`4.1.0`) |
+| `language` | TEXT | NOT NULL | Waymark language identifier (`python`, `json`, `markdown`, etc.) |
+| `symbol_name` | TEXT | NOT NULL | Exact Waymark symbol identity (`FRAME_SYNC_STREAM`, `tenants[ten_013]`, `row:CHK-14-C`, `fence:L7`) |
+| `symbol_kind` | TEXT | NOT NULL | Waymark symbol kind |
+| `symbol_parent` | TEXT | NULLABLE | Parent symbol name when nested |
+| `start_line` | INTEGER | NOT NULL | 1-based inclusive start line |
+| `start_column` | INTEGER | NOT NULL | 0-based UTF-16 code-unit start column |
+| `end_line` | INTEGER | NOT NULL | 1-based inclusive end line |
+| `end_column` | INTEGER | NOT NULL | 0-based UTF-16 code-unit end column |
+| `scope_start` | BIGINT | NOT NULL | Inclusive canonical LF Unicode code-point start offset |
+| `scope_end` | BIGINT | NOT NULL | Exclusive canonical LF Unicode code-point end offset |
+| `observed_scope_hash` | VARCHAR(64) | NOT NULL | SHA-256 of `current_content[scope_start:scope_end]` |
+| `observation_bundle_id` | UUID | NULLABLE, indexed | Migration 0005 bundle identity; NULL for historical singles |
+| `bundle_ordinal` | INTEGER | NULLABLE, 0..31, unique with bundle | Paired nullability with bundle ID; selection order |
+| `accepted_pdcp_log_id` | UUID | FK, indexed, NULLABLE | Singles retain partial uniqueness; bundled observations can share one accepted log |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Observation timestamp |
+
+Retention and lifecycle semantics:
+- Observations are append-only server-issued records.
+- SAVE closes their editing cycle; paging and fresh admission both reject closed-cycle observations even if target version/hash are unchanged.
+- Replay requires the exact authoritative observation for every accepted log recording `observation_id`, with one-to-one accepted-log linkage and matching target, cycle, preimage version/hash, scope bounds and scope hash against the sequential replay buffer. Missing or altered rows fail closed; diagnostic scope offsets are never fallback authority. Historical unobserved transactions retain their original replay path.
+- Under `SELECT ... FOR UPDATE` on `cloud_target_files`, `patchdiff_submit_observed_operations` locks the `target_scope_observations` row, verifies `target_file_id`, `editing_cycle_id`, `target_version`, `target_current_hash`, `waymark_engine_version`, `observed_scope_hash`, and re-verifies Waymark symbol coordinates before restricting `patchdiff-tx/2` operations to `[scope_start, scope_end)`.
+- Downgrading migration `20261026_0004` refuses while any rows exist in `target_scope_observations`.
+
+Migration `20261027_0005_observation_bundles.py` follows 0004 without altering it.
+It replaces `uq_target_scope_observations_accepted_log` with partial unique index
+`uq_scope_single_accepted_log` (`observation_bundle_id IS NULL AND
+accepted_pdcp_log_id IS NOT NULL`), and adds `uq_scope_bundle_ordinal`,
+`ix_scope_bundle`, `ix_scope_accepted_log` and paired-nullability/range check
+`ck_scope_bundle_pair`. Downgrade refuses bundled rows, many-to-one accepted links
+or accepted `patchdiff-observed-batch/1` records before altering schema.
+Historical rows, logs and snapshots remain unchanged.
+
+Accepted batches retain ordered operations and authoritative scope evidence in
+canonical JSON, hash it, and link every participating observation to one log in
+the same transaction as all ledger entries and one target increment. The request
+fingerprint identifies the submitted envelope before server evidence is attached.
+Replay independently verifies canonical record/hash, exact links, bundle, group
+order, target/cycle/version/preimage and all original scope hashes. Ledger facts
+carry group/operation ordinals, observation IDs, original scope bounds and local
+sequential operation coordinates. [Full durable contract](STRUCTURAL_BATCH_EDITING.md#durable-evidence-and-replay).

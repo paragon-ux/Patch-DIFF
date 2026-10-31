@@ -43,6 +43,7 @@ def _payload(result: dict) -> dict:
 @pytest.mark.parametrize("escaped", [False, True], ids=["literal-utf8", "ascii-escapes"])
 def test_live_stdio_unicode_and_audit_survive_ambient_codepages(ambient_encoding: str | None, escaped: bool) -> None:
     env = os.environ.copy()
+    env["PATCHDIFF_MCP_PROFILE"] = "full"
     env.update(PYTHONPATH=str(BACKEND), PATCHDIFF_DATABASE_URL=settings.database_url)
     env.pop("PYTHONIOENCODING", None)
     env.pop("PYTHONUTF8", None)

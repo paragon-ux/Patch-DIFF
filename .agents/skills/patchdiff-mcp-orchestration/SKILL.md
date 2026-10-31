@@ -22,9 +22,17 @@ The host (e.g., Claude Desktop, custom agent runner) owns planning, prompt build
 
 The PatchDIFF MCP service provides deterministic validation, authoritative bounded reads, exact search, atomic target updates, append-only logging with idempotency, manifest recording, and replay.
 
+### Working-Tree vs. PostgreSQL Substrate in Git Environments
+
+PatchDIFF operates against an authoritative PostgreSQL substrate. Workspace files on disk are not mutated by transaction submission tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_commit_bundle`) until the host explicitly exports them.
+When orchestrating in an active Git repository:
+- State-dependent Git working tree commands (`git diff`, `git status`) inspect disk files and therefore do NOT reflect database transactions.
+- Agents must NOT expect `git diff` to show transaction results.
+- Disk synchronization occurs only when the host exports (`patchdiff_export_target`) or finalizes the target. Repository history commands (`git log`, `git show <commit>`) operate on committed git objects.
+
 ## Tool Surface Overview
 
-PatchDIFF provides 20 tools across five functional areas:
+PatchDIFF retains 22 internal tool handlers. The external adapter defaults to the 7-tool editor profile; explicit unobserved/observed/full profiles expose 5/6/22 tools and enforce identical lists for advertisement and calls. Opt-in observed_editor exposes only read_target, find_occurrences, observe_scope and submit_observed_operations (4 tools), denying lifecycle calls on delegated editor connections. Trusted lifecycle clients and older integrations select PATCHDIFF_MCP_PROFILE=full before startup. The existing functional areas include:
 
 1. **Target Lifecycle**:
    - `patchdiff_handle_upload`: register uploaded file content as a target.
@@ -88,7 +96,7 @@ For a conflicting request key, persist a distinct rejected attempt with NULL sto
 
 The stdio adapter (`backend/app/mcp/external_adapter.py`):
 - Communicates via newline-delimited JSON-RPC over `stdin` and `stdout`.
-- Advertises the full schema of all tools in `tools/list`, including `TYPED_EDIT_JSON_SCHEMA` for `patchdiff_submit_edits`.
+- Advertises complete schemas for the immutable startup profile in `tools/list`, including `TYPED_EDIT_JSON_SCHEMA` for `patchdiff_submit_edits`.
 - Validates JSON-RPC `params`: if `params` is provided and is not a JSON object, it returns error `-32602` (`Invalid params: params must be an object`).
 - Pass-through execution: delegates tool execution to `registry.call(...)` and wraps domain payloads as tool results; handler failures return tool results with `isError: true`. JSON-RPC envelope errors use their own RPC error responses.
 
@@ -111,10 +119,18 @@ Validate context_chars as a non-bool integer >=0, default 40 and cap 400. Both h
 
 ## Goal F additions
 
-- Tools: `patchdiff_submit_operations` (tx/2), `patchdiff_submit_replacement` (tx/3), `patchdiff_read_lines` and `patchdiff_preview`. Discovery advertises 20 tools, 13 examples across nine tools, and `x-patchdiff-capabilities` built from the runtime constants.
+- Tools: `patchdiff_submit_operations` (tx/2), `patchdiff_submit_replacement` (tx/3), `patchdiff_read_lines` and `patchdiff_preview`. The full compatibility profile retains 22 tools and the existing examples, and `x-patchdiff-capabilities` built from the runtime constants.
 - Submissions accept boolean `include_correlation_id`; the UUID is response-only and never part of request identity.
 - Rejections return immutable `diagnostic.failure_context` and fresh, response-only `current_context`; exact recovery keeps the original diagnostic. Near misses are computed only after a service-owned commit releases the lock (banded exact Levenshtein within the 1,000,000-cell cap) and are omitted for caller-owned transactions.
 - Preview is advisory: no writes, locks or request keys; a payload bounded to 32,768 bytes with explicit omission metadata; submission always rechecks guards.
 - tx/3 fresh admission (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) runs after request-key recovery/conflict and returns `invalid_argument` / `replacement_too_large` with no row.
 - Friction follow-up: accepted responses add `current_version`/`current_hash` and warnings; an MCP `current_context` identical to `diagnostic.failure_context` is elided as `same_as_failure_context`; preview computes near misses inline; tool-result text is literal (ASCII fallback for lone surrogates) inside an ASCII-escaped JSON-RPC line; unknown or missing arguments return a structured `invalid_argument` payload (`isError: true`); every parameter has a description, rechecked against the 65,536-byte discovery budget.
 - Contract: `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics"); decisions in `docs/usability/F01-decision.md`, `PASS-A-decision.md`, `PASS-B-decision.md` and `friction-followup-decision.md`.
+
+## Structural batch contracts
+
+Legacy profiles retain the existing observe/observed-submit names. The opt-in versioned external view uses the same handlers through purpose-specific aliases. `selections` issues 1..32 exact disjoint scopes in one discovery; `groups` submits at most 128 scope-local tx/2 operations in one atomic target transaction. Batch mode requires both guards and a request key; reject mixed single/batch forms. Startup profiles are immutable, apply to tools/list and tools/call, and cannot be supplied per request. Strict observation remains enforced separately by services. See `docs/STRUCTURAL_BATCH_EDITING.md` for schemas, errors and executable recipes.
+
+## Versioned observed editor view
+
+Opt-in observed_v2 exposes 8 external purposes; no registry/runtime/migration is added. Follow docs/MCP_EDITOR_V2.md for exact names, explicit snapshot normalization, distinct transaction/current receipt states, 8192-byte whole logical commit/error bound, negotiated 2025 output schemas/structured results and 2024 text fallback. Preserve all old profile contracts. Do not prevalidate operational inputs in a way that bypasses known-target audit or exact keyed recovery. Verify large single-scope compatibility, audited malformed values, conflict logging, post-advance recovery, real stdio denials and deterministic five-file --editor-v2 --host-finalize. No model coaching or inferred performance claims.

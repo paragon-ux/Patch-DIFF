@@ -34,7 +34,7 @@ Read project artifacts in this order:
 9. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop and usage guide)
 10. `docs/LEGACY_COMPATIBILITY.md` (frozen `.pdcp` v0.2.3 syntax, `patchdiff_submit_pdcp`, deprecated regeneration wrappers, and historical replay profiles)
 11. `docs/PatchDIFF-Concept-Paper-6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, design rationale, tradeoffs, and research hypotheses)
-12. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `evaluation/README.md` (verification matrix and offline evaluation methodology)
+12. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `backend/tests/verification/README.md` (verification matrix and offline evaluation methodology)
 
 Concept Paper v6 (`docs/PatchDIFF-Concept-Paper-6.md`) is the current explanation of PatchDIFF's theoretical model, design rationale, tradeoffs, and research claims. For executable API schemas, persistence behavior, runtime profiles, and exact limits, use the current normative specifications and implementation (`AGENTS.md` and items 2–10 above). Concept Paper v5 (`docs/PatchDIFF-Concept-Paper-5.md`) remains an unchanged historical record.
 
@@ -129,6 +129,28 @@ Recorded decisions: `docs/usability/F01-decision.md`, `docs/usability/PASS-A-dec
 
 ## Non-Negotiable Invariants
 
+Structural batch extension: the existing `patchdiff_observe_scope` accepts
+bounded `selections` and the existing `patchdiff_submit_observed_operations`
+accepts guarded `groups`. Each group uses its original scope-local sequential
+buffer through the shared applier; descending assembly commits one target
+version, accepted log and complete observation linkage atomically. The internal
+durable pair is `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`;
+replay verifies every authoritative scope without Waymark. Additive migration
+`20261027_0005` follows `20261026_0004`, preserving historical single linkage and
+refusing destructive downgrade. See [the batch contract](docs/STRUCTURAL_BATCH_EDITING.md).
+
+External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default `editor`
+advertises and permits exactly 7 tools; `unobserved` 5, `observed` 6 and explicit
+compatibility `full` all 22. Opt-in `observed_editor` advertises and permits only
+the four observed editing/read tools; that profile rejects SAVE/replay. Opt-in
+`observed_v2` exposes five purpose-specific external tools through the same
+services with explicit snapshots and bounded typed receipts; see
+[the v2 contract](docs/MCP_EDITOR_V2.md). It also denies lifecycle calls; all legacy
+profiles and the internal 22 handlers retain their contracts.
+Trusted lifecycle/legacy clients opt into `full`;
+the internal registry retains all handlers. Strict observed service admission
+remains independent. The frozen comparative Gate 2 stays closed.
+
 PatchDIFF must always preserve:
 
 ```text
@@ -169,7 +191,7 @@ Do not claim completion unless relevant tests pass against live Postgres:
 
 - Pure runtime unit tests (`backend/tests/unit/`)
 - Postgres integration tests (`backend/tests/integration/`), including live Alembic `upgrade -> downgrade -> upgrade` and real stdio MCP subprocess E2E workflow
-- Offline payload and verdict equivalence evaluation (`evaluation/offline_eval.py`)
+- Offline payload and verdict equivalence evaluation (`backend/tests/verification/offline_eval.py`)
 
 ## PR Review Standard
 

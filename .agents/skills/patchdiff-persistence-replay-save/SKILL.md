@@ -139,3 +139,7 @@ A successful reconstruction can report materialized_state_matches=false. CRLF/ba
 - tx/3 writes one typed ledger row with `operation: "replace_all"`. A valid oversized fresh replacement writes nothing, while a key-conflict row stores the full submitted record.
 - `patchdiff_read_lines` and `patchdiff_preview` read one committed row under `no_autoflush`, with no lock and no write.
 - Contract: `docs/DATA_MODEL.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
+
+## Structural bundle persistence and replay
+
+Migration 20261026_0004 persists observations; additive 20261027_0005 adds paired bundle ID/ordinal, unique bundle order, bundle/accepted-log indexes and partial accepted-log uniqueness for historical singles. Bundled observations can share one accepted log and are each consumed once. Downgrade refuses bundled rows, many-to-one links or accepted batch records. Keep request recovery before stale guards; fingerprint the submitted batch before attaching authoritative evidence. All links, ledger rows, target state and one version increment share the existing locked transaction. Explicitly replay patchdiff-observed-batch/1 only with patchdiff-observed-batch-r1, requiring the exact ordered scope evidence and preimage without Waymark. See `docs/STRUCTURAL_BATCH_EDITING.md`.

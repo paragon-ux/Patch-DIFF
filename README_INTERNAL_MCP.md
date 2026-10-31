@@ -6,6 +6,12 @@ Most users should connect through the external MCP adapter documented in [README
 
 ## Boundary
 
+All 22 internal registry handlers remain available to trusted code. External MCP
+profiles independently restrict both advertised and callable tools (7 by default).
+The internal observed batch form still verifies every server-issued scope under
+the target lock and uses the shared applier, atomic commit and replay path.
+[Batch and profile contracts](docs/STRUCTURAL_BATCH_EDITING.md).
+
 The internal registry is not a separate product path.
 
 It must keep the same invariants as the external adapter:

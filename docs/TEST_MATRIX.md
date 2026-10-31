@@ -9,6 +9,24 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNI
 
 ## Global Test Invariants
 
+Compact presentation is covered by `test_mcp_response_modes.py`,
+`test_host_finalize.py` and `test_compact_host_workflow.py`: immutable mode/default
+compatibility, preserved schemas/profiles/guards/warnings/source/paging, rich
+keyed recovery, exact per-target lifecycle effects, artifact-name isolation,
+SAVE uncertainty, evidence failures and bounded stdio failure cleanup. CI also
+runs the existing five-file oracle with compact editing and trusted scalar
+finalization. These checks do not invoke a model or establish host spill limits.
+
+Structural batch coverage additionally lives in `test_observed_batch_core.py`,
+`test_mcp_profiles.py`, `test_observed_batch.py`, `test_batch_stdio_profiles.py`,
+`test_batch_migrations.py`, `test_batch_documented_examples.py` and
+`test_structural_batch_oracle.py`. They cover 2/5/20/32 scopes, one discovery per
+snapshot, selection limits/geometry/paging, scope-local sequential operations,
+atomic rejection and rollback, concurrent writers, request recovery/conflicts,
+corrupted replay authority, populated 0004/0005 preservation/refusal, enforced
+7/5/6/22 catalogs, real response-loss recovery, Python/JSON/Markdown examples and
+the frozen five-file full-byte/20-check oracle. [Capability evidence](STRUCTURAL_BATCH_EDITING.md#deterministic-capability-evidence).
+
 - Postgres (`postgres:16.3-alpine`) is the required working substrate. SQLite must never be used to claim persistence, locking, migration, SAVE, or replay correctness.
 - The deterministic core runtime is pure and language-neutral; it must never import DB/ORM drivers, call MCP tools, or execute transaction payloads.
 - Atomicity is strictly per target: multi-edit transactions commit completely or leave target state untouched.
@@ -72,9 +90,9 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 
 ---
 
-## 3. Offline Payload & Verdict Accounting Matrix (`evaluation/offline_eval.py`)
+## 3. Offline Payload & Verdict Accounting Matrix (`backend/tests/verification/offline_eval.py`)
 
-Run with: `$env:PYTHONPATH="backend"; python evaluation/offline_eval.py`
+Run with: `$env:PYTHONPATH="backend"; python backend/tests/verification/offline_eval.py`
 
 The original comparison evaluates 5 scenarios across 3 proposal variants:
 1. `pdcp`: PDCP v0.2.3 with 7 mandatory manifest fields per edit.

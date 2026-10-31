@@ -259,3 +259,54 @@ class CurrentPdcpFiles(TimestampMixin, Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+class TargetScopeObservations(TimestampMixin, Base):
+    __tablename__ = "target_scope_observations"
+    __table_args__ = (
+        CheckConstraint("target_version >= 0", name="ck_target_scope_observations_target_version"),
+        CheckConstraint(
+            "start_line >= 1 AND end_line >= start_line",
+            name="ck_target_scope_observations_line_range",
+        ),
+        CheckConstraint(
+            "start_column >= 0 AND end_column >= 0",
+            name="ck_target_scope_observations_columns",
+        ),
+        CheckConstraint(
+            "scope_start >= 0 AND scope_end >= scope_start",
+            name="ck_target_scope_observations_scope_offsets",
+        ),
+        CheckConstraint("(observation_bundle_id IS NULL AND bundle_ordinal IS NULL) OR "
+                        "(observation_bundle_id IS NOT NULL AND bundle_ordinal IS NOT NULL AND bundle_ordinal >= 0 AND bundle_ordinal < 32)",
+                        name="ck_scope_bundle_pair"),
+        UniqueConstraint("observation_bundle_id", "bundle_ordinal", name="uq_scope_bundle_ordinal"),
+        Index("ix_scope_bundle", "observation_bundle_id"),
+        Index("ix_scope_accepted_log", "accepted_pdcp_log_id"),
+        Index("uq_scope_single_accepted_log", "accepted_pdcp_log_id", unique=True,
+              postgresql_where=text("observation_bundle_id IS NULL AND accepted_pdcp_log_id IS NOT NULL")),
+        Index("ix_target_scope_observations_target_version", "target_file_id", "target_version"),
+        Index("ix_target_scope_observations_target_cycle", "target_file_id", "editing_cycle_id"),
+    )
+
+    observation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    observation_bundle_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    bundle_ordinal: Mapped[int | None] = mapped_column(Integer)
+    target_file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cloud_target_files.target_file_id"), nullable=False)
+    editing_cycle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("editing_cycles.editing_cycle_id"), nullable=False)
+    target_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_current_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    waymark_engine_version: Mapped[str] = mapped_column(Text, nullable=False)
+    language: Mapped[str] = mapped_column(Text, nullable=False)
+    symbol_name: Mapped[str] = mapped_column(Text, nullable=False)
+    symbol_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    symbol_parent: Mapped[str | None] = mapped_column(Text)
+    start_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_column: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_line: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_column: Mapped[int] = mapped_column(Integer, nullable=False)
+    scope_start: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    scope_end: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    observed_scope_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    accepted_pdcp_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("append_only_pdcp_logs.pdcp_log_id")
+    )

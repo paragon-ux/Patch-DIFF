@@ -9,20 +9,30 @@ from __future__ import annotations
 import copy
 import inspect
 import json
+import os
 import sys
+from dataclasses import dataclass
 from types import NoneType, UnionType
 from typing import Any, TextIO, get_args, get_origin, get_type_hints
 
 from app.mcp import tools as _registered_tools  # noqa: F401 - imports register tool handlers
 from app.mcp.server import registry
+from app.mcp.editor_contracts import (
+    EDITOR_V2_TOOLS, EDITOR_V2_ROUTES, ContractArgumentError,
+    tool_declaration, normalize_arguments, project_result, is_success,
+)
 from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
 from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
 from app.core.line_endings import EXPORT_FORMATS
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, SPAN_CONTEXT_RUNTIME_VERSION
+from app.pdcp.observed_batch import (SELECTION_JSON_SCHEMA, GROUP_JSON_SCHEMA, MAX_BATCH_SCOPES,
+                                     MAX_BATCH_OPERATIONS, BATCH_ERROR_CODES, BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION)
 
 
-PROTOCOL_VERSION = "2024-11-05"
+PROTOCOL_VERSION = "2024-11-05"  # Legacy fallback for clients without a revision.
+SUPPORTED_PROTOCOL_VERSIONS = (PROTOCOL_VERSION, "2025-06-18", "2025-11-25")
+LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[-1]
 SERVER_NAME = "patchdiff-mvp"
 SERVER_VERSION = "0.2.2"
 EXPECTED_TOOL_NAMES = registry.names()
@@ -58,6 +68,26 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
     "patchdiff_get_manifest_ledger": "Return the newest bounded ledger page displayed oldest-first, with has_more/next_sequence for backward traversal.",
+    "patchdiff_observe_scope": (
+        "Observe structural scopes via pinned Waymark Engine. Routes: target_file_id alone, or optional nonblank "
+        "query/kind filters, returns candidates only (no observation receipt); omit query to list without that filter. "
+        "symbol_name selects one exact scope and returns observation_id + bounded text. selections selects 1..32 "
+        "disjoint scopes on one snapshot and returns observation_bundle_id + scopes[]. Known exact identities need "
+        "no preceding discovery. Use returned names verbatim, including Markdown punctuation; ambiguity rejects. "
+        "observation_id + offset pages an issued scope; continue with next_offset. "
+        "selections cannot mix with query, symbol_name, observation_id, top-level kind or nonzero offset."
+    ) + _CODE_POINTS,
+    "patchdiff_submit_observed_operations": (
+        "Commit one guarded atomic target transaction. Both forms require target_file_id, intent, "
+        "expected_target_version and expected_current_hash. Choose exactly one: single observation_id + operations "
+        "(absolute sequential spans), or batch observation_bundle_id + groups + client_request_id "
+        "(scope-local sequential spans). Omit the other form's fields, even null placeholders. "
+        "Each group pairs a returned scopes[].observation_id with your proposed operations. Operations run "
+        "sequentially; batch match indexes are 1-based overlapping occurrences within that group's buffer, "
+        "not global find_occurrences indexes. Exact matches may contain newlines. At most 32 groups/128 operations. "
+        "Any failure rejects the entire transaction. Spans stay within their observed scope; insertions must be "
+        "strictly interior with both nonempty expected_before/expected_after guards inside that scope."
+    ) + _CODE_POINTS,
 }
 
 # Illustrative resources; hosts bind real IDs, guards, parents and returned cursors.
@@ -75,6 +105,27 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
     "patchdiff_read_target": [{"target_file_id": _EXAMPLE_TARGET, "start": 0, "length": 120}],
     "patchdiff_find_occurrences": [{"target_file_id": _EXAMPLE_TARGET, "text": "alpha", "context_chars": 20,
                                     "start_occurrence": 1, "max_results": 5}],
+    "patchdiff_observe_scope": [
+        {"target_file_id": _EXAMPLE_TARGET, "query": "alp", "kind": "function"},
+        {"target_file_id": _EXAMPLE_TARGET, "symbol_name": "alpha", "kind": "function"},
+        {"target_file_id": _EXAMPLE_TARGET, "selections": [{"symbol_name": "alpha", "kind": "function"},
+                                                                      {"symbol_name": "beta", "kind": "function"}], "max_chars": 8},
+        {"target_file_id": _EXAMPLE_TARGET, "observation_id": "22222222-2222-4222-8222-222222222222", "offset": 8},
+    ],
+    "patchdiff_submit_observed_operations": [
+        {"target_file_id": _EXAMPLE_TARGET, "observation_id": "22222222-2222-4222-8222-222222222222",
+         "expected_target_version": 0, "expected_current_hash": "0" * 64, "intent": "Update exact multiline text in one scope",
+         "operations": [{"op": "match", "match": '# ababa\n    return "alpha"',
+                         "replace": '# ababa\n    return "gamma"'}]},
+        {"target_file_id": _EXAMPLE_TARGET, "observation_bundle_id": "33333333-3333-4333-8333-333333333333",
+         "expected_target_version": 0, "expected_current_hash": "0" * 64, "client_request_id": "example-observed-batch",
+         "intent": "Update two disjoint scopes atomically", "groups": [
+             {"observation_id": "22222222-2222-4222-8222-222222222222",
+              "operations": [{"op": "match", "match": "aba", "replace": "XYZ", "occurrence_index": 2}]},
+             {"observation_id": "44444444-4444-4444-8444-444444444444",
+              "operations": [{"op": "match", "match": "beta", "replace": "delta", "occurrence_index": 2}]},
+         ]},
+    ],
     "patchdiff_get_pdcp_log": [{"target_file_id": _EXAMPLE_TARGET, "limit": 2},
                                {"target_file_id": _EXAMPLE_TARGET, "limit": 2, "before_sequence": 3}],
     "patchdiff_get_manifest_ledger": [{"target_file_id": _EXAMPLE_TARGET, "limit": 2},
@@ -90,23 +141,71 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
 }
 
 
+_BASE_EDITOR_TOOLS = frozenset({"patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_save", "patchdiff_replay"})
+MCP_PROFILES = {
+    "editor": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_edits", "patchdiff_submit_observed_operations"},
+    "unobserved": _BASE_EDITOR_TOOLS | {"patchdiff_submit_edits"},
+    "unobserved_editor": frozenset({"patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_submit_edits"}),
+    "hybrid_editor": frozenset({"patchdiff_submit_edits"}),
+    "observed": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_observed_operations"},
+    "observed_editor": frozenset({"patchdiff_read_target", "patchdiff_find_occurrences",
+                                  "patchdiff_observe_scope", "patchdiff_submit_observed_operations"}),
+    "observed_v2": EDITOR_V2_TOOLS,
+    "full": frozenset(EXPECTED_TOOL_NAMES),
+}
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class ExternalMCPAdapter:
     """Minimal JSON-RPC MCP adapter backed by the internal PatchDIFF registry."""
 
+    profile: str
+    response_mode: str
+    _tool_names: tuple[str, ...]
+    _protocol_version: str
+    _initialized: bool
+
+    def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
+        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
+        if selected not in MCP_PROFILES:
+            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, unobserved_editor, hybrid_editor, observed, observed_editor, observed_v2 or full.")
+        object.__setattr__(self, "profile", selected)
+        object.__setattr__(self, "_protocol_version", PROTOCOL_VERSION)
+        object.__setattr__(self, "_initialized", False)
+        mode = os.getenv("PATCHDIFF_MCP_RESPONSE_MODE", "detailed") if response_mode is None else response_mode
+        if mode not in {"detailed", "compact"}:
+            raise ValueError(f"Unknown PATCHDIFF_MCP_RESPONSE_MODE: {mode!r}; expected detailed or compact.")
+        object.__setattr__(self, "response_mode", mode)
+        object.__setattr__(self, "_tool_names", tuple(sorted(MCP_PROFILES[selected])))
+
     def list_tools(self) -> list[dict[str, Any]]:
+        if self.profile == "observed_v2":
+            declarations = []
+            for name in self._tool_names:
+                declaration = tool_declaration(name, _input_schema_for(EDITOR_V2_ROUTES[name]))
+                if self._protocol_version == PROTOCOL_VERSION:
+                    for key in ("outputSchema", "annotations", "_meta"):
+                        declaration.pop(key, None)
+                declarations.append(declaration)
+            return declarations
         return [
             {
                 "name": name,
-                "description": TOOL_DESCRIPTIONS.get(name, f"PatchDIFF tool {name}."),
+                "description": TOOL_DESCRIPTIONS.get(name, f"PatchDIFF tool {name}.") + (
+                    " This session uses compact success responses; supplementary evidence requires a detailed session."
+                    if self.response_mode == "compact" and name in {"patchdiff_observe_scope", "patchdiff_submit_observed_operations"}
+                    else ""),
                 "inputSchema": _input_schema_for(name),
             }
-            for name in registry.names()
+            for name in self._tool_names
         ]
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-        if name not in registry.names():
+        if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
+        if self.profile == "observed_v2":
+            return self._call_editor_tool(name, args)
         argument_error = _argument_error(name, args)
         if argument_error is not None:
             return {"content": [{"type": "text", "text": _dumps(argument_error, sort_keys=True)}], "isError": True}
@@ -116,7 +215,36 @@ class ExternalMCPAdapter:
             return _tool_error(f"Invalid arguments for {name}: {exc}")
         except Exception as exc:  # pragma: no cover - defensive transport boundary
             return _tool_error(f"PatchDIFF MCP tool failed: {exc}")
+        if self.response_mode == "compact":
+            projected = _compact_payload(name, payload)
+            if projected is not payload:
+                return _tool_result(projected, compact=True)
         return _tool_result(payload)
+
+    def _call_editor_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        try:
+            normalized = normalize_arguments(name, arguments)
+        except ContractArgumentError as exc:
+            payload = {"status": "invalid_argument", "code": exc.code, "failure_detail": exc.detail}
+        else:
+            route = EDITOR_V2_ROUTES[name]
+            payload = _argument_error(route, normalized)
+            if payload is None:
+                try:
+                    if name == "patchdiff_commit_bundle":
+                        payload = _registered_tools.submit_editor_operations(**normalized)
+                    else:
+                        payload = registry.call(route, **normalized)
+                except Exception:  # An infrastructure failure cannot establish a transaction outcome.
+                    payload = {"status": "outcome_unknown", "code": "execution_failed",
+                               "failure_detail": "Tool execution failed; transaction outcome is unknown."}
+        success = is_success(name, payload)
+        projected = project_result(name, payload, arguments=arguments)
+        result = {"content": [{"type": "text", "text": _dumps(projected, sort_keys=True, separators=(",", ":"))}],
+                  "isError": not success}
+        if self._protocol_version != PROTOCOL_VERSION:
+            result["structuredContent"] = projected
+        return result
 
     def handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
         request_id = request.get("id")
@@ -128,13 +256,21 @@ class ExternalMCPAdapter:
             return _rpc_error(request_id, -32600, "Invalid JSON-RPC request.")
 
         if method == "initialize":
+            params = request.get("params", {})
+            if not isinstance(params, dict):
+                return _rpc_error(request_id, -32602, "initialize params must be an object.")
+            requested = params.get("protocolVersion", PROTOCOL_VERSION)
+            if not isinstance(requested, str):
+                return _rpc_error(request_id, -32602, "protocolVersion must be a string.")
+            negotiated = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else LATEST_PROTOCOL_VERSION
+            if self._initialized and negotiated != self._protocol_version:
+                return _rpc_error(request_id, -32602, "A connection cannot renegotiate its protocol revision.")
+            object.__setattr__(self, "_protocol_version", negotiated)
+            object.__setattr__(self, "_initialized", True)
             return _rpc_result(
                 request_id,
-                {
-                    "protocolVersion": PROTOCOL_VERSION,
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-                },
+                {"protocolVersion": negotiated, "capabilities": {"tools": {}},
+                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION}},
             )
         if method == "tools/list":
             return _rpc_result(request_id, {"tools": self.list_tools()})
@@ -161,24 +297,26 @@ class ExternalMCPAdapter:
 def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
     """Serve newline-delimited JSON-RPC requests over stdio."""
 
-    adapter = ExternalMCPAdapter()
-    for line in input_stream:
-        if not line.strip():
-            continue
-        try:
-            request = json.loads(line)
-        except json.JSONDecodeError as exc:
-            response = _rpc_error(None, -32700, f"Parse error: {exc.msg}")
-        else:
-            if not isinstance(request, dict):
-                response = _rpc_error(None, -32600, "JSON-RPC message must be an object.")
+    from app.services.waymark_worker import serving_worker_owner
+    with serving_worker_owner(prewarm=True):
+        adapter = ExternalMCPAdapter()
+        for line in input_stream:
+            if not line.strip():
+                continue
+            try:
+                request = json.loads(line)
+            except json.JSONDecodeError as exc:
+                response = _rpc_error(None, -32700, f"Parse error: {exc.msg}")
             else:
-                response = adapter.handle_request(request)
-        if response is not None:
-            # The JSON-RPC line stays ASCII: hosts that mis-decode stdout cannot corrupt text, and
-            # U+2028/U+2029/U+0085 cannot split lines. Tool-result text inside it is literal.
-            output_stream.write(json.dumps(response, separators=(",", ":"), sort_keys=True) + "\n")
-            output_stream.flush()
+                if not isinstance(request, dict):
+                    response = _rpc_error(None, -32600, "JSON-RPC message must be an object.")
+                else:
+                    response = adapter.handle_request(request)
+            if response is not None:
+                # The JSON-RPC line stays ASCII: hosts that mis-decode stdout cannot corrupt text, and
+                # U+2028/U+2029/U+0085 cannot split lines. Tool-result text inside it is literal.
+                output_stream.write(json.dumps(response, separators=(",", ":"), sort_keys=True) + "\n")
+                output_stream.flush()
 
 
 def main() -> None:
@@ -258,6 +396,10 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "project_id": "Optional project UUID.",
     "context_policy": "Context policy name.",
     "regenerated_pdcp_content": "Regenerated legacy PDCP 0.2.3 text.",
+    "query": "Optional case-insensitive substring filter over Waymark symbol names for candidate discovery, which issues no observation receipt.",
+    "symbol_name": "Exact returned Waymark symbol name (or parent.name), including Markdown punctuation, to select uniquely and issue an observation_id. Ambiguity rejects.",
+    "kind": "Optional Waymark symbol kind filter (e.g. function, class, method, variable, property, object, section, table_row, code_block).",
+    "observation_id": "Server-issued UUID identifying a verified structural scope observation.",
 }
 
 
@@ -274,7 +416,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                 "minItems": 1,
                 "items": copy.deepcopy(TYPED_EDIT_JSON_SCHEMA),
             }
-        elif name in {"patchdiff_submit_operations", "patchdiff_preview"} and parameter_name == "operations":
+        elif name in {"patchdiff_submit_operations", "patchdiff_submit_observed_operations", "patchdiff_preview"} and parameter_name == "operations":
             properties[parameter_name] = {"type": "array", "minItems": 1, "items": copy.deepcopy(OPERATION_JSON_SCHEMA)}
         else:
             properties[parameter_name] = _schema_for_annotation(type_hints.get(parameter_name, parameter.annotation))
@@ -316,6 +458,20 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["start_line"]["default"] = 1
         properties["offset"]["default"] = 0
         properties["include_line_starts"]["default"] = False
+    if name == "patchdiff_observe_scope":
+        for field in ("query", "symbol_name", "kind"):
+            properties[field]["minLength"] = 1
+            properties[field]["description"] = _PARAMETER_DESCRIPTIONS[field] + " Nonblank when supplied; omitted/null means absent."
+        properties["query"]["description"] += " Absence removes only the query filter."
+        for field, minimum in (("offset", 0), ("max_chars", 1)):
+            properties[field]["minimum"] = minimum
+        properties["offset"]["default"] = 0
+        properties["offset"]["description"] = "Code-point offset within the observed scope; page with observation_id and the returned next_offset."
+        properties["observation_id"]["description"] = "Issued scope UUID for paging with offset; omit symbol_name, query and selections."
+        properties["include_line_starts"]["default"] = False
+        properties["selections"] = {"type": "array", "minItems": 1, "maxItems": MAX_BATCH_SCOPES,
+                                    "uniqueItems": True, "items": copy.deepcopy(SELECTION_JSON_SCHEMA),
+                                    "description": "Select 1..32 exact disjoint scopes on one snapshot; returns observation_bundle_id and scopes with observation_id/text. Initial text <=32,768; total scope text <=65,536 code points."}
     if name == "patchdiff_export_target":
         properties["format"].update({"enum": list(EXPORT_FORMATS), "default": "original_text",
                                      "description": "original_text (legacy alias of canonical_lf), canonical_lf, crlf, or original_eol."})
@@ -323,7 +479,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         properties["export_after_save"]["default"] = False
     if name == "patchdiff_preview":
         properties["format"]["enum"] = ["0.2.3", "patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
-    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_replacement"}:
+    if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_observed_operations", "patchdiff_submit_replacement"}:
         properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {
         "type": "object",
@@ -356,6 +512,62 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
             "span_context": {"fields": ["expected_before", "expected_after"], "runtime_version": SPAN_CONTEXT_RUNTIME_VERSION},
         }
+    if name == "patchdiff_submit_observed_operations":
+        span_schema = properties["operations"]["items"]["oneOf"][1]
+        span_schema["description"] = (
+            "Nonempty spans must stay within the sequential observed scope. Insertions (start == end) "
+            "must be strictly interior and require both nonempty adjacency guards entirely within that scope. "
+            "The service checks coordinate equality, boundaries and adjacency against the sequential buffer."
+        )
+        span_schema["allOf"] = [{
+            "if": {"properties": {"expected_text": {"const": ""}}, "required": ["expected_text"]},
+            "then": {
+                "required": ["expected_before", "expected_after"],
+                "properties": {key: {"type": "string", "minLength": 1}
+                               for key in ("expected_before", "expected_after")},
+            },
+        }]
+        for req_field in ("expected_target_version", "expected_current_hash"):
+            if req_field not in schema.setdefault("required", []):
+                schema["required"].append(req_field)
+        properties["expected_target_version"]["type"] = "integer"
+        properties["expected_current_hash"]["type"] = "string"
+        properties["observation_id"] = {"type": "string", "format": "uuid", "description": "Single form only: issued scope UUID paired with top-level operations; omit in batch form."}
+        properties["observation_bundle_id"] = {"type": "string", "format": "uuid", "description": "Batch form only: returned bundle UUID paired with groups and client_request_id; omit in single form."}
+        properties["operations"]["description"] = "Single form only: proposed sequential match/span operations within observation_id; span offsets are absolute. Omit in batch form."
+        group_schema = copy.deepcopy(GROUP_JSON_SCHEMA)
+        group_schema["properties"]["observation_id"]["description"] = "Copy an observation_id from the selected bundle's scopes array."
+        group_schema["properties"]["operations"]["description"] = "Your proposed operations, evaluated sequentially within this scope's original slice; span offsets are scope-local."
+        group_schema["properties"]["operations"]["items"] = copy.deepcopy(properties["operations"]["items"])
+        match_schema = group_schema["properties"]["operations"]["items"]["oneOf"][0]
+        match_schema["properties"]["occurrence_index"]["description"] = "One-based overlapping occurrence in this scope's sequential buffer after earlier operations, not the global target."
+        match_schema["properties"]["match"]["description"] = "Exact text, including any literal newlines, inside this group's sequential scope buffer."
+        properties["groups"] = {"type": "array", "minItems": 1, "maxItems": MAX_BATCH_SCOPES, "items": group_schema,
+                                "description": "Batch form only: pair each selected scopes[].observation_id with proposed operations; do not copy scope objects. At most 128 operations total; each group uses its own scope-local sequential buffer."}
+        schema["oneOf"] = [
+            {"required": ["observation_id", "operations"],
+             "not": {"anyOf": [{"required": [key]} for key in ("observation_bundle_id", "groups")]}},
+            {"required": ["observation_bundle_id", "groups", "client_request_id"],
+             "properties": {"client_request_id": {"type": "string"}},
+             "not": {"anyOf": [{"required": [key]} for key in ("observation_id", "operations")]}},
+        ]
+        schema["x-patchdiff-capabilities"] = {
+            "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
+            "operations": ["match", "span"], "coordinates": "sequential_code_points", "zero_length_insertion": True,
+            "requires_observation": True,
+            "observed_insertion": {"position": "strictly_interior", "boundary_insertions": False,
+                                   "required_guards": ["expected_before", "expected_after"],
+                                   "guards_within_scope": True, "adjacency": "sequential_buffer"},
+            "span_context": {"fields": ["expected_before", "expected_after"], "runtime_version": SPAN_CONTEXT_RUNTIME_VERSION},
+            "batch": {"protocol_version": BATCH_PROTOCOL_VERSION, "runtime_version": BATCH_RUNTIME_VERSION,
+                      "max_scopes": MAX_BATCH_SCOPES, "max_operations": MAX_BATCH_OPERATIONS,
+                      "coordinates": "scope_local_sequential_code_points", "error_codes": list(BATCH_ERROR_CODES)},
+        }
+    if name == "patchdiff_observe_scope":
+        schema["allOf"] = [{"if": {"required": ["selections"]}, "then": {
+            "not": {"anyOf": [{"required": [key]} for key in ("symbol_name", "query", "observation_id", "kind")]},
+            "properties": {"offset": {"const": 0}},
+        }}]
     if name == "patchdiff_submit_replacement":
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": REPLACEMENT_PROTOCOL_VERSION, "runtime_version": REPLACEMENT_RUNTIME_VERSION,
@@ -380,7 +592,49 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             schema["allOf"].append({"if": {"properties": {"format": {"const": format_}}}, "then": branch})
     if name in TOOL_EXAMPLES:
         schema["examples"] = copy.deepcopy(TOOL_EXAMPLES[name])
+    _portable_schema_patterns(schema)
     return schema
+
+
+def _portable_schema_patterns(schema: Any) -> None:
+    if isinstance(schema, dict):
+        pattern = schema.get("pattern")
+        suffix = r"(?![\s\S])"
+        if isinstance(pattern, str) and pattern.endswith(suffix):
+            # RE2 hosts reject lookahead; $ alone permits a final LF in other engines.
+            schema["pattern"] = pattern[:-len(suffix)] + "$"
+            schema.setdefault("allOf", []).append({"not": {"type": "string", "pattern": "\n"}})
+        if "enum" in schema and isinstance(schema["enum"], list):
+            has_none = any(v is None for v in schema["enum"])
+            types = schema.get("type")
+            is_nullable = has_none or (isinstance(types, list) and "null" in types) or types == "null"
+            clean_enum = [v for v in schema["enum"] if v is not None and v != ""]
+            if is_nullable and clean_enum:
+                # OpenAPI / Gemini hosts reject null/empty values in enum declarations.
+                # In standard JSON Schema, an enum constraint without null rejects null
+                # even if type includes "null". Using anyOf preserves null acceptance
+                # while keeping enum strictly non-null strings.
+                non_null_type = "string"
+                if isinstance(types, list):
+                    non_null_types = [t for t in types if t != "null"]
+                    if non_null_types:
+                        non_null_type = non_null_types[0]
+                elif isinstance(types, str) and types != "null":
+                    non_null_type = types
+                schema.pop("type", None)
+                schema.pop("enum", None)
+                schema["anyOf"] = [
+                    {"type": "null"},
+                    {"type": non_null_type, "enum": clean_enum},
+                ]
+            else:
+                schema["enum"] = clean_enum
+        for key, value in schema.items():
+            if key != "examples":
+                _portable_schema_patterns(value)
+    elif isinstance(schema, list):
+        for value in schema:
+            _portable_schema_patterns(value)
 
 
 def _schema_for_annotation(annotation: Any) -> dict[str, Any]:
@@ -420,9 +674,36 @@ def _schema_for_annotation(annotation: Any) -> dict[str, Any]:
     return {}
 
 
-def _tool_result(payload: dict[str, Any]) -> dict[str, Any]:
+def _compact_payload(name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Response-only projection; authoritative results and stored facts stay complete."""
+    omitted = []
+    result = dict(payload)
+    if name == "patchdiff_submit_observed_operations" and payload.get("status") == "accepted":
+        for key in ("evidence", "groups"):
+            if key in result:
+                del result[key]
+                omitted.append(key)
+    elif name == "patchdiff_observe_scope" and payload.get("status") == "candidates":
+        fields = {"name", "kind", "parent", "start_line", "end_line"}
+        result["candidates"] = [{key: value for key, value in item.items() if key in fields}
+                                for item in payload["candidates"]]
+        if any(set(item) - fields for item in payload["candidates"]):
+            omitted.append("candidate_details")
+    elif name == "patchdiff_observe_scope" and payload.get("status") == "observed_batch":
+        fields = {"start", "end", "max_chars", "next_start", "start_line", "end_line"}
+        result["scopes"] = [{key: value for key, value in item.items() if key not in fields}
+                            for item in payload["scopes"]]
+        if any(set(item) & fields for item in payload["scopes"]):
+            omitted.append("duplicate_page_metadata")
+    else:
+        return payload
+    result["presentation"] = {"mode": "compact", "omitted": omitted}
+    return result
+
+
+def _tool_result(payload: dict[str, Any], *, compact: bool = False) -> dict[str, Any]:
     return {
-        "content": [{"type": "text", "text": _dumps(payload, sort_keys=True)}],
+        "content": [{"type": "text", "text": _dumps(payload, sort_keys=True, **({"separators": (",", ":")} if compact else {}))}],
         "isError": False,
     }
 

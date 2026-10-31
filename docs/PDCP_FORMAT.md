@@ -154,9 +154,9 @@ Submitted over MCP via `patchdiff_submit_replacement` for explicit whole-documen
 | **`patchdiff-tx/2`** | `patchdiff_submit_operations` | `patchdiff-mvp-0.3.0` (`0.5.0` with span context) | Coordinate-known `span` replacements, descending multi-span edits from a single read, and verified insertions (`expected_before`/`expected_after`) | Required (`version` and/or `hash`) | **`~165 B`** |
 | **`patchdiff-tx/3`** | `patchdiff_submit_replacement` | `patchdiff-mvp-0.4.0` | Explicit guarded whole-document replacement (`replace_all`, up to 1,048,576 UTF-8 bytes / 1,000,000 code points, raw and canonical) | Required (`version` and/or `hash`) | **`229 B` MCP `arguments` JSON framing** (`232 B` `arguments` / `290 B` persisted record / `341 B` complete `tools/call` line for a 3-byte replacement) |
 
-### Deterministic Byte Accounting (`evaluation/offline_eval.py`)
+### Deterministic Byte Accounting (`backend/tests/verification/offline_eval.py`)
 
-Measured UTF-8 byte sizes across standard typed editing scenarios (`PYTHONPATH=backend python evaluation/offline_eval.py`):
+Measured UTF-8 byte sizes across standard typed editing scenarios (`PYTHONPATH=backend python backend/tests/verification/offline_eval.py`):
 
 | Scenario | `patchdiff-tx/1` Minimal (`typed_min`, Wire / Persisted) | `patchdiff-tx/1` Matched Prose (`typed_match`, Wire / Persisted) | Verdict & Delimiter Safety |
 | --- | --- | --- | --- | --- | --- |
@@ -181,6 +181,15 @@ Measured `patchdiff-tx/3` (`patchdiff_submit_replacement`) UTF-8 byte sizes:
 ---
 
 ## 5. Shared Lowering and Applier Semantics
+
+The structural batch tool mode wraps ordered tx/2 operation groups in the internal
+durable format `patchdiff-observed-batch/1`, runtime `patchdiff-observed-batch-r1`.
+It is not another public tool or operation type. Each group lowers through the
+same tx/2 parser and `ParsedPDCP` and executes the existing applier against its
+own original slice. The canonical envelope additionally records target/bundle,
+both guards, intent, editing cycle and immutable authoritative scope evidence.
+Original operation order, group/operation indices, scope hashes/bounds and IDs
+support deterministic replay without discovery. [Complete batch specification](STRUCTURAL_BATCH_EDITING.md).
 
 All supported transaction formats lower into `ParsedPDCP`:
 ```python

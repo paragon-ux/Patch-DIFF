@@ -26,6 +26,7 @@ def apply_pdcp_transaction(
     allow_replace_all_operations: bool = False,
     allow_span_context: bool = False,
     collect_warnings: bool = True,
+    scope_bounds: tuple[int, int] | None = None,
 ) -> AcceptedCoreResult | RejectedCoreResult:
     """Apply a parsed+validated transaction to an in-memory buffer.
 
@@ -49,11 +50,12 @@ def apply_pdcp_transaction(
 
     change_facts: list[dict] = []
     warnings: list[dict] = []
+    running_scope: list[int] | None = [scope_bounds[0], scope_bounds[1]] if scope_bounds is not None else None
     for change in parsed.changes:
         change_id = change.manifest.change_id
         prior = len(change_facts)
         if change.operation == "replace_all":
-            if not allow_replace_all_operations or len(parsed.changes) != 1:
+            if not allow_replace_all_operations or len(parsed.changes) != 1 or running_scope is not None:
                 return _rejected(FailureReason.BLOCK_MALFORMED, "Sole replacement is unsupported by this runtime profile.",
                                  before_hash, change_id, buffer=current, prior_changes=prior)
             span = MatchSpan(0, len(current))
@@ -69,6 +71,43 @@ def apply_pdcp_transaction(
                 return _rejected(FailureReason.SPAN_OUT_OF_BOUNDS, "Span is outside the sequential buffer.",
                                  before_hash, change_id, {"span_check": "bounds", "buffer_length": len(current)},
                                  buffer=current, prior_changes=prior, focus=len(current))
+            if running_scope is not None and not (
+                running_scope[0] < start < running_scope[1] if start == end
+                else running_scope[0] <= start < end <= running_scope[1]
+            ):
+                return _rejected(
+                    FailureReason.SPAN_OUT_OF_BOUNDS,
+                    f"Span [{start}, {end}) is outside the observed scope [{running_scope[0]}, {running_scope[1]}).",
+                    before_hash,
+                    change_id,
+                    {
+                        "code": "OPERATION_OUTSIDE_OBSERVED_SCOPE",
+                        "span_check": "observed_scope_bounds",
+                        "observed_scope_start": running_scope[0],
+                        "observed_scope_end": running_scope[1],
+                        "operation_start": start,
+                        "operation_end": end,
+                        "buffer_length": len(current),
+                    },
+                    buffer=current,
+                    prior_changes=prior,
+                    focus=start,
+                )
+            if running_scope is not None and start == end:
+                before = canonicalize_text(change.expected_before or "")
+                after = canonicalize_text(change.expected_after or "")
+                if not before or not after:
+                    return _rejected(
+                        FailureReason.SPAN_EXPECTED_TEXT_MISMATCH,
+                        "Observed insertions require nonempty expected_before and expected_after adjacency guards.",
+                        before_hash, change_id, {"code": "OBSERVED_INSERTION_GUARDS_REQUIRED"},
+                        buffer=current, prior_changes=prior, focus=start)
+                if start - len(before) < running_scope[0] or end + len(after) > running_scope[1]:
+                    return _rejected(
+                        FailureReason.SPAN_OUT_OF_BOUNDS,
+                        "Observed insertion adjacency guards must remain inside the sequential observed scope.",
+                        before_hash, change_id, {"code": "OPERATION_OUTSIDE_OBSERVED_SCOPE"},
+                        buffer=current, prior_changes=prior, focus=start)
             expected = canonicalize_text(change.match_payload)
             actual = current[start:end]
             if actual != expected:
@@ -116,18 +155,55 @@ def apply_pdcp_transaction(
                     prior_changes=prior,
                 )
 
-            try:
-                span = resolve_match_span(
-                    current,
-                    change.match_payload,
-                    change.manifest.disambiguation,
-                    overlapping=overlapping_matches,
-                    enforce_singleton_selectors=enforce_singleton_selectors,
-                )
-            except MatchResolutionError as exc:
-                return _match_rejection(
-                    exc, change, original, current, change_facts, before_hash, overlapping_matches,
-                )
+            if running_scope is not None:
+                scope_start_cur, scope_end_cur = running_scope[0], running_scope[1]
+                scope_slice = current[scope_start_cur:scope_end_cur]
+                needle = canonicalize_text(change.match_payload)
+                scope_occurrences = find_exact_occurrences(scope_slice, needle, overlapping=overlapping_matches)
+                whole_occurrences = find_exact_occurrences(current, needle, overlapping=overlapping_matches)
+                if not scope_occurrences and whole_occurrences:
+                    return _rejected(
+                        FailureReason.SPAN_OUT_OF_BOUNDS,
+                        f"Match for {change_id} resolves outside the observed scope [{scope_start_cur}, {scope_end_cur}).",
+                        before_hash,
+                        change_id,
+                        {
+                            "code": "OPERATION_OUTSIDE_OBSERVED_SCOPE",
+                            "span_check": "observed_scope_bounds",
+                            "observed_scope_start": scope_start_cur,
+                            "observed_scope_end": scope_end_cur,
+                            "buffer_length": len(current),
+                        },
+                        buffer=current,
+                        prior_changes=prior,
+                        focus=scope_start_cur,
+                    )
+                try:
+                    rel_span = resolve_match_span(
+                        scope_slice,
+                        change.match_payload,
+                        change.manifest.disambiguation,
+                        overlapping=overlapping_matches,
+                        enforce_singleton_selectors=enforce_singleton_selectors,
+                    )
+                    span = MatchSpan(scope_start_cur + rel_span.start, scope_start_cur + rel_span.end)
+                except MatchResolutionError as exc:
+                    return _match_rejection(
+                        exc, change, original, current, change_facts, before_hash, overlapping_matches,
+                    )
+            else:
+                try:
+                    span = resolve_match_span(
+                        current,
+                        change.match_payload,
+                        change.manifest.disambiguation,
+                        overlapping=overlapping_matches,
+                        enforce_singleton_selectors=enforce_singleton_selectors,
+                    )
+                except MatchResolutionError as exc:
+                    return _match_rejection(
+                        exc, change, original, current, change_facts, before_hash, overlapping_matches,
+                    )
             if collect_warnings and prior and "occurrence_index" in change.manifest.disambiguation:
                 shifted = _basis_shift(original, change, span, change_facts, overlapping_matches)
                 if shifted is not None:
@@ -141,6 +217,8 @@ def apply_pdcp_transaction(
                 warnings.append(warning("no_op_change", f"{change_id} replaces text with identical text.",
                                         change_id=change_id, change_index=change.change_index))
         current = current[: span.start] + replacement + current[span.end :]
+        if running_scope is not None:
+            running_scope[1] += len(replacement) - (span.end - span.start)
         change_facts.append(
             {
                 "change_id": change_id,

@@ -215,7 +215,7 @@ def test_corrupt_non_ascii_hash_retains_identity_but_still_obeys_json_byte_caps(
 
 def test_real_stdio_rejection_context_and_recovery_with_independent_sql():
     backend = Path(__file__).resolve().parents[2]
-    env = {**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_DATABASE_URL": settings.database_url}
+    env = {**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url}
     proc = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=backend, env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     sequence = 0

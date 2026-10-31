@@ -16,7 +16,16 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
 ## MCP Tool Surface Overview
 
-The 20 registered MCP tools are organized into five functional groups:
+The 22 internal tools are organized into the groups below. External stdio MCP
+defaults to the **7-tool `editor` profile**; `unobserved` exposes 5, `observed` 6,
+`observed_editor` 4, and explicitly selected `full` exposes all 22. The opt-in
+`observed_editor` profile contains only read_target, find_occurrences,
+observe_scope and submit_observed_operations (all with the `patchdiff_` prefix);
+SAVE/replay belong to the separate trusted host session in that role. Both
+advertisement and dispatch
+enforce the immutable startup `PATCHDIFF_MCP_PROFILE`. Initialization, export,
+legacy and administrative tools require `full` at the external boundary.
+See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_EDITING.md).
 
 | Group | Tool Name | Role & Modernized Status |
 | --- | --- | --- |
@@ -173,6 +182,11 @@ Storage is canonical: every upload is normalized to LF before hashing, and `curr
 `original_eol` returns `invalid_argument` with `code: "original_eol_unrecoverable"` for a `mixed` upload, because per-line endings were never stored, and with `code: "source_line_endings_unknown"` for a target without recorded facts. Any other `format` returns `invalid_argument` with `code: "unsupported_export_format"` and `allowed_formats`. The export response adds `content_eol` and `content_sha256` (SHA-256 of the returned content's UTF-8 bytes); `hash` and `current_hash` remain the canonical hash. An unedited CRLF upload exported with `original_eol` has `content_sha256 == source_line_endings.source_sha256`. Line endings in edit payloads are canonicalized like everything else, so `original_eol` applies the recorded style to new lines too.
 
 ### Discovery, argument errors and examples
+
+Advertised regular expressions use syntax accepted by RE2-based MCP hosts.
+Strict end-of-string constraints combine `$` with a JSON Schema `not` constraint
+against a trailing LF; nullable fields still accept null. This preserves the
+runtime's exact identifier/hash domains without advertising unsupported lookahead.
 
 `tools/list` gives every top-level parameter a one-line description (units, coordinate frame, guard semantics or cursor meaning). Submission tool descriptions repeat the guard rule in prose for hosts that drop `anyOf`. It advertises the tx/2 operation schema and, for both newer submission tools, `x-patchdiff-capabilities` derived from the runtime constants: protocol, immutable runtime and allowed operations, plus either coordinate, insertion and `span_context` support (`fields` and the `0.5.0` runtime) or size limits. It also publishes 13 schema-conforming `inputSchema.examples` across nine tools, deep-copied per result. The complete `{tools: [...]}` payload is at most 65,536 bytes and the complete examples map at most 8,192 bytes. Examples are illustrative arguments: hosts must bind real target IDs, guards, parents and cursors (see the host guide's discovery sequence). Every advertised example runs over real stdio and PostgreSQL in the test suite; this is API coverage, not a model-success or production-performance claim.
 
@@ -512,3 +526,128 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 ## 5. Convenience & Deprecated Compatibility Wrappers
 
 `patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#3-deprecated-regeneration--prompt-prefix-wrappers) for legacy wrapper specifications.
+
+
+---
+
+## Structural Observation and Scoped Submission (`waymark-engine@4.1.0`)
+
+### `patchdiff_observe_scope`
+
+The public `tools/list` schemas include task-independent examples for filtered
+candidate discovery, direct single selection, batch selection, observation paging,
+and separate single/batch submissions. Bind illustrative IDs, both guards and
+returned cursors to actual receipts. Candidate discovery issues no observation;
+known exact identities can be selected directly. Preserve returned Markdown names
+including punctuation; ambiguous identities reject. Exact match strings can
+include literal newlines. `find_occurrences` indexes the whole current target;
+batch groups instead count overlapping matches from one inside their own
+scope-local sequential buffer after earlier operations. A preceding catalog is
+not mandatory, and single/batch fields cannot be mixed.
+
+Discover structural symbol candidates or select a unique symbol scope in the authoritative PostgreSQL target snapshot using the pinned `waymark-engine@4.1.0` package.
+
+Bundle mode additionally accepts `selections: [{symbol_name, kind?}, ...]`
+(1–32 exact, unique, nonempty, disjoint scopes), exclusive with single selectors,
+query, observation ID, top-level kind and nonzero offset. One target snapshot and
+one Waymark pass serve all selections; no partial issuance occurs.
+`status: "observed_batch"` returns a bundle ID, both target guards, engine/language,
+and ordered scope receipts. Total scope contents cap at 65,536 code points;
+initial text totals cap at 32,768 (`BUNDLE_RESPONSE_TOO_LARGE`), with existing
+per-scope default 4,000 / max 8,000 pages and ID pagination. Selection failures
+identify `selection_index`. [Exact fields and lifecycle](STRUCTURAL_BATCH_EDITING.md#observation-contract).
+
+- **Arguments**:
+  - `target_file_id` (UUID string, required)
+  - `query` (string | null, optional): case-insensitive substring filter for candidate discovery when `symbol_name` is omitted.
+  - `symbol_name` (string | null, optional): exact Waymark symbol name (or `parent.name`) to select uniquely and issue a server-persisted `observation_id`.
+  - `kind` (string | null, optional): Waymark symbol kind filter (`function`, `class`, `method`, `variable`, `config_item`, `object`, `section`, `table_row`, `code_block`, etc.).
+  - `observation_id` (UUID string | null, optional): existing server-issued observation UUID for paginating a large observed scope (`mode: "scope_page"`).
+  - `offset` (`integer >= 0`, default `0`): code-point offset within `[scope_start, scope_end)`.
+  - `max_chars` (`integer >= 1 | null`, default `4000`, cap `8000`): maximum code points returned on the page.
+  - `include_line_starts` (`boolean`, default `false`): include 1-based line start offsets within the returned page.
+The optional top-level `query`, `symbol_name` and `kind` values must be nonblank
+when supplied. Omission/null means that selector or filter is absent; omitting
+`query` removes only the query filter. Discovery advertises `minLength: 1` to
+reject empty strings; the service also rejects whitespace-only strings, including
+Unicode whitespace. Nonblank strings are not implicitly trimmed.
+
+- **Modes & Fail-Closed Guarantees**:
+  - **Candidate discovery** (`symbol_name` omitted): returns `status: "candidates"`, `observation_id: null`, and bounded structural candidates.
+  - **Exact selection** (`symbol_name` provided):
+    - `0` matches -> `status: "not_found"`, `code: "SCOPE_NOT_FOUND"`, `observation_id: null`.
+    - `> 1` matches -> `status: "ambiguous"`, `code: "AMBIGUOUS_SCOPE_SELECTION"`, `observation_id: null`, at most 200 matching candidates, `total_candidates` and `candidates_truncated` (never silently picks the smallest span).
+    - `1` match -> persists a `target_scope_observations` row and returns `status: "observed"`, `observation_id`, `target_version`, `target_current_hash`, `scope_start`, `scope_end`, `observed_scope_hash`, and bounded canonical slice `text`.
+
+### `patchdiff_submit_observed_operations`
+Submit guarded `patchdiff-tx/2` `match`/`span` operations restricted to a server-issued `observation_id`.
+
+Alternatively submit one atomic batch with `observation_bundle_id`, `groups`,
+`intent`, **both** target guards and mandatory `client_request_id`. Each group
+contains exactly one unique bundle `observation_id` and nonempty tx/2 `operations`;
+allow 1–32 groups, at most 128 operations total, and nonempty bundle subsets.
+Single and batch forms are mutually exclusive. Batch spans and match selectors
+use each group's own **scope-local sequential buffer**; single form spans remain
+absolute. One Waymark pass re-verifies all participating scopes under the target
+lock. A failed batch consumes no receipts and adds no accepted ledger rows.
+Success assembles descending original spans, writes one accepted log and advances
+version once, returning before/after versions, bundle ID, group/change counts and
+bounded group summaries. Key recovery precedes stale guards; changed bodies
+conflict through the existing audited mechanism.
+
+The internal durable pair is `patchdiff-observed-batch/1` /
+`patchdiff-observed-batch-r1`; replay requires every exact authoritative link,
+scope hash, bundle and ordered group mapping without invoking Waymark. Migration
+0005 preserves historical single linkage via a partial unique index.
+[Batch errors, replay and executable examples](STRUCTURAL_BATCH_EDITING.md).
+
+- **Arguments**:
+  - `target_file_id` (UUID string, required)
+  - `observation_id` (UUID string, required): server-issued observation UUID from `patchdiff_observe_scope`.
+  - `intent` (non-whitespace string, required)
+  - `operations` (non-empty array of `match` / `span` operations, required)
+  - `expected_target_version` (`integer >= 0`, required)
+  - `expected_current_hash` (64-char lowercase hex SHA-256, required)
+  - `source`, `parent_pdcp_log_id`, `attempt`, `client_request_id`, `include_correlation_id` (optional)
+- **Locked Admission Guarantees**:
+  - Acquires `SELECT ... FOR UPDATE` on `cloud_target_files` and `target_scope_observations`.
+  - Rejects and logs in `append_only_pdcp_logs` any missing (`OBSERVATION_REQUIRED`), malformed (`INVALID_OBSERVATION_ID`), unknown (`UNKNOWN_OBSERVATION_ID`), cross-target (`OBSERVATION_TARGET_MISMATCH`), closed-cycle (`OBSERVATION_CYCLE_MISMATCH`), already-consumed (`OBSERVATION_ALREADY_CONSUMED`), or stale (`STALE_OBSERVATION_VERSION`, `STALE_OBSERVATION_HASH`) observation.
+  - Nonempty `span` and `match` edits must remain within `[scope_start, scope_end)`; a full-scope replacement is allowed. The running scope end adjusts after each sequential operation.
+  - Zero-width insertions (`start == end`, `expected_text: ""`) require `scope_start < start < scope_end`. Both boundaries reject, including with otherwise matching guards. Both nonempty `expected_before` and `expected_after` are mandatory, must match immediately adjacent text, and must lie entirely within the current sequential scope. Missing guards reject with `span_expected_text_mismatch` / `OBSERVED_INSERTION_GUARDS_REQUIRED`; mismatching guards reject with `span_expected_text_mismatch`. Out-of-scope spans, boundary insertions and guards crossing the scope reject with `span_out_of_bounds` / `OPERATION_OUTSIDE_OBSERVED_SCOPE`. Every rejection is atomic and audited. Unobserved historical insertion behavior is unchanged.
+  - Observation pagination rejects a closed cycle after SAVE with `OBSERVATION_CYCLE_MISMATCH`, even when content, hash and version are unchanged.
+  - Replay of an accepted log carrying `observation_id` requires exactly one matching authoritative observation row. Identity, accepted-log linkage, target, editing cycle, preimage version/hash, recorded scope bounds and scope hash must match the replay buffer; missing or altered evidence fails with `replay_protocol_invalid`. Diagnostic offsets never replace a missing row. Genuinely unobserved history retains its existing path.
+  - When `PATCHDIFF_STRICT_OBSERVATION_MODE=1` is enabled, all unobserved write tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`, `patchdiff_submit_pdcp`, `patchdiff_request_regeneration`) are rejected and logged with `code: "OBSERVATION_REQUIRED"`.
+## External response representations
+
+`PATCHDIFF_MCP_RESPONSE_MODE` is frozen at external-adapter startup. Unset or
+`detailed` preserves existing result bodies and serialization; `compact` is an
+opt-in presentation contract. Unknown values prevent startup. Trusted embeddings
+can pass response_mode to ExternalMCPAdapter. A request cannot change the mode.
+The mode is independent of profile and does not change tools/list names, callable
+tools, input schemas, request identity, audit, runtime/replay profiles or guards.
+
+Only these successful result shapes are projected:
+
+| Tool/status | Compact projection |
+| --- | --- |
+| patchdiff_submit_observed_operations / accepted | Omit evidence and groups if present; retain every other field, including warnings, warning_details, warning_count, warnings_truncated, validity, all identities/guards/aliases, counts and deduplicated. |
+| patchdiff_observe_scope / candidates | Preserve envelope/count/order/truncation; entries retain name, kind, parent, start_line, end_line. |
+| patchdiff_observe_scope / observed_batch | Preserve envelope/scopes; omit each scope's start, end, max_chars, next_start, start_line and end_line. Keep original bounds/length/hash, observation/ordinal/symbol, exact text, offset, truncated, next_offset and requested absolute line_starts. |
+
+Projected results include `presentation: {mode: "compact", omitted: [...]}`.
+Omission names are evidence, groups, candidate_details, duplicate_page_metadata;
+only actual omissions are listed. Compact JSON uses no optional separator spaces
+and retains existing Unicode safety. Single observed selections/pages, every
+failure/diagnostic and unrelated tools keep their existing representation.
+Mode-specific tool descriptions announce compact presentation.
+
+Exact request recovery uses the receiving session's representation of the same
+stored outcome; the request fingerprint never includes response mode. Full facts
+remain in the detailed representation and append-only persistence, retrievable by
+a separate trusted detailed/full operator. Compact mode does not guarantee that
+arbitrary source-rich responses fit a host's spill limit. Use existing query/kind,
+direct selection and observation pagination; never silently truncate source.
+
+## Versioned editor profile
+
+The opt-in `observed_v2` external profile exposes five purpose-specific tools through the existing services (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`). Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 22 handlers retain their contracts.

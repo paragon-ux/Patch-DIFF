@@ -8,3 +8,8 @@ pytest-cache-files-*/
 build/
 dist/
 .env
+integrations/waymark/node_modules/
+# Internal experiments, transcripts, exports and benchmark captures stay local.
+/evaluation/
+/.tmp/
+/.ci-results/
