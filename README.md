@@ -490,3 +490,5 @@ Read in order of precedence:
 ## License
 
 [MIT](LICENSE), selected by the repository owner. Third-party packages retain their own licenses; the release checklist records dependency and security review limits.
+
+Opt-in `PATCHDIFF_MCP_PROFILE=observed_v2` provides eight purpose-specific observed editing tools, explicit reusable snapshots and bounded transaction receipts. Existing profiles remain available. See [the versioned editor contract](docs/MCP_EDITOR_V2.md) for startup, negotiation, compatibility and measurement limits.

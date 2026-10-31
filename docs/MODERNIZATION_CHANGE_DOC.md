@@ -89,3 +89,9 @@ Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004
 Offline replacement cases measure serialized bytes and accepted content/hash oracles, not live transport, persistence or timing. No live-model comparison, representative sanitized dataset or production performance threshold has been established. No editing adapter, optional typed guards or normalized request-identity behavior is introduced.
 
 Historical source and verification records remain preserved in Git and internal archives; they do not establish verification of a later revision.
+
+## PR20: opt-in purpose-specific editor contract
+
+Decision: add `observed_v2` with eight external purposes, six common bundle paths and two single-scope compatibility paths. The latter preserve scopes above the batch issuance cap. Reusable explicit snapshots remove result-to-argument field renaming; bounded receipts preserve immutable transaction evidence separately from current state. Modern MCP revisions are negotiated with text fallback and optional structured results/output schemas. Existing profiles,22 internal handlers, services, transaction formats, migrations and replay runtimes retain their contracts.
+
+[The full contract](MCP_EDITOR_V2.md) records compatibility, audited admission/recovery ordering, response limits, host-loading uncertainty and actual verification paths. This is a tool/schema/data change; the rejected prompt-only proposal is not implemented. Static bytes and backend correctness do not establish model-time savings.

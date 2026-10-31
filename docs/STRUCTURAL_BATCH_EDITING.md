@@ -267,3 +267,7 @@ audit inspection are counted separately as trusted lifecycle work. API-call
 reduction establishes capability; it establishes no model latency, context,
 token-cost or comparative performance result. Gate 2 remains closed, and a new
 direct three-arm run still requires owner authorization.
+
+## Versioned external view
+
+Opt-in `observed_v2` separates candidate listing, selection, paging and the two commit forms into eight external purposes. It lowers unchanged values into the batch/single services described here and retains the two single-scope paths for scopes above batch limits. See [the v2 contract](MCP_EDITOR_V2.md); existing profile catalogs and durable formats remain unchanged.
