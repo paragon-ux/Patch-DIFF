@@ -241,7 +241,17 @@ In environments with an active version control system (e.g. Git repository), the
 
 For observed operations, keep nonempty edits within the observed scope. Insert only strictly inside the current sequential scope; never insert at either boundary. Supply both nonempty `expected_before` and `expected_after`, matching immediately adjacent text entirely inside that scope. Earlier operations can move the scope end and change those neighbors, so derive later guards from the intermediate buffer. On `OBSERVED_INSERTION_GUARDS_REQUIRED`, mismatching adjacency, or `OPERATION_OUTSIDE_OBSERVED_SCOPE`, re-read and correct the proposal; do not bypass strict admission. SAVE closes the observation's editing cycle, so obtain a fresh observation before paging or submitting again.
 
-A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; check each accepted-edit warning against what you meant before continuing; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; do not treat a local copy as authoritative; in Git workspaces, be aware that PatchDIFF maintains canonical state in Postgres and does not mutate working tree files until exported, so state-dependent Git working tree commands (`git diff`, `git status`) do not reflect database transactions.
+A host skill or system prompt for PatchDIFF should say, at minimum: read before editing; always pass a guard; send code-point offsets; on rejection re-read before retrying; set `parent_pdcp_log_id` on retries; check each accepted-edit warning against what you meant before continuing; do not reuse `find_occurrences` indexes for several same-string edits in one transaction; treat `intent`/`rationale` as claims; never describe an accepted edit as correct, only as applied; run task validators outside PatchDIFF; export with `original_eol` when writing back to the original file; and do not treat a local copy as authoritative.
+
+### Host Prompt Hygiene & Friction Prevention
+
+Empirical $2\times2$ factorial evaluation ($N=24$ live model runs across Non-Git and Git environments) identified three critical prompt hygiene principles that govern agent efficiency:
+
+1. **Omit Obsolete Schema and Spill Permissions**: When MCP tools are eagerly delivered via `tools/list` (e.g. `observed_v2`), do NOT include legacy permissions clauses such as `"Registered help/schema resources and this session's spills are allowed"`. Empirical trials showed that LLMs interpret this phrase as an instruction to inspect local disk schemas and help files via native filesystem tools, wasting 5–6 tool calls upfront before beginning edits.
+2. **Explicitly Forbid Post-Commit Verification Audits**: Host prompts should state:
+   > *"The host performs independent final verification after you report completion. Do NOT perform post-commit verification audits or read-back loops once all targets are committed. Send your completion message immediately after committing all files."*
+   Ambiguous phrasing such as *"Read/search/observe when needed to resolve editing uncertainty"* causes models to launch into redundant post-commit read loops (`find_occurrences`, `read_target`), adding 9–12 unnecessary tool invocations per session.
+3. **Harmonize Prompts Across Git and Non-Git Environments**: Do not inject cautionary warnings into editor prompts regarding `git diff` or `git status` vs. PostgreSQL substrate state. Adding negative warnings about version control inadvertently primes the model with Git terminology and cognitive load. An identical, harmonized prompt achieves complete cross-environment performance parity ($21.7 \pm 1.2$ steps in Git vs. $26.7 \pm 2.5$ steps in Non-Git, $p=0.06$).
 
 
 ## 11. Waymark structural observation workflow (`waymark-engine@4.1.0`)
@@ -280,9 +290,10 @@ prove transcript clipping. Attach a later export as a new hashed addendum withou
 overwriting the initial result or uncertain SAVE receipts. A parent cannot export
 its own future terminal response; the operator can attach it afterward.
 The trusted host performs independent final verification and renders receipt
-tables. The editor may read/search to resolve editing uncertainty, then sends one
-terminal status identifying completed targets and unresolved issues; that message
-need not reproduce hashes or lifecycle tables. Public tool discovery supplies operation
+tables. The editor focuses strictly on proposal generation and execution, sending one
+terminal status immediately upon completing all target commits. It should be explicitly
+instructed not to perform post-commit audit loops or re-read targets after commit; that
+message need not reproduce hashes or lifecycle tables. Public tool discovery supplies operation
 contracts; a host handoff need not repeat a separate tool tutorial.
 
 
