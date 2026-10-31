@@ -46,19 +46,19 @@ PatchDIFF evaluates proposals against five distinct `ValidationStage` boundaries
 flowchart TD
     SUBMIT["Incoming Transaction Proposal<br/>(patchdiff-tx/1, tx/2, tx/3)"] --> STAGE1{"Stage 1: Precondition Guard<br/>(Row Lock: SELECT ... FOR UPDATE)"}
     
-    STAGE1 -- "Target missing or<br/>Version / Hash mismatch" --> REJ1["Reject: target_version_mismatch<br/>(zero DB mutation)"]
+    STAGE1 -- "Target missing or<br/>Version / Hash mismatch" --> REJ1["Reject: target_version_mismatch<br/>(zero target mutation; audit logged if target exists)"]
     STAGE1 -- "Guards hold" --> STAGE2{"Stage 2: Protocol Validation<br/>(Schema, Format, Lineage)"}
     
-    STAGE2 -- "Malformed syntax or<br/>invalid parent lineage" --> REJ2["Reject: block_malformed / lineage_invalid<br/>(audit attempt row)"]
+    STAGE2 -- "Malformed syntax or<br/>invalid parent lineage" --> REJ2["Reject: block_malformed / lineage_invalid<br/>(zero target mutation; audit logged)"]
     STAGE2 -- "Protocol valid" --> STAGE3{"Stage 3: Transaction Applicability<br/>(Exact MATCH & Span Preconditions)"}
     
-    STAGE3 -- "Missing text" --> REJ3A["Reject: match_absent<br/>(Levenshtein near_misses scan)"]
-    STAGE3 -- "Multiple matches" --> REJ3B["Reject: match_ambiguous<br/>(up to 5 exact_candidates)"]
-    STAGE3 -- "Consumed by prior edit" --> REJ3C["Reject: sequential_match_invalid<br/>(consumed_by_change_id)"]
+    STAGE3 -- "Missing text" --> REJ3A["Reject: match_absent<br/>(zero target mutation; near_misses scan)"]
+    STAGE3 -- "Multiple matches" --> REJ3B["Reject: match_ambiguous<br/>(zero target mutation; up to 5 exact_candidates)"]
+    STAGE3 -- "Consumed by prior edit" --> REJ3C["Reject: sequential_match_invalid<br/>(zero target mutation; consumed_by_change_id)"]
     
     STAGE3 -- "All operations match" --> STAGE4{"Stage 4: Commit Guard<br/>(Sequential In-Memory Simulation)"}
     
-    STAGE4 -- "Simulated buffer<br/>diverges" --> REJ4["Reject: target_diverged<br/>(rollback in-memory state)"]
+    STAGE4 -- "Simulated buffer<br/>diverges" --> REJ4["Reject: target_diverged<br/>(zero target mutation; audit logged)"]
     STAGE4 -- "Simulation verified" --> STAGE5["Stage 5: Accepted Commit<br/>- Advance canonical target state<br/>- Append accepted attempt log<br/>- Record manifest ledger with facts"]
 ```
 

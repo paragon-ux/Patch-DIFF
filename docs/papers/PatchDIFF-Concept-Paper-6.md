@@ -1,6 +1,6 @@
 # PatchDIFF: Transactional Document Editing for AI Agents
 
-> **Scope & Authority Note:** This paper presents the conceptual foundation, formal transaction model, architectural tradeoffs, and research hypotheses of PatchDIFF. For executable API schemas, persistence contracts, and exact runtime limits, refer to the normative specifications ([AGENTS.md](../../AGENTS.md), [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), [MCP_TOOLS.md](../spec/MCP_TOOLS.md), [PATCHDIFF_CORE_SPEC.md](../spec/PATCHDIFF_CORE_SPEC.md), [DATA_MODEL.md](../spec/DATA_MODEL.md), and [PDCP_FORMAT.md](../spec/PDCP_FORMAT.md)).
+> **Scope & Authority Note:** This paper presents the conceptual foundation, formal transaction model, architectural tradeoffs, and research hypotheses of PatchDIFF. For executable API schemas, persistence contracts, and exact runtime limits, refer to the normative specifications ([AGENTS.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/AGENTS.md), [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), [MCP_TOOLS.md](../spec/MCP_TOOLS.md), [PATCHDIFF_CORE_SPEC.md](../spec/PATCHDIFF_CORE_SPEC.md), [DATA_MODEL.md](../spec/DATA_MODEL.md), and [PDCP_FORMAT.md](../spec/PDCP_FORMAT.md)).
 
 ---
 
@@ -671,10 +671,10 @@ PatchDIFF demonstrates that agent document editing is naturally modeled as a **d
    - Anthropic, *Text Editor Tool (`str_replace_based_edit_tool` / `str_replace`)*, Claude API Documentation, `https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/text-editor-tool`.
    - OpenAI, *Apply Patch Tool (`apply_patch` V4A Diff Format)*, OpenAI Platform Documentation & Cookbook, `https://platform.openai.com/docs/guides/tools`.
 7. **PatchDIFF Normative Specifications:**
-   - [AGENTS.md](../../AGENTS.md) — Locked architectural invariants and runtime boundaries.
+   - [AGENTS.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/AGENTS.md) — Locked architectural invariants and runtime boundaries.
    - [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md) — Architecture decisions (`A1`–`A8`), contracts (`C1`–`C6`), and historical design reconciliation.
    - [MCP_TOOLS.md](../spec/MCP_TOOLS.md) — Normative MCP tool contracts, schemas, and byte budgets.
    - [PATCHDIFF_CORE_SPEC.md](../spec/PATCHDIFF_CORE_SPEC.md) — Deterministic core runtime specification and validation stages.
    - [DATA_MODEL.md](../spec/DATA_MODEL.md) — PostgreSQL schema and constraints.
    - [PDCP_FORMAT.md](../spec/PDCP_FORMAT.md) — Transaction formats (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`).
-   - [backend/tests/verification/README.md](../../backend/tests/verification/README.md) — Offline payload byte accounting and evaluation methodology.
+   - [backend/tests/verification/README.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/backend/tests/verification/README.md) — Offline payload byte accounting and evaluation methodology.
