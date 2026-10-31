@@ -133,7 +133,7 @@
 **Standard**: PR Review Standard v1.1.0  
 **Recheck Date**: 2026-10-31  
 **Target Plan**: `pr23_remediation_plan_REVISED.md` (Sol-Optimized Plan)  
-**Evaluated Head**: Working tree at `dda16296d31722e1962b322e4f4fc07eefd85225` with Sol-optimized remediation changes  
+**Evaluated Head**: `abd4d39` (CI Run `41234564958`: 100% green across all unit, live Postgres integration, resident worker, offline eval, and docs build suites)  
 **Base**: Merged PR #22 (`56d3545d9f4369bc1e57f593dbb71bbd37128b9e`)  
 **Scope**: All 32 open baseline findings across 8 workstreams (A–H) and 1 external registry gate.
 
@@ -243,8 +243,8 @@
 - **P2 — Medium Priority**: None identified within reviewed scope.
 - **P3 — Low Priority**: None identified within reviewed scope.
 - **Verification**:
-  - 1,055 unit tests passed, 1 skipped in 51.39s.
-  - Full live PostgreSQL integration suite: 571 passed, 1 skipped in 523.54s (0:08:43), including new `test_finalize_live.py`, `test_batch_migrations.py`, and `test_migrations_reachable.py`.
+  - 1,055 unit tests passed, 1 skipped in CI.
+  - Full live PostgreSQL integration suite: 571 passed, 1 skipped in CI run `41234564958` (duration 3m 00s).
   - Offline evaluation: 100% passed.
   - Installed wheel smoke test (`test_installed_wheel_smoke.py`) passed.
   - `PR23-PLAN-TEST-001` & `PR23-IMPL-TEST-001`: Fake export mocks replaced with real live PostgreSQL tests.
