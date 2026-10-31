@@ -245,7 +245,7 @@ A host skill or system prompt for PatchDIFF should say, at minimum: read before 
 
 ### Host Prompt Hygiene & Friction Prevention
 
-Empirical $2\times2$ factorial evaluation ($N=24$ live model runs across Non-Git and Git environments) identified three critical prompt hygiene principles that govern agent efficiency:
+Empirical $2\times2$ factorial evaluation ($n=3$ per arm across Non-Git and Git environments, $N=12$ runs) identified three critical prompt hygiene principles that govern agent efficiency:
 
 1. **Omit Obsolete Schema and Spill Permissions**: When MCP tools are eagerly delivered via `tools/list` (e.g. `observed_v2`), do NOT include legacy permissions clauses such as `"Registered help/schema resources and this session's spills are allowed"`. Empirical trials showed that LLMs interpret this phrase as an instruction to inspect local disk schemas and help files via native filesystem tools, wasting 5–6 tool calls upfront before beginning edits.
 2. **Explicitly Forbid Post-Commit Verification Audits**: Host prompts should state:
