@@ -77,3 +77,34 @@ def test_profile_schema_sizes_are_actual_serialized_tools_list_bytes():
                                    ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
              for profile in MCP_PROFILES}
     assert sizes["unobserved"] < sizes["observed"] < sizes["editor"] < sizes["full"]
+
+
+def test_legacy_profile_warning_deduplicated(capsys):
+    from app.mcp.external_adapter import _WARNED_LEGACY_PROFILES
+    _WARNED_LEGACY_PROFILES.clear()
+
+    # First instance emits notice to stderr
+    adapter1 = ExternalMCPAdapter(profile="editor")
+    captured = capsys.readouterr()
+    assert "[PATCHDIFF NOTICE]" in captured.err
+    assert "editor" in captured.err
+    assert captured.out == ""  # Stdout must remain pure!
+
+    # Second instance does NOT emit notice again
+    adapter2 = ExternalMCPAdapter(profile="editor")
+    captured2 = capsys.readouterr()
+    assert captured2.err == ""
+    assert captured2.out == ""
+
+    # Different legacy profile emits notice once
+    adapter3 = ExternalMCPAdapter(profile="observed")
+    captured3 = capsys.readouterr()
+    assert "[PATCHDIFF NOTICE]" in captured3.err
+    assert "observed" in captured3.err
+
+    # Modern default observed_v2 and full never emit legacy notices
+    adapter4 = ExternalMCPAdapter(profile="observed_v2")
+    adapter5 = ExternalMCPAdapter(profile="full")
+    captured4 = capsys.readouterr()
+    assert captured4.err == ""
+

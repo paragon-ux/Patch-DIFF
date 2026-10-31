@@ -310,3 +310,39 @@ class TargetScopeObservations(TimestampMixin, Base):
     accepted_pdcp_log_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("append_only_pdcp_logs.pdcp_log_id")
     )
+
+
+class TargetFinalizations(TimestampMixin, Base):
+    __tablename__ = "target_finalizations"
+    __table_args__ = (
+        UniqueConstraint("target_file_id", "client_request_id", name="uq_target_finalizations_target_key"),
+        Index("ix_target_finalizations_target_key", "target_file_id", "client_request_id"),
+        Index("ix_target_finalizations_target_created", "target_file_id", "created_at"),
+        CheckConstraint(
+            "(status = 'completed' AND snapshot_id IS NOT NULL AND closed_editing_cycle_id IS NOT NULL AND new_editing_cycle_id IS NOT NULL AND saved_target_version IS NOT NULL AND canonical_current_hash IS NOT NULL AND content_sha256 IS NOT NULL) OR "
+            "(status != 'completed' AND failure_detail IS NOT NULL)",
+            name="ck_target_finalizations_status_fields",
+        ),
+    )
+
+    finalization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    target_file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cloud_target_files.target_file_id"), nullable=False)
+    client_request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    fingerprint_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("target_snapshots.snapshot_id"))
+    closed_editing_cycle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("editing_cycles.editing_cycle_id"))
+    new_editing_cycle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("editing_cycles.editing_cycle_id"))
+    saved_target_version: Mapped[int | None] = mapped_column(BigInteger)
+    canonical_current_hash: Mapped[str | None] = mapped_column(String(64))
+    filename: Mapped[str | None] = mapped_column(Text)
+    export_format: Mapped[str | None] = mapped_column(Text)
+    content_eol: Mapped[str | None] = mapped_column(Text)
+    source_line_endings: Mapped[dict | None] = mapped_column(JSONB)
+    content_sha256: Mapped[str | None] = mapped_column(String(64))
+    content_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    exported_content: Mapped[str | None] = mapped_column(Text)
+    failure_code: Mapped[str | None] = mapped_column(Text)
+    failure_detail: Mapped[str | None] = mapped_column(Text)
+

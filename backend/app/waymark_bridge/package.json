@@ -1,0 +1,13 @@
+{
+  "name": "@patchdiff/waymark-integration",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only Waymark Engine structural discovery bridge for Patch-DIFF",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "waymark-engine": "4.1.0"
+  }
+}

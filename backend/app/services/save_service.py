@@ -172,6 +172,7 @@ def save_target(
         session.add(new_cycle)
         session.flush()
         target.active_editing_cycle_id = new_cycle.editing_cycle_id
+        session.flush()
 
         return SaveResult(
             status="saved",

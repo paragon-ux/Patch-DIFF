@@ -412,15 +412,16 @@ def patchdiff_replay(*, target_file_id: str) -> dict[str, Any]:
 def patchdiff_finalize_target(
     *,
     target_file_id: str,
+    client_request_id: str,
     expected_target_version: int | None = None,
     expected_current_hash: str | None = None,
     format: str = "original_eol",
-    client_request_id: str | None = None,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
         result = finalize_target(
             session,
             target_file_id=target_file_id,
+            client_request_id=client_request_id,
             expected_target_version=expected_target_version,
             expected_current_hash=expected_current_hash,
             format=format,
@@ -428,6 +429,8 @@ def patchdiff_finalize_target(
     return {
         "status": result.status,
         "target_file_id": str(result.target_file_id),
+        "client_request_id": result.client_request_id,
+        "finalization_id": str(result.finalization_id) if result.finalization_id else None,
         "filename": result.filename,
         "version": result.version,
         "current_hash": result.current_hash,
@@ -438,11 +441,16 @@ def patchdiff_finalize_target(
         "materialized_state_checks": result.materialized_state_checks,
         "exported_content": result.exported_content,
         "content_sha256": result.content_sha256,
+        "content_bytes": result.content_bytes,
+        "content_delivery": result.content_delivery,
         "format": result.format,
         "source_line_endings": result.source_line_endings,
         "failure_reason": result.failure_reason.value if result.failure_reason else None,
+        "failure_code": result.failure_code,
         "failure_detail": result.failure_detail,
-        **({"client_request_id": client_request_id} if client_request_id else {}),
+        "is_idempotent_replay": result.is_idempotent_replay,
+        **({"lock_hold_ms": result.lock_hold_ms} if result.lock_hold_ms is not None else {}),
+        **({"replay_ms": result.replay_ms} if result.replay_ms is not None else {}),
     }
 
 

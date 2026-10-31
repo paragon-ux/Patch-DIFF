@@ -463,16 +463,20 @@ Replays accepted logs against the initial snapshot, dispatching on `(protocol_ve
 Atomically executes SAVE checkpointing, deterministic replay verification, and format export in a single PostgreSQL session and transaction under `SELECT ... FOR UPDATE` row locking. Available on the `full` profile.
 - **Arguments**:
   - `target_file_id` (`string`, required): UUID of the canonical target.
-  - `expected_target_version` (`integer`, optional): Expected current target version.
+  - `client_request_id` (`string`, required): Durable client request identity (1–128 printable ASCII characters without whitespace).
+  - `expected_target_version` (`integer`, optional): Expected current target version (guard requirement: at least one guard must be provided).
   - `expected_current_hash` (`string`, optional): Expected SHA-256 hash.
   - `format` (`string`, optional, default `"original_eol"`): Output line-ending format (`"original_eol"`, `"canonical_lf"`, `"crlf"`, `"original_text"`).
-  - `client_request_id` (`string`, optional): Client invocation correlation ID.
-- **Database Atomicity**: If replay verification fails (`materialized_state_matches is not True`), the entire database transaction rolls back, leaving zero snapshots created and zero editing cycle mutations.
+- **Database Atomicity & Rollback**: Direct outer transaction ownership. If replay verification fails (`materialized_state_matches is not True`) or export fails, the entire transaction rolls back cleanly, leaving zero snapshots created and zero editing cycle mutations.
+- **Durable Keyed Recovery**: Re-invocations with identical `(target_file_id, client_request_id)` and matching fingerprint recover the original completed receipt directly with `is_idempotent_replay: true`. Conflicting arguments under the same request key reject with `code: "request_key_conflict"`.
+- **Bounded Delivery**: Inline content is capped at 1 MiB (`MAX_INLINE_EXPORT_BYTES = 1,048,576`). For larger exports, `content_delivery` is `"deferred"`, and `exported_content` is null.
 - **Returns**:
   ```json
   {
     "status": "ok",
     "target_file_id": "UUID",
+    "client_request_id": "req-123",
+    "finalization_id": "UUID",
     "filename": "main.py",
     "version": 2,
     "current_hash": "sha256...",
@@ -488,8 +492,11 @@ Atomically executes SAVE checkpointing, deterministic replay verification, and f
     },
     "exported_content": "...",
     "content_sha256": "sha256...",
+    "content_bytes": 1024,
+    "content_delivery": "inline",
     "format": "original_eol",
-    "source_line_endings": "crlf"
+    "source_line_endings": {"eol": "lf", "uniform": true},
+    "is_idempotent_replay": false
   }
   ```
 

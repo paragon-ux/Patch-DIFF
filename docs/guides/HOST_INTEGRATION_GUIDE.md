@@ -7,14 +7,30 @@ Why this document exists: the server is a transaction service; the host owns pla
 ## 0. Stdio transport and host refresh
 
 Choose the immutable server profile before starting a session with
-`PATCHDIFF_MCP_PROFILE`: `editor` (default, 7 tools), `unobserved` (5), `observed`
-(6), `observed_editor` (4), or `full` (22). Use `observed_editor` for delegated
-editing when the host owns lifecycle work; it rejects SAVE/replay as well as
-other excluded tools before dispatch. Older integrations and trusted
-initialization/export/audit
-operators must explicitly opt into `full`. Excluded tools are uncallable as well
-as unadvertised. An agent cannot override a profile per request.
-[Exact profile lists and batch examples](../spec/STRUCTURAL_BATCH_EDITING.md).
+`PATCHDIFF_MCP_PROFILE`: default is `observed_v2` (5 tools for delegated agent editing),
+or opt into `full` (23 tools for trusted host lifecycle management). Legacy profiles
+`editor` (7 tools), `unobserved` (5), `unobserved_editor` (3), `hybrid_editor` (1),
+`observed` (6), and `observed_editor` (4) remain available with advisory stderr notices.
+
+Use `observed_v2` for delegated agent editing: it exposes only reading, search, structural
+scope discovery, and bundle commits, rejecting lifecycle and administrative tools before dispatch.
+Trusted host harnesses use `full` to initialize targets, perform database migrations, and
+execute atomic finalization. Excluded tools are uncallable as well as unadvertised. An agent
+cannot override a profile per request.
+
+### Operator and Agent Process Isolation (`PR23-PLAN-MCP-003`)
+
+The MCP profile is an interface boundary, not an operating system security boundary.
+Hosts must enforce process and credential isolation:
+- The model/agent receives only an `observed_v2` stdio connection.
+- Operator database credentials (`PATCHDIFF_DATABASE_URL`), admin shell access, and
+  `full`-profile process handles must be held exclusively by the host process.
+- The agent must not have permissions to launch arbitrary child processes or inspect host
+  environment variables containing database credentials.
+- When strict observation is required across all submissions, set
+  `PATCHDIFF_STRICT_OBSERVATION_MODE=1`. In strict mode, PatchDIFF rejects all unobserved
+  write submissions (`patchdiff_submit_edits`, `patchdiff_submit_operations`, etc.) with
+  `OBSERVATION_REQUIRED`.
 
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
 
@@ -374,9 +390,39 @@ Understanding host integration requires distinguishing three independent integri
 2. **Host Export Consistency**: The exported bytes returned in the MCP response match the exact verified PostgreSQL state at that version and hash.
 3. **Physical Disk Write-Back Integrity**: The host harness installs the exported bytes onto disk. PatchDIFF does not manage filesystem permissions, directory sync, symlinks, or cross-resource atomicity. Host harnesses must write to a temporary file on the same filesystem, verify content hash, flush/fsync, and atomically rename (`os.replace` / `renameat`) over the destination file.
 
-### Fail-Closed Retry & Uncertainty Semantics (`PR23-PLAN-SVC-001`)
+### Fail-Closed Retry & Keyed Recovery Semantics (`PR23-PLAN-SVC-001`)
 
 - SAVE rotates editing cycles without advancing target version or hash.
-- If an MCP response is lost or times out during `patchdiff_finalize_target`, the finalization state is classified as `save_uncertain`.
-- **Do not retry automatically**: Resubmitting finalization with the same version/hash without verification could create a duplicate snapshot.
-- The host harness must reconcile authoritative target status via `patchdiff_get_target` or `patchdiff_replay` before attempting any further lifecycle operations.
+- To prevent duplicate snapshot creation across network retries, `patchdiff_finalize_target` requires a mandatory `client_request_id` (1–128 printable ASCII characters).
+- **Durable Keyed Recovery**: If a client retry arrives with an identical request fingerprint, PatchDIFF returns the cached original finalization receipt with `is_idempotent_replay: true` directly under row locking, without creating duplicate snapshots or rotating cycles again.
+- **Request Conflict Detection**: If a retry arrives with the same `client_request_id` but differing parameters or target state, the service returns `status: "rejected"` with `code: "request_key_conflict"`.
+- If an unknown transport error occurs before receiving a finalization response, resending with the exact same `client_request_id` and guards recovers the completed outcome safely.
+
+### Safe Disk Write-Back Reference Implementation (`PR23-PLAN-ARCH-002`, `PR23-PLAN-ARCH-004`)
+
+Host harnesses must never directly overwrite user files without containment and preimage verification.
+PatchDIFF provides a reference implementation in `examples/host_finalize.py`:
+
+```python
+from examples.host_finalize import safe_write_back_file, finalize_single_target
+
+# Execute atomic finalize over trusted full MCP connection and safely write back to disk
+receipt = finalize_single_target(
+    operator.call,
+    target_file_id="...",
+    expected_target_version=1,
+    client_request_id="fin-job-42",
+    destination_path="/path/to/project/src/main.py",
+    preimage_sha256="expected_initial_disk_hash",
+    authorized_root="/path/to/project",
+)
+```
+
+The write-back protocol guarantees:
+1. **Authorized Root Containment**: Rejects target paths or symlinks that escape `authorized_root`.
+2. **Preimage Conflict Detection**: Verifies existing disk bytes against `preimage_sha256`; rejects with `PreimageMismatchError` if concurrent disk modifications occurred.
+3. **Same-Directory Temp File & Fsync**: Writes to `.tmp-<filename>-<uuid>` in the destination directory, flushes and fsyncs the file descriptor.
+4. **Atomic Replacement**: Calls `os.replace` to atomically install the file over destination.
+5. **Parent Directory Fsync**: Syncs parent directory descriptor on POSIX platforms where supported.
+6. **Post-Write Hash Verification**: Confirms written disk bytes match `content_sha256`.
+

@@ -192,6 +192,8 @@ Do not claim completion unless relevant tests pass against live Postgres:
 - Postgres integration tests (`backend/tests/integration/`), including live Alembic `upgrade -> downgrade -> upgrade` and real stdio MCP subprocess E2E workflow
 - Offline payload and verdict equivalence evaluation (`backend/tests/verification/offline_eval.py`)
 
+Always execute integration tests and verification suites with `PATCHDIFF_WAYMARK_MODE=resident` (the same mode enforced in GitHub Actions CI) to use a persistent in-memory Node.js worker and avoid repeated cold-boot subprocess spawning overhead.
+
 ## PR Review Standard
 
 All PR reviews must follow [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_STANDARD.md). Record the base and head SHAs, map every changed file to a primary category, and give each required category its own coverage statement, separate P1/P2/P3 finding lists, verification gaps, and verdict. Empty reviewed buckets must say so; unreviewed buckets must say not assessed.
