@@ -298,3 +298,58 @@ def test_ipc_trace_encloses_polling_and_records_only_terminal_outcome(tmp_path, 
     events = [json.loads(line) for line in recorder.path.read_text().splitlines()]
     reads = [event for event in events if event["event"] == "ipc_read"]
     assert len(reads) == 1 and reads[0]["outcome"] == ("error" if failure else "ok")
+
+
+def test_exchange_queued_frame_does_not_win_over_pipe_write_error():
+    """Regression test: queued frame arriving during polling must not mask a failed pipe write."""
+    import uuid
+    from types import SimpleNamespace
+    from app.services import waymark_worker as worker
+
+    class Frames:
+        def empty(self):
+            return True
+
+        def get(self, timeout):
+            return {"result": "stale_or_premature_frame"}
+
+    def broken_write(data):
+        raise BrokenPipeError("Pipe broke during write")
+
+    generation = object.__new__(worker._Generation)
+    generation.id, generation.lock = str(uuid.uuid4()), threading.Lock()
+    generation.error, generation.expected, generation.frames = None, None, Frames()
+    generation.owner = SimpleNamespace(closed=False)
+    generation.proc = SimpleNamespace(stdin=SimpleNamespace(write=broken_write))
+
+    with pytest.raises(worker.WaymarkWorkerError) as exc_info:
+        generation.exchange("discover", "1", {}, 1, "result")
+    assert "Worker pipe write failed." in str(exc_info.value)
+
+
+def test_exchange_writer_catches_value_error_on_closed_stream():
+    """Regression test: ValueError from writing to a closed stream must be caught as a bounded worker error."""
+    import uuid
+    from types import SimpleNamespace
+    from app.services import waymark_worker as worker
+
+    class Frames:
+        def empty(self):
+            return True
+
+        def get(self, timeout):
+            raise queue.Empty()
+
+    def closed_stream_write(data):
+        raise ValueError("I/O operation on closed file")
+
+    generation = object.__new__(worker._Generation)
+    generation.id, generation.lock = str(uuid.uuid4()), threading.Lock()
+    generation.error, generation.expected, generation.frames = None, None, Frames()
+    generation.owner = SimpleNamespace(closed=False)
+    generation.proc = SimpleNamespace(stdin=SimpleNamespace(write=closed_stream_write))
+
+    with pytest.raises(worker.WaymarkWorkerError) as exc_info:
+        generation.exchange("discover", "1", {}, 0.5, "result")
+    assert "Worker pipe write failed." in str(exc_info.value)
+

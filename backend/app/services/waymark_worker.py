@@ -323,7 +323,7 @@ class _Generation:
                         if not written:
                             raise OSError("Worker pipe closed")
                         data = data[written:]
-            except OSError as exc:
+            except (OSError, ValueError) as exc:
                 write_errors.append(exc)
         writer = threading.Thread(target=write, daemon=True)
         writer.start()
@@ -343,8 +343,8 @@ class _Generation:
                 try:
                     value = self.frames.get(timeout=min(.05, remaining))
                     writer.join(timeout=max(0, deadline - time.monotonic()))
-                    if writer.is_alive() or self.error:
-                        raise self.error or _error("PROTOCOL_ERROR", "Worker did not consume its control frame.")
+                    if writer.is_alive() or self.error or write_errors:
+                        raise self.error or _error("PROTOCOL_ERROR", "Worker pipe write failed." if write_errors else "Worker did not consume its control frame.")
                     return value
                 except queue.Empty:
                     continue

@@ -1,0 +1,118 @@
+[project]
+site_name = "PatchDIFF Documentation"
+site_url = "https://paragon-ux.github.io/Patch-DIFF"
+site_description = "Transactional document-editing service for MCP-connected agents."
+site_author = "Paragon UX"
+docs_dir = "docs"
+site_dir = "site"
+exclude_docs = """
+reviews/**
+usability/**
+"""
+
+nav = [
+    { "Home" = "index.md" },
+    { "Visual Architecture & Flow" = "architecture.md" },
+    { "Specifications" = [
+        { "Core Runtime Spec" = "spec/PATCHDIFF_CORE_SPEC.md" },
+        { "MCP Tools" = "spec/MCP_TOOLS.md" },
+        { "Data Model" = "spec/DATA_MODEL.md" },
+        { "PDCP Format" = "spec/PDCP_FORMAT.md" },
+        { "Editor v2 Contract" = "spec/MCP_EDITOR_V2.md" },
+        { "Structural Batch Editing" = "spec/STRUCTURAL_BATCH_EDITING.md" },
+        { "Waymark Worker" = "spec/WAYMARK_WORKER.md" }
+    ]},
+    { "Guides" = [
+        { "Host Integration Guide" = "guides/HOST_INTEGRATION_GUIDE.md" },
+        { "Claude Desktop Setup" = "guides/CLAUDE_DESKTOP_SETUP.md" },
+        { "Observed Editor Workflow" = "guides/OBSERVED_EDITOR_WORKFLOW.md" }
+    ]},
+    { "Benchmarks" = [
+        { "Modernized 2×2 Factorial Benchmark" = "benchmarks/modernized_benchmark_report.md" },
+        { "Verification Test Matrix" = "benchmarks/TEST_MATRIX.md" }
+    ]},
+    { "Papers" = [
+        { "Concept Paper v6" = "papers/PatchDIFF-Concept-Paper-6.md" },
+        { "Modernization Architecture" = "papers/MODERNIZATION_ARCHITECTURE.md" },
+        { "Modernization Change Record" = "papers/MODERNIZATION_CHANGE_DOC.md" }
+    ]},
+    { "Standards" = [
+        { "PR Review Standard" = "standards/PR_REVIEW_STANDARD.md" },
+        { "Release Readiness" = "standards/RELEASE_READINESS.md" }
+    ]},
+    { "Legacy" = [
+        { "Legacy Compatibility" = "legacy/LEGACY_COMPATIBILITY.md" },
+        { "Historical Archive Index" = "legacy/ARCHIVE_INDEX.md" },
+        { "Legacy Benchmark Report" = "legacy/git_benchmark_report.md" },
+        { "Concept Paper v5" = "legacy/PatchDIFF-Concept-Paper-5.md" },
+        { "Protocol Spec v0.2.3" = "legacy/PatchDIFF-Protocol-Spec-v0.2.3.md" },
+        { "Implementation Spec v0.2.3" = "legacy/PatchDIFF-Implementation-Spec-v0.2.3.md" },
+        { "Snapshot v0.2.3" = "legacy/PatchDIFF-Snapshot.md" }
+    ]}
+]
+
+[project.theme]
+language = "en"
+features = [
+  "announce.dismiss",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.code.select",
+  "content.footnote.tooltips",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+toc.permalink = true
+pymdownx.arithmatex.generic = true
+pymdownx.betterem = {}
+pymdownx.caret = {}
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.magiclink = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true
+pymdownx.tilde = {}

@@ -13,3 +13,4 @@ integrations/waymark/node_modules/
 /evaluation/
 /.tmp/
 /.ci-results/
+/site/

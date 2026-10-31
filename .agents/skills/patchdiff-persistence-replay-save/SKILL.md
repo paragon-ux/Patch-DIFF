@@ -48,6 +48,15 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
 3. `20261022_0003_source_line_endings.py`:
    - Adds nullable JSONB `source_line_endings` to `cloud_target_files`, written at upload before LF canonicalization; existing targets keep NULL.
    - Guarded downgrade: refuses while any target has recorded line endings.
+4. `20261026_0004_target_scope_observations.py`:
+   - Adds `target_scope_observations` table for durable AST observation authority, binding target file ID, editing cycle ID, scope identity, character bounds, and content hash.
+   - Adds unique constraint `uq_target_scope_observations_identity` and indexes.
+   - Guarded downgrade: refuses to downgrade while observation rows exist.
+5. `20261027_0005_observation_bundles.py`:
+   - Adds paired `observation_bundle_id` (UUID) and `bundle_ordinal` to `target_scope_observations`.
+   - Adds unique constraint `uq_target_scope_observations_bundle_ordinal` and indexes.
+   - Partial unique index on `accepted_pdcp_log_id` ensuring historical single-observation linkage remains unique while batch observations link atomically.
+   - Guarded downgrade: refuses while bundled observations or batch records exist.
 
 Migrations must always run cleanly on live Postgres:
 ```powershell
@@ -138,8 +147,8 @@ A successful reconstruction can report materialized_state_matches=false. CRLF/ba
 - Accepted rows store `diagnostic_json = {warnings, warning_count, warnings_truncated}` only when warnings exist; exact recovery returns them. Ledger and attempt pages join through `pdcp_log_id`, and `include_content` pages carry a 1,048,576-byte content budget.
 - tx/3 writes one typed ledger row with `operation: "replace_all"`. A valid oversized fresh replacement writes nothing, while a key-conflict row stores the full submitted record.
 - `patchdiff_read_lines` and `patchdiff_preview` read one committed row under `no_autoflush`, with no lock and no write.
-- Contract: `docs/DATA_MODEL.md` and `docs/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
+- Contract: `docs/spec/DATA_MODEL.md` and `docs/spec/MCP_TOOLS.md` ("Guarded editing, reads, preview and diagnostics").
 
 ## Structural bundle persistence and replay
 
-Migration 20261026_0004 persists observations; additive 20261027_0005 adds paired bundle ID/ordinal, unique bundle order, bundle/accepted-log indexes and partial accepted-log uniqueness for historical singles. Bundled observations can share one accepted log and are each consumed once. Downgrade refuses bundled rows, many-to-one links or accepted batch records. Keep request recovery before stale guards; fingerprint the submitted batch before attaching authoritative evidence. All links, ledger rows, target state and one version increment share the existing locked transaction. Explicitly replay patchdiff-observed-batch/1 only with patchdiff-observed-batch-r1, requiring the exact ordered scope evidence and preimage without Waymark. See `docs/STRUCTURAL_BATCH_EDITING.md`.
+Migration 20261026_0004 persists observations; additive 20261027_0005 adds paired bundle ID/ordinal, unique bundle order, bundle/accepted-log indexes and partial accepted-log uniqueness for historical singles. Bundled observations can share one accepted log and are each consumed once. Downgrade refuses bundled rows, many-to-one links or accepted batch records. Keep request recovery before stale guards; fingerprint the submitted batch before attaching authoritative evidence. All links, ledger rows, target state and one version increment share the existing locked transaction. Explicitly replay patchdiff-observed-batch/1 only with patchdiff-observed-batch-r1, requiring the exact ordered scope evidence and preimage without Waymark. See `docs/spec/STRUCTURAL_BATCH_EDITING.md`.
