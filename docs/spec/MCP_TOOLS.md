@@ -525,7 +525,7 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 
 ## 5. Convenience & Deprecated Compatibility Wrappers
 
-`patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#3-deprecated-regeneration--prompt-prefix-wrappers) for legacy wrapper specifications.
+`patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#3-deprecated-regeneration-prompt-prefix-wrappers) for legacy wrapper specifications.
 
 
 ---

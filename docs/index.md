@@ -6,6 +6,14 @@ PatchDIFF transforms untrusted, model-generated text edits into **explicitly pre
 
 ---
 
+## Visual Architecture & Flow
+
+For complete visual flowcharts and interactive sequence diagrams:
+
+- [**Visual Architecture & Transaction Lifecycle**](architecture.md): Interactive Mermaid diagrams showing the end-to-end host transaction lifecycle, 5-stage core validation pipeline, 4-tier system architecture, and profile-dispatched replay engine.
+
+---
+
 ## Documentation Structure
 
 ```text

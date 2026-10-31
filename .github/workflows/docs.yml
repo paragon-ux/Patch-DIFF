@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - 'docs/**'
-      - 'mkdocs.yml'
       - 'zensical.toml'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
@@ -31,10 +30,10 @@ jobs:
           python-version: "3.11"
       - name: Install documentation dependencies
         run: |
-          pip install mkdocs-material
+          pip install zensical
       - name: Build documentation site
         run: |
-          mkdocs build -d site
+          zensical build
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
