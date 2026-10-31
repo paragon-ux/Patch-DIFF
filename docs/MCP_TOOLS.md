@@ -18,7 +18,11 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
 
 The 22 internal tools are organized into the groups below. External stdio MCP
 defaults to the **7-tool `editor` profile**; `unobserved` exposes 5, `observed` 6,
-and explicitly selected `full` exposes all 22. Both advertisement and dispatch
+`observed_editor` 4, and explicitly selected `full` exposes all 22. The opt-in
+`observed_editor` profile contains only read_target, find_occurrences,
+observe_scope and submit_observed_operations (all with the `patchdiff_` prefix);
+SAVE/replay belong to the separate trusted host session in that role. Both
+advertisement and dispatch
 enforce the immutable startup `PATCHDIFF_MCP_PROFILE`. Initialization, export,
 legacy and administrative tools require `full` at the external boundary.
 See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_EDITING.md).
@@ -562,6 +566,12 @@ identify `selection_index`. [Exact fields and lifecycle](STRUCTURAL_BATCH_EDITIN
   - `offset` (`integer >= 0`, default `0`): code-point offset within `[scope_start, scope_end)`.
   - `max_chars` (`integer >= 1 | null`, default `4000`, cap `8000`): maximum code points returned on the page.
   - `include_line_starts` (`boolean`, default `false`): include 1-based line start offsets within the returned page.
+The optional top-level `query`, `symbol_name` and `kind` values must be nonblank
+when supplied. Omission/null means that selector or filter is absent; omitting
+`query` removes only the query filter. Discovery advertises `minLength: 1` to
+reject empty strings; the service also rejects whitespace-only strings, including
+Unicode whitespace. Nonblank strings are not implicitly trimmed.
+
 - **Modes & Fail-Closed Guarantees**:
   - **Candidate discovery** (`symbol_name` omitted): returns `status: "candidates"`, `observation_id: null`, and bounded structural candidates.
   - **Exact selection** (`symbol_name` provided):
@@ -637,3 +647,7 @@ remain in the detailed representation and append-only persistence, retrievable b
 a separate trusted detailed/full operator. Compact mode does not guarantee that
 arbitrary source-rich responses fit a host's spill limit. Use existing query/kind,
 direct selection and observation pagination; never silently truncate source.
+
+## Versioned editor profile
+
+The opt-in `observed_v2` external profile exposes eight purposes through the existing services. Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 22 handlers retain their contracts.

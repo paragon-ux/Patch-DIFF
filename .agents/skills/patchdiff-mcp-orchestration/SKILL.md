@@ -24,7 +24,7 @@ The PatchDIFF MCP service provides deterministic validation, authoritative bound
 
 ## Tool Surface Overview
 
-PatchDIFF retains 22 internal tool handlers. The external adapter defaults to the 7-tool editor profile; explicit unobserved/observed/full profiles expose 5/6/22 tools and enforce identical lists for advertisement and calls. Trusted lifecycle clients and older integrations select PATCHDIFF_MCP_PROFILE=full before startup. The existing functional areas include:
+PatchDIFF retains 22 internal tool handlers. The external adapter defaults to the 7-tool editor profile; explicit unobserved/observed/full profiles expose 5/6/22 tools and enforce identical lists for advertisement and calls. Opt-in observed_editor exposes only read_target, find_occurrences, observe_scope and submit_observed_operations (4 tools), denying lifecycle calls on delegated editor connections. Trusted lifecycle clients and older integrations select PATCHDIFF_MCP_PROFILE=full before startup. The existing functional areas include:
 
 1. **Target Lifecycle**:
    - `patchdiff_handle_upload`: register uploaded file content as a target.
@@ -121,4 +121,8 @@ Validate context_chars as a non-bool integer >=0, default 40 and cap 400. Both h
 
 ## Structural batch contracts
 
-Extend only the existing observe/observed-submit names. `selections` issues 1..32 exact disjoint scopes in one discovery; `groups` submits at most 128 scope-local tx/2 operations in one atomic target transaction. Batch mode requires both guards and a request key; reject mixed single/batch forms. Startup profiles are immutable, apply to tools/list and tools/call, and cannot be supplied per request. Strict observation remains enforced separately by services. See `docs/STRUCTURAL_BATCH_EDITING.md` for schemas, errors and executable recipes.
+Legacy profiles retain the existing observe/observed-submit names. The opt-in versioned external view uses the same handlers through purpose-specific aliases. `selections` issues 1..32 exact disjoint scopes in one discovery; `groups` submits at most 128 scope-local tx/2 operations in one atomic target transaction. Batch mode requires both guards and a request key; reject mixed single/batch forms. Startup profiles are immutable, apply to tools/list and tools/call, and cannot be supplied per request. Strict observation remains enforced separately by services. See `docs/STRUCTURAL_BATCH_EDITING.md` for schemas, errors and executable recipes.
+
+## Versioned observed editor view
+
+Opt-in observed_v2 exposes 8 external purposes; no registry/runtime/migration is added. Follow docs/MCP_EDITOR_V2.md for exact names, explicit snapshot normalization, distinct transaction/current receipt states, 8192-byte whole logical commit/error bound, negotiated 2025 output schemas/structured results and 2024 text fallback. Preserve all old profile contracts. Do not prevalidate operational inputs in a way that bypasses known-target audit or exact keyed recovery. Verify large single-scope compatibility, audited malformed values, conflict logging, post-advance recovery, real stdio denials and deterministic five-file --editor-v2 --host-finalize. No model coaching or inferred performance claims.

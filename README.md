@@ -414,8 +414,10 @@ See [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md) for full setup 
 External MCP defaults to the **7-tool `editor` profile**: `patchdiff_read_target`,
 `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`,
 `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay`.
-Set trusted startup `PATCHDIFF_MCP_PROFILE=unobserved` (5), `observed` (6), or
-`full` (22). Older integrations and trusted initialization/export operators must
+Set trusted startup `PATCHDIFF_MCP_PROFILE=unobserved` (5), `observed` (6),
+`observed_editor` (4), or `full` (22). Use `observed_editor` for delegated editing
+when the host owns SAVE/replay; excluded tools are not advertised or callable.
+Older integrations and trusted initialization/export operators must
 explicitly select `full`. Both discovery and dispatch enforce the same immutable
 profile. The internal registry retains every handler listed below.
 
@@ -488,3 +490,5 @@ Read in order of precedence:
 ## License
 
 [MIT](LICENSE), selected by the repository owner. Third-party packages retain their own licenses; the release checklist records dependency and security review limits.
+
+Opt-in `PATCHDIFF_MCP_PROFILE=observed_v2` provides eight purpose-specific observed editing tools, explicit reusable snapshots and bounded transaction receipts. Existing profiles remain available. See [the versioned editor contract](docs/MCP_EDITOR_V2.md) for startup, negotiation, compatibility and measurement limits.

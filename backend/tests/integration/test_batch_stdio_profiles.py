@@ -53,7 +53,7 @@ def peer(profile):
         process.stderr.close()
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("observed", 6), ("full", 22)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("observed", 6), ("observed_editor", 4), ("full", 22)])
 def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count):
     with peer(profile) as (_, rpc):
         listed = rpc("tools/list")["tools"]
@@ -67,6 +67,22 @@ def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count):
         override = rpc("tools/call", {"name": "patchdiff_read_target", "arguments": {"target_file_id": "x", "profile": "full"}})
         assert override["isError"]
 
+
+
+def test_delegated_editor_stdio_denies_lifecycle_and_every_unadvertised_route():
+    allowed = {"patchdiff_read_target", "patchdiff_find_occurrences",
+               "patchdiff_observe_scope", "patchdiff_submit_observed_operations"}
+    with peer("observed_editor") as (_, rpc):
+        assert {tool["name"] for tool in rpc("tools/list")["tools"]} == allowed
+        for name in set(registry.names()) - allowed:
+            result = rpc("tools/call", {"name": name, "arguments": {}, "profile": "full"})
+            assert result["isError"]
+            assert "Unknown PatchDIFF MCP tool" in result["content"][0]["text"]
+        override = rpc("tools/call", {"name": "patchdiff_observe_scope",
+            "arguments": {"target_file_id": "target", "profile": "full"}})
+        assert override["isError"]
+        assert json.loads(override["content"][0]["text"])["code"] == "unknown_argument"
+        assert {tool["name"] for tool in rpc("tools/list")["tools"]} == allowed
 
 def test_unknown_profile_fails_startup_without_advertisement():
     completed = subprocess.run([sys.executable, "-m", "app.mcp.external_adapter"], cwd=ROOT,
@@ -108,3 +124,22 @@ def test_real_postgres_stdio_response_lost_after_commit_recovers_once():
             result = json.loads(rpc("tools/call", {"name": name, "arguments": {"target_file_id": target["target_file_id"]}})["content"][0]["text"])
             assert result["status"] in {"saved", "success"}
     assert state(target)[1] == 1 and len(state(target)[2]) == 1 and len(state(target)[3]) == 4
+
+
+def test_observed_selector_admission_contract_over_real_stdio():
+    from jsonschema import Draft202012Validator
+
+    target = registry.call("patchdiff_initialize_target", filename="stdio-selector.py",
+                           content="def example():\n    return 1\n", content_type="text/x-python")
+    with peer("observed") as (_, rpc):
+        schema = next(tool["inputSchema"] for tool in rpc("tools/list")["tools"]
+                      if tool["name"] == "patchdiff_observe_scope")
+        validator = Draft202012Validator(schema)
+        base = {"target_file_id": target["target_file_id"]}
+        for field in ("query", "symbol_name", "kind"):
+            assert not validator.is_valid({**base, field: ""})
+            assert validator.is_valid({**base, field: None})
+            result = rpc("tools/call", {"name": "patchdiff_observe_scope", "arguments": {**base, field: "\u3000"}})
+            assert json.loads(result["content"][0]["text"])["status"] == "invalid_argument"
+        valid = rpc("tools/call", {"name": "patchdiff_observe_scope", "arguments": {**base, "query": "example"}})
+        assert json.loads(valid["content"][0]["text"])["status"] == "candidates"
