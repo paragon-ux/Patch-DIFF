@@ -503,7 +503,7 @@ All quantitative and comparative claims in this paper follow a four-tier classif
 1. **`Enforced Contract / Hard Cap`**: Deterministic byte, code-point, or row-count bounds enforced in software.
 2. **`Measured (PatchDIFF-only)`**: Deterministic byte counts from `backend/tests/verification/offline_eval.py` and local reference workload medians.
 3. **`Analytical Comparison`**: Structural complexity and round-trip comparisons under stated workflow assumptions.
-4. **`Empirically Validated / Open Hypotheses`**: Live-model 2×2 factorial evaluation ($N=24$ independent runs across Baseline and Modernized evaluations; see `docs/benchmarks/modernized_benchmark_report.md` and `docs/benchmarks/git_benchmark_report.md`) evaluating `H1`, `H7`, and Git environment interaction; remaining multi-agent contention (`H3`), long-horizon session compaction (`H4`), and human review (`H6`) studies remain open empirical investigations.
+4. **`Empirically Validated / Open Hypotheses`**: Live-model 2×2 factorial evaluation ($N=12$ independent runs in the Modernized evaluation; see [modernized_benchmark_report.md](../benchmarks/modernized_benchmark_report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)) evaluating `H1`, `H7`, and Git environment interaction; remaining multi-agent contention (`H3`), long-horizon session compaction (`H4`), and human review (`H6`) studies remain open empirical investigations.
 
 ### 23.1 Deterministic Payload Byte Scaling & Reference Runtime Characteristics (`Measured`)
 
@@ -629,7 +629,7 @@ PatchDIFF deliberately trades heuristic permissiveness for deterministic safety.
 5. **No semantic or task-level correctness guarantee:**
    - An accepted PatchDIFF transaction guarantees that precondition guards held and exact text/span operations succeeded (`protocol_valid: true`, `transaction_valid: true`). It never guarantees that the resulting code compiles, passes tests, or satisfies the user's intent (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
 6. **Empirically measured efficiency and remaining open questions (`Decision A8`):**
-   - Live-model token savings, step reductions, and transaction validity were confirmed on the 5-file canary workload across $N=24$ independent runs (`docs/benchmarks/modernized_benchmark_report.md` and `docs/benchmarks/git_benchmark_report.md`). Multi-agent concurrent contention (`H3`), long-horizon multi-hour sessions (`H4`), and human reviewer error-identification studies (`H6`) remain open empirical investigations.
+   - Live-model token savings, step reductions, and transaction validity were confirmed on the 5-file canary workload across $N=12$ independent runs in the Modernized evaluation ([modernized_benchmark_report.md](../benchmarks/modernized_benchmark_report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)). Multi-agent concurrent contention (`H3`), long-horizon multi-hour sessions (`H4`), and human reviewer error-identification studies (`H6`) remain open empirical investigations.
 
 ---
 

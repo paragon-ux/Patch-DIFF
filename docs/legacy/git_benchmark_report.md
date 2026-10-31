@@ -1,4 +1,6 @@
-# 2×2 Factorial Comparative Benchmark Report: Control (Native Baseline) vs. Full PatchDIFF (`observed_v2`)
+# Legacy 2×2 Factorial Comparative Benchmark Report (Superseded)
+
+> **Legacy Benchmark Notice**: This report records an earlier comparative benchmark ($N=12$). It is classified as **legacy** because the evaluation prompt contained multiple confounds (such as unhygienic step-by-step discovery instructions and uncompacted transaction receipts) that artificially inflated tool calls and step latency. For the authoritative, unconfounded empirical evaluation using streamlined `observed_v2` and prompt hygiene rules, refer to the **[Modernized 2×2 Factorial Benchmark Report](../benchmarks/modernized_benchmark_report.md)**.
 
 ## Executive Summary
 
@@ -143,7 +145,7 @@ Based on transcript evidence across all 12 runs, three actionable prompt frictio
 Following the identification of the three prompt friction points above, a separate, standalone evaluation was conducted with the modernized prompt contract across both Non-Git and Git environments.
 
 The complete $n=3$ replication study for the modernized prompt ($N=12$ standalone matrix), along with its dedicated statistical hypothesis testing and cross-environment equivalence analysis, is documented in:
-👉 [`modernized_benchmark_report.md`](modernized_benchmark_report.md)
+👉 [`modernized_benchmark_report.md`](../benchmarks/modernized_benchmark_report.md)
 
 ---
 

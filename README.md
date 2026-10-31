@@ -12,24 +12,24 @@
 
 PatchDIFF turns model-generated document edits into **explicitly preconditioned, atomic, auditable, and deterministically replayable PostgreSQL transactions** over the Model Context Protocol (MCP).
 
-| ⚡ Completion Speed (Git) | ⏱️ Turnaround Predictability | 📉 Context Window Burn | 🎯 Byte Fidelity |
+| ⚡ Time Elapsed (Git) | ⏱️ Turnaround Predictability | 📉 Context Window Burn | 🎯 Byte Fidelity |
 | :---: | :---: | :---: | :---: |
 | **1.66× Faster** | **4.7× Tighter** | **-64.8%** | **100.0%** |
 | *(3m 03s vs. 5m 04s in Git)* | *(±20s vs. ±96s variance)* | *(1.61M tokens saved/task)* | *(0 diffs across 60 files)* |
 
 ```mermaid
 xychart-beta
-    title "Mean Task Completion Duration in Seconds (N=24)"
+    title "Mean Time Elapsed in Seconds (Modernized Benchmark, N=12)"
     x-axis ["Non-Git Control", "Non-Git PatchDIFF", "Git Repo Control", "Git Repo PatchDIFF"]
-    y-axis "Duration (Seconds)" 0 --> 350
+    y-axis "Time Elapsed (Seconds)" 0 --> 350
     bar [206, 207, 304, 183]
 ```
 
-> **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime across $N=24$ independent runs (Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized_benchmark_report.md) and [Git Benchmark Report](docs/benchmarks/git_benchmark_report.md).
+> **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime across $N=12$ independent runs (Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized_benchmark_report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
 
-### How Compounded Efficiency Drives Faster Speed
+### How Compounded Efficiency Drives Faster Time Elapsed
 
-When agent throughput is constrained, every redundant turn, token, and verification step compounds into severe wall-clock delays. PatchDIFF completes tasks in **3 minutes flat (1.66× faster in Git environments)** by eliminating latency drivers across the entire execution loop:
+When agent throughput is constrained, every redundant turn, token, and verification step compounds into severe wall-clock delays. PatchDIFF completes tasks in **3 minutes flat (1.66× faster Time Elapsed in Git environments)** by eliminating latency drivers across the entire execution loop:
 
 - **-55.8% Interaction Steps** (24.2 vs. 54.8 turns): Eliminates round-trip model dispatch latency ($p < 0.00001$).
 - **-64.8% Total Context Tokens** (876K vs. 2.49M): Cuts prompt prefill and attention processing by 1.61M tokens/task ($p < 0.00001$).
@@ -38,7 +38,7 @@ When agent throughput is constrained, every redundant turn, token, and verificat
 - **High Predictability**: Standard deviation collapses from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** (and $\pm 14\text{s}$ in Git), eliminating long-tail recovery spirals.
 - **100.0% Full-Byte Accuracy**: 60/60 target files matched oracle reference with 240/240 verification assertions passing.
 
-| Operating Environment | Paradigm ($n=3$ per cell) | Mean Duration | Mean Steps | Mean Tool Calls | Git Commands | Mean Context Tokens | Full-Byte Match |
+| Operating Environment | Paradigm ($n=3$ per cell) | Mean Time Elapsed | Mean Steps | Mean Tool Calls | Git Commands | Mean Context Tokens | Full-Byte Match |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Non-Git Workspace** | Control Baseline | 3m 26s ± 1m 11s | 53.0 ± 3.6 | 52.0 ± 3.6 | N/A | 2,451,605 ± 507,644 | 100% (0 diffs) |
 | **Non-Git Workspace** | Modernized PatchDIFF | **3m 27s ± 21s** | **26.7 ± 2.5** | **24.7 ± 4.2** | N/A | **1,001,039 ± 143,395** | **100% (0 diffs)** |
@@ -141,8 +141,8 @@ Full documentation is available on the **[Zensical Documentation Site](https://p
 - **Specifications**: [Core Runtime](docs/spec/PATCHDIFF_CORE_SPEC.md) | [MCP Tools](docs/spec/MCP_TOOLS.md) | [Data Model](docs/spec/DATA_MODEL.md) | [PDCP Formats](docs/spec/PDCP_FORMAT.md) | [Editor v2](docs/spec/MCP_EDITOR_V2.md) | [Batch Editing](docs/spec/STRUCTURAL_BATCH_EDITING.md)
 - **Guides**: [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) | [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) | [Observed Workflow](docs/guides/OBSERVED_EDITOR_WORKFLOW.md)
 - **Whitepapers**: [Concept Paper v6](docs/papers/PatchDIFF-Concept-Paper-6.md) | [Modernization Architecture](docs/papers/MODERNIZATION_ARCHITECTURE.md)
-- **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized_benchmark_report.md) | [Git Comparative Benchmark](docs/benchmarks/git_benchmark_report.md) | [Test Matrix](docs/benchmarks/TEST_MATRIX.md)
-- **Standards & Legacy**: [PR Review Standard](docs/standards/PR_REVIEW_STANDARD.md) | [Release Readiness](docs/standards/RELEASE_READINESS.md) | [Legacy Compatibility](docs/legacy/LEGACY_COMPATIBILITY.md)
+- **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized_benchmark_report.md) | [Test Matrix](docs/benchmarks/TEST_MATRIX.md)
+- **Standards & Legacy**: [PR Review Standard](docs/standards/PR_REVIEW_STANDARD.md) | [Release Readiness](docs/standards/RELEASE_READINESS.md) | [Legacy Compatibility](docs/legacy/LEGACY_COMPATIBILITY.md) | [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md)
 
 ---
 

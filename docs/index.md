@@ -57,7 +57,6 @@ Practical guides for integrating PatchDIFF with agents and desktop tools:
 Empirical validation and testing methodology:
 
 - [**modernized_benchmark_report.md**](benchmarks/modernized_benchmark_report.md): Standalone Modernized 2×2 Factorial Benchmark ($N=12$) demonstrating a -55.8% step reduction, -57.8% tool invocation reduction, -64.8% token reduction, and zero Git verification tax.
-- [**git_benchmark_report.md**](benchmarks/git_benchmark_report.md): Complete baseline 2×2 factorial evaluation ($N=12$) comparing Native Control against Full PatchDIFF across Git and Non-Git environments.
 - [**TEST_MATRIX.md**](benchmarks/TEST_MATRIX.md): Comprehensive test coverage matrix across unit, live PostgreSQL, migration roundtrip, and stdio subprocess tests.
 
 ---
@@ -86,6 +85,7 @@ Engineering governance and release requirements:
 Frozen legacy formats and historical records:
 
 - [**LEGACY_COMPATIBILITY.md**](legacy/LEGACY_COMPATIBILITY.md): Frozen `.pdcp` v0.2.3 wire syntax, legacy submission tool (`patchdiff_submit_pdcp`), deprecated regeneration wrappers, and historical replay profiles.
+- [**git_benchmark_report.md**](legacy/git_benchmark_report.md): Legacy baseline 2×2 factorial evaluation ($N=12$); superseded by the modernized benchmark due to prompt confounds in early iterations.
 - [**PatchDIFF-Concept-Paper-5.md**](legacy/PatchDIFF-Concept-Paper-5.md): Historical v0.2.3 conceptual whitepaper.
 - [**PatchDIFF-Protocol-Spec-v0.2.3.md**](legacy/PatchDIFF-Protocol-Spec-v0.2.3.md): Historical v0.2.3 protocol specification.
 - [**PatchDIFF-Implementation-Spec-v0.2.3.md**](legacy/PatchDIFF-Implementation-Spec-v0.2.3.md): Historical v0.2.3 implementation specification.

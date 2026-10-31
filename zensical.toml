@@ -29,7 +29,6 @@ nav = [
     ]},
     { "Benchmarks" = [
         { "Modernized 2×2 Factorial Benchmark" = "benchmarks/modernized_benchmark_report.md" },
-        { "Git Comparative Benchmark" = "benchmarks/git_benchmark_report.md" },
         { "Verification Test Matrix" = "benchmarks/TEST_MATRIX.md" }
     ]},
     { "Papers" = [
@@ -43,6 +42,7 @@ nav = [
     ]},
     { "Legacy" = [
         { "Legacy Compatibility" = "legacy/LEGACY_COMPATIBILITY.md" },
+        { "Legacy Benchmark Report" = "legacy/git_benchmark_report.md" },
         { "Concept Paper v5" = "legacy/PatchDIFF-Concept-Paper-5.md" },
         { "Protocol Spec v0.2.3" = "legacy/PatchDIFF-Protocol-Spec-v0.2.3.md" },
         { "Implementation Spec v0.2.3" = "legacy/PatchDIFF-Implementation-Spec-v0.2.3.md" },
