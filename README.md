@@ -12,7 +12,7 @@
 
 PatchDIFF turns model-generated document edits into **explicitly preconditioned, atomic, auditable, and deterministically replayable PostgreSQL transactions** over the Model Context Protocol (MCP).
 
-| ⚡ Time Elapsed (Git) | ⏱️ Turnaround Predictability | 📉 Context Window Burn | 🎯 Byte Fidelity |
+| ⚡ Time Elapsed (Git) | ⏱️ Turnaround Predictability | 📉 Context Window Burn | 🎯 Byte Accuracy |
 | :---: | :---: | :---: | :---: |
 | **1.66× Faster** | **4.7× Tighter** | **-64.8%** | **100.0%** |
 | *(3m 03s vs. 5m 04s in Git)* | *(±20s vs. ±96s variance)* | *(1.61M tokens saved/task)* | *(0 diffs across 60 files)* |
@@ -27,16 +27,14 @@ xychart-beta
 
 > **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime across $N=12$ independent runs (Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized_benchmark_report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
 
-### How Compounded Efficiency Drives Faster Time Elapsed
+### How Empirical Hypotheses Drive Faster Time Elapsed
 
-When agent throughput is constrained, every redundant turn, token, and verification step compounds into severe wall-clock delays. PatchDIFF completes tasks in **3 minutes flat (1.66× faster Time Elapsed in Git environments)** by eliminating latency drivers across the entire execution loop:
+When agent throughput is constrained, every redundant turn, prefill token, and verification step compounds into severe wall-clock delays. PatchDIFF completes tasks in **3 minutes flat (1.66× faster Time Elapsed in Git environments)** by validating four core architectural hypotheses:
 
-- **-55.8% Interaction Steps** (24.2 vs. 54.8 turns): Eliminates round-trip model dispatch latency ($p < 0.00001$).
-- **-64.8% Total Context Tokens** (876K vs. 2.49M): Cuts prompt prefill and attention processing by 1.61M tokens/task ($p < 0.00001$).
-- **-57.8% Tool Invocations** (22.7 vs. 53.8 calls): Compresses sequential file operations into atomic bundle commits.
-- **Zero Git Verification Tax** (0.0 vs. 10.0 shell commands): Replaces exploratory `git diff`/`status` loops with mathematical certainty under PostgreSQL row locks.
-- **High Predictability**: Standard deviation collapses from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** (and $\pm 14\text{s}$ in Git), eliminating long-tail recovery spirals.
-- **100.0% Full-Byte Accuracy**: 60/60 target files matched oracle reference with 240/240 verification assertions passing.
+1. **Batch Editing Hypothesis (`H2`)**: Submitting multiple edits in a single atomic batch rather than $N$ separate tool calls cuts interaction steps by **-55.8%** (24.2 vs. 54.8 turns, $p < 0.00001$) and tool invocations by **-57.8%** (22.7 vs. 53.8 calls, $p < 0.00001$).
+2. **Verification Elimination Hypothesis (`H5`)**: Providing cryptographic receipts (`after_hash`) under PostgreSQL row locks gives the model immediate verification, completely eliminating the **10.0 exploratory `git diff` / `git status` commands** per task seen in the control baseline.
+3. **Context & Token Reduction Hypothesis (`H1`)**: Emitting targeted patches instead of full-file rewrites or repetitive surrounding context cuts total context window tokens by **-64.8%** (876K vs. 2.49M, saving 1.61M tokens/task, $p < 0.00001$), drastically reducing prompt prefill and generation overhead.
+4. **Reliability & Turnaround Predictability (`H7`)**: The model achieved **100.0% full-byte accuracy** against the oracle reference (0 diffs across all 60 files) with zero transaction rejections, collapsing Time Elapsed standard deviation from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** (and $\pm 14\text{s}$ in Git).
 
 | Operating Environment | Paradigm ($n=3$ per cell) | Mean Time Elapsed | Mean Steps | Mean Tool Calls | Git Commands | Mean Context Tokens | Full-Byte Match |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -50,10 +48,10 @@ When agent throughput is constrained, every redundant turn, token, and verificat
 ## System Architecture
 
 ```text
-PatchDIFF server = deterministic transaction runtime + authoritative read/commit service
+PatchDIFF server = deterministic transaction runtime + authoritative read and edit service
 MCP              = transport/interface (stdio JSON-RPC / internal registry)
 Host / Model     = planning, context selection, proposal generator, retry owner
-PostgreSQL 16+   = canonical working substrate (SELECT ... FOR UPDATE)
+PostgreSQL 16+   = authoritative document store (SELECT ... FOR UPDATE)
 ```
 
 > For interactive visual flowcharts of the host transaction lifecycle and 5-stage validation pipeline, see the **[Visual Architecture & Flow](https://paragon-ux.github.io/Patch-DIFF/architecture/)** guide.
@@ -68,22 +66,22 @@ PostgreSQL 16+   = canonical working substrate (SELECT ... FOR UPDATE)
 | **Repeated identical text** | `str_replace` requires expanding `old_str` with surrounding lines | Explicit `occurrence_index`, `anchor_before` / `anchor_after`, or code-point spans |
 | **Line-diff grammars (`diff -u`)** | Requires line-prefixed diff syntax or numeric hunk headers | Structured JSON fields (`edits[]` / `operations[]`); no delimiter collisions |
 | **Coordinate & state drift** | Line-based edits assume positions remain unchanged | Required `expected_target_version` / `expected_current_hash` under `SELECT ... FOR UPDATE` |
-| **Multiple changes in one file** | Single-replacement requires $N$ calls with partial failure risks | Single submission simulated sequentially in memory and committed atomically |
+| **Multiple changes in one file** | Single-replacement requires $N$ calls with partial failure risks | Single submission simulated sequentially in memory and applied atomically all-or-nothing |
 | **Missing or ambiguous match** | Basic interfaces return uninformative error strings | Bounded diagnostics: `failure_context`, `exact_candidates`, and Levenshtein `near_misses` |
 | **Lost submission response** | Host must re-read to guess if a timed-out write succeeded | Resubmitting with the same `client_request_id` returns recorded outcome (`deduplicated: true`) |
-| **Audit & session history** | Host must maintain custom logging and verification | Append-only attempt log, manifest ledger with runtime-derived facts, `save` & `replay` |
+| **Audit & session history** | Host must maintain custom logging and verification | Append-only attempt log, audit ledger with runtime-derived facts, `save` & `replay` |
 
 ---
 
 ## Transaction Formats
 
-PatchDIFF supports three declarative, non-executable transaction input formats:
+PatchDIFF supports three structured transaction input formats (pure declarative data, no executable code):
 
 - **`patchdiff-tx/1` (`patchdiff_submit_edits`)**: Ordered exact `MATCH/REPLACE` edits with optional `occurrence_index`, `anchor_before`, or `anchor_after` disambiguation.
 - **`patchdiff-tx/2` (`patchdiff_submit_operations`)**: Ordered exact match and `[start, end)` code-point span operations with `expected_text` and optional adjacency guards.
 - **`patchdiff-tx/3` (`patchdiff_submit_replacement`)**: Sole explicit whole-document replacement (`<= 1,000,000` code points and `<= 1,048,576` UTF-8 bytes).
 
-All formats require `expected_target_version` and/or `expected_current_hash` and lower into the same deterministic core applier. See [PDCP Format](docs/spec/PDCP_FORMAT.md) and [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) for full request schemas and examples.
+All formats require `expected_target_version` and/or `expected_current_hash` and are processed by the same deterministic core engine. See [PDCP Format](docs/spec/PDCP_FORMAT.md) and [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) for full request schemas and examples.
 
 ---
 
