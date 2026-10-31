@@ -361,4 +361,22 @@ outside the editing model's context and under a private ignored capture director
 
 ## Purpose-specific observed interface
 
-For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](../spec/MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
+For the five-tool `observed_v2` connection (now the default agent profile), use [MCP_EDITOR_V2.md](../spec/MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize and finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
+
+## Atomic Host Finalization (`patchdiff_finalize_target`)
+
+Trusted hosts and operators can invoke `patchdiff_finalize_target` over MCP on the `full` profile, executing atomic SAVE checkpointing, deterministic replay verification, and format export in a single roundtrip.
+
+### Three Distinct Atomicity Boundaries (`PR23-PLAN-ARCH-002`)
+
+Understanding host integration requires distinguishing three independent integrity domains:
+1. **Database Commit Atomicity**: PostgreSQL executes SAVE snapshotting, editing cycle rotation, deterministic replay verification, and export within a single transaction under `SELECT ... FOR UPDATE` row locking. If replay verification fails (e.g. hash mismatch or broken history chain), the transaction rolls back completely, leaving zero snapshots created and zero editing cycle mutations.
+2. **Host Export Consistency**: The exported bytes returned in the MCP response match the exact verified PostgreSQL state at that version and hash.
+3. **Physical Disk Write-Back Integrity**: The host harness installs the exported bytes onto disk. PatchDIFF does not manage filesystem permissions, directory sync, symlinks, or cross-resource atomicity. Host harnesses must write to a temporary file on the same filesystem, verify content hash, flush/fsync, and atomically rename (`os.replace` / `renameat`) over the destination file.
+
+### Fail-Closed Retry & Uncertainty Semantics (`PR23-PLAN-SVC-001`)
+
+- SAVE rotates editing cycles without advancing target version or hash.
+- If an MCP response is lost or times out during `patchdiff_finalize_target`, the finalization state is classified as `save_uncertain`.
+- **Do not retry automatically**: Resubmitting finalization with the same version/hash without verification could create a duplicate snapshot.
+- The host harness must reconcile authoritative target status via `patchdiff_get_target` or `patchdiff_replay` before attempting any further lifecycle operations.

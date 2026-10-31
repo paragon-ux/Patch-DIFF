@@ -29,7 +29,7 @@ def original_examples(self, method, params):
     result = rpc(self, method, params)
     if method == "tools/list":
         for tool in result["tools"]:
-            if tool["name"] in {"patchdiff_observe_scope", "patchdiff_submit_observed_operations"}:
+            if tool["name"] in {"patchdiff_observe_scope", "patchdiff_submit_observed_operations", "patchdiff_finalize_target"}:
                 tool["inputSchema"].pop("examples", None)
     return result
 recorded.Client.rpc = original_examples

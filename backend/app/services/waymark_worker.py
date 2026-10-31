@@ -25,7 +25,11 @@ from app.services.waymark_adapter import resolve_node_executable
 
 PROTOCOL = "patchdiff-waymark-worker/1"
 ENGINE_VERSION = "4.1.0"
-BRIDGE = Path(__file__).resolve().parents[3] / "integrations" / "waymark"
+BRIDGE = (
+    Path(os.environ["PATCHDIFF_WAYMARK_BRIDGE_DIR"]).resolve()
+    if "PATCHDIFF_WAYMARK_BRIDGE_DIR" in os.environ
+    else Path(__file__).resolve().parents[3] / "integrations" / "waymark"
+)
 RESULT_LIMIT = 2 * 1024 * 1024
 CONTROL_LIMIT = 4096
 STDERR_LIMIT = 65536

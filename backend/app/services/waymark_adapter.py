@@ -27,7 +27,11 @@ from app.storage.models import CloudTargetFiles
 from app.services.performance_events import span, bridge_environment, collect_bridge_events, track_child
 
 EXPECTED_WAYMARK_ENGINE_VERSION = "4.1.0"
-WAYMARK_INTEGRATION_DIR = Path(__file__).resolve().parents[3] / "integrations" / "waymark"
+WAYMARK_INTEGRATION_DIR = (
+    Path(os.environ["PATCHDIFF_WAYMARK_BRIDGE_DIR"]).resolve()
+    if "PATCHDIFF_WAYMARK_BRIDGE_DIR" in os.environ
+    else Path(__file__).resolve().parents[3] / "integrations" / "waymark"
+)
 WAYMARK_DISCOVER_SCRIPT = WAYMARK_INTEGRATION_DIR / "discover.mjs"
 
 DEFAULT_WAYMARK_TIMEOUT_SECONDS = 15.0

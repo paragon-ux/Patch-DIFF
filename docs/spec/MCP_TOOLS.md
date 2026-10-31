@@ -43,6 +43,7 @@ See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_E
 | | `patchdiff_submit_pdcp` | **Frozen legacy input** (`0.2.3`). Raw `.pdcp` text with 7 required manifest fields. |
 | **4. Checkpoint, Replay & Audit** | `patchdiff_save` | Snapshot current target and rotate editing cycle without target mutation; optional version and hash guards. |
 | | `patchdiff_replay` | Deterministically reconstruct target from initial snapshot + accepted logs, reporting component checks. |
+| | `patchdiff_finalize_target` | Atomic single-roundtrip SAVE checkpoint, replay verification, and format export under row locking. |
 | | `patchdiff_get_pdcp_log` | Bounded newest-first page of append-only attempts (accepted/rejected), filtering by status, hash, or request ID. |
 | | `patchdiff_get_manifest_ledger` | Retrieve accepted-only manifest ledger entries with `origin`, `derived` facts and their attempt identity. |
 | **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
@@ -455,6 +456,40 @@ Replays accepted logs against the initial snapshot, dispatching on `(protocol_ve
       "recomputed_hash_matches": true,
       "version_matches": true
     }
+  }
+  ```
+
+### `patchdiff_finalize_target`
+Atomically executes SAVE checkpointing, deterministic replay verification, and format export in a single PostgreSQL session and transaction under `SELECT ... FOR UPDATE` row locking. Available on the `full` profile.
+- **Arguments**:
+  - `target_file_id` (`string`, required): UUID of the canonical target.
+  - `expected_target_version` (`integer`, optional): Expected current target version.
+  - `expected_current_hash` (`string`, optional): Expected SHA-256 hash.
+  - `format` (`string`, optional, default `"original_eol"`): Output line-ending format (`"original_eol"`, `"canonical_lf"`, `"crlf"`, `"original_text"`).
+  - `client_request_id` (`string`, optional): Client invocation correlation ID.
+- **Database Atomicity**: If replay verification fails (`materialized_state_matches is not True`), the entire database transaction rolls back, leaving zero snapshots created and zero editing cycle mutations.
+- **Returns**:
+  ```json
+  {
+    "status": "ok",
+    "target_file_id": "UUID",
+    "filename": "main.py",
+    "version": 2,
+    "current_hash": "sha256...",
+    "snapshot_id": "UUID",
+    "closed_editing_cycle_id": "UUID",
+    "new_editing_cycle_id": "UUID",
+    "materialized_state_matches": true,
+    "materialized_state_checks": {
+      "content_matches": true,
+      "stored_hash_matches": true,
+      "recomputed_hash_matches": true,
+      "version_matches": true
+    },
+    "exported_content": "...",
+    "content_sha256": "sha256...",
+    "format": "original_eol",
+    "source_line_endings": "crlf"
   }
   ```
 

@@ -78,7 +78,7 @@ def test_compact_serialization_keeps_unicode_and_surrogate_fallback(monkeypatch)
     for text in ("🌟\u2028\n", "\ud800"):
         payload = {"status": "accepted", "warnings": [text], "evidence": {"changes": []}}
         monkeypatch.setattr(type(registry), "call", lambda *a, **kw: payload)
-        result = ExternalMCPAdapter(response_mode="compact").call_tool("patchdiff_submit_observed_operations",
+        result = ExternalMCPAdapter(profile="editor", response_mode="compact").call_tool("patchdiff_submit_observed_operations",
                                                                     {"target_file_id": "x", "intent": "update"})
         wire = result["content"][0]["text"]
         wire.encode("utf-8")

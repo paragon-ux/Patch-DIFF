@@ -341,7 +341,7 @@ def test_mcp_001_schema_requires_non_null_guard() -> None:
     from jsonschema import Draft202012Validator
     from app.mcp.external_adapter import ExternalMCPAdapter
 
-    schema = next(t["inputSchema"] for t in ExternalMCPAdapter().list_tools() if t["name"] == "patchdiff_submit_edits")
+    schema = next(t["inputSchema"] for t in ExternalMCPAdapter(profile="editor").list_tools() if t["name"] == "patchdiff_submit_edits")
     validator = Draft202012Validator(schema)
     args = {"target_file_id": TARGET_ID, "intent": "Edit", "edits": [{"match": "a", "replace": "b"}]}
     assert not validator.is_valid(args)

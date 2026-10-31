@@ -10,12 +10,12 @@ from app.mcp.external_adapter import ExternalMCPAdapter, MCP_PROFILES
 from app.mcp.server import registry
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("full", 22)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("observed_v2", 5), ("full", 23)])
 def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch):
     adapter = ExternalMCPAdapter(profile=profile)
     assert len(adapter.list_tools()) == count
     assert {tool["name"] for tool in adapter.list_tools()} == MCP_PROFILES[profile]
-    assert len(registry.names()) == 22
+    assert len(registry.names()) == 23
     invoked = []
     monkeypatch.setattr(type(registry), "call", lambda self, name, **kw: invoked.append(name) or {"status": "ok"})
     for name in registry.names():
@@ -30,9 +30,9 @@ def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch)
 def test_default_startup_environment_and_session_immutability(monkeypatch):
     monkeypatch.delenv("PATCHDIFF_MCP_PROFILE", raising=False)
     adapter = ExternalMCPAdapter()
-    assert adapter.profile == "editor" and len(adapter.list_tools()) == 7
+    assert adapter.profile == "observed_v2" and len(adapter.list_tools()) == 5
     monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "full")
-    assert len(adapter.list_tools()) == 7 and ExternalMCPAdapter().profile == "full"
+    assert len(adapter.list_tools()) == 5 and ExternalMCPAdapter().profile == "full"
     with pytest.raises(FrozenInstanceError): adapter.profile = "full"
     with pytest.raises(ValueError): ExternalMCPAdapter(profile="bad")
     monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "bad")
@@ -41,7 +41,7 @@ def test_default_startup_environment_and_session_immutability(monkeypatch):
 
 
 def test_batch_schemas_are_typed_bounded_and_mutually_exclusive():
-    schemas = {item["name"]: item["inputSchema"] for item in ExternalMCPAdapter().list_tools()}
+    schemas = {item["name"]: item["inputSchema"] for item in ExternalMCPAdapter(profile="editor").list_tools()}
     observe = Draft202012Validator(schemas["patchdiff_observe_scope"])
     tid, bid, oid = (str(uuid.uuid4()) for _ in range(3))
     selector = {"target_file_id": tid, "selections": [{"symbol_name": "f", "kind": "function"}]}

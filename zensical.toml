@@ -13,6 +13,7 @@ usability/**
 nav = [
     { "Home" = "index.md" },
     { "Visual Architecture & Flow" = "architecture.md" },
+    { "Roadmap" = "ROADMAP.md" },
     { "Specifications" = [
         { "Core Runtime Spec" = "spec/PATCHDIFF_CORE_SPEC.md" },
         { "MCP Tools" = "spec/MCP_TOOLS.md" },
