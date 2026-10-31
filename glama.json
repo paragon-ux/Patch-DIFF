@@ -1,0 +1,64 @@
+{
+  "$schema": "https://glama.ai/mcp/v1",
+  "name": "patchdiff",
+  "description": "Server-side deterministic, atomic, preconditioned document transaction engine exposed over the Model Context Protocol (MCP).",
+  "repository": "https://github.com/paragon-ux/Patch-DIFF",
+  "homepage": "https://github.com/paragon-ux/Patch-DIFF#readme",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "transactions",
+    "document-editing",
+    "deterministic",
+    "postgresql",
+    "patching",
+    "diff",
+    "agentic-coding"
+  ],
+  "tools": [
+    {
+      "name": "patchdiff_submit_edits",
+      "description": "Submit atomic guarded typed edits (patchdiff-tx/1) against a target document managed in PostgreSQL."
+    },
+    {
+      "name": "patchdiff_submit_operations",
+      "description": "Submit ordered guarded match/span operations (patchdiff-tx/2) against a target document."
+    },
+    {
+      "name": "patchdiff_submit_replacement",
+      "description": "Submit an explicit guarded whole-target replacement (patchdiff-tx/3)."
+    },
+    {
+      "name": "patchdiff_read_target",
+      "description": "Read authoritative UTF-8 slices of a target document by code-point offset and length."
+    },
+    {
+      "name": "patchdiff_read_lines",
+      "description": "Read authoritative inclusive line ranges of a target document with range-relative pagination."
+    },
+    {
+      "name": "patchdiff_find_occurrences",
+      "description": "Search for exact occurrences of text in a target document with surrounding context and pagination."
+    },
+    {
+      "name": "patchdiff_preview",
+      "description": "Advisory in-memory dry-run of a transaction proposal without acquiring row locks or advancing target state."
+    },
+    {
+      "name": "patchdiff_save",
+      "description": "Checkpoint current target state and rotate the active editing cycle."
+    },
+    {
+      "name": "patchdiff_replay",
+      "description": "Deterministically reconstruct and verify target state across recorded execution profiles."
+    },
+    {
+      "name": "patchdiff_get_pdcp_log",
+      "description": "Query the append-only attempt log for accepted and rejected transaction proposals."
+    },
+    {
+      "name": "patchdiff_get_manifest_ledger",
+      "description": "Query the accepted-only manifest ledger with runtime-derived span and hash facts."
+    }
+  ]
+}

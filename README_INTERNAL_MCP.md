@@ -2,7 +2,7 @@
 
 This README is for local debugging and test-harness use of the internal MCP registry.
 
-Most users should connect through the external MCP adapter documented in [README.md](README.md) and [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md). The internal registry is still useful for quick local checks because it calls the same service-layer functions without starting an external MCP host.
+Most users should connect through the external MCP adapter documented in [README.md](README.md) and [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md). The internal registry is still useful for quick local checks because it calls the same service-layer functions without starting an external MCP host.
 
 ## Boundary
 
@@ -10,7 +10,7 @@ All 22 internal registry handlers remain available to trusted code. External MCP
 profiles independently restrict both advertised and callable tools (7 by default).
 The internal observed batch form still verifies every server-issued scope under
 the target lock and uses the shared applier, atomic commit and replay path.
-[Batch and profile contracts](docs/STRUCTURAL_BATCH_EDITING.md).
+[Batch and profile contracts](docs/spec/STRUCTURAL_BATCH_EDITING.md).
 
 The internal registry is not a separate product path.
 
@@ -53,7 +53,7 @@ Export the current target after a successful submit:
 
 ## Legacy `.pdcp` Compatibility
 
-Frozen `.pdcp` v0.2.3 submission (`patchdiff_submit_pdcp`) and the deprecated regeneration wrappers are documented in [docs/LEGACY_COMPATIBILITY.md](docs/LEGACY_COMPATIBILITY.md).
+Frozen `.pdcp` v0.2.3 submission (`patchdiff_submit_pdcp`) and the deprecated regeneration wrappers are documented in [docs/legacy/LEGACY_COMPATIBILITY.md](docs/legacy/LEGACY_COMPATIBILITY.md).
 
 ## List Internal Tools
 

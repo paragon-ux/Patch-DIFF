@@ -1,0 +1,46 @@
+[project]
+site_name = "PatchDIFF Documentation"
+site_url = "https://paragon-ux.github.io/Patch-DIFF"
+site_description = "Transactional document-editing service for MCP-connected agents."
+site_author = "Paragon UX"
+docs_dir = "docs"
+site_dir = "site"
+
+nav = [
+    { "Home" = "index.md" },
+    { "Specifications" = [
+        { "Core Runtime Spec" = "spec/PATCHDIFF_CORE_SPEC.md" },
+        { "MCP Tools" = "spec/MCP_TOOLS.md" },
+        { "Data Model" = "spec/DATA_MODEL.md" },
+        { "PDCP Format" = "spec/PDCP_FORMAT.md" },
+        { "Editor v2 Contract" = "spec/MCP_EDITOR_V2.md" },
+        { "Structural Batch Editing" = "spec/STRUCTURAL_BATCH_EDITING.md" },
+        { "Waymark Worker" = "spec/WAYMARK_WORKER.md" }
+    ]},
+    { "Guides" = [
+        { "Host Integration Guide" = "guides/HOST_INTEGRATION_GUIDE.md" },
+        { "Claude Desktop Setup" = "guides/CLAUDE_DESKTOP_SETUP.md" },
+        { "Observed Editor Workflow" = "guides/OBSERVED_EDITOR_WORKFLOW.md" }
+    ]},
+    { "Benchmarks" = [
+        { "Modernized 2×2 Factorial Benchmark" = "benchmarks/modernized_benchmark_report.md" },
+        { "Git Comparative Benchmark" = "benchmarks/git_benchmark_report.md" },
+        { "Verification Test Matrix" = "benchmarks/TEST_MATRIX.md" }
+    ]},
+    { "Papers" = [
+        { "Concept Paper v6" = "papers/PatchDIFF-Concept-Paper-6.md" },
+        { "Modernization Architecture" = "papers/MODERNIZATION_ARCHITECTURE.md" },
+        { "Modernization Change Record" = "papers/MODERNIZATION_CHANGE_DOC.md" }
+    ]},
+    { "Standards" = [
+        { "PR Review Standard" = "standards/PR_REVIEW_STANDARD.md" },
+        { "Release Readiness" = "standards/RELEASE_READINESS.md" }
+    ]},
+    { "Legacy" = [
+        { "Legacy Compatibility" = "legacy/LEGACY_COMPATIBILITY.md" },
+        { "Concept Paper v5" = "legacy/PatchDIFF-Concept-Paper-5.md" },
+        { "Protocol Spec v0.2.3" = "legacy/PatchDIFF-Protocol-Spec-v0.2.3.md" },
+        { "Implementation Spec v0.2.3" = "legacy/PatchDIFF-Implementation-Spec-v0.2.3.md" },
+        { "Snapshot v0.2.3" = "legacy/PatchDIFF-Snapshot.md" }
+    ]}
+]

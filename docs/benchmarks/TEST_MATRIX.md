@@ -4,8 +4,8 @@
 
 This document defines the comprehensive test matrix for PatchDIFF, covering pure-core unit tests, Postgres integration tests, real stdio MCP subprocess workflows, and offline evaluation.
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
-As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
+As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
 
 ## Global Test Invariants
 
@@ -25,7 +25,7 @@ snapshot, selection limits/geometry/paging, scope-local sequential operations,
 atomic rejection and rollback, concurrent writers, request recovery/conflicts,
 corrupted replay authority, populated 0004/0005 preservation/refusal, enforced
 7/5/6/22 catalogs, real response-loss recovery, Python/JSON/Markdown examples and
-the frozen five-file full-byte/20-check oracle. [Capability evidence](STRUCTURAL_BATCH_EDITING.md#deterministic-capability-evidence).
+the frozen five-file full-byte/20-check oracle. [Capability evidence](../spec/STRUCTURAL_BATCH_EDITING.md#deterministic-capability-evidence).
 
 - Postgres (`postgres:16.3-alpine`) is the required working substrate. SQLite must never be used to claim persistence, locking, migration, SAVE, or replay correctness.
 - The deterministic core runtime is pure and language-neutral; it must never import DB/ORM drivers, call MCP tools, or execute transaction payloads.

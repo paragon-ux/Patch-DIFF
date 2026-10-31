@@ -56,7 +56,7 @@ all guards/version aliases, validity, request key, deduplication and all existin
 warning fields remain. A presentation object lists actual omissions. Detailed
 sessions and durable logs/ledger retain full evidence. See
 [the response contract](MCP_TOOLS.md#external-response-representations) and
-[editor workflow v1](OBSERVED_EDITOR_WORKFLOW.md).
+[editor workflow v1](../guides/OBSERVED_EDITOR_WORKFLOW.md).
 
 Extend `patchdiff_observe_scope` with `selections`: 1–32 objects containing required
 nonempty `symbol_name` and optional nonempty `kind`. Exact names and existing

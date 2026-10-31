@@ -7,12 +7,12 @@ This document defines the active declarative JSON transaction formats supported 
 2. **`patchdiff-tx/2` (Guarded Match & Span Operations)**: Canonical JSON passed through `patchdiff_submit_operations` with required `intent`, required state guard, and ordered `operations[]` carrying explicit `op: "match"` or `op: "span"`. Span records require `start`, `end`, `expected_text`, and `replace`, use sequential canonical Unicode code-point coordinates, and allow explicit empty-span insertion (`start == end`, `expected_text: ""`). Optional `expected_before` / `expected_after` verify exact adjacent text; records using them execute under immutable runtime profile `patchdiff-mvp-0.5.0` (otherwise `patchdiff-mvp-0.3.0`).
 3. **`patchdiff-tx/3` (Guarded Sole Whole-Target Replacement)**: Canonical JSON passed through `patchdiff_submit_replacement` with required `intent`, required state guard, and a single `{"op": "replace_all", "replace": "..."}` operation under immutable runtime profile `patchdiff-mvp-0.4.0` (`232 B` MCP `arguments` JSON / `290 B` persisted record / `341 B` compact `tools/call` line for a 3-byte whole-target replacement).
 
-> **Legacy Compatibility**: Frozen `.pdcp` v0.2.3 text transactions (`patchdiff_submit_pdcp`), deprecated regeneration wrappers, and historical runtime profiles (`0.1.0`–`0.2.1`) remain supported for backward compatibility and deterministic replay. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md) for their specification.
+> **Legacy Compatibility**: Frozen `.pdcp` v0.2.3 text transactions (`patchdiff_submit_pdcp`), deprecated regeneration wrappers, and historical runtime profiles (`0.1.0`–`0.2.1`) remain supported for backward compatibility and deterministic replay. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md) for their specification.
 
 None of these formats is executable code. All lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
-As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
+As-built record: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
 
 ---
 
@@ -176,7 +176,7 @@ Measured `patchdiff-tx/3` (`patchdiff_submit_replacement`) UTF-8 byte sizes:
 | **Unicode, quotes, CRLF normalization (`'say "hi" \\\r\n🌟'`)** | `16 B` raw / `15 B` LF | `250 B` | `308 B` | `359 B` | `accepted` |
 | **Whole-target 2 KB rewrite (40 lines, 39 `\n` chars)** | `2,109 B` / `2,109 B` | `2,377 B` | `2,435 B` | `2,486 B` | `accepted` |
 
-*(For the baseline comparison against frozen `.pdcp` v0.2.3, see [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#5-measured-comparison-legacy-pdcp-v023-vs-typed-patchdiff-tx1).)*
+*(For the baseline comparison against frozen `.pdcp` v0.2.3, see [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#5-measured-comparison-legacy-pdcp-v023-vs-typed-patchdiff-tx1).)*
 
 ---
 

@@ -2,7 +2,7 @@
 
 Audience: host and client developers integrating model proposals with the PatchDIFF transaction service.
 
-Why this document exists: the server is a transaction service; the host owns planning, wording, retry and compaction ([MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), A1). If the host's behavior is only specified in server-built prompt strings, it cannot be versioned, reviewed or adapted per host. Here it can. Contract details are in [MCP_TOOLS.md](MCP_TOOLS.md); this guide says how to *use* them.
+Why this document exists: the server is a transaction service; the host owns planning, wording, retry and compaction ([MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md), A1). If the host's behavior is only specified in server-built prompt strings, it cannot be versioned, reviewed or adapted per host. Here it can. Contract details are in [MCP_TOOLS.md](../spec/MCP_TOOLS.md); this guide says how to *use* them.
 
 ## 0. Stdio transport and host refresh
 
@@ -14,7 +14,7 @@ other excluded tools before dispatch. Older integrations and trusted
 initialization/export/audit
 operators must explicitly opt into `full`. Excluded tools are uncallable as well
 as unadvertised. An agent cannot override a profile per request.
-[Exact profile lists and batch examples](STRUCTURAL_BATCH_EDITING.md).
+[Exact profile lists and batch examples](../spec/STRUCTURAL_BATCH_EDITING.md).
 
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
 
@@ -116,7 +116,7 @@ Typed-match (`patchdiff-tx/1`) and legacy PDCP submissions use runtime `patchdif
 {"target_file_id":"11111111-1111-4111-8111-111111111111","expected_target_version":0,"intent":"Replace greeting","edits":[{"match":"hello","replace":"goodbye","occurrence_index":2}]}
 ```
 
-Use `occurrence_index` 1, omit selectors for a unique match, or supply anchors that actually hold. An index and anchors are combined constraints. (For legacy `.pdcp` v0.2.3 singleton-selector behavior and historical `0.1.0`–`0.2.1` replay profiles, see [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).)
+Use `occurrence_index` 1, omit selectors for a unique match, or supply anchors that actually hold. An index and anchors are combined constraints. (For legacy `.pdcp` v0.2.3 singleton-selector behavior and historical `0.1.0`–`0.2.1` replay profiles, see [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md).)
 
 ### Invalid text and safe rejected evidence
 
@@ -126,7 +126,7 @@ If inspecting such a rejection with include_content, pdcp_content is an ASCII-es
 
 ### Guarded operations, replacement, line reads and preview
 
-The full contract is in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics); this section covers how to use it.
+The full contract is in [MCP_TOOLS.md](../spec/MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics); this section covers how to use it.
 
 - **Choose the narrowest tool.** Use `patchdiff_submit_edits` for exact text matches. Use `patchdiff_submit_operations` when you already hold code-point offsets from `patchdiff_read_target`, `patchdiff_read_lines` or `patchdiff_find_occurrences`: each span carries the exact `expected_text`, and `start == end` with empty `expected_text` inserts. Span coordinates refer to the text after earlier operations in the same transaction, so send several spans from one read in descending `start` order. Use `patchdiff_submit_replacement` only when the user explicitly asked to replace the whole document.
 - **Verify insertions.** An insertion has no `expected_text` to check, so an off-by-N offset (a UTF-16 index, a miscounted line, a stale read) would otherwise commit silently. Add `expected_before` and/or `expected_after`: the exact text immediately before `start` and after `end`, such as the end of the previous line and the start of the next. A mismatch rejects with `span_expected_text_mismatch` and shows the actual adjacent text. A `grapheme_boundary_split` warning on an accepted span means the offset landed inside a character cluster such as an emoji or a combining sequence.
@@ -165,7 +165,7 @@ Moved from the old server prompt:
 
 ## 5. Legacy Compatibility (`.pdcp` v0.2.3 & Deprecated Wrappers)
 
-Frozen `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`), `patchdiff_build_prompt_context`, and the deprecated regeneration wrappers remain supported for backward compatibility and historical replay. All legacy format rules, wrapper contracts, and historical replay profiles (`0.1.0`–`0.2.1`) are documented in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).
+Frozen `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`), `patchdiff_build_prompt_context`, and the deprecated regeneration wrappers remain supported for backward compatibility and historical replay. All legacy format rules, wrapper contracts, and historical replay profiles (`0.1.0`–`0.2.1`) are documented in [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md).
 
 ## 6. Checkpoints, history and context
 
@@ -264,7 +264,7 @@ span offsets use that group's local slice, starting at zero. Submit all groups
 in one target transaction; any failure rejects the whole request, and success
 increments version once. Re-read stale bundles; repeat an identical keyed request
 to recover a lost committed response. SAVE closes the original editing cycle.
-See [limits, errors, replay guarantees and complete Python/JSON/Markdown recipes](STRUCTURAL_BATCH_EDITING.md).
+See [limits, errors, replay guarantees and complete Python/JSON/Markdown recipes](../spec/STRUCTURAL_BATCH_EDITING.md).
 
 The existing single-scope workflow below remains available, with absolute span
 coordinates and its historical record/replay behavior.
@@ -361,4 +361,4 @@ outside the editing model's context and under a private ignored capture director
 
 ## Purpose-specific observed interface
 
-For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
+For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](../spec/MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.

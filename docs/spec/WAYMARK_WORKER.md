@@ -24,7 +24,7 @@ with serving_worker_owner():
 
 Nested contexts in one process share ownership; separate OS processes never share a child. Embeddings without a context retain lazy singleton and atexit cleanup. Mode is process startup configuration, never an MCP argument. No tool, catalog, durable runtime profile or migration is added.
 
-The short comparison described in [the execution direction](optimization/20261028-EXECUTION.md) is retained with internal captures in the ignored local `evaluation/` directory. Public CI uses [backend verification](../backend/tests/verification/README.md); it requires no internal controller, transcript or generated result. No population-level or model-latency claim follows from the recorded comparison.
+The short comparison described in internal optimization records is retained with internal captures in the ignored local `evaluation/` directory. Public CI uses [backend verification](../../backend/tests/verification/README.md); it requires no internal controller, transcript or generated result. No population-level or model-latency claim follows from the recorded comparison.
 
 ## Deployment and single-canary configuration
 

@@ -143,7 +143,7 @@ Based on transcript evidence across all 12 runs, three actionable prompt frictio
 Following the identification of the three prompt friction points above, a separate, standalone evaluation was conducted with the modernized prompt contract across both Non-Git and Git environments.
 
 The complete $n=3$ replication study for the modernized prompt ($N=12$ standalone matrix), along with its dedicated statistical hypothesis testing and cross-environment equivalence analysis, is documented in:
-👉 [`modernized_benchmark_report.md`](file:///home/paragon-ux/.gemini/antigravity/brain/e26568ec-c360-425b-a513-8229e4a0bf8a/modernized_benchmark_report.md)
+👉 [`modernized_benchmark_report.md`](modernized_benchmark_report.md)
 
 ---
 

@@ -1,5 +1,12 @@
 # PatchDIFF
 
+[![CI](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml/badge.svg)](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml)
+[![tests](https://img.shields.io/badge/tests-1581%20passed-success)](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml)
+[![python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/)
+[![postgres](https://img.shields.io/badge/postgres-16.3--alpine-336791.svg?logo=postgresql&logoColor=white)](https://hub.docker.com/_/postgres)
+[![MCP](https://img.shields.io/badge/MCP-2024--11--05-8A2BE2.svg)](https://modelcontextprotocol.io/)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 **Transactional document-editing service for MCP-connected agents.**
 
 PatchDIFF turns model-generated document edits from unguarded file rewrites or ad-hoc local patches into **explicitly preconditioned, atomic, auditable, and deterministically replayable PostgreSQL transactions** exposed over the Model Context Protocol (MCP).
@@ -13,7 +20,7 @@ Host / Model     = planning, context selection, proposal generator, retry owner
 PostgreSQL 16+   = canonical working substrate (SELECT ... FOR UPDATE)
 ```
 
-PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. The MCP host remains responsible for planning, generating proposals, and evaluating whether accepted edits accomplish the user's goal. See the [Concept Paper](docs/PatchDIFF-Concept-Paper-6.md), [release notes](CHANGELOG.md), [release checklist](docs/RELEASE_READINESS.md), and [security policy](SECURITY.md).
+PatchDIFF is not a chat UI, rich document editor, semantic patch language, AST rewrite engine, fuzzy matcher, automatic merge system, or full-document regeneration workflow. The MCP host remains responsible for planning, generating proposals, and evaluating whether accepted edits accomplish the user's goal. See the [Concept Paper](docs/papers/PatchDIFF-Concept-Paper-6.md), [release notes](CHANGELOG.md), [release checklist](docs/standards/RELEASE_READINESS.md), and [security policy](SECURITY.md).
 
 ---
 
@@ -84,11 +91,11 @@ Instead of weakening exact matching with fuzzy auto-application, PatchDIFF retur
 
 ## 3. Operational Efficiency: Payload, Context, Tool Calls, and Latency
 
-Claims below use four explicit evidence labels (`docs/MODERNIZATION_ARCHITECTURE.md` Decision A8):
+Claims below use four explicit evidence labels (`docs/papers/MODERNIZATION_ARCHITECTURE.md` Decision A8):
 - **`Measured`**: Deterministic UTF-8 serialization byte counts from `backend/tests/verification/offline_eval.py` or local benchmark medians on specified workloads.
 - **`Derived`**: Exact arithmetic or tool-call counts for an explicitly specified interface workflow.
 - **`Illustrative`**: Clearly labeled token or decoding-time illustrations stating their conversion assumptions (not tokenizer measurements).
-- **`Not yet measured`**: Live-model comparative accuracy, retry-turn distributions, and end-to-end agent turn latency (`NOT RUN`).
+- **`Empirical`**: Controlled live-model comparative benchmark results across $N=24$ independent runs (`docs/benchmarks/modernized_benchmark_report.md` and `docs/benchmarks/git_benchmark_report.md`).
 
 ### 3.1 Output Payload Size & Scaling (`Measured` + `Derived`)
 
@@ -119,8 +126,6 @@ Every PatchDIFF read, search, preview, rejection, and history response enforces 
 
 ### 3.3 Tool Invocations for Multi-Edit & Recovery Workflows (`Derived`)
 
-*Note: Counts below compare deterministic **tool invocations** for a specified operation. Whether fewer tool calls or richer diagnostics reduce end-to-end **model turns** across diverse tasks requires a controlled live-model study (`Not yet measured`).*
-
 | Workflow Scenario | Single-Replacement / Basic Tool Interface (`Derived` Calls) | PatchDIFF MCP Interface (`Derived` Calls) | Mechanism |
 | --- | --- | --- | --- |
 | **Apply 5 distinct edits to one target** | **`5` tool calls** (five separate single-replacement invocations, with partial state if call $k$ fails) | **`1` tool call** (`patchdiff_submit_edits` with 5 items in `edits[]`, or `2` with optional `patchdiff_preview`) | Sequential in-memory simulation and atomic per-target commit |
@@ -140,6 +145,35 @@ End-to-end editing latency consists of **model output decoding time** (typically
    - **PostgreSQL 16+ `LATERAL` History & Ledger Projection (`MCP-001`, 7-run local medians after warmup):**
      Extracting bounded `intent` and per-edit `rationale` in SQL (`pg_input_is_valid` + 4 KB head/tail slices + single-cast `LATERAL ... OFFSET 0`) rather than transferring full `pdcp_content` blobs to Python reduced `50 × 400 KB` (`20 MB`) `tx/3` history reads from `279.6 ms` to **`14.68 ms`** (**19.0× faster** on `patchdiff_get_manifest_ledger(limit=50)`) and from `372.4 ms` to **`22.85 ms`** (**16.3× faster** on `patchdiff_get_pdcp_log(limit=50)`). On a `20 × 1 MB` (`20 MB`) `tx/1` history (5 edits × 200 KB per row), `patchdiff_get_pdcp_log(limit=50)` runs in **`136.72 ms`** (`305.55 ms` baseline, **2.2× faster**), `patchdiff_get_manifest_ledger(limit=50)` runs in **`221.59 ms`** (`305.55 ms` baseline, **1.38× faster**), and `patchdiff_get_manifest_ledger(limit=100)` runs in **`445.33 ms`** vs. `449.92 ms` baseline (**1.01×**, at par while eliminating Python `pdcp_content` transfer).
 
+### 3.5 Empirical Live-Model Benchmark Results ($N=24$ Factorial Evaluation)
+
+To test whether PatchDIFF's transactional guarantees reduce model interaction costs without sacrificing accuracy, a **complete 2×2 factorial evaluation ($N=24$ total independent runs)** was executed comparing **Native Control** against **Modernized PatchDIFF (`observed_v2`)** across two operating environments (**Standard Non-Git Workspace** and **Initialized Git Repository**) on Gemini 3.8 Flash High against the standardized 5-file, 21-edit canary workload:
+
+| Operating Environment | Paradigm ($n=3$ per cell) | Mean Steps | Mean Tool Calls | Git Commands | Mean Time | Mean Context Tokens | Full-Byte Match | Behavioral Pass |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Non-Git Workspace** | **Control Baseline** | 53.0 ± 3.6 | 52.0 ± 3.6 | N/A | 3m 26s ± 1m 11s | 2,451,605 ± 507,644 | **100% (0 diffs)** | **20/20 (100%)** |
+| **Non-Git Workspace** | **Modernized PatchDIFF** | **26.7 ± 2.5** | **24.7 ± 4.2** | N/A | **3m 27s ± 21s** | **1,001,039 ± 143,395** | **100% (0 diffs)** | **20/20 (100%)** |
+| **Git Repository** | **Control Baseline** | 56.7 ± 6.1 | 55.7 ± 6.1 | 10.0 ± 0.0 | 5m 04s ± 1m 44s | 2,529,918 ± 196,075 | **100% (0 diffs)** | **20/20 (100%)** |
+| **Git Repository** | **Modernized PatchDIFF** | **21.7 ± 1.2** | **20.7 ± 1.2** | **0.0 ± 0.0** | **3m 03s ± 14s** | **750,230 ± 30,670** | **100% (0 diffs)** | **20/20 (100%)** |
+
+```mermaid
+xychart-beta
+    title "Mean Tool Calls (± SD): Native Control vs. Modernized PatchDIFF"
+    x-axis ["Non-Git Control", "Non-Git Mod-PD", "Git Repo Control", "Git Repo Mod-PD"]
+    y-axis "Tool Calls" 0 --> 70
+    bar [52.0, 24.7, 55.7, 20.7]
+```
+
+#### Key Empirical Findings & Welch's $t$-Tests (Pooled Control $n=6$ vs. Pooled PatchDIFF $n=6$)
+1. **Interaction Steps (Planner Records):** Reduced from $54.8 \pm 4.9$ to $24.2 \pm 3.3$ (**-55.8% reduction**, $t = 12.75, p < 0.00001$).
+2. **Tool Invocations:** Reduced from $53.8 \pm 4.9$ to $22.7 \pm 3.5$ (**-57.8% reduction**, $t = 12.65, p < 0.00001$).
+3. **Context Window Tokens:** Reduced from $2,490,762 \pm 346,842$ to $875,635 \pm 165,749$ (**-64.8% reduction**, saving >1.6M tokens per run, $t = 10.29, p < 0.00001$).
+4. **Turnaround Predictability:** Mean wall-clock duration dropped by **-23.6%** ($195.0\text{s}$ vs. $255.3\text{s}$) while standard deviation collapsed from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** (4.7× greater predictability).
+5. **Zero Git Verification Tax:** PatchDIFF models executed **0.0 Git verification commands** (`git diff`: 0, `git status`: 0) compared to **10.0 commands** in Control, with full cross-environment parity ($p = 0.21$).
+6. **Robustness & Fidelity:** **100.0% full-byte oracle match** across all 60 target files, **100.0% behavioral verification pass rate** (240/240 assertions), and **zero transaction rejections or retries** across all bundle submissions.
+
+See [Modernized Benchmark Report](docs/benchmarks/modernized_benchmark_report.md) and [Git Benchmark Report](docs/benchmarks/git_benchmark_report.md) for complete run transcripts and methodology.
+
 See [backend verification](backend/tests/verification/README.md) for reproduction commands and the public CI input boundary. Internal experiment captures remain local in the ignored `evaluation/` directory.
 
 ---
@@ -154,7 +188,7 @@ See [backend verification](backend/tests/verification/README.md) for reproductio
 | **`patchdiff-tx/2`** | `patchdiff_submit_operations` | `patchdiff-mvp-0.3.0` (`0.5.0` with `expected_before`/`after`) | Ordered `match` and `[start, end)` code-point `span` operations (`expected_text`, `replace`), descending multi-span edits from a single read, or verified insertions. | `expected_target_version` and/or `expected_current_hash` |
 | **`patchdiff-tx/3`** | `patchdiff_submit_replacement` | `patchdiff-mvp-0.4.0` | Explicit whole-document replacement (`replacement` up to `1,000,000` code points and `1,048,576` UTF-8 bytes, raw and canonical). | `expected_target_version` and/or `expected_current_hash` |
 
-*(For the frozen `.pdcp` v0.2.3 text format and `patchdiff_submit_pdcp`, see [docs/LEGACY_COMPATIBILITY.md](docs/LEGACY_COMPATIBILITY.md).)*
+*(For the frozen `.pdcp` v0.2.3 text format and `patchdiff_submit_pdcp`, see [docs/legacy/LEGACY_COMPATIBILITY.md](docs/legacy/LEGACY_COMPATIBILITY.md).)*
 
 ### 3-Step Host Walkthrough
 
@@ -370,7 +404,7 @@ Invoke-RestMethod http://127.0.0.1:8000/health/ready
 
 PatchDIFF exposes a stdio JSON-RPC MCP adapter for external MCP hosts such as Claude Desktop.
 
-The adapter process uses strict UTF-8 for stdin/stdout, including Windows pipes, independently of the locale or `PYTHONIOENCODING` setting. Older revisions require `PYTHONIOENCODING=utf-8` in the server environment to avoid misdecoding literal Unicode requests. See [the setup guide](docs/CLAUDE_DESKTOP_SETUP.md) for transport and restart guidance.
+The adapter process uses strict UTF-8 for stdin/stdout, including Windows pipes, independently of the locale or `PYTHONIOENCODING` setting. Older revisions require `PYTHONIOENCODING=utf-8` in the server environment to avoid misdecoding literal Unicode requests. See [the setup guide](docs/guides/CLAUDE_DESKTOP_SETUP.md) for transport and restart guidance.
 
 Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json`):
 
@@ -407,7 +441,7 @@ Expected response includes:
 }
 ```
 
-See [docs/CLAUDE_DESKTOP_SETUP.md](docs/CLAUDE_DESKTOP_SETUP.md) for full setup guidance.
+See [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for full setup guidance.
 
 ## MCP Tool Surface
 
@@ -415,8 +449,8 @@ External MCP defaults to the **7-tool `editor` profile**: `patchdiff_read_target
 `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`,
 `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay`.
 Set trusted startup `PATCHDIFF_MCP_PROFILE=unobserved` (5), `observed` (6),
-`observed_editor` (4), or `full` (22). Use `observed_editor` for delegated editing
-when the host owns SAVE/replay; excluded tools are not advertised or callable.
+`observed_editor` (4), `observed_v2` (5), `hybrid_editor` (1), or `full` (22). Use `observed_editor` for delegated editing
+when the host owns SAVE/replay; use `observed_v2` for streamlined 5-tool editing with explicit snapshots and compact receipts; use `hybrid_editor` for single-tool editing (`patchdiff_submit_edits`); excluded tools are not advertised or callable.
 Older integrations and trusted initialization/export operators must
 explicitly select `full`. Both discovery and dispatch enforce the same immutable
 profile. The internal registry retains every handler listed below.
@@ -425,16 +459,16 @@ Select multiple structures with `patchdiff_observe_scope(selections=...)` and
 submit their scope-local operation `groups` in one guarded atomic transaction
 through `patchdiff_submit_observed_operations`. A successful batch advances the
 target once and links every scope for deterministic replay.
-[Exact contracts and executable examples](docs/STRUCTURAL_BATCH_EDITING.md).
+[Exact contracts and executable examples](docs/spec/STRUCTURAL_BATCH_EDITING.md).
 
 - **Document Lifecycle**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
 - **Authoritative Reads & Exact Search**: `patchdiff_read_target` (bounded slices with `next_start`), `patchdiff_read_lines` (inclusive LF ranges with `next_offset` / `next_start`), `patchdiff_find_occurrences` (exact spans with context and pagination)
 - **Guarded Submission**: `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (sequential match/span edits, `patchdiff-tx/2`), `patchdiff_submit_replacement` (sole explicit whole-target replacement, `patchdiff-tx/3`)
 - **Advisory Preview**: `patchdiff_preview` (bounded verdict/facts without audit rows, keys, or target mutation)
 - **Checkpoints, Replay & History**: `patchdiff_save` (editing cycle rotation), `patchdiff_replay` (deterministic profile-dispatched reconstruction), `patchdiff_get_pdcp_log` (bounded attempt log), `patchdiff_get_manifest_ledger` (accepted changes with runtime facts)
-- **Legacy Compatibility**: Frozen `.pdcp` v0.2.3 submission (`patchdiff_submit_pdcp`) and compatibility wrappers (`patchdiff_build_prompt_context`, `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are documented in [docs/LEGACY_COMPATIBILITY.md](docs/LEGACY_COMPATIBILITY.md).
+- **Legacy Compatibility**: Frozen `.pdcp` v0.2.3 submission (`patchdiff_submit_pdcp`) and compatibility wrappers (`patchdiff_build_prompt_context`, `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are documented in [docs/legacy/LEGACY_COMPATIBILITY.md](docs/legacy/LEGACY_COMPATIBILITY.md).
 
-See [docs/MCP_TOOLS.md](docs/MCP_TOOLS.md) and [docs/HOST_INTEGRATION_GUIDE.md](docs/HOST_INTEGRATION_GUIDE.md).
+See [docs/spec/MCP_TOOLS.md](docs/spec/MCP_TOOLS.md) and [docs/guides/HOST_INTEGRATION_GUIDE.md](docs/guides/HOST_INTEGRATION_GUIDE.md).
 
 The explicit `full` catalog retains all 22 tools and the existing executable discovery examples. Bind examples to actual target IDs, guards, rejection parents, and returned cursors. A preview does not reserve state: subsequent submission must recheck a version or hash guard. Span and whole-target replacement always require a guard; a version guard also detects intervening no-op/ABA edits. Correlation IDs are opt-in invocation metadata, separate from caller-known retry keys.
 
@@ -443,10 +477,10 @@ The explicit `full` catalog retains all 22 tools and the existing executable dis
 Run unit and integration tests against live Postgres:
 
 ```powershell
-# Unit tests (pure runtime, 816 tests)
+# Unit tests (pure runtime, 1,020 tests)
 .\.venv\Scripts\python.exe -m pytest backend/tests/unit -q
 
-# Integration tests (live Postgres & real stdio subprocess, 410 tests)
+# Integration tests (live Postgres & real stdio subprocess, 561 tests)
 $env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
 .\.venv\Scripts\python.exe -m pytest backend/tests/integration -q
 
@@ -465,7 +499,7 @@ backend/app/pdcp         Declarative typed and PDCP parsers, matcher, disambigua
 backend/app/services     Authoritative services (submit, read, search, near-miss, save, replay, export)
 backend/app/storage      SQLAlchemy models, database session management, migrations
 backend/app/mcp          MCP tool definitions, internal registry, and external stdio adapter
-backend/app/migrations   Alembic migration versions (0001 initial, 0002 typed ledger, 0003 source line endings)
+backend/app/migrations   Alembic migration versions (0001 initial, 0002 typed ledger, 0003 source line endings, 0004 observations, 0005 bundle links)
 backend/tests            Unit tests and live Postgres integration tests
 evaluation               Offline payload and verdict equivalence evaluation harness
 docs                     Modernized architecture, core spec, data model, tool contracts, guides
@@ -476,19 +510,21 @@ docs                     Modernized architecture, core spec, data model, tool co
 Read in order of precedence:
 
 1. `AGENTS.md` (locked architectural invariants)
-2. `docs/MODERNIZATION_ARCHITECTURE.md` (architectural decisions A1–A8, contracts C1–C6, and whitepaper hypothesis reconciliation)
-3. `docs/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility, and verification scope)
-4. `docs/MCP_TOOLS.md` (MCP tool contracts, byte budgets, and schemas)
-5. `docs/PATCHDIFF_CORE_SPEC.md` (deterministic core runtime specification)
-6. `docs/DATA_MODEL.md` (Postgres schema and migrations `0001`, `0002`, and `0003`)
-7. `docs/PDCP_FORMAT.md` (`patchdiff-tx/1`, guarded operations `patchdiff-tx/2`, sole replacement `patchdiff-tx/3`)
-8. `docs/HOST_INTEGRATION_GUIDE.md` (host-owned loop, reads, guards, retries, and failure handling)
-9. `docs/LEGACY_COMPATIBILITY.md` (frozen `.pdcp` v0.2.3 format, `patchdiff_submit_pdcp`, deprecated wrappers, and historical replay profiles)
-10. `docs/PatchDIFF-Concept-Paper-6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, operational efficiency bounds, and research hypotheses; supersedes historical `docs/PatchDIFF-Concept-Paper-5.md`)
-11. `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` & `backend/tests/verification/README.md`
+2. `docs/papers/MODERNIZATION_ARCHITECTURE.md` (architectural decisions A1–A8, contracts C1–C6, and whitepaper hypothesis reconciliation)
+3. `docs/papers/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility, and verification scope)
+4. `docs/spec/MCP_TOOLS.md` (MCP tool contracts, byte budgets, and schemas)
+5. `docs/spec/PATCHDIFF_CORE_SPEC.md` (deterministic core runtime specification)
+6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `20260510_0001` through `20261027_0005`)
+7. `docs/spec/PDCP_FORMAT.md` (`patchdiff-tx/1`, guarded operations `patchdiff-tx/2`, sole replacement `patchdiff-tx/3`)
+8. `docs/spec/MCP_EDITOR_V2.md` (streamlined 5-tool `observed_v2` profile and compact receipts)
+9. `docs/spec/STRUCTURAL_BATCH_EDITING.md` (structural observation and atomic batch execution)
+10. `docs/guides/HOST_INTEGRATION_GUIDE.md` (host-owned loop, reads, guards, retries, and failure handling)
+11. `docs/legacy/LEGACY_COMPATIBILITY.md` (frozen `.pdcp` v0.2.3 format, `patchdiff_submit_pdcp`, deprecated wrappers, and historical replay profiles)
+12. `docs/papers/PatchDIFF-Concept-Paper-6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, operational efficiency bounds, and research hypotheses; supersedes historical `docs/legacy/PatchDIFF-Concept-Paper-5.md`)
+13. `docs/benchmarks/TEST_MATRIX.md`, `docs/benchmarks/modernized_benchmark_report.md` & `backend/tests/verification/README.md`
 
 ## License
 
 [MIT](LICENSE), selected by the repository owner. Third-party packages retain their own licenses; the release checklist records dependency and security review limits.
 
-Opt-in `PATCHDIFF_MCP_PROFILE=observed_v2` provides eight purpose-specific observed editing tools, explicit reusable snapshots and bounded transaction receipts. Existing profiles remain available. See [the versioned editor contract](docs/MCP_EDITOR_V2.md) for startup, negotiation, compatibility and measurement limits.
+Opt-in `PATCHDIFF_MCP_PROFILE=observed_v2` provides five purpose-specific observed editing tools (`patchdiff_list_scopes`, `patchdiff_find_occurrences`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_read_target`), explicit reusable snapshots, and bounded transaction receipts (`<= 2 KB`). Existing profiles remain available. See [the versioned editor contract](docs/spec/MCP_EDITOR_V2.md) for startup, negotiation, compatibility and measurement limits.

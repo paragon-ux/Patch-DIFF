@@ -24,8 +24,8 @@ The schema supports:
 - SAVE checkpoints and editing cycle advancement (`editing_cycles`, `target_snapshots`)
 - deterministic replay across recorded `(protocol_version, runtime_version)` profiles
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
-As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
+As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
 
 ## Design Rules
 

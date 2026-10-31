@@ -6,7 +6,7 @@ The as-built record, compatibility details and verification scope are in [MODERN
 
 ## Goal F extensions: guarded operations, replacement, preview and diagnostics
 
-These extensions keep the thesis unchanged: exact matching, sequential in-memory simulation, per-target atomic commit, append-only history and PostgreSQL authority. Decisions are recorded in [F01](usability/F01-decision.md), [Pass A](usability/PASS-A-decision.md), [Pass B](usability/PASS-B-decision.md) and the [PR #11 friction follow-up](usability/friction-followup-decision.md). The normative tool contract is [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
+These extensions keep the thesis unchanged: exact matching, sequential in-memory simulation, per-target atomic commit, append-only history and PostgreSQL authority. Decisions are recorded in [F01](../usability/F01-decision.md), [Pass A](../usability/PASS-A-decision.md), [Pass B](../usability/PASS-B-decision.md) and the [PR #11 friction follow-up](../usability/friction-followup-decision.md). The normative tool contract is [MCP_TOOLS.md](../spec/MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
 
 - **New formats, new immutable profiles.** `patchdiff-tx/2` (ordered match/span operations with exact `expected_text`, runtime `patchdiff-mvp-0.3.0`) and `patchdiff-tx/3` (one guarded `replace_all`, runtime `patchdiff-mvp-0.4.0`) lower into the shared `ParsedPDCP` and applier. tx/2 spans that carry `expected_before`/`expected_after` adjacency guards record the separate immutable runtime `patchdiff-mvp-0.5.0`. Earlier formats, profiles, records and fingerprints are unchanged.
 - **Admission is a service boundary.** tx/3 fresh size limits (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) run after request-key recovery or conflict auditing and never during replay.
@@ -21,7 +21,7 @@ These extensions keep the thesis unchanged: exact matching, sequential in-memory
 
 The structural batch extension preserves per-target atomicity across multiple
 server-issued scopes. Its decision and contracts are in
-[STRUCTURAL_BATCH_EDITING.md](STRUCTURAL_BATCH_EDITING.md): one discovery per
+[STRUCTURAL_BATCH_EDITING.md](../spec/STRUCTURAL_BATCH_EDITING.md): one discovery per
 snapshot, per-group tx/2 evaluation through the existing applier, descending
 assembly, one locked commit, exact request recovery, all-scope replay without
 Waymark, and immutable `patchdiff-observed-batch/1` /
@@ -29,8 +29,8 @@ Waymark, and immutable `patchdiff-observed-batch/1` /
 defaults to seven advertised/callable tools; compatibility requires explicit
 startup `PATCHDIFF_MCP_PROFILE=full`.
 
-- **Conceptual design thesis** = [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (modernized conceptual whitepaper covering `patchdiff-tx/1..3`, edit-method comparisons, operational efficiency bounds, generalized transaction invariants, and research hypotheses `H1`–`H7`). It supersedes the original v0.2.3 whitepaper (`docs/PatchDIFF-Concept-Paper-5.md`, "P1"), which is preserved untouched alongside `docs/PatchDIFF-Protocol-Spec-v0.2.3.md` and `docs/PatchDIFF-Implementation-Spec-v0.2.3.md` as a historical design record.
-- **Active implementation contract** = `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/MCP_TOOLS.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md`, `docs/HOST_INTEGRATION_GUIDE.md`, `docs/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md`. Active documents state the current modernized system coherently in their main body rather than contradicting themselves via tacked-on footers.
+- **Conceptual design thesis** = [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (modernized conceptual whitepaper covering `patchdiff-tx/1..3`, edit-method comparisons, operational efficiency bounds, generalized transaction invariants, and research hypotheses `H1`–`H7`). It supersedes the original v0.2.3 whitepaper (`docs/legacy/PatchDIFF-Concept-Paper-5.md`, "P1"), which is preserved untouched alongside `docs/legacy/PatchDIFF-Protocol-Spec-v0.2.3.md` and `docs/legacy/PatchDIFF-Implementation-Spec-v0.2.3.md` as a historical design record.
+- **Active implementation contract** = `docs/spec/PATCHDIFF_CORE_SPEC.md`, `docs/spec/MCP_TOOLS.md`, `docs/spec/DATA_MODEL.md`, `docs/spec/PDCP_FORMAT.md`, `docs/spec/MCP_EDITOR_V2.md`, `docs/spec/STRUCTURAL_BATCH_EDITING.md`, `docs/benchmarks/TEST_MATRIX.md`, `docs/guides/HOST_INTEGRATION_GUIDE.md`, `docs/guides/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md`. Active documents state the current modernized system coherently in their main body rather than contradicting themselves via tacked-on footers.
 - **Primary external evidence (E1–E8)** was fetched and verified directly from the primary vendor documentation pages and release endpoints on `2026-10-20` (Section 3.1).
 - **No live-model or third-party benchmark claims**: Deterministic guarantees, live Postgres persistence, migrations, and stdio MCP subprocess workflows are verified locally (`pytest`). Offline byte/verdict accounting is verified (`backend/tests/verification/offline_eval.py`). Live-model/live-host comparative token and validity-rate trials have **not** been run and are labelled accordingly.
 
@@ -44,10 +44,10 @@ unchanged. Detailed sessions retain full results. The trusted host may finalize
 edited targets using existing scalar SAVE/REPLAY/export rather than asking the
 model to manage lifecycle turns. SAVE remains non-idempotent; uncertain outcomes
 require explicit operator reconciliation. See the
-[representation contract](MCP_TOOLS.md#external-response-representations) and
-[host recipe](HOST_INTEGRATION_GUIDE.md#trusted-scalar-finalization).
+[representation contract](../spec/MCP_TOOLS.md#external-response-representations) and
+[host recipe](../guides/HOST_INTEGRATION_GUIDE.md#trusted-scalar-finalization).
 
-From [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (carrying forward the core thesis of `docs/PatchDIFF-Concept-Paper-5.md`, abstract, Section 4, Section 9): PatchDIFF's core contribution is not textual diff syntax by itself, but *"the runtime and lifecycle semantics that make model-generated textual deltas safe to apply repeatedly to one cached authoritative document."*
+From [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (carrying forward the core thesis of `docs/legacy/PatchDIFF-Concept-Paper-5.md`, abstract, Section 4, Section 9): PatchDIFF's core contribution is not textual diff syntax by itself, but *"the runtime and lifecycle semantics that make model-generated textual deltas safe to apply repeatedly to one cached authoritative document."*
 
 | Category | Items |
 | --- | --- |
@@ -57,11 +57,11 @@ From [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (carrying forw
 
 ### 1.1 Whitepaper Hypothesis & Limitation Reconciliation (`PatchDIFF-Concept-Paper-5.md` -> `PatchDIFF-Concept-Paper-6.md`)
 
-`docs/PatchDIFF-Concept-Paper-5.md` is preserved untouched as the historical v0.2.3 design paper, and [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) carries its thesis forward to the modernized architecture. The tables below reconcile the original v0.2.3 design assumptions, the seven Section 23 research hypotheses (`H1`–`H7`, preserving each hypothesis's original identity), and the Section 26/28 limitations with the current modernized implementation and deterministic verification evidence. Note that deterministic functional, persistence, replay, and offline byte-sizing properties are verified directly by the test suite and `backend/tests/verification/offline_eval.py`. Live-model trials evaluating `H1`–`H4` and `H7` were empirically executed across $N=24$ independent runs ($N=12$ baseline factorial benchmark and $N=12$ standalone modernized benchmark on Gemini 3.8 Flash High across Non-Git and Git environments; see `docs/modernized_benchmark_report.md`).
+`docs/legacy/PatchDIFF-Concept-Paper-5.md` is preserved untouched as the historical v0.2.3 design paper, and [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) carries its thesis forward to the modernized architecture. The tables below reconcile the original v0.2.3 design assumptions, the seven Section 23 research hypotheses (`H1`–`H7`, preserving each hypothesis's original identity), and the Section 26/28 limitations with the current modernized implementation and deterministic verification evidence. Note that deterministic functional, persistence, replay, and offline byte-sizing properties are verified directly by the test suite and `backend/tests/verification/offline_eval.py`. Live-model trials evaluating `H1`–`H4` and `H7` were empirically executed across $N=24$ independent runs ($N=12$ baseline factorial benchmark and $N=12$ standalone modernized benchmark on Gemini 3.8 Flash High across Non-Git and Git environments; see `docs/benchmarks/modernized_benchmark_report.md` and `docs/benchmarks/git_benchmark_report.md`).
 
 | Historical v0.2.3 Concept Paper Design | Current Modernized Implementation (`patchdiff-tx/1..3` + Profiles `0.1.0`..`0.5.0`) |
 | --- | --- |
-| Text-delimited `.pdcp` v0.2.3 as the primary model-facing transaction format | Structured JSON transactions (`patchdiff-tx/1`, `tx/2`, `tx/3`); `.pdcp` v0.2.3 retained in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md) for backward compatibility and historical replay |
+| Text-delimited `.pdcp` v0.2.3 as the primary model-facing transaction format | Structured JSON transactions (`patchdiff-tx/1`, `tx/2`, `tx/3`); `.pdcp` v0.2.3 retained in [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md) for backward compatibility and historical replay |
 | 7 mandatory `# MANIFEST` prose fields per change block | Required top-level transaction `intent`, optional per-edit `rationale`/`risk`, and runtime-derived `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests) |
 | Server-mediated regeneration prompt/context workflow | Host-owned planning, bounded reading (`patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`), proposal, and retry loop over MCP |
 | Match-only edit representation (`<<<<<<< MATCH` / `>>>>>>> REPLACE`) | Exact match (`tx/1`/`tx/2`), guarded `[start, end)` code-point spans with `expected_text` and optional `expected_before`/`expected_after` adjacency checks (`tx/2`), and guarded whole-target replacement (`tx/3`) |
@@ -293,21 +293,21 @@ For rejected exact recovery, the complete stored diagnostic (including original 
 
 | Layer | Files | Role & Maintenance Rule |
 | --- | --- | --- |
-| **1. Historical Thesis, Frozen Specs & Records** | `docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/PatchDIFF-Snapshot.md`, `docs/usability/**` (Goal F decisions, accepted plans, verification captures and the earlier as-built record `docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md`), `docs/reviews/*` | Preserved untouched as historical design and evidence records. Never edited to hide historical evolution. Recorded decisions remain the provenance for current contracts. |
-| **2. Architecture & Change Record** | `docs/MODERNIZATION_ARCHITECTURE.md`, `docs/MODERNIZATION_CHANGE_DOC.md` | This document holds decisions A1–A8, contracts C1–C6 and primary evidence E1–E8. The change record holds current product behavior, format compatibility and verification scope. |
-| **3. Active System Specifications & Legacy Reference** | `docs/MCP_FIRST_MVP.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/MCP_TOOLS.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/LEGACY_COMPATIBILITY.md`, `docs/TEST_MATRIX.md`, `docs/CODEX_BUILD_PLAN.md` | Coherent active specifications describing the current system (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement, host-owned retry, migrations `0001`–`0003`, stage validity, explicit replay profiles), with frozen `.pdcp` v0.2.3 and deprecated wrappers isolated in `docs/LEGACY_COMPATIBILITY.md`. **Rewrite coherently when active contracts change; do not append contradictory footers.** |
-| **4. Host & Operator Guides** | `docs/HOST_INTEGRATION_GUIDE.md`, `docs/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md` | Operational and host-facing instructions aligned with Layer 3. |
+| **1. Historical Thesis, Frozen Specs & Records** | `docs/legacy/PatchDIFF-Concept-Paper-5.md`, `docs/legacy/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/legacy/PatchDIFF-Implementation-Spec-v0.2.3.md`, `docs/legacy/PatchDIFF-Snapshot.md`, `docs/usability/**` (Goal F decisions, accepted plans, verification captures and the earlier as-built record `docs/usability/internal/MODERNIZATION_CHANGE_DOC-973ba79.md`), `docs/reviews/*` | Preserved untouched as historical design and evidence records. Never edited to hide historical evolution. Recorded decisions remain the provenance for current contracts. |
+| **2. Architecture & Change Record** | `docs/papers/MODERNIZATION_ARCHITECTURE.md`, `docs/papers/MODERNIZATION_CHANGE_DOC.md` | This document holds decisions A1–A8, contracts C1–C6 and primary evidence E1–E8. The change record holds current product behavior, format compatibility and verification scope. |
+| **3. Active System Specifications & Legacy Reference** | `docs/spec/PATCHDIFF_CORE_SPEC.md`, `docs/spec/MCP_TOOLS.md`, `docs/spec/DATA_MODEL.md`, `docs/spec/PDCP_FORMAT.md`, `docs/spec/MCP_EDITOR_V2.md`, `docs/spec/STRUCTURAL_BATCH_EDITING.md`, `docs/spec/WAYMARK_WORKER.md`, `docs/legacy/LEGACY_COMPATIBILITY.md`, `docs/benchmarks/TEST_MATRIX.md` | Coherent active specifications describing the current system (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement, host-owned retry, migrations `0001` through `0005`, stage validity, explicit replay profiles), with frozen `.pdcp` v0.2.3 and deprecated wrappers isolated in `docs/legacy/LEGACY_COMPATIBILITY.md`. **Rewrite coherently when active contracts change; do not append contradictory footers.** |
+| **4. Host & Operator Guides** | `docs/guides/HOST_INTEGRATION_GUIDE.md`, `docs/guides/CLAUDE_DESKTOP_SETUP.md`, `docs/guides/OBSERVED_EDITOR_WORKFLOW.md`, `README.md`, `README_INTERNAL_MCP.md` | Operational and host-facing instructions aligned with Layer 3. |
 
 ### 5.2 Precedence Order
 
 1. Locked invariants in `AGENTS.md` (deterministic non-executable core, per-target atomic commit, append-only history, accepted-only ledger, Postgres authority, deterministic replay).
-2. `docs/MODERNIZATION_ARCHITECTURE.md` and `docs/MODERNIZATION_CHANGE_DOC.md`.
-3. Active contract documents (`docs/MCP_TOOLS.md`, `docs/PATCHDIFF_CORE_SPEC.md`, `docs/DATA_MODEL.md`, `docs/PDCP_FORMAT.md`, `docs/MCP_FIRST_MVP.md`, `docs/TEST_MATRIX.md`).
+2. `docs/papers/MODERNIZATION_ARCHITECTURE.md` and `docs/papers/MODERNIZATION_CHANGE_DOC.md`.
+3. Active contract documents (`docs/spec/MCP_TOOLS.md`, `docs/spec/PATCHDIFF_CORE_SPEC.md`, `docs/spec/DATA_MODEL.md`, `docs/spec/PDCP_FORMAT.md`, `docs/spec/MCP_EDITOR_V2.md`, `docs/spec/STRUCTURAL_BATCH_EDITING.md`, `docs/benchmarks/TEST_MATRIX.md`).
 4. Frozen v0.2.3 specifications for legacy `.pdcp` wire syntax details.
 5. Host guides and READMEs.
 
 ## 6. Verification Summary
 
-[MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md) records product behavior and verification scope. [TEST_MATRIX.md](TEST_MATRIX.md) maps unit, live PostgreSQL, real stdio subprocess and isolated populated migration preservation/refusal coverage. Test and CI results must identify the executed revision; historical suite totals do not certify later changes.
+[MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md) records product behavior and verification scope. [TEST_MATRIX.md](../benchmarks/TEST_MATRIX.md) maps unit, live PostgreSQL, real stdio subprocess and isolated populated migration preservation/refusal coverage. Test and CI results must identify the executed revision; historical suite totals do not certify later changes.
 
 No live-model comparative study or external Desktop-host performance claim is established by these deterministic tests.

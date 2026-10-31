@@ -9,12 +9,12 @@ This document is the single canonical reference for PatchDIFF's frozen legacy in
 4. **Historical runtime replay profiles** (`patchdiff-mvp-0.1.0`, `patchdiff-mvp-0.2.0`, `patchdiff-mvp-0.2.1`)
 5. **Measured wire and storage comparison** between legacy `.pdcp` v0.2.3 and active typed JSON transactions (`patchdiff-tx/1`)
 
-For all new integrations and host workflows, use the active typed JSON formats documented in [PDCP_FORMAT.md](PDCP_FORMAT.md), [MCP_TOOLS.md](MCP_TOOLS.md), and [HOST_INTEGRATION_GUIDE.md](HOST_INTEGRATION_GUIDE.md):
+For all new integrations and host workflows, use the active typed JSON formats documented in [PDCP_FORMAT.md](../spec/PDCP_FORMAT.md), [MCP_TOOLS.md](../spec/MCP_TOOLS.md), and [HOST_INTEGRATION_GUIDE.md](../guides/HOST_INTEGRATION_GUIDE.md):
 - `patchdiff_submit_edits` (`patchdiff-tx/1`) for exact `MATCH/REPLACE` transactions
 - `patchdiff_submit_operations` (`patchdiff-tx/2`) for guarded sequential match/span edits and verified insertions
 - `patchdiff_submit_replacement` (`patchdiff-tx/3`) for guarded whole-target replacement
 
-Historical design specifications (`docs/PatchDIFF-Concept-Paper-5.md`, `docs/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/PatchDIFF-Implementation-Spec-v0.2.3.md`) remain preserved untouched as historical design artifacts.
+Historical design specifications (`docs/legacy/PatchDIFF-Concept-Paper-5.md`, `docs/legacy/PatchDIFF-Protocol-Spec-v0.2.3.md`, `docs/legacy/PatchDIFF-Implementation-Spec-v0.2.3.md`) remain preserved untouched as historical design artifacts.
 
 ---
 
@@ -118,7 +118,7 @@ Early pre-MCP-first iterations included server-built prompt templates and server
 | --- | --- | --- |
 | `patchdiff_build_prompt_context` | **Legacy Convenience** | Returns a bounded 4,000-character prefix (`content[:4000]`) with `context_truncated: bool`, active manifest summary, and `.pdcp` formatting instructions. Not an authoritative retrieval engine; use `patchdiff_read_target`, `patchdiff_read_lines`, and `patchdiff_find_occurrences`. |
 | `patchdiff_get_regeneration_context` | **Deprecated** | Returns rejection metadata and bounded target context for a rejected log ID. Replaced by inspecting the structured `diagnostic` (`failure_context`, `exact_candidates`, `near_misses`) returned directly by `patchdiff_submit_edits` / `patchdiff_submit_operations` and reading fresh slices. |
-| `patchdiff_build_regeneration_prompt` | **Deprecated** | Builds a static text prompt asking a model to emit a corrected `.pdcp` v0.2.3 document. Replaced by the host-owned retry loop in [HOST_INTEGRATION_GUIDE.md](HOST_INTEGRATION_GUIDE.md). |
+| `patchdiff_build_regeneration_prompt` | **Deprecated** | Builds a static text prompt asking a model to emit a corrected `.pdcp` v0.2.3 document. Replaced by the host-owned retry loop in [HOST_INTEGRATION_GUIDE.md](../guides/HOST_INTEGRATION_GUIDE.md). |
 | `patchdiff_request_regeneration` | **Deprecated** | Wrapper combining regeneration context lookup and prompt formatting, or submitting a provided `candidate_pdcp` while preserving caller-owned transaction semantics. Replaced by `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. |
 
 ---

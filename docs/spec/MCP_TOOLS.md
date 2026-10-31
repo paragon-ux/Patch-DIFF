@@ -11,8 +11,8 @@ This document defines the complete MCP tool surface for PatchDIFF.
 
 PatchDIFF is exposed over stdio JSON-RPC (`backend/app/mcp/external_adapter.py`) and an internal Python registry (`backend/app/mcp/server.py`). All tools route through the deterministic service layer (`backend/app/services/`) and execute per-target atomic commits against Postgres.
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
-As-built record: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
+As-built record: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
 
 ## MCP Tool Surface Overview
 
@@ -45,10 +45,10 @@ See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_E
 | | `patchdiff_replay` | Deterministically reconstruct target from initial snapshot + accepted logs, reporting component checks. |
 | | `patchdiff_get_pdcp_log` | Bounded newest-first page of append-only attempts (accepted/rejected), filtering by status, hash, or request ID. |
 | | `patchdiff_get_manifest_ledger` | Retrieve accepted-only manifest ledger entries with `origin`, `derived` facts and their attempt identity. |
-| **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
-| | `patchdiff_get_regeneration_context` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
-| | `patchdiff_build_regeneration_prompt` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
-| | `patchdiff_request_regeneration` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md). |
+| **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
+| | `patchdiff_get_regeneration_context` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
+| | `patchdiff_build_regeneration_prompt` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
+| | `patchdiff_request_regeneration` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
 
 ### Bounded Wire & Context Budgets & Measured Service Latency
 
@@ -67,7 +67,7 @@ See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_E
 
 ## Guarded editing, reads, preview and diagnostics
 
-This section is the normative contract for guarded operations (`patchdiff-tx/2`), sole replacement (`patchdiff-tx/3`), line reads, preview, response options, accepted-transaction warnings, bounded rejection evidence and line-ending export. Other documents summarize it and link here. Recorded decisions: [F01](usability/F01-decision.md), [Pass A](usability/PASS-A-decision.md), [Pass B](usability/PASS-B-decision.md) and the [PR #11 friction follow-up](usability/friction-followup-decision.md).
+This section is the normative contract for guarded operations (`patchdiff-tx/2`), sole replacement (`patchdiff-tx/3`), line reads, preview, response options, accepted-transaction warnings, bounded rejection evidence and line-ending export. Other documents summarize it and link here. Recorded decisions: [F01](../usability/F01-decision.md), [Pass A](../usability/PASS-A-decision.md), [Pass B](../usability/PASS-B-decision.md) and the [PR #11 friction follow-up](../usability/friction-followup-decision.md).
 
 Byte budgets below count compact ASCII-escaped JSON (`ensure_ascii=True`, `separators=(",", ":")`) and exclude the JSON-RPC envelope. Tool-result text is literal and its JSON-RPC line is ASCII-escaped (see [Discovery, argument errors and examples](#discovery-argument-errors-and-examples)). Offsets and counts are Unicode code points, not UTF-8 bytes or UTF-16 units: a JavaScript or TypeScript host must convert its UTF-16 string indexes before sending a span or reading an offset.
 
@@ -424,7 +424,7 @@ Live output for an unselected `alpha` on the same target; hashes and the repeate
 ```
 
 ### `patchdiff_submit_pdcp` (Frozen Legacy Input)
-Retained for backward compatibility with frozen `.pdcp` v0.2.3 text transactions. New integrations should use `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), or `patchdiff_submit_replacement` (`patchdiff-tx/3`). See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#2-legacy-mcp-submission-tool-patchdiff_submit_pdcp) for arguments and legacy format details.
+Retained for backward compatibility with frozen `.pdcp` v0.2.3 text transactions. New integrations should use `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), or `patchdiff_submit_replacement` (`patchdiff-tx/3`). See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#2-legacy-mcp-submission-tool-patchdiff_submit_pdcp) for arguments and legacy format details.
 
 ---
 
@@ -525,7 +525,7 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
 
 ## 5. Convenience & Deprecated Compatibility Wrappers
 
-`patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#3-deprecated-regeneration--prompt-prefix-wrappers) for legacy wrapper specifications.
+`patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#3-deprecated-regeneration--prompt-prefix-wrappers) for legacy wrapper specifications.
 
 
 ---

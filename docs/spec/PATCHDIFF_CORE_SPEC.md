@@ -25,8 +25,8 @@ The core runtime is deterministic, pure, and trusted.
 
 Transaction inputs are untrusted data.
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md).
-As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
+As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
 
 ## Core Architecture & Representation
 
@@ -48,7 +48,7 @@ All four input formats lower into the same internal `ParsedPDCP` representation 
 - **`patchdiff-tx/1` (primary typed)**: Structured JSON with required `intent`, required state guard (`expected_target_version` and/or `expected_current_hash`), ordered `edits[]` (`match`, `replace`, optional `change_id`, `rationale`, `risk`, `occurrence_index`, `anchor_before`, `anchor_after`), optional `client_request_id`, `parent_pdcp_log_id`, and `attempt`. Persisted in `append_only_pdcp_logs.pdcp_content` as deterministic canonical JSON.
 - **`patchdiff-tx/2` (guarded operations)**: Ordered explicit match/span operations, required intent and state guard, sequential canonical code-point spans with exact expected text and optional adjacent-text guards; immutable profile 0.3.0, or 0.5.0 when the guards are used.
 - **`patchdiff-tx/3` (sole replacement)**: Exactly one guarded `replace_all`, immutable profile 0.4.0; fresh size admission is a service boundary, not a replay grammar constraint.
-- **Legacy `.pdcp` v0.2.3 & historical profiles (`0.1.0`–`0.2.1`)**: Frozen legacy text format and historical replay profiles are specified in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md).
+- **Legacy `.pdcp` v0.2.3 & historical profiles (`0.1.0`–`0.2.1`)**: Frozen legacy text format and historical replay profiles are specified in [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md).
 
 None of these formats is executable code.
 
@@ -110,7 +110,7 @@ A conflicting reuse of an existing request key is a separately audited context_i
 - `change_id` defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate `change_id`s within a transaction reject with `FailureReason.MANIFEST_INVALID`.
 
 ### Legacy PDCP (v0.2.3) Rules
-Frozen `.pdcp` v0.2.3 header, 7-field `# MANIFEST` grammar, and delimiter-collision (`FailureReason.BLOCK_MALFORMED`) rules are documented in [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#1-frozen-pdcp-v023-wire-format).
+Frozen `.pdcp` v0.2.3 header, 7-field `# MANIFEST` grammar, and delimiter-collision (`FailureReason.BLOCK_MALFORMED`) rules are documented in [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#1-frozen-pdcp-v023-wire-format).
 
 ### Executable Logic Rejection
 Reject obvious executable code outside payloads: imports, functions, classes, loops, conditionals, shell commands, dynamic evaluation, filesystem calls, network calls, tool calls (`FailureReason.EXECUTABLE_LOGIC_DETECTED`).
@@ -130,7 +130,7 @@ Matching is:
 All exact occurrences of `MATCH` across the buffer are enumerated, including overlapping occurrences (advancing the search index by 1 code point rather than `len(match)`). For example, matching `"aa"` in `"aaa"` yields 2 occurrences (spans `0..2` and `1..3`) and rejects with `FailureReason.MATCH_AMBIGUOUS` unless explicitly disambiguated.
 
 ### Historical Replay Profiles (`patchdiff-mvp-0.1.0` through `0.2.1`)
-Historical logs accepted under `patchdiff-mvp-0.1.0`, `0.2.0`, or `0.2.1` are replayed using their recorded profile settings so that accepted history remains deterministically replayable. See [LEGACY_COMPATIBILITY.md](LEGACY_COMPATIBILITY.md#4-historical-runtime-replay-profiles).
+Historical logs accepted under `patchdiff-mvp-0.1.0`, `0.2.0`, or `0.2.1` are replayed using their recorded profile settings so that accepted history remains deterministically replayable. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#4-historical-runtime-replay-profiles).
 
 ## Disambiguation
 

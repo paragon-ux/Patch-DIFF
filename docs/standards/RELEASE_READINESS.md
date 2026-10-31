@@ -21,7 +21,7 @@ No remote tags or GitHub releases existed when checked on 2026-10-22. `v0.1.0` i
 
 ## Merge review
 
-- Review [release notes](../CHANGELOG.md), [README](../README.md), [tool contracts](MCP_TOOLS.md) and [host guidance](HOST_INTEGRATION_GUIDE.md) against actual discovery and behavior.
+- Review [release notes](../../CHANGELOG.md), [README](../../README.md), [tool contracts](../spec/MCP_TOOLS.md) and [host guidance](../guides/HOST_INTEGRATION_GUIDE.md) against actual discovery and behavior.
 - Complete integration and release-readiness reviews. Recheck every confirmed finding at a fix revision; preserve historical results and evidence.
 - Check the exact current PR head and generated-merge CI checkout SHAs, test counts, migrations and offline results. A prior check on another revision is insufficient.
 - Verify a real stdio/PostgreSQL workflow outside existing tests, including guard/recovery, bounded preview, ledger, SAVE/replay/export and independent SQL assertions. Retain source and helper hashes.
@@ -32,7 +32,7 @@ No remote tags or GitHub releases existed when checked on 2026-10-22. `v0.1.0` i
 - MIT license and package license/readme metadata must be present in source and built artifacts. Third-party dependency licenses are separate from the project license.
 - Resolve/install the exact reviewed dependency lock in an isolated environment; run dependency consistency, current advisory checks and the complete suite after implementation is finished. Include the Python/platform and exact lock hash in evidence.
 - Build and inspect a wheel without publishing. Smoke-test the installed artifact's MCP initialization/discovery and health endpoints from outside the source checkout. The documented deployment still uses a source checkout and its migration configuration; no standalone PyPI deployment is certified by an editable install.
-- Verify a private security-reporting channel. It was disabled at review time; see [SECURITY.md](../SECURITY.md). This is a publication prerequisite, not an invitation to post sensitive reports publicly.
+- Verify a private security-reporting channel. It was disabled at review time; see [SECURITY.md](../../SECURITY.md). This is a publication prerequisite, not an invitation to post sensitive reports publicly.
 - Reassess the pinned PostgreSQL container image and deployment configuration for the intended environment. A PyPI advisory check does not cover operating-system/container vulnerabilities. Bind development services to loopback; do not recreate existing data volumes as part of verification.
 - Use the final merged source revision for release artifacts and checksums, then attach those exact artifacts to any approved release. Do not copy source-tree test results to a different wheel or tag without checking identity.
 
