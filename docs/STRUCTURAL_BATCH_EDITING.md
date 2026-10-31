@@ -18,10 +18,15 @@ The same immutable profile controls both `tools/list` and `tools/call`.
 | `editor` (default) | 7 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
 | `unobserved` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save`, `patchdiff_replay` |
 | `observed` | 6 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
+| `observed_editor` (delegated role) | 4 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations` |
 | `full` (explicit compatibility) | 22 | All registered tools, including initialization, export, history and legacy submissions |
 
 Older integrations and trusted lifecycle operators that initialize/export targets
 must explicitly select `full`. The internal registry retains all 22 handlers.
+Delegated editors use
+`observed_editor` when the host owns SAVE/replay; these lifecycle tools are
+uncallable on that editor connection. Existing profile defaults/counts are
+unchanged; use a separate full session for trusted finalization.
 `PATCHDIFF_STRICT_OBSERVATION_MODE=1` independently rejects unobserved writes at
 the service layer, including writes through `full` or the internal registry.
 
@@ -262,3 +267,7 @@ audit inspection are counted separately as trusted lifecycle work. API-call
 reduction establishes capability; it establishes no model latency, context,
 token-cost or comparative performance result. Gate 2 remains closed, and a new
 direct three-arm run still requires owner authorization.
+
+## Versioned external view
+
+Opt-in `observed_v2` separates candidate listing, selection, paging and the two commit forms into eight external purposes. It lowers unchanged values into the batch/single services described here and retains the two single-scope paths for scopes above batch limits. See [the v2 contract](MCP_EDITOR_V2.md); existing profile catalogs and durable formats remain unchanged.

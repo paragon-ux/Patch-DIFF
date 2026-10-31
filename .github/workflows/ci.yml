@@ -58,11 +58,15 @@ jobs:
         env:
           PATCHDIFF_WAYMARK_MODE: resident
         run: python backend/tests/verification/structural_batch/verify.py --output .ci-results/five-file
-      - name: Compact editor and trusted scalar finalization (five files)
+      - name: Four-tool delegated editor and trusted scalar finalization (five files)
         env:
           PATCHDIFF_WAYMARK_MODE: resident
           PATCHDIFF_MCP_RESPONSE_MODE: compact
         run: python backend/tests/verification/structural_batch/verify.py --host-finalize --output .ci-results/five-file-compact-host
+      - name: Versioned editor interface and trusted scalar finalization (five files)
+        env:
+          PATCHDIFF_WAYMARK_MODE: resident
+        run: python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize --output .ci-results/five-file-v2
       - name: Executed source and environment
         if: always()
         run: |

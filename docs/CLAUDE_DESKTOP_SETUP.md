@@ -83,8 +83,9 @@ References:
 The default startup profile is `editor` (7 advertised and callable tools).
 Use `PATCHDIFF_MCP_PROFILE=full` in the server environment for older integrations
 or trusted upload/initialization/export workflows that need the complete 22-tool
-catalog. `unobserved` (5) and `observed` (6) are also available. Unknown profiles
-fail startup, and requests cannot override the session's immutable selection.
+catalog. `unobserved` (5), `observed` (6), and `observed_editor` (4) are also
+available. The last is for delegated editors whose host owns SAVE/replay.
+Unknown profiles fail startup, and requests cannot override the session's immutable selection.
 [Exact tool lists and structural batches](STRUCTURAL_BATCH_EDITING.md).
 
 Use the venv Python directly so Claude Desktop launches the interpreter that has PatchDIFF's dependencies installed.

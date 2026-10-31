@@ -43,3 +43,5 @@ controller. Never use these prepared operations to perform a live model canary.
 Test output belongs in a new external directory or the ignored `.ci-results/`.
 Historical documents can reference the original local evaluation paths; current
 reproduction commands use this directory.
+
+Versioned eight-tool editor regression uses the same authenticated fixtures and archived operations: `python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize --output /tmp/five-file-v2-fresh`. It negotiates 2025 MCP, validates actual input/output schemas and equal text/structured channels, then independently checks five exports, 20 behaviors and scalar SAVE/replay. This is zero-model backend verification; never use archived operations to perform a live canary.

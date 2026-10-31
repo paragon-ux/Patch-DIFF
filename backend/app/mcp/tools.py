@@ -232,6 +232,25 @@ def patchdiff_submit_observed_operations(
     client_request_id: str | None = None,
     include_correlation_id: bool = False,
 ) -> dict[str, Any]:
+    return _submit_result_to_payload(_submit_observed_result(**locals()))
+
+
+def _submit_observed_result(
+    *,
+    target_file_id: str,
+    intent: str,
+    operations: list[dict] | None = BATCH_UNSET,
+    observation_id: str | None = BATCH_UNSET,
+    observation_bundle_id: str | None = BATCH_UNSET,
+    groups: list[dict] | None = BATCH_UNSET,
+    expected_target_version: int | None = None,
+    expected_current_hash: str | None = None,
+    source: str = "model_response",
+    parent_pdcp_log_id: str | None = None,
+    attempt: int | None = None,
+    client_request_id: str | None = None,
+    include_correlation_id: bool = False,
+) -> SubmitPDCPResult:
     with SessionLocal() as session:
         result = submit_observed_operations(
             session,
@@ -249,7 +268,16 @@ def patchdiff_submit_observed_operations(
             client_request_id=client_request_id,
             include_correlation_id=include_correlation_id,
         )
-    return _submit_result_to_payload(result)
+    return result
+
+
+def submit_editor_operations(**arguments: Any) -> dict[str, Any]:
+    """Trusted external view of the same result; no additional admission or runtime."""
+    result = _submit_observed_result(**arguments)
+    payload = _submit_result_to_payload(result)
+    # These are the historical transaction boundaries, never inferred from current state.
+    payload.update(before_version=result.before_version, after_version=result.after_version)
+    return payload
 
 
 @registry.register("patchdiff_read_target")

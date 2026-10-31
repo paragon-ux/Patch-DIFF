@@ -30,8 +30,12 @@ single uniqueness; replay verifies every recorded scope without Waymark.
 [Limits, error codes, evidence and examples](STRUCTURAL_BATCH_EDITING.md).
 
 External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
-`unobserved` has 5, `observed` 6, and explicit compatibility `full` 22. Profiles
-filter both discovery and calls and remain immutable for a session; the internal
+`unobserved` has 5, `observed` 6, opt-in `observed_editor` 4, and explicit
+compatibility `full` 22. The four-tool delegated role excludes SAVE/replay at
+both advertisement and dispatch while preserving the existing profiles and all
+request shapes. Observation/submission descriptions clarify route inputs, returned
+authority and the scopes-to-groups mapping; service validation and durable
+transaction/replay formats are unchanged. Profiles filter both discovery and calls and remain immutable for a session; the internal
 registry keeps all 22 handlers. Trusted lifecycle operators and older integrations
 must opt into `full` before starting their session.
 
@@ -85,3 +89,9 @@ Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004
 Offline replacement cases measure serialized bytes and accepted content/hash oracles, not live transport, persistence or timing. No live-model comparison, representative sanitized dataset or production performance threshold has been established. No editing adapter, optional typed guards or normalized request-identity behavior is introduced.
 
 Historical source and verification records remain preserved in Git and internal archives; they do not establish verification of a later revision.
+
+## PR20: opt-in purpose-specific editor contract
+
+Decision: add `observed_v2` with eight external purposes, six common bundle paths and two single-scope compatibility paths. The latter preserve scopes above the batch issuance cap. Reusable explicit snapshots remove result-to-argument field renaming; bounded receipts preserve immutable transaction evidence separately from current state. Modern MCP revisions are negotiated with text fallback and optional structured results/output schemas. Existing profiles,22 internal handlers, services, transaction formats, migrations and replay runtimes retain their contracts.
+
+[The full contract](MCP_EDITOR_V2.md) records compatibility, audited admission/recovery ordering, response limits, host-loading uncertainty and actual verification paths. This is a tool/schema/data change; the rejected prompt-only proposal is not implemented. Static bytes and backend correctness do not establish model-time savings.

@@ -140,7 +140,7 @@ def test_portable_patterns_preserve_strict_end_and_null(field, valid, limit, nul
 
 @pytest.mark.parametrize("field", ["query", "symbol_name", "kind"])
 def test_optional_observe_selectors_advertise_empty_string_rejection(field):
-    for profile in ("observed", "full"):
+    for profile in ("observed", "observed_editor", "full"):
         schema = next(tool["inputSchema"] for tool in ExternalMCPAdapter(profile=profile).list_tools()
                       if tool["name"] == "patchdiff_observe_scope")
         base = {"target_file_id": "11111111-1111-4111-8111-111111111111"}

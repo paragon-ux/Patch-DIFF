@@ -44,13 +44,14 @@ def original_plan():
 
 
 class MCP:
-    def __init__(self, profile, database_url=None, *, response_mode=None, rpc_timeout_seconds=30):
+    def __init__(self, profile, database_url=None, *, response_mode=None, rpc_timeout_seconds=30, protocol_version=None):
         if not 0 < rpc_timeout_seconds < float("inf"):
             raise ValueError("RPC timeout must be finite and positive")
+        self.protocol_version = protocol_version or ("2025-11-25" if profile == "observed_v2" else None)
         self.rpc_timeout_seconds, self.closed = rpc_timeout_seconds, False
         self.profile, self.sequence, self.calls, self.events = profile, 0, Counter(), []
         env = {**os.environ, "PYTHONPATH": str(REPO / "backend"), "PATCHDIFF_MCP_PROFILE": profile,
-               "PATCHDIFF_STRICT_OBSERVATION_MODE": "1" if profile == "observed" else "0"}
+               "PATCHDIFF_STRICT_OBSERVATION_MODE": "1" if profile in {"observed", "observed_editor", "observed_v2"} else "0"}
         if database_url: env["PATCHDIFF_DATABASE_URL"] = database_url
         if response_mode is not None: env["PATCHDIFF_MCP_RESPONSE_MODE"] = response_mode
         self.response_mode = env.get("PATCHDIFF_MCP_RESPONSE_MODE", "detailed")
@@ -64,7 +65,7 @@ class MCP:
 
     def __enter__(self):
         try:
-            self.rpc("initialize", {})
+            self.rpc("initialize", {"protocolVersion": self.protocol_version} if self.protocol_version else {})
             self.catalog = self.rpc("tools/list", {})
             self.catalog_wire_bytes = self.last_wire_bytes
             return self
@@ -127,6 +128,12 @@ class MCP:
         result = self.rpc("tools/call", {"name": name, "arguments": arguments})
         if result.get("isError"): raise RuntimeError(result)
         payload = json.loads(result["content"][0]["text"])
+        if self.profile == "observed_v2":
+            from jsonschema import Draft202012Validator
+            assert result["structuredContent"] == payload
+            declaration = next(t for t in self.catalog["tools"] if t["name"] == name)
+            Draft202012Validator(declaration["inputSchema"]).validate(arguments)
+            Draft202012Validator(declaration["outputSchema"]).validate(payload)
         self.events.append({"tool": name, "arguments": arguments, "response": payload,
                             "result_utf8_bytes": len(result["content"][0]["text"].encode("utf-8")),
                             "jsonrpc_line_bytes": self.last_wire_bytes,
@@ -134,7 +141,9 @@ class MCP:
         return payload
 
 
-def run(destination, database_url=None, *, host_finalize=False):
+def run(destination, database_url=None, *, host_finalize=False, editor_v2=False):
+    if editor_v2 and not host_finalize:
+        raise ValueError("observed_v2 requires separate trusted --host-finalize")
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
     exports = destination / "exports"
@@ -142,13 +151,13 @@ def run(destination, database_url=None, *, host_finalize=False):
     expected()  # authenticates frozen task/source hashes before using their content
     plan = original_plan()
     profiles = {}
-    for profile in ("editor", "unobserved", "observed", "full"):
+    for profile in ("editor", "unobserved", "observed", "observed_editor", "observed_v2", "full"):
         with MCP(profile, database_url) as client:
             profiles[profile] = {"tool_count": len(client.catalog["tools"]),
                                  "tools_list_jsonrpc_line_bytes": client.catalog_wire_bytes,
                                  "tools_result_utf8_bytes": len(json.dumps(client.catalog, sort_keys=True, separators=(",", ":")).encode("utf-8"))}
     files, manifest = [], []
-    with MCP("full", database_url, response_mode="detailed" if host_finalize else None) as lifecycle, MCP("observed", database_url) as editor:
+    with MCP("full", database_url, response_mode="detailed" if host_finalize else None) as lifecycle, MCP("observed_v2" if editor_v2 else "observed_editor" if host_finalize else "observed", database_url) as editor:
         for name, groups in plan.items():
             content = (PRIMARY / "fixtures" / name).read_bytes()
             assert sha(content) == SOURCE_HASHES[name]
@@ -156,19 +165,35 @@ def run(destination, database_url=None, *, host_finalize=False):
                 content_type={".py": "text/x-python", ".json": "application/json", ".md": "text/markdown"}[Path(name).suffix])
             assert target["status"] == "ok"
             tid = target["target_file_id"]
-            bundle = editor.call("patchdiff_observe_scope", target_file_id=tid, selections=[g["selection"] for g in groups])
-            assert bundle["status"] == "observed_batch", bundle
-            accepted = editor.call("patchdiff_submit_observed_operations", target_file_id=tid,
-                observation_bundle_id=bundle["observation_bundle_id"], expected_target_version=0,
-                expected_current_hash=target["current_hash"], intent="Apply the original primary task to selected structures",
-                client_request_id="deterministic-structural-batch", groups=[{"observation_id": scope["observation_id"],
-                    "operations": group["operations"]} for scope, group in zip(bundle["scopes"], groups)])
-            assert accepted["status"] == "accepted" and accepted["after_version"] == 1, accepted
-            if editor.response_mode == "compact":
-                assert bundle["presentation"]["mode"] == accepted["presentation"]["mode"] == "compact"
-                assert "evidence" not in accepted and "groups" not in accepted
+            if editor_v2:
+                bundle = editor.call("patchdiff_observe_scopes", target_file_id=tid, selections=[g["selection"] for g in groups])
+                assert bundle["status"] == "observed_batch", bundle
+                receipt = editor.call("patchdiff_commit_bundle", snapshot=bundle["snapshot"],
+                    intent="Apply the original primary task to selected structures",
+                    client_request_id="deterministic-structural-batch", groups=[{"observation_id": scope["observation_id"],
+                        "operations": group["operations"]} for scope, group in zip(bundle["scopes"], groups)])
+                assert receipt["status"] == "accepted" and receipt["transaction"]["after"]["version"] == 1, receipt
+                assert receipt["current"] == receipt["transaction"]["after"]
+                assert receipt["transaction"]["group_count"] == len(groups)
+                assert receipt["transaction"]["operation_count"] == sum(len(g["operations"]) for g in groups)
+                accepted = {"after_version": receipt["transaction"]["after"]["version"],
+                            "after_hash": receipt["transaction"]["after"]["hash"],
+                            "pdcp_log_id": receipt["transaction"]["pdcp_log_id"],
+                            "change_count": receipt["transaction"]["operation_count"]}
             else:
-                assert "evidence" in accepted and "presentation" not in accepted
+                bundle = editor.call("patchdiff_observe_scope", target_file_id=tid, selections=[g["selection"] for g in groups])
+                assert bundle["status"] == "observed_batch", bundle
+                accepted = editor.call("patchdiff_submit_observed_operations", target_file_id=tid,
+                    observation_bundle_id=bundle["observation_bundle_id"], expected_target_version=0,
+                    expected_current_hash=target["current_hash"], intent="Apply the original primary task to selected structures",
+                    client_request_id="deterministic-structural-batch", groups=[{"observation_id": scope["observation_id"],
+                        "operations": group["operations"]} for scope, group in zip(bundle["scopes"], groups)])
+                assert accepted["status"] == "accepted" and accepted["after_version"] == 1, accepted
+                if editor.response_mode == "compact":
+                    assert bundle["presentation"]["mode"] == accepted["presentation"]["mode"] == "compact"
+                    assert "evidence" not in accepted and "groups" not in accepted
+                else:
+                    assert "evidence" in accepted and "presentation" not in accepted
             replay = None
             if not host_finalize:
                 saved = editor.call("patchdiff_save", target_file_id=tid, expected_target_version=1, expected_current_hash=accepted["after_hash"])
@@ -199,7 +224,7 @@ def run(destination, database_url=None, *, host_finalize=False):
         oracle = complete_primary(exports)
         assert oracle["complete_correct"] and oracle["behavioral"]["passed"] == oracle["behavioral"]["total"] == 20, oracle
         result = {"kind": "deterministic_api_capability_check", "model_invocations": 0, "gate2": "closed",
-                  "files": files, "oracle": oracle, "profiles": profiles, "host_finalized": host_finalize,
+                  "files": files, "oracle": oracle, "profiles": profiles, "host_finalized": host_finalize, "editor_v2": editor_v2,
                   "response_modes": {"editor": editor.response_mode, "operator": lifecycle.response_mode},
                   "editing_tools_calls": dict(editor.calls),
                   "trusted_lifecycle_tools_calls": dict(lifecycle.calls),
@@ -216,7 +241,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--host-finalize", action="store_true", help="Use trusted scalar finalization after all five editing batches")
+    parser.add_argument("--editor-v2", action="store_true", help="Exercise observed_v2 schemas/receipts over negotiated 2025 MCP; requires --host-finalize")
     args = parser.parse_args()
-    result = run(args.output, host_finalize=args.host_finalize)
+    result = run(args.output, host_finalize=args.host_finalize, editor_v2=args.editor_v2)
     print(json.dumps({"passed": result["oracle"]["complete_correct"], "behavioral": "20/20",
                       "editing_tools_call_total": result["editing_tools_call_total"], "profiles": result["profiles"], "model_invocations": 0}, indent=2))
