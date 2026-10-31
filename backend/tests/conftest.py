@@ -7,6 +7,8 @@ import pytest
 
 from app.main import app
 
+os.environ.setdefault("PATCHDIFF_WAYMARK_MODE", "resident")
+
 if not os.getenv("PATCHDIFF_NODE_BINARY") and not shutil.which("node"):
     for fallback in (
         Path.home() / ".local" / "bin" / "node",
