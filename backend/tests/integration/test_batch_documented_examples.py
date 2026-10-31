@@ -3,7 +3,7 @@ import re
 
 
 def test_complete_documented_python_json_markdown_batch_examples():
-    path = Path(__file__).resolve().parents[3] / "docs/STRUCTURAL_BATCH_EDITING.md"
+    path = Path(__file__).resolve().parents[3] / "docs/spec/STRUCTURAL_BATCH_EDITING.md"
     blocks = re.findall(r"```python\n(.*?)\n```", path.read_text(encoding="utf-8"), re.S)
     assert len(blocks) == 1
     namespace = {}
