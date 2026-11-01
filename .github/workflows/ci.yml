@@ -54,12 +54,15 @@ jobs:
           mkdir -p /tmp/test-pd-wheel-dist
           python -m build --wheel --no-isolation --outdir /tmp/test-pd-wheel-dist
           python -m venv --without-pip --system-site-packages /tmp/test-pd-wheel-venv
-          pip install --no-deps --prefix /tmp/test-pd-wheel-venv /tmp/test-pd-wheel-dist/*.whl
+          pip install --no-deps --force-reinstall --prefix /tmp/test-pd-wheel-venv /tmp/test-pd-wheel-dist/*.whl
           sed -i '1s|^.*$|#!/tmp/test-pd-wheel-venv/bin/python3|' /tmp/test-pd-wheel-venv/bin/patchdiff
           chmod +x /tmp/test-pd-wheel-venv/bin/patchdiff
+          BASE_SITES=$(python -c 'import sys; print("\n".join(p for p in sys.path if "site-packages" in p and "Patch-DIFF" not in p))')
+          VENV_SITE=$(/tmp/test-pd-wheel-venv/bin/python3 -c 'import site; print([p for p in site.getsitepackages() if "test-pd-wheel-venv" in p][0])')
+          echo "$BASE_SITES" > "$VENV_SITE/base-deps.pth"
           /tmp/test-pd-wheel-venv/bin/python3 -m app.waymark_bridge.bootstrap --target-dir /tmp/test-pd-wheel-venv/waymark-bridge
-          VENV_SITE=$(/tmp/test-pd-wheel-venv/bin/python3 -c 'import site; print(site.getsitepackages()[0])')
-          cp -r /tmp/test-pd-wheel-venv/waymark-bridge/node_modules "$VENV_SITE/app/waymark_bridge/"
+          APP_DIR=$(/tmp/test-pd-wheel-venv/bin/python3 -c 'import app; from pathlib import Path; print(Path(app.__file__).parent)')
+          cp -r /tmp/test-pd-wheel-venv/waymark-bridge/node_modules "$APP_DIR/waymark_bridge/"
       - name: Postgres integration tests
         env:
           PATCHDIFF_WAYMARK_MODE: resident

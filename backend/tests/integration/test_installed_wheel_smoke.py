@@ -73,7 +73,7 @@ def isolated_wheel_installation(tmp_path_factory):
             capture_output=True,
         )
         subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--no-deps", "--prefix", str(venv_dir), str(wheel_path)],
+            [sys.executable, "-m", "pip", "install", "--no-deps", "--force-reinstall", "--prefix", str(venv_dir), str(wheel_path)],
             check=True,
             capture_output=True,
             text=True,
