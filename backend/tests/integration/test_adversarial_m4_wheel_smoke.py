@@ -393,7 +393,7 @@ def test_adversarial_two_process_lifecycle_and_timing(isolated_env):
 
         # 2. Editor discovers scopes via authentic Node bridge
         list_resp = call_tool(editor_proc, 2, "patchdiff_list_scopes", {"target_file_id": target_id})
-        assert not list_resp["result"]["isError"]
+        assert not list_resp["result"]["isError"], f"list_resp: {list_resp}"
         list_payload = json.loads(list_resp["result"]["content"][0]["text"])
         assert list_payload["status"] == "candidates"
         names = {c["name"] for c in list_payload["candidates"]}

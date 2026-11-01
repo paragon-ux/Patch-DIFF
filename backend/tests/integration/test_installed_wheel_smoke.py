@@ -68,7 +68,7 @@ def isolated_wheel_installation(tmp_path_factory):
 
         venv_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            [sys.executable, "-m", "venv", "--without-pip", "--system-site-packages", str(venv_dir)],
+            [sys.executable, "-m", "venv", "--without-pip", str(venv_dir)],
             check=True,
             capture_output=True,
         )
@@ -87,6 +87,12 @@ def isolated_wheel_installation(tmp_path_factory):
         if current_site_packages:
             pth_file = venv_site_packages / "base-deps.pth"
             pth_file.write_text("\n".join(current_site_packages) + "\n", encoding="utf-8")
+
+        sitecustomize_file = venv_site_packages / "sitecustomize.py"
+        sitecustomize_file.write_text(
+            "import sys\nsys.path = [p for p in sys.path if 'Patch-DIFF' not in p and not p.endswith('/backend')]\n",
+            encoding="utf-8",
+        )
 
         if patchdiff_bin.is_file():
             content = patchdiff_bin.read_text(encoding="utf-8").splitlines()
