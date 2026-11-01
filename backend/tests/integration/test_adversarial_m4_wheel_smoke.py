@@ -272,6 +272,7 @@ def test_adversarial_profile_privilege_separation(isolated_env):
     finally:
         proc_v2.stdin.close()
         proc_v2.terminate()
+        proc_v2.wait(timeout=5)
 
     # 2. Test full profile (24 tools allowed)
     env_full = {
@@ -300,6 +301,7 @@ def test_adversarial_profile_privilege_separation(isolated_env):
     finally:
         proc_full.stdin.close()
         proc_full.terminate()
+        proc_full.wait(timeout=5)
 
 
 def test_adversarial_two_process_lifecycle_and_timing(isolated_env):
@@ -470,3 +472,5 @@ def test_adversarial_two_process_lifecycle_and_timing(isolated_env):
         host_proc.terminate()
         editor_proc.stdin.close()
         editor_proc.terminate()
+        host_proc.wait(timeout=5)
+        editor_proc.wait(timeout=5)

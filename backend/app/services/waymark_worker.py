@@ -202,6 +202,7 @@ class _Generation:
         self.threads = []
         self.stopping = threading.Event()
         self.ready = False
+        self.stderr_output = bytearray()
         digest = hashlib.sha256()
         for name in ("discovery_core.mjs", "worker.mjs"):
             raw = (self.owner.bridge_dir / name).read_bytes()
@@ -237,6 +238,12 @@ class _Generation:
     def poison(self, error):
         with self.lock:
             if self.error is None:
+                if self.stderr_output:
+                    stderr_msg = self.stderr_output.decode("utf-8", errors="replace").strip()
+                    if stderr_msg:
+                        import sys
+                        sys.stderr.write(f"[waymark_worker poison child stderr] {stderr_msg}\n")
+                        sys.stderr.flush()
                 self.error = error
             self.ready = False
         self._kill()
@@ -297,6 +304,13 @@ class _Generation:
                 if not raw:
                     return
                 count += len(raw)
+                self.stderr_output.extend(raw)
+                try:
+                    import sys
+                    sys.stderr.write(f"[waymark_worker stderr] {raw.decode('utf-8', errors='replace')}")
+                    sys.stderr.flush()
+                except Exception:
+                    pass
                 if count > STDERR_LIMIT:
                     self.poison(_error("PROTOCOL_ERROR", "Worker exceeded the stderr limit."))
                     return
