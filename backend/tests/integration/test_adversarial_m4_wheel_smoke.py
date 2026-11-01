@@ -25,29 +25,13 @@ import pytest
 from app.core.config import settings
 
 
+from backend.tests.integration.test_installed_wheel_smoke import isolated_wheel_installation
+
+
 @pytest.fixture(scope="module")
-def isolated_env():
-    """Verify and retrieve isolated wheel installation in /tmp/test-pd-wheel-venv."""
-    venv_dir = Path("/tmp/test-pd-wheel-venv")
-    patchdiff_bin = venv_dir / "bin" / "patchdiff"
-    python_bin = venv_dir / "bin" / "python3"
-    site_packages_dirs = list(venv_dir.glob("lib/python*/site-packages"))
-    assert site_packages_dirs, f"No site-packages in {venv_dir}"
-    venv_site_packages = site_packages_dirs[0]
-
-    from app.services.waymark_adapter import resolve_node_executable
-    node_path = resolve_node_executable()
-
-    assert patchdiff_bin.is_file(), f"{patchdiff_bin} missing"
-    assert python_bin.is_file(), f"{python_bin} missing"
-
-    return {
-        "venv_dir": venv_dir,
-        "patchdiff_bin": patchdiff_bin,
-        "python_bin": python_bin,
-        "site_packages": venv_site_packages,
-        "node_path": node_path,
-    }
+def isolated_env(isolated_wheel_installation):
+    """PR23-R3-TEST-001: Authentic isolated wheel environment provided by isolated_wheel_installation."""
+    return isolated_wheel_installation
 
 
 def test_adversarial_venv_strict_isolation(isolated_env):
@@ -393,7 +377,11 @@ def test_adversarial_two_process_lifecycle_and_timing(isolated_env):
 
         # 2. Editor discovers scopes via authentic Node bridge
         list_resp = call_tool(editor_proc, 2, "patchdiff_list_scopes", {"target_file_id": target_id})
-        assert not list_resp["result"]["isError"], f"list_resp: {list_resp}"
+        if list_resp["result"]["isError"]:
+            editor_proc.stdin.close()
+            editor_proc.terminate()
+            err = editor_proc.stderr.read()
+            assert not list_resp["result"]["isError"], f"list_resp: {list_resp} | stderr: {err}"
         list_payload = json.loads(list_resp["result"]["content"][0]["text"])
         assert list_payload["status"] == "candidates"
         names = {c["name"] for c in list_payload["candidates"]}
