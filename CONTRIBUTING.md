@@ -50,12 +50,14 @@ pip install --upgrade pip
 pip install -r requirements.lock
 pip install --no-deps -e .
 
-# 3. Start PostgreSQL
-docker compose up -d postgres
+# 3. Provision PostgreSQL & run migrations (supports native on 5434, docker on 5433, or both)
+patchdiff-mcp setup --route both
 
-# 4. Run database migrations through head
-export PYTHONPATH=".:backend"
-alembic -c backend/app/migrations/alembic.ini upgrade head
+# Manage database daemons identically across either or both routes:
+patchdiff-mcp daemon start   --route <native|docker|both>
+patchdiff-mcp daemon stop    --route <native|docker|both>
+patchdiff-mcp daemon restart --route <native|docker|both>
+patchdiff-mcp daemon status  --route <native|docker|both>
 ```
 
 ---

@@ -62,6 +62,8 @@ Run with: `pytest backend/tests/unit -q`
 | `test_friction_followup.py` | FR-1..FR-20 pure behavior: `occurrence_index` basis-shift warnings and selector details, grapheme boundary cases, span context guards and 0.3.0/0.5.0 profile selection, line-ending facts and export mapping, the shared retryable set, span evidence, near-miss scope and pruned-versus-unpruned equivalence over buffers beyond 256 code points, exact abandoning and pigeonhole/Landau-Vishkin work bounds on 65,536-code-point repetitive buffers, consumed sequential matches, failure windows and context elision, no-op warnings, candidate cursors and replacement numbers, `line_starts`, UTF-8 serialization fallback, structured argument errors and parameter descriptions. |
 | `test_migration_0003_offline.py` | **C5b**: SQL rendering of nullable `source_line_endings` without backfill; downgrade refusal precedes the column drop. |
 | `test_migration_0002_offline.py` | **C5**: 0002 sits between 0001 and head `20261022_0003`; SQL rendering of `origin`, `derived_json`, `client_request_id`, `request_fingerprint`, and partial unique index; downgrade safety check rendering. |
+| `test_publish_workflow.py` | **PR23-R3-DEP-001**: PyPI workflow YAML validity, elimination of inline `${{ ... }}` interpolation in `run:` blocks, anchored tag regex validation against injection payloads, git provenance & `origin/main` ancestry checks, `pyproject.toml` version matching, and OIDC `id-token: write` isolation. |
+| `test_runtime_cli.py` | Dual-route PostgreSQL CLI (`patchdiff-mcp setup` / `patchdiff-mcp daemon`): distinct port enforcement (`5434` native vs `5433` docker), idempotent `postgresql.conf`/`pg_hba.conf`/`.env` generation, and host `mcp_config.json` provisioning. |
 
 ---
 
@@ -87,6 +89,9 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 | `test_mcp_e2e_flows.py` | End-to-end upload -> context -> submit -> get -> save -> replay -> export workflows. |
 | `test_external_mcp_adapter.py` | External MCP stdio adapter JSON-RPC handling; tool discovery; argument routing. |
 | `test_external_mcp_e2e.py` | In-process adapter flows AND **`test_real_stdio_subprocess_mcp_full_modernized_workflow`**: real child-process `python -m app.mcp.external_adapter` communicating over stdin/stdout backed by live Postgres executing the full 8-step product workflow (initialize, upload, read/search, ambiguous reject, disambiguated accept with lineage & idempotency, SAVE, replay, and export). |
+| `test_finalize_live.py` | Atomic host finalization (`patchdiff_finalize_target`) and paginated export (`patchdiff_read_finalized_export`) against live PostgreSQL: row-lock serialization, durable `client_request_id` recovery, 1 MiB inline boundary, replay failure rollback, and decoupled lock timing metrics. |
+| `test_installed_wheel_smoke.py` & `test_adversarial_m4_wheel_smoke.py` | **PR23-R3-TEST-001**: Built wheel installed into an isolated virtualenv outside the repo checkout (`sys.path` isolation verified), Waymark JS bridge + `wasmImports["_Znwm"]` verification, and full two-process (`full` host + `observed_v2` editor) stdio lifecycle via the `patchdiff-mcp` / `patchdiff` console scripts. |
+| `test_dual_route_runtime_cli.py` | End-to-end native PostgreSQL cluster (`initdb` / `pg_ctl`) lifecycle (`start` -> `alembic upgrade head` to `20261031_0007` -> `status` -> `restart` -> `stop`) on an isolated port. |
 
 ---
 

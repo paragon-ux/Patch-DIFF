@@ -189,6 +189,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Bootstrap PatchDIFF Waymark JavaScript bridge")
     parser.add_argument(
         "--target-dir",
+        "--bridge-dir",
+        dest="target_dir",
         type=Path,
         default=None,
         help="Target directory for bridge installation (default: user cache)",

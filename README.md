@@ -87,32 +87,50 @@ All formats require `expected_target_version` and/or `expected_current_hash` and
 
 ## Quickstart
 
-### 1. Start PostgreSQL & Apply Migrations
+PatchDIFF supports two independent, non-conflicting PostgreSQL runtime routes out of the box—**`native`** (user-space `initdb`/`pg_ctl` cluster on `127.0.0.1:5434`) and **`docker`** (Docker Compose `patchdiff-postgres` container on `127.0.0.1:5433`)—with identical setup and daemon lifecycle commands.
+
+### 1. Provision Runtime & Apply Migrations
 
 ```bash
-docker compose up -d postgres
-python -m alembic -c backend/app/migrations/alembic.ini upgrade head
+# Provision both routes (native on 5434 + docker on 5433), apply Alembic migrations
+# through head (20261031_0007), verify the Waymark JS bridge, and smoke-test MCP stdio:
+patchdiff-mcp setup --route both
+
+# Or provision a single route independently:
+patchdiff-mcp setup --route native   # User-space PostgreSQL cluster on 127.0.0.1:5434
+patchdiff-mcp setup --route docker   # Docker Compose container on 127.0.0.1:5433
+```
+
+Manage the database daemons identically across either or both routes:
+
+```bash
+patchdiff-mcp daemon start   --route <native|docker|both>
+patchdiff-mcp daemon stop    --route <native|docker|both>
+patchdiff-mcp daemon restart --route <native|docker|both>
+patchdiff-mcp daemon status  --route <native|docker|both>
 ```
 
 ### 2. Connect via MCP Stdio Adapter
 
-PatchDIFF exposes a stdio JSON-RPC MCP adapter. For Claude Desktop (`claude_desktop_config.json`):
+PatchDIFF exposes a stdio JSON-RPC MCP adapter (`patchdiff-mcp`, `uvx patchdiff-mcp`, or `python -m app.mcp.external_adapter`). You can auto-configure your MCP host config with `patchdiff-mcp setup --route both --update-mcp-config --mcp-route <native|docker>`, or configure `claude_desktop_config.json` / `mcp_config.json` directly:
 
 ```json
 {
   "mcpServers": {
     "patchdiff": {
-      "command": "python",
-      "args": ["-m", "app.mcp.external_adapter"],
+      "command": "patchdiff-mcp",
+      "args": [],
       "env": {
-        "PYTHONPATH": "/path/to/Patch-DIFF/backend",
-        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff",
-        "PATCHDIFF_MCP_PROFILE": "editor"
+        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5434/patchdiff",
+        "PATCHDIFF_MCP_PROFILE": "observed_v2",
+        "PATCHDIFF_WAYMARK_MODE": "resident"
       }
     }
   }
 }
 ```
+
+*(Use port `5434` for the `native` route or port `5433` for the `docker` route).*
 
 See [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) for full host integration details.
 
@@ -120,15 +138,12 @@ See [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) for full host in
 
 ## MCP Profiles & Tool Surface
 
-External MCP defaults to the **7-tool `editor` profile**: `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, and `patchdiff_replay`.
+External MCP defaults to the **5-tool `observed_v2` profile**: `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`.
 
 Configure the profile via `PATCHDIFF_MCP_PROFILE`:
-- **`editor`** (default, 7 tools): Recommended for interactive agent workflows.
-- **`observed_v2`** (5 tools): Streamlined editing with explicit AST snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte hard ceiling). See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
-- **`hybrid_editor`** (1 tool): Minimal single-tool editing (`patchdiff_submit_edits`).
-- **`observed_editor`** (4 tools): Pure editing and reading tools for delegated subagents.
-- **`unobserved`** (5 tools): Direct text reads and submissions without structural AST observation.
-- **`full`** (22 tools): Complete tool suite including administrative document lifecycle and legacy wrappers.
+- **`observed_v2`** (default, 5 tools): Streamlined agent editing with explicit AST snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte hard ceiling). See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
+- **`full`** (24 tools): Complete trusted-host tool suite including document initialization, `patchdiff_finalize_target`, `patchdiff_read_finalized_export`, `patchdiff_save`, `patchdiff_replay`, audit inspection, and legacy compatibility wrappers.
+- **Legacy compatibility profiles** (`editor` [7], `observed` [6], `unobserved` [5], `observed_editor` [4], `unobserved_editor` [3], `hybrid_editor` [1]): Retained for backward compatibility with a once-per-process stderr migration notice.
 
 ---
 

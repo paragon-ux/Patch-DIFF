@@ -29,14 +29,18 @@ single-scope and unobserved records/profiles retain their semantics. Migration
 single uniqueness; replay verifies every recorded scope without Waymark.
 [Limits, error codes, evidence and examples](../spec/STRUCTURAL_BATCH_EDITING.md).
 
-External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
-`unobserved` has 5, `observed` 6, opt-in `observed_editor` 4, and explicit
-compatibility `full` 22. The four-tool delegated role excludes SAVE/replay at
-both advertisement and dispatch while preserving the existing profiles and all
-request shapes. Observation/submission descriptions clarify route inputs, returned
-authority and the scopes-to-groups mapping; service validation and durable
-transaction/replay formats are unchanged. Profiles filter both discovery and calls and remain immutable for a session; the internal
-registry keeps all 22 handlers. Trusted lifecycle operators and older integrations
+External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=observed_v2` (5 tools).
+Legacy compatibility profiles (`editor` [7], `observed` [6], `unobserved` [5],
+`observed_editor` [4], `unobserved_editor` [3], `hybrid_editor` [1]) remain
+available with a once-per-process stderr migration notice, and explicit
+compatibility `full` exposes all 24 tools (including `patchdiff_finalize_target`
+and `patchdiff_read_finalized_export`). Delegated editing profiles exclude
+SAVE/replay/finalize at both advertisement and dispatch while preserving the
+existing profiles and all request shapes. Observation/submission descriptions
+clarify route inputs, returned authority and the scopes-to-groups mapping;
+service validation and durable transaction/replay formats are unchanged. Profiles
+filter both discovery and calls and remain immutable for a session; the internal
+registry keeps all 24 handlers. Trusted lifecycle operators and older integrations
 must opt into `full` before starting their session.
 
 | Tool | Stored protocol | Runtime for new submissions | Behavior |
@@ -80,7 +84,7 @@ Discovery examples are deep-copied per result and bounded: 65,536 compact ASCII-
 
 SAVE snapshots current target state and rotates editing cycles without mutating content; optional version and hash guards are both checked. Replay checks initial snapshot ownership/hash, accepted-log ownership/content hashes, contiguous versions, before/after hashes and recorded execution profiles. Materialized health reports independent raw `content_matches`, `stored_hash_matches`, `recomputed_hash_matches` and `version_matches`; successful reconstruction can coexist with unhealthy storage. CRLF/bare-CR corruption is visible even if canonical hashes agree. Replay never repairs target or history.
 
-Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004` (observations) and `20261027_0005` (bundles). Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses existing typed ledger rows rather than discarding information. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
+Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004` (observations), `20261027_0005` (bundles), `20261031_0006` (`target_finalizations`) and `20261031_0007` (`finalization_checks`). Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses existing typed ledger rows rather than discarding information. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. Migrations 0006 and 0007 add `target_finalizations` with durable `client_request_id` idempotency, `request_fingerprint`, immutable `exported_bytes`, and `replay_checks_json`; downgrade refuses when rows exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
 
 ## Verification scope
 
@@ -101,4 +105,8 @@ Decision: add `observed_v2` with eight external purposes, six common bundle path
 Decision: streamline `observed_v2` to five external purpose-specific tools (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`), eliminating dual-path confusion by pruning redundant singular tools (`patchdiff_observe_one`, `patchdiff_commit_observation`, and `patchdiff_read_observation`). Resolve commit receipt bloat and client response truncation by preserving the authoritative `scopes` confirmation array while dropping raw `changes` span facts (reducing receipt payload size from ~12 KB to ~2 KB). Retain rich candidate symbol and selector metadata in `patchdiff_list_scopes` for non-blind scope discovery.
 
 [The PR 21 retrospective](https://github.com/paragon-ux/Patch-DIFF/blob/main/docs/reviews/PR21-streamlined-v2-retrospective.md) records the full architectural narrative across PR 19, 20, 20slim, and 21, and documents the empirical 5-file canary benchmark (24 planner steps vs 41 in PR 20, 16 MCP calls vs 35, 968K cache tokens vs 2.64M, 0 rejections/retries, and 100% full-byte correctness). Existing profiles, internal handlers, services, transaction formats, migrations, and replay runtimes retain their contracts.
+
+## PR23: profile consolidation, atomic finalization, dual-route setup & PyPI packaging
+
+Decision: elevate `observed_v2` (5 tools) to the default external MCP profile and expand `full` to 24 tools with atomic host finalization (`patchdiff_finalize_target`) and immutable finalized-export paging (`patchdiff_read_finalized_export`), backed by migrations `20261031_0006` and `20261031_0007` (`target_finalizations`). Package the service as `patchdiff-mcp` (`patchdiff-mcp`, `patchdiff-mcp-setup`, `patchdiff-mcp-daemon`) with packaged Waymark JS bridge assets and dual-route PostgreSQL provisioning (`native` on `127.0.0.1:5434` and `docker` on `127.0.0.1:5433`). See [the PR 23 review record](https://github.com/paragon-ux/Patch-DIFF/blob/main/docs/reviews/PR23-modernization-release-review.md) and [finalize replay scaling benchmark](../benchmarks/finalize_replay_benchmark_report.md).
 

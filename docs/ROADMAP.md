@@ -47,7 +47,8 @@ In accordance with [PR Review Standard v1.1.0](standards/PR_REVIEW_STANDARD.md):
 ### 2.1 Distribution (`patchdiff-mcp`)
 
 - **PyPI Package Name**: `patchdiff-mcp` (differentiating from unrelated third-party package `patchdiff`).
-- **Console Script**: `patchdiff` (enabling standard execution via `uvx --from patchdiff-mcp patchdiff` or `pip install patchdiff-mcp`).
+- **Console Scripts**: `patchdiff-mcp` (primary, enabling direct execution via `uvx patchdiff-mcp` or `pip install patchdiff-mcp`), `patchdiff-mcp-setup`, and `patchdiff-mcp-daemon` (with `patchdiff`, `patchdiff-setup`, and `patchdiff-daemon` retained as compatibility aliases).
+- **Dual-Route PostgreSQL Runtime CLI**: `patchdiff-mcp setup --route <native|docker|both>` and `patchdiff-mcp daemon <start|stop|restart|status> --route <native|docker|both>` manage an isolated user-space PostgreSQL cluster (`native`, port `5434`) and a Docker Compose container (`docker`, port `5433`) independently and simultaneously.
 - **Supported Runtime**: Python >=3.11 with `psycopg[binary]>=3.2,<4.0`.
 - **Packaging Security**: PyPI Trusted Publishing via GitHub Actions OIDC (`.github/workflows/publish.yml`) gated to exact tag-to-metadata verification and owner-protected environment authorization (cryptographic tag signatures remain a future policy).
 

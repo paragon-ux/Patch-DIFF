@@ -94,11 +94,12 @@ def isolated_wheel_installation(tmp_path_factory):
             encoding="utf-8",
         )
 
-        if patchdiff_bin.is_file():
-            content = patchdiff_bin.read_text(encoding="utf-8").splitlines()
-            content[0] = f"#!{python_bin}"
-            patchdiff_bin.write_text("\n".join(content) + "\n", encoding="utf-8")
-            patchdiff_bin.chmod(0o755)
+        for script_bin in venv_dir.glob("bin/patchdiff*"):
+            if script_bin.is_file():
+                content = script_bin.read_text(encoding="utf-8").splitlines()
+                content[0] = f"#!{python_bin}"
+                script_bin.write_text("\n".join(content) + "\n", encoding="utf-8")
+                script_bin.chmod(0o755)
 
     # Ensure Waymark bridge is bootstrapped with pinned Node
     site_packages_dirs = list(venv_dir.glob("lib/python*/site-packages"))

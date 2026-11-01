@@ -34,7 +34,7 @@ Authoritative technical specifications and tool schemas:
 
 - [**PATCHDIFF_CORE_SPEC.md**](spec/PATCHDIFF_CORE_SPEC.md): Pure deterministic core runtime, validation stages (`ValidationStage`), overlapping-match enumeration, sequential simulation, and replay engine.
 - [**MCP_TOOLS.md**](spec/MCP_TOOLS.md): Complete Model Context Protocol tool contracts, schemas, byte budgets, and request/response representations.
-- [**DATA_MODEL.md**](spec/DATA_MODEL.md): PostgreSQL relational substrate, row-locking concurrency model (`SELECT ... FOR UPDATE`), and Alembic migrations `20260510_0001` through `20261027_0005`.
+- [**DATA_MODEL.md**](spec/DATA_MODEL.md): PostgreSQL relational substrate, row-locking concurrency model (`SELECT ... FOR UPDATE`), and Alembic migrations `20260510_0001` through `20261031_0007`.
 - [**PDCP_FORMAT.md**](spec/PDCP_FORMAT.md): Declarative transaction input formats: typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), and guarded sole replacement (`patchdiff-tx/3`).
 - [**MCP_EDITOR_V2.md**](spec/MCP_EDITOR_V2.md): Streamlined 5-tool `observed_v2` editor profile with explicit reusable snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte logical ceiling).
 - [**STRUCTURAL_BATCH_EDITING.md**](spec/STRUCTURAL_BATCH_EDITING.md): Multi-scope AST observation and atomic batch execution contracts.
@@ -47,7 +47,7 @@ Authoritative technical specifications and tool schemas:
 Practical guides for integrating PatchDIFF with agents and desktop tools:
 
 - [**HOST_INTEGRATION_GUIDE.md**](guides/HOST_INTEGRATION_GUIDE.md): Host-owned loop, prompt hygiene rules, reading slices, guarded submissions, handling rejections, and retry orchestration.
-- [**CLAUDE_DESKTOP_SETUP.md**](guides/CLAUDE_DESKTOP_SETUP.md): Step-by-step configuration for connecting Anthropic Claude Desktop to PatchDIFF via stdio MCP.
+- [**CLAUDE_DESKTOP_SETUP.md**](guides/CLAUDE_DESKTOP_SETUP.md): Step-by-step configuration for connecting MCP hosts (Claude Desktop, Antigravity) to PatchDIFF via stdio MCP, including dual-route PostgreSQL provisioning (`patchdiff-mcp setup` / `patchdiff-mcp daemon` for `native` port `5434` and `docker` port `5433`).
 - [**OBSERVED_EDITOR_WORKFLOW.md**](guides/OBSERVED_EDITOR_WORKFLOW.md): End-to-end walkthrough for agents using structural observation and atomic batch submission.
 
 ---
@@ -57,7 +57,8 @@ Practical guides for integrating PatchDIFF with agents and desktop tools:
 Empirical validation and testing methodology:
 
 - [**modernized_benchmark_report.md**](benchmarks/modernized_benchmark_report.md): Standalone Modernized 2×2 Factorial Benchmark ($N=12$) demonstrating a -55.8% step reduction, -57.8% tool invocation reduction, -64.8% token reduction, and zero Git verification tax.
-- [**TEST_MATRIX.md**](benchmarks/TEST_MATRIX.md): Comprehensive test coverage matrix across unit, live PostgreSQL, migration roundtrip, and stdio subprocess tests.
+- [**finalize_replay_benchmark_report.md**](benchmarks/finalize_replay_benchmark_report.md): Empirical scaling evaluation of `patchdiff_finalize_target` lock-wait and lock-hold latency across edit history lengths ($0..100$ accepted commits).
+- [**TEST_MATRIX.md**](benchmarks/TEST_MATRIX.md): Comprehensive test coverage matrix across unit, live PostgreSQL, migration roundtrip, installed wheel packaging, and stdio subprocess tests.
 
 ---
 

@@ -30,6 +30,7 @@ nav = [
     ]},
     { "Benchmarks" = [
         { "Modernized 2×2 Factorial Benchmark" = "benchmarks/modernized_benchmark_report.md" },
+        { "Finalize & Replay Scaling Benchmark" = "benchmarks/finalize_replay_benchmark_report.md" },
         { "Verification Test Matrix" = "benchmarks/TEST_MATRIX.md" }
     ]},
     { "Papers" = [

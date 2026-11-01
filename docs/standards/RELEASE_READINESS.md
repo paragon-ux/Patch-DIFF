@@ -6,7 +6,7 @@ This checklist distinguishes reviewed code from a published release. Neither mer
 
 | Identifier | Current value | Meaning |
 | --- | --- | --- |
-| Python distribution | `patchdiff-mvp` `0.1.0` | Package metadata; candidate first tag `v0.1.0` |
+| Python distribution | `patchdiff-mcp` `0.1.0` | Package metadata (`patchdiff-mcp`, `patchdiff-mcp-setup`, `patchdiff-mcp-daemon`); candidate first tag `v0.1.0` |
 | MCP server advertisement | `patchdiff-mvp` `0.2.2` | Stdio server information |
 | MCP wire protocol | `2024-11-05`, `2025-06-18`, `2025-11-25` | Supported negotiated revisions (`2024-11-05` legacy default; `2025-11-25` latest). See negotiation fallback rules below. |
 | Legacy transaction | `0.2.3` | Frozen declarative `.pdcp` format |
@@ -14,6 +14,7 @@ This checklist distinguishes reviewed code from a published release. Neither mer
 | Match/span operations | `patchdiff-tx/2` / runtime `patchdiff-mvp-0.3.0` | Sequential span and match operations |
 | Span context | `patchdiff-tx/2` / runtime `patchdiff-mvp-0.5.0` | Span operations with `expected_before`/`expected_after` |
 | Sole replacement | `patchdiff-tx/3` / runtime `patchdiff-mvp-0.4.0` | Explicit whole-target replacement |
+| Observed batch | `patchdiff-observed-batch/1` / runtime `patchdiff-observed-batch-r1` | Grouped scope-local operations on one observed snapshot |
 
 These are independent version domains. Do not rename durable runtime profiles to match a marketing version. Existing historical runtime profiles `0.1.0`, `0.2.0` and `0.2.1` remain supported under their recorded identifiers.
 

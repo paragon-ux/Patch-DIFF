@@ -6,8 +6,8 @@ Most users should connect through the external MCP adapter documented in [README
 
 ## Boundary
 
-All 22 internal registry handlers remain available to trusted code. External MCP
-profiles independently restrict both advertised and callable tools (7 by default).
+All 24 internal registry handlers remain available to trusted code. External MCP
+profiles independently restrict both advertised and callable tools (`observed_v2` 5 tools by default; `full` 24 tools).
 The internal observed batch form still verifies every server-issued scope under
 the target lock and uses the shared applier, atomic commit and replay path.
 [Batch and profile contracts](docs/spec/STRUCTURAL_BATCH_EDITING.md).
@@ -24,17 +24,17 @@ It must keep the same invariants as the external adapter:
 
 ## Prerequisites
 
-From the repo root:
+From the repo root, provision either the `native` (`127.0.0.1:5434`) or `docker` (`127.0.0.1:5433`) PostgreSQL route (or `both`):
 
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Or Windows: .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.lock
 python -m pip install --no-deps -e .
-docker compose up -d postgres
-$env:PYTHONPATH = "backend"
-.\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
+
+# Provision both routes (native on 5434 + docker on 5433) and run migrations:
+patchdiff-mcp setup --route both
 ```
 
 ## Submit Typed Edits (Primary `patchdiff-tx/1`)
@@ -61,12 +61,13 @@ Frozen `.pdcp` v0.2.3 submission (`patchdiff_submit_pdcp`) and the deprecated re
 .\.venv\Scripts\python.exe -c "from app.mcp import tools; from app.mcp.server import registry; print('\n'.join(registry.names()))"
 ```
 
-Expected internal tool surface (22 registered handlers):
+Expected internal tool surface (24 registered handlers):
 
 ```text
 patchdiff_build_prompt_context
 patchdiff_build_regeneration_prompt
 patchdiff_export_target
+patchdiff_finalize_target
 patchdiff_find_occurrences
 patchdiff_get_manifest_ledger
 patchdiff_get_pdcp_log
@@ -76,6 +77,7 @@ patchdiff_handle_upload
 patchdiff_initialize_target
 patchdiff_observe_scope
 patchdiff_preview
+patchdiff_read_finalized_export
 patchdiff_read_lines
 patchdiff_read_target
 patchdiff_replay

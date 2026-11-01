@@ -5,11 +5,12 @@ PatchDIFF's Claude Desktop adapter is a local stdio MCP server, not a localhost 
 Claude Desktop launches the Python process directly and talks to it over stdin/stdout:
 
 ```text
-Claude Desktop
+Claude Desktop / MCP Host
   -> launches
-backend/app/mcp/external_adapter.py
-  -> uses
-Postgres Docker container on localhost:5432
+backend/app/mcp/external_adapter.py (or `patchdiff-mcp` console script)
+  -> uses either independent PostgreSQL route:
+     - `native` route: user-space PostgreSQL cluster on 127.0.0.1:5434
+     - `docker` route: Docker Compose `patchdiff-postgres` container on 127.0.0.1:5433
 ```
 
 Do not connect Claude Desktop to `http://127.0.0.1:8000` for this setup. The FastAPI server is useful for health checks and future HTTP API work, but the current Claude Desktop MCP path is the stdio adapter.
@@ -22,19 +23,46 @@ When running an older revision without the UTF-8 transport fix, add `"PYTHONIOEN
 
 Restart or refresh the server through the host after command/environment changes, then verify the connection. Claude Desktop restart steps appear below; other hosts have their own refresh lifecycle.
 
-## 1. Start Postgres And Run Migrations
+## 1. Provision Postgres & Run Migrations (`native`, `docker`, or `both`)
 
-From the Patch-DIFF repo root:
+PatchDIFF provides a unified setup and daemon lifecycle CLI (`patchdiff-mcp setup` / `patchdiff-mcp daemon`) supporting two independent, non-conflicting PostgreSQL routes:
+
+- **`native` (`127.0.0.1:5434`)**: User-space PostgreSQL cluster managed via `initdb` / `pg_ctl` in `~/.local/share/patchdiff-runtime/pgdata` (ideal for WSL/Linux without requiring Docker Desktop).
+- **`docker` (`127.0.0.1:5433`)**: Docker Compose `patchdiff-postgres` (`postgres:16.3-alpine`) container mapped to `127.0.0.1:5433:5432`.
+
+From the Patch-DIFF repo root (or with the `patchdiff-mcp` package installed):
+
+```bash
+# Provision both routes, run Alembic migrations through head (20261031_0007),
+# bootstrap/verify the Waymark JS bridge, and smoke-test the MCP stdio adapter:
+patchdiff-mcp setup --route both
+
+# Or provision a single route:
+patchdiff-mcp setup --route native
+patchdiff-mcp setup --route docker
+```
+
+Both routes support identical daemon lifecycle commands:
+
+```bash
+patchdiff-mcp daemon start   --route <native|docker|both>
+patchdiff-mcp daemon stop    --route <native|docker|both>
+patchdiff-mcp daemon restart --route <native|docker|both>
+patchdiff-mcp daemon status  --route <native|docker|both>
+```
+
+You can also run Docker Compose and Alembic manually if preferred:
 
 ```powershell
 docker compose up -d postgres
 $env:PYTHONPATH = "backend"
+$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5433/patchdiff"
 .\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
 ```
 
-You do not need to run `uvicorn` for the Claude Desktop MCP tools. Claude Desktop launches `app.mcp.external_adapter` directly.
+You do not need to run `uvicorn` for the Claude Desktop MCP tools. Claude Desktop launches `app.mcp.external_adapter` (or the `patchdiff-mcp` console script) directly.
 
-Apply migrations through `20261027_0005` so the typed ledger, request idempotency, source line endings and bundled scope evidence are available.
+Apply migrations through `20261031_0007` so the typed ledger, request idempotency, source line endings, bundled scope evidence, and durable target finalizations (`target_finalizations`) are available.
 
 ## 2. Smoke Test The Adapter
 
@@ -80,17 +108,18 @@ References:
 
 ## 4. Add PatchDIFF
 
-The default startup profile is `editor` (7 advertised and callable tools).
-Use `PATCHDIFF_MCP_PROFILE=full` in the server environment for older integrations
-or trusted upload/initialization/export workflows that need the complete 22-tool
-catalog. `unobserved` (5), `observed` (6), and `observed_editor` (4) are also
-available. The last is for delegated editors whose host owns SAVE/replay.
+The default startup profile is `observed_v2` (5 advertised and callable tools: `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`).
+Use `PATCHDIFF_MCP_PROFILE=full` in the server environment for trusted upload/initialization/export/finalization workflows that need the complete 24-tool catalog. Legacy compatibility profiles (`editor` [7], `observed` [6], `unobserved` [5], `observed_editor` [4], `unobserved_editor` [3], and `hybrid_editor` [1]) remain available with a once-per-process stderr migration notice.
 Unknown profiles fail startup, and requests cannot override the session's immutable selection.
 [Exact tool lists and structural batches](../spec/STRUCTURAL_BATCH_EDITING.md).
 
-Use the venv Python directly so Claude Desktop launches the interpreter that has PatchDIFF's dependencies installed.
+You can auto-populate your MCP configuration file using:
 
-Replace paths if your repo lives somewhere else:
+```bash
+patchdiff-mcp setup --route both --update-mcp-config --mcp-route <native|docker> --mcp-config /path/to/mcp_config.json
+```
+
+Or add the configuration manually using your virtual environment Python (pointing `PATCHDIFF_DATABASE_URL` to port `5434` for `native` or port `5433` for `docker`):
 
 ```json
 {
@@ -104,7 +133,9 @@ Replace paths if your repo lives somewhere else:
       ],
       "env": {
         "PYTHONPATH": "C:\\path\\to\\Patch-DIFF\\backend",
-        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff"
+        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5433/patchdiff",
+        "PATCHDIFF_MCP_PROFILE": "observed_v2",
+        "PATCHDIFF_WAYMARK_MODE": "resident"
       }
     }
   }
@@ -125,11 +156,14 @@ Open a new chat and check the MCP/connectors UI:
 + button near the message box, labeled "+" -> Connectors
 ```
 
-You should see `patchdiff` and the full modernized tool surface:
+Under the default `observed_v2` profile, you will see the 5 streamlined editing tools:
+- `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`
 
-- **Target lifecycle**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
-- **Authoritative reads & exact search**: `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`
-- **Guarded edit submission**: `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (match/span, `patchdiff-tx/2`), `patchdiff_submit_replacement` (sole replace_all, `patchdiff-tx/3`), `patchdiff_submit_pdcp` (legacy `.pdcp`)
+Under `PATCHDIFF_MCP_PROFILE=full`, you will see all 24 tools:
+
+- **Target lifecycle & finalization**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`, `patchdiff_finalize_target`, `patchdiff_read_finalized_export`
+- **Authoritative reads, structural scopes & exact search**: `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`
+- **Guarded edit submission**: `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (match/span, `patchdiff-tx/2`), `patchdiff_submit_observed_operations` (single/batch observed scopes), `patchdiff_submit_replacement` (sole replace_all, `patchdiff-tx/3`), `patchdiff_submit_pdcp` (legacy `.pdcp`)
 - **Checkpoints, replay & audit**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
 - **Advisory preview & legacy wrappers**: `patchdiff_preview` (bounded keyless/no-audit evaluation), `patchdiff_build_prompt_context` (bounded prefix convenience), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 

@@ -218,6 +218,7 @@ def test_adversarial_wheel_package_completeness():
             entry_points_files = [n for n in names if n.endswith("entry_points.txt")]
             assert entry_points_files, "entry_points.txt missing from wheel"
             ep_content = z.read(entry_points_files[0]).decode("utf-8")
+            assert "patchdiff-mcp = app.mcp.external_adapter:main" in ep_content
             assert "patchdiff = app.mcp.external_adapter:main" in ep_content
 
             # Required waymark_bridge files

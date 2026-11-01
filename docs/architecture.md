@@ -80,7 +80,7 @@ PatchDIFF enforces a strict separation of concerns across four distinct operatio
 ┌──────────────────────────────▼──────────────────────────────┐
 │                  Tier 2: MCP Transport Layer                │
 │     (backend/app/mcp/external_adapter.py, tools.py)         │
-│  - Exposes immutable profiles (editor, observed_v2, full)   │
+│  - Exposes immutable profiles (observed_v2, full, legacy)   │
 │  - Enforces strict input schema validation & request limits │
 │  - Formats bounded machine-readable responses & receipts    │
 └──────────────────────────────┬──────────────────────────────┘
@@ -117,7 +117,7 @@ flowchart LR
     A["Initial Snapshot<br/>(Cycle 0 Text)"] --> B["Replay Engine<br/>(patchdiff_replay)"]
     C["Ordered Accepted Logs<br/>(append_only_pdcp_logs)"] --> B
     
-    B --> D{"Profile Dispatch<br/>(0.1.0 .. 0.5.0)"}
+    B --> D{"Profile Dispatch<br/>(0.1.0 .. 0.5.0, batch-r1)"}
     
     D --> E["Reconstruct<br/>In-Memory Buffer"]
     

@@ -20,7 +20,12 @@ dependencies = [
 ]
 
 [project.scripts]
+patchdiff-mcp = "app.mcp.external_adapter:main"
+patchdiff-mcp-setup = "app.mcp.runtime_cli:setup_entrypoint"
+patchdiff-mcp-daemon = "app.mcp.runtime_cli:daemon_entrypoint"
 patchdiff = "app.mcp.external_adapter:main"
+patchdiff-setup = "app.mcp.runtime_cli:setup_entrypoint"
+patchdiff-daemon = "app.mcp.runtime_cli:daemon_entrypoint"
 
 [project.optional-dependencies]
 test = [

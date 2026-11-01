@@ -55,8 +55,10 @@ jobs:
           python -m build --wheel --no-isolation --outdir /tmp/test-pd-wheel-dist
           python -m venv --without-pip /tmp/test-pd-wheel-venv
           pip install --no-deps --force-reinstall --prefix /tmp/test-pd-wheel-venv /tmp/test-pd-wheel-dist/*.whl
-          sed -i '1s|^.*$|#!/tmp/test-pd-wheel-venv/bin/python3|' /tmp/test-pd-wheel-venv/bin/patchdiff
-          chmod +x /tmp/test-pd-wheel-venv/bin/patchdiff
+          for script_bin in /tmp/test-pd-wheel-venv/bin/patchdiff*; do
+            sed -i '1s|^.*$|#!/tmp/test-pd-wheel-venv/bin/python3|' "$script_bin"
+            chmod +x "$script_bin"
+          done
           BASE_SITES=$(python -c 'import sys; print("\n".join(p for p in sys.path if "site-packages" in p and "Patch-DIFF" not in p))')
           VENV_SITE=$(/tmp/test-pd-wheel-venv/bin/python3 -c 'import site; print([p for p in site.getsitepackages() if "test-pd-wheel-venv" in p][0])')
           echo "$BASE_SITES" > "$VENV_SITE/base-deps.pth"
