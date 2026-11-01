@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Identity, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -343,6 +344,7 @@ class TargetFinalizations(TimestampMixin, Base):
     content_sha256: Mapped[str | None] = mapped_column(String(64))
     content_bytes: Mapped[int | None] = mapped_column(BigInteger)
     exported_content: Mapped[str | None] = mapped_column(Text)
+    materialized_state_checks: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     failure_code: Mapped[str | None] = mapped_column(Text)
     failure_detail: Mapped[str | None] = mapped_column(Text)
 

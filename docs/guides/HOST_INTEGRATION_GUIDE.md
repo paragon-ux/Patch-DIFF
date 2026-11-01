@@ -8,7 +8,7 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 Choose the immutable server profile before starting a session with
 `PATCHDIFF_MCP_PROFILE`: default is `observed_v2` (5 tools for delegated agent editing),
-or opt into `full` (23 tools for trusted host lifecycle management). Legacy profiles
+or opt into `full` (24 tools for trusted host lifecycle management). Legacy profiles
 `editor` (7 tools), `unobserved` (5), `unobserved_editor` (3), `hybrid_editor` (1),
 `observed` (6), and `observed_editor` (4) remain available with advisory stderr notices.
 
@@ -415,14 +415,64 @@ receipt = finalize_single_target(
     destination_path="/path/to/project/src/main.py",
     preimage_sha256="expected_initial_disk_hash",
     authorized_root="/path/to/project",
+    allow_unconditional_overwrite=False,
+    raise_on_disk_error=False,
 )
 ```
 
-The write-back protocol guarantees:
-1. **Authorized Root Containment**: Rejects target paths or symlinks that escape `authorized_root`.
-2. **Preimage Conflict Detection**: Verifies existing disk bytes against `preimage_sha256`; rejects with `PreimageMismatchError` if concurrent disk modifications occurred.
-3. **Same-Directory Temp File & Fsync**: Writes to `.tmp-<filename>-<uuid>` in the destination directory, flushes and fsyncs the file descriptor.
-4. **Atomic Replacement**: Calls `os.replace` to atomically install the file over destination.
-5. **Parent Directory Fsync**: Syncs parent directory descriptor on POSIX platforms where supported.
-6. **Post-Write Hash Verification**: Confirms written disk bytes match `content_sha256`.
+The write-back protocol enforces five non-negotiable security guarantees:
+
+1. **POSIX Descriptor-Relative Filesystem Containment (`PR23-R3-SCRIPT-001`)**:
+   - Path validation performed solely with string manipulations (e.g. `path.resolve()` and `relative_to`) is inherently vulnerable to TOCTOU directory swaps and symlink replacement attacks.
+   - `safe_write_back_file` pins `authorized_root` by acquiring an immutable directory file descriptor (`os.O_DIRECTORY | os.O_RDONLY | os.O_CLOEXEC`).
+   - Every intermediate directory component is traversed descriptor-relatively using `os.open(comp, os.O_DIRECTORY | os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=current_fd)`.
+   - Traversal of any symlinked intermediate directory returns `ELOOP` / `ENOTDIR` or fails `stat.S_ISLNK`, raising `PathEscapeError`.
+   - Traversal components `..`, `.`, empty elements, and path separators are strictly rejected.
+   - Missing intermediate directories are created descriptor-relatively with `os.mkdir(comp, mode=0o755, dir_fd=current_fd)`.
+   - The verified parent directory file descriptor (`parent_dir_fd`) is pinned and passed as `dir_fd` to all temporary file creation, preimage reading, locking, and atomic replacement operations.
+
+2. **In-Memory Pre-Write Digest Verification (`PR23-R3-SCRIPT-002`)**:
+   - Before opening file descriptors, creating temporary files, or interacting with disk, `safe_write_back_file` validates that `data` is bytes and its SHA-256 matches `expected_sha256`.
+   - If the payload is corrupted or hash mismatch occurs, `HostWriteBackError` is raised immediately. Disk state remains completely untouched, and no temporary files are left behind.
+   - *Pre-replace verification*: After writing and fsyncing the unique temporary file (`.tmp-{leaf_name}-{uuid}`), the descriptor is rewound (`lseek(temp_fd, 0, SEEK_SET)`), re-read, and its digest verified against `expected_sha256` before initiating rename.
+   - *Post-replace verification*: After atomic rename, the destination is re-opened read-only relative to `parent_dir_fd` and re-verified against `expected_sha256` as defense-in-depth.
+
+3. **Enforceable Per-File Cooperative Writer Coordination (`PR23-R3-SCRIPT-003`)**:
+   - Neither `os.replace` nor an unlocked preimage check provides a compare-and-swap guarantee. Racing host processes can overwrite each other's changes or install stale edits.
+   - Locking the destination file inode directly is flawed: `os.replace` detaches and replaces the directory entry with a fresh inode, causing concurrent waiters to hold a dead inode while subsequent operations race unprotected.
+   - `safe_write_back_file` coordinates cooperating writers via a dedicated `.lock-{leaf_name}` marker file in the pinned parent directory:
+     ```python
+     lock_fd = os.open(f".lock-{leaf_name}", os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600, dir_fd=parent_dir_fd)
+     fcntl.flock(lock_fd, fcntl.LOCK_EX)
+     ```
+   - The exclusive lock is acquired *before* reading existing disk bytes and is held continuously across:
+     a. Preimage inspection and verification
+     b. Temporary file creation, payload write, and file fsync
+     c. Pre-replace descriptor digest verification
+     d. Descriptor-relative atomic replacement: `os.replace(temp_name, leaf_name, src_dir_fd=parent_dir_fd, dst_dir_fd=parent_dir_fd)`
+     e. Parent directory fsync: `os.fsync(parent_dir_fd)`
+     f. Post-write verification
+   - If `fcntl.flock` is unavailable on the platform, `safe_write_back_file` fails closed rather than proceeding without serialization.
+
+4. **Mandatory Preimage Expectations for Overwriting Existing Files (`PR23-R3-SCRIPT-005`)**:
+   - If the destination file exists on disk, `preimage_sha256` is mandatory by default. Invoking `safe_write_back_file` without `preimage_sha256` raises `PreimageMismatchError`, preventing accidental overwrites.
+   - Unconditional overwriting (e.g. initial checkout or explicit clobber) requires setting `allow_unconditional_overwrite=True`.
+   - When `preimage_sha256` is provided:
+     - If the file exists: disk contents are read under lock and verified against `preimage_sha256.lower()`. On mismatch, `PreimageMismatchError` is raised.
+     - If the file does not exist: `PreimageMismatchError` is raised (preimage was expected, but file was absent).
+   - If destination exists as a symlink or directory, it is rejected with `PathEscapeError` or `HostWriteBackError`.
+
+5. **Truthful Multi-Stage Status Reporting & Chunked Deferred Retrieval (`PR23-R3-SCRIPT-004`, `PR23-R3-SVC-001`)**:
+   - `finalize_single_target` distinctly tracks database finalization outcome (`db_status`) and filesystem write-back outcome (`disk_status`):
+     - `receipt["db_status"]`: `"ok"` or `"rejected"`. Indicates PostgreSQL transaction status.
+     - `receipt["disk_status"]`: `"written"`, `"skipped"`, or `"error"`. Indicates host write-back status.
+     - `receipt["written_destination"]`: Installed file path if written, otherwise `None`.
+     - `receipt["status"]`: Overall status; set to `"ok"` only if database finalization succeeded AND requested disk write-back succeeded. If write-back fails or is incomplete, `receipt["status"]` is `"error"` (or raises `HostWriteBackError` if `raise_on_disk_error=True`). Never reports false success.
+   - *Deferred Export Paging (> 1 MiB)*:
+     - When target export exceeds 1 MiB, `patchdiff_finalize_target` returns `content_delivery: "deferred"` and `exported_content: None`.
+     - If `destination_path` is requested, `finalize_single_target` queries `patchdiff_read_finalized_export` in 256 KiB chunks (`limit=262144`) using `finalization_id`, `target_file_id`, and `offset`.
+     - Base64 chunks are decoded and concatenated in memory.
+     - The assembled payload is verified: total byte count must equal `receipt["content_bytes"]` and SHA-256 must equal `receipt["content_sha256"]`.
+     - Assembled verified bytes are written via `safe_write_back_file`.
+     - If chunk retrieval, base64 decoding, or assembled digest verification fails, `receipt["disk_status"]` is set to `"error"`, `receipt["written_destination"]` to `None`, and `receipt["status"]` to `"error"`, guaranteeing zero false successes.
 

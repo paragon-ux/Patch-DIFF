@@ -33,6 +33,7 @@ def test_required_tool_names_are_registered() -> None:
         "patchdiff_observe_scope",
         "patchdiff_submit_observed_operations",
         "patchdiff_finalize_target",
+        "patchdiff_read_finalized_export",
     }
 
 

@@ -1,13 +1,20 @@
 """Trusted scalar lifecycle recipe. No model, transport, oracle, retry, or resume."""
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timezone
+import errno
+try:
+    import fcntl
+except ImportError:
+    fcntl = None  # type: ignore[assignment]
 import hashlib
 import json
 import ntpath
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
+import stat
 import uuid
 
 
@@ -177,6 +184,17 @@ class PathEscapeError(HostWriteBackError):
     """Target destination escapes authorized directory boundary."""
 
 
+def _read_all_fd(fd: int) -> bytes:
+    """Read all bytes from an open file descriptor until EOF."""
+    chunks: list[bytes] = []
+    while True:
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def safe_write_back_file(
     destination_path: Path | str,
     data: bytes,
@@ -184,73 +202,258 @@ def safe_write_back_file(
     expected_sha256: str,
     preimage_sha256: str | None = None,
     authorized_root: Path | str | None = None,
+    allow_unconditional_overwrite: bool = False,
 ) -> Path:
     """Safely and atomically write exported bytes to a local destination file.
 
     Guarantees:
-    1. Authorized directory containment: checks realpath against authorized_root if provided.
-    2. Symlink escape detection: rejects target paths that resolve outside authorized root.
-    3. Preimage conflict check: if destination file exists and preimage_sha256 is supplied,
-       verifies existing disk bytes match preimage; rejects with PreimageMismatchError if changed.
-    4. Same-directory temp file + fsync: writes data to temp file in destination's directory.
-    5. Atomic replace: renames temp file to destination via os.replace.
-    6. Directory fsync: syncs parent directory on POSIX systems where supported.
-    7. Post-write verification: reads back destination and confirms sha256 matches expected_sha256.
+    1. Pre-write digest verification (PR23-R3-SCRIPT-002): validates data is bytes
+       and its SHA-256 matches expected_sha256 before any filesystem interaction.
+    2. Descriptor-relative filesystem containment (PR23-R3-SCRIPT-001): pins authorized_root
+       and traverses path components via descriptor-relative operations with O_NOFOLLOW
+       to prevent symlink swaps, TOCTOU races, and directory traversal escape.
+    3. Writer coordination & locking (PR23-R3-SCRIPT-003): acquires exclusive lock on
+       .lock-{dest.name} before verifying preimage and holds lock across write and replace.
+    4. Mandatory preimage check (PR23-R3-SCRIPT-005): requires preimage_sha256 when
+       destination file exists unless allow_unconditional_overwrite=True.
+    5. Exclusive temp creation & verification: writes to unique .tmp file in pinned parent
+       directory, fsyncs, and verifies digest on descriptor before replacement.
+    6. Atomic descriptor-relative replace: renames temp file to destination using parent dir_fd.
+    7. Directory fsync & defense-in-depth verification: syncs parent directory and confirms
+       installed file digest.
     """
-    dest = Path(destination_path).resolve()
-    if authorized_root is not None:
-        auth_root = Path(authorized_root).resolve()
-        try:
-            dest.relative_to(auth_root)
-        except ValueError:
-            raise PathEscapeError(f"Destination {dest} is outside authorized root {auth_root}.")
+    # 1. Pre-write digest verification (PR23-R3-SCRIPT-002)
+    if not isinstance(data, (bytes, bytearray)):
+        raise HostWriteBackError(f"data must be bytes, got {type(data).__name__}")
+    data_bytes = bytes(data)
 
-    # Preimage check
-    if dest.is_file():
-        if preimage_sha256 is not None:
-            actual_preimage = hashlib.sha256(dest.read_bytes()).hexdigest()
-            if actual_preimage != preimage_sha256:
-                raise PreimageMismatchError(
-                    f"Destination {dest} on disk has hash {actual_preimage}, expected {preimage_sha256}."
-                )
+    if (
+        not isinstance(expected_sha256, str)
+        or len(expected_sha256) != 64
+        or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256)
+    ):
+        raise HostWriteBackError(f"Invalid expected_sha256 format: {expected_sha256!r}")
+    expected_sha256 = expected_sha256.lower()
 
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = dest.parent / f".tmp-{dest.name}-{uuid.uuid4().hex}"
+    data_hash = hashlib.sha256(data_bytes).hexdigest()
+    if data_hash != expected_sha256:
+        raise HostWriteBackError(
+            f"Pre-write digest verification failed: data hash {data_hash} does not match expected_sha256 {expected_sha256}."
+        )
+
+    # 2. Descriptor-relative traversal (PR23-R3-SCRIPT-001)
+    dest = Path(destination_path)
+    opened_fds: list[int] = []
+    lock_fd: int | None = None
+    temp_name: str | None = None
+    parent_dir_fd: int | None = None
 
     try:
-        with temp_path.open("wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
+        if authorized_root is not None:
+            auth_root = Path(authorized_root).resolve()
+            if not auth_root.is_dir():
+                raise PathEscapeError(f"Authorized root {auth_root} does not exist or is not a directory.")
 
-        os.replace(temp_path, dest)
-
-        # Sync parent directory on POSIX
-        if hasattr(os, "O_DIRECTORY") and hasattr(os, "fsync"):
-            try:
-                dir_fd = os.open(str(dest.parent), os.O_RDONLY | os.O_DIRECTORY)
+            if dest.is_absolute():
                 try:
-                    os.fsync(dir_fd)
-                finally:
-                    os.close(dir_fd)
-            except OSError:
-                pass  # Some filesystems or OSes do not support directory fsync
+                    lexical_rel = dest.relative_to(auth_root)
+                except ValueError:
+                    try:
+                        lexical_rel = dest.relative_to(Path(authorized_root))
+                    except ValueError:
+                        raise PathEscapeError(f"Destination {dest} is outside authorized root {auth_root}.")
+                rel_parts = lexical_rel.parts
+            else:
+                rel_parts = dest.parts
 
-        # Post-write byte & hash verification
-        installed_bytes = dest.read_bytes()
-        installed_hash = hashlib.sha256(installed_bytes).hexdigest()
-        if installed_hash != expected_sha256:
-            raise HostWriteBackError(
-                f"Installed file {dest} hash {installed_hash} does not match expected {expected_sha256}."
-            )
-        return dest
-    except Exception:
-        if temp_path.exists():
+            if any(p == ".." for p in rel_parts):
+                raise PathEscapeError(f"Destination {dest} contains parent traversal ('..').")
+
+            clean_parts = [p for p in rel_parts if p not in ("", ".")]
+            if not clean_parts:
+                raise PathEscapeError(f"Destination {dest} specifies root directory, not a file.")
+
+            dir_components = clean_parts[:-1]
+            leaf_name = clean_parts[-1]
+
             try:
-                temp_path.unlink()
+                auth_flags = os.O_DIRECTORY | os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                auth_fd = os.open(str(auth_root), auth_flags)
+            except OSError as exc:
+                raise PathEscapeError(f"Cannot open authorized root {auth_root}: {exc}") from exc
+            opened_fds.append(auth_fd)
+            current_fd = auth_fd
+
+            for comp in dir_components:
+                if "/" in comp or "\\" in comp or comp in (".", ".."):
+                    raise PathEscapeError(f"Invalid path component: {comp!r}")
+
+                comp_flags = (
+                    os.O_DIRECTORY
+                    | os.O_RDONLY
+                    | getattr(os, "O_NOFOLLOW", 0)
+                    | getattr(os, "O_CLOEXEC", 0)
+                )
+                try:
+                    next_fd = os.open(comp, comp_flags, dir_fd=current_fd)
+                except OSError as exc:
+                    if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                        try:
+                            st = os.lstat(comp, dir_fd=current_fd)
+                            if stat.S_ISLNK(st.st_mode):
+                                raise PathEscapeError(f"Path component {comp!r} is a symlink.") from exc
+                        except OSError:
+                            pass
+                        raise PathEscapeError(f"Path component {comp!r} is not a directory.") from exc
+                    elif exc.errno == errno.ENOENT:
+                        try:
+                            os.mkdir(comp, mode=0o755, dir_fd=current_fd)
+                        except FileExistsError:
+                            pass
+                        except OSError as me:
+                            raise HostWriteBackError(f"Failed to create directory {comp!r}: {me}") from me
+                        try:
+                            next_fd = os.open(comp, comp_flags, dir_fd=current_fd)
+                        except OSError as oe:
+                            raise PathEscapeError(f"Failed to open created directory {comp!r}: {oe}") from oe
+                    else:
+                        raise PathEscapeError(f"Error traversing component {comp!r}: {exc}") from exc
+
+                opened_fds.append(next_fd)
+                current_fd = next_fd
+
+            parent_dir_fd = current_fd
+            resolved_dest = auth_root.joinpath(*clean_parts)
+        else:
+            resolved_dest = dest.resolve()
+            dest_parent = resolved_dest.parent
+            dest_parent.mkdir(parents=True, exist_ok=True)
+            parent_flags = os.O_DIRECTORY | os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+            parent_dir_fd = os.open(str(dest_parent), parent_flags)
+            opened_fds.append(parent_dir_fd)
+            leaf_name = resolved_dest.name
+
+        if "/" in leaf_name or "\\" in leaf_name or leaf_name in (".", ".."):
+            raise PathEscapeError(f"Invalid destination leaf name: {leaf_name!r}")
+
+        # 3. Writer coordination & locking (PR23-R3-SCRIPT-003)
+        lock_name = f".lock-{leaf_name}"
+        lock_flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
+        try:
+            lock_fd = os.open(lock_name, lock_flags, 0o600, dir_fd=parent_dir_fd)
+            opened_fds.append(lock_fd)
+        except OSError as exc:
+            raise HostWriteBackError(f"Failed to open lock file {lock_name!r}: {exc}") from exc
+
+        if fcntl is not None and hasattr(fcntl, "flock"):
+            fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        else:
+            raise HostWriteBackError("POSIX fcntl.flock writer coordination is required on this platform.")
+
+        # 4. Leaf validation & preimage check (PR23-R3-SCRIPT-005) - held under lock!
+        try:
+            st = os.lstat(leaf_name, dir_fd=parent_dir_fd)
+            dest_exists = True
+        except FileNotFoundError:
+            dest_exists = False
+            st = None
+
+        if dest_exists:
+            if stat.S_ISLNK(st.st_mode):
+                raise PathEscapeError(f"Destination {leaf_name!r} is a symlink.")
+            if stat.S_ISDIR(st.st_mode):
+                raise HostWriteBackError(f"Destination {leaf_name!r} is a directory, not a file.")
+            if not stat.S_ISREG(st.st_mode):
+                raise HostWriteBackError(f"Destination {leaf_name!r} is not a regular file.")
+
+            if preimage_sha256 is None and not allow_unconditional_overwrite:
+                raise PreimageMismatchError(
+                    f"Destination file {resolved_dest} already exists; preimage_sha256 is required unless allow_unconditional_overwrite=True"
+                )
+
+            if preimage_sha256 is not None:
+                read_fd = os.open(leaf_name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_dir_fd)
+                try:
+                    existing_bytes = _read_all_fd(read_fd)
+                finally:
+                    os.close(read_fd)
+
+                actual_preimage = hashlib.sha256(existing_bytes).hexdigest()
+                if actual_preimage != preimage_sha256.lower():
+                    raise PreimageMismatchError(
+                        f"Destination {resolved_dest} on disk has hash {actual_preimage}, expected {preimage_sha256}."
+                    )
+        else:
+            if preimage_sha256 is not None:
+                raise PreimageMismatchError(
+                    f"Destination file {resolved_dest} does not exist, but preimage_sha256 was expected."
+                )
+
+        # 5. Write to temporary file in pinned parent directory
+        temp_name = f".tmp-{leaf_name}-{uuid.uuid4().hex}"
+        temp_flags = os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
+        temp_fd = os.open(temp_name, temp_flags, 0o600, dir_fd=parent_dir_fd)
+        try:
+            view = memoryview(data_bytes)
+            written = 0
+            while written < len(data_bytes):
+                n = os.write(temp_fd, view[written:])
+                written += n
+            os.fsync(temp_fd)
+
+            os.lseek(temp_fd, 0, os.SEEK_SET)
+            written_bytes = _read_all_fd(temp_fd)
+            if hashlib.sha256(written_bytes).hexdigest() != expected_sha256:
+                raise HostWriteBackError(
+                    f"Temporary file {temp_name} failed pre-replace digest verification."
+                )
+        finally:
+            os.close(temp_fd)
+
+        # 6. Atomic replacement
+        os.replace(temp_name, leaf_name, src_dir_fd=parent_dir_fd, dst_dir_fd=parent_dir_fd)
+        temp_name = None
+
+        # 7. Parent directory fsync
+        if hasattr(os, "fsync"):
+            try:
+                os.fsync(parent_dir_fd)
+            except OSError:
+                pass
+
+        # 8. Post-write verification under lock (defense in depth)
+        verify_fd = os.open(leaf_name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_dir_fd)
+        try:
+            installed_bytes = _read_all_fd(verify_fd)
+            installed_hash = hashlib.sha256(installed_bytes).hexdigest()
+            if installed_hash != expected_sha256:
+                raise HostWriteBackError(
+                    f"Installed file {resolved_dest} hash {installed_hash} does not match expected {expected_sha256}."
+                )
+        finally:
+            os.close(verify_fd)
+
+        return resolved_dest
+
+    except Exception:
+        if temp_name is not None and parent_dir_fd is not None:
+            try:
+                os.unlink(temp_name, dir_fd=parent_dir_fd)
             except OSError:
                 pass
         raise
+    finally:
+        if lock_fd is not None:
+            try:
+                if fcntl is not None and hasattr(fcntl, "flock"):
+                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+        for fd in reversed(opened_fds):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 
 def finalize_single_target(
@@ -264,8 +467,16 @@ def finalize_single_target(
     destination_path: Path | str | None = None,
     preimage_sha256: str | None = None,
     authorized_root: Path | str | None = None,
+    allow_unconditional_overwrite: bool = False,
+    raise_on_disk_error: bool = False,
 ) -> dict:
-    """Execute single-target atomic finalization via patchdiff_finalize_target and optional disk write-back."""
+    """Execute single-target atomic finalization via patchdiff_finalize_target and truthful disk write-back.
+
+    Separates database outcome ('db_status') from host disk outcome ('disk_status').
+    For deferred content delivery (>1 MiB), pages finalized chunks via patchdiff_read_finalized_export,
+    verifies complete assembled SHA-256 and byte length, and performs atomic write-back.
+    Never reports false success when disk write-back is unfulfilled.
+    """
     args = {
         "target_file_id": target_file_id,
         "client_request_id": client_request_id,
@@ -277,18 +488,127 @@ def finalize_single_target(
         args["expected_current_hash"] = expected_current_hash
 
     receipt = call_tool("patchdiff_finalize_target", **args)
-    if receipt.get("status") != "ok":
+    db_status = receipt.get("status")
+    receipt["db_status"] = db_status
+
+    if db_status != "ok":
+        receipt["disk_status"] = "skipped"
+        receipt["written_destination"] = None
         return receipt
 
-    if destination_path is not None and receipt.get("exported_content") is not None:
-        raw_bytes = receipt["exported_content"].encode("utf-8")
-        safe_write_back_file(
+    if destination_path is None:
+        receipt["disk_status"] = "skipped"
+        receipt["written_destination"] = None
+        return receipt
+
+    # PR23-R3-SCRIPT-004: Handle write-back (Case A: inline, Case B: deferred)
+    exported_content = receipt.get("exported_content")
+    if exported_content is not None:
+        raw_bytes = exported_content.encode("utf-8")
+        expected_sha256 = receipt.get("content_sha256")
+        if expected_sha256 is None:
+            expected_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    else:
+        # Case B: Deferred delivery (>1 MiB export)
+        finalization_id = receipt.get("finalization_id")
+        if not finalization_id:
+            msg = "Finalize receipt missing finalization_id for deferred export retrieval"
+            receipt["disk_status"] = "error"
+            receipt["written_destination"] = None
+            receipt["status"] = "error"
+            receipt["disk_error"] = msg
+            if raise_on_disk_error:
+                raise HostWriteBackError(msg)
+            return receipt
+
+        chunks: list[bytes] = []
+        offset = 0
+        limit = 262144
+        expected_sha256 = receipt.get("content_sha256")
+        expected_bytes = receipt.get("content_bytes")
+
+        try:
+            while True:
+                read_res = call_tool(
+                    "patchdiff_read_finalized_export",
+                    finalization_id=finalization_id,
+                    target_file_id=target_file_id,
+                    offset=offset,
+                    limit=limit,
+                )
+                if not isinstance(read_res, dict) or read_res.get("status") != "ok":
+                    detail = (
+                        read_res.get("failure_detail")
+                        or read_res.get("error")
+                        or read_res.get("status")
+                        if isinstance(read_res, dict)
+                        else str(read_res)
+                    )
+                    raise HostWriteBackError(f"Deferred read failed at offset {offset}: {detail}")
+
+                content_b64 = read_res.get("content_base64")
+                if content_b64 is None:
+                    raise HostWriteBackError(f"Deferred export response missing content_base64 at offset {offset}")
+
+                try:
+                    chunk = base64.b64decode(content_b64, validate=True)
+                except Exception as b64_err:
+                    raise HostWriteBackError(f"Invalid base64 payload at offset {offset}: {b64_err}") from b64_err
+
+                chunks.append(chunk)
+
+                if not read_res.get("has_more"):
+                    break
+
+                next_offset = read_res.get("next_offset")
+                if next_offset is None or next_offset <= offset:
+                    raise HostWriteBackError(
+                        f"Invalid pagination response: next_offset={next_offset} with offset={offset}"
+                    )
+                offset = next_offset
+
+            raw_bytes = b"".join(chunks)
+
+            # Assembled integrity verification
+            computed_sha = hashlib.sha256(raw_bytes).hexdigest()
+            if expected_sha256 is not None and computed_sha != expected_sha256:
+                raise HostWriteBackError(
+                    f"Deferred assembled bytes SHA-256 {computed_sha} does not match expected {expected_sha256}"
+                )
+
+            if expected_bytes is not None and len(raw_bytes) != expected_bytes:
+                raise HostWriteBackError(
+                    f"Deferred assembled bytes length {len(raw_bytes)} does not match expected {expected_bytes}"
+                )
+
+        except Exception as exc:
+            receipt["disk_status"] = "error"
+            receipt["written_destination"] = None
+            receipt["status"] = "error"
+            receipt["disk_error"] = str(exc)
+            if raise_on_disk_error:
+                raise
+            return receipt
+
+    try:
+        written_path = safe_write_back_file(
             destination_path,
             raw_bytes,
-            expected_sha256=receipt["content_sha256"],
+            expected_sha256=expected_sha256,
             preimage_sha256=preimage_sha256,
             authorized_root=authorized_root,
+            allow_unconditional_overwrite=allow_unconditional_overwrite,
         )
-        receipt["written_destination"] = str(destination_path)
-    return receipt
+        receipt["disk_status"] = "written"
+        receipt["written_destination"] = str(written_path)
+        receipt["status"] = "ok"
+        return receipt
+    except Exception as exc:
+        receipt["disk_status"] = "error"
+        receipt["written_destination"] = None
+        receipt["status"] = "error"
+        receipt["disk_error"] = str(exc)
+        if raise_on_disk_error:
+            raise
+        return receipt
 

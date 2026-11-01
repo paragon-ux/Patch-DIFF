@@ -16,9 +16,9 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DO
 
 ## MCP Tool Surface Overview
 
-The 22 internal tools are organized into the groups below. External stdio MCP
-defaults to the **7-tool `editor` profile**; `unobserved` exposes 5, `observed` 6,
-`observed_editor` 4, and explicitly selected `full` exposes all 22. The opt-in
+The 24 internal tools are organized into the groups below. External stdio MCP
+defaults to the **5-tool `observed_v2` profile** (with legacy 7-tool `editor` profile); `unobserved` exposes 5, `observed` 6,
+`observed_editor` 4, and explicitly selected `full` exposes all 24. The opt-in
 `observed_editor` profile contains only read_target, find_occurrences,
 observe_scope and submit_observed_operations (all with the `patchdiff_` prefix);
 SAVE/replay belong to the separate trusted host session in that role. Both
@@ -44,6 +44,7 @@ See [profiles, exact batch contracts and executable examples](STRUCTURAL_BATCH_E
 | **4. Checkpoint, Replay & Audit** | `patchdiff_save` | Snapshot current target and rotate editing cycle without target mutation; optional version and hash guards. |
 | | `patchdiff_replay` | Deterministically reconstruct target from initial snapshot + accepted logs, reporting component checks. |
 | | `patchdiff_finalize_target` | Atomic single-roundtrip SAVE checkpoint, replay verification, and format export under row locking. |
+| | `patchdiff_read_finalized_export` | Retrieve immutable finalized export bytes by finalization ID with pagination and integrity verification. Available in `full` profile. |
 | | `patchdiff_get_pdcp_log` | Bounded newest-first page of append-only attempts (accepted/rejected), filtering by status, hash, or request ID. |
 | | `patchdiff_get_manifest_ledger` | Retrieve accepted-only manifest ledger entries with `origin`, `derived` facts and their attempt identity. |
 | **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
@@ -468,8 +469,12 @@ Atomically executes SAVE checkpointing, deterministic replay verification, and f
   - `expected_current_hash` (`string`, optional): Expected SHA-256 hash.
   - `format` (`string`, optional, default `"original_eol"`): Output line-ending format (`"original_eol"`, `"canonical_lf"`, `"crlf"`, `"original_text"`).
 - **Database Atomicity & Rollback**: Direct outer transaction ownership. If replay verification fails (`materialized_state_matches is not True`) or export fails, the entire transaction rolls back cleanly, leaving zero snapshots created and zero editing cycle mutations.
-- **Durable Keyed Recovery**: Re-invocations with identical `(target_file_id, client_request_id)` and matching fingerprint recover the original completed receipt directly with `is_idempotent_replay: true`. Conflicting arguments under the same request key reject with `code: "request_key_conflict"`.
-- **Bounded Delivery**: Inline content is capped at 1 MiB (`MAX_INLINE_EXPORT_BYTES = 1,048,576`). For larger exports, `content_delivery` is `"deferred"`, and `exported_content` is null.
+- **Durable Keyed Recovery & Receipt Parity**: Re-invocations with identical `(target_file_id, client_request_id)` and matching fingerprint recover the original completed receipt directly with `is_idempotent_replay: true`. Conflicting arguments under the same request key reject with `code: "request_key_conflict"`. Persisted `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`) are durably stored in `target_finalizations.materialized_state_checks` (additive migration `20261031_0007`) and recovered verbatim, ensuring identical receipt parity without re-evaluating against potentially mutated current target state.
+- **Timing & Latency Instrumentation**:
+  - `lock_wait_ms` (`float`, optional): Elapsed time in milliseconds spent waiting to acquire the row lock on `cloud_target_files` via `SELECT ... FOR UPDATE`.
+  - `lock_hold_ms` (`float`, optional): Elapsed time in milliseconds from exclusive row lock acquisition until transaction commit or rollback completes.
+  - `replay_ms` (`float`, optional): Elapsed time in milliseconds spent executing in-memory replay verification under row lock.
+- **Bounded Delivery**: Inline content is capped at 1 MiB (`MAX_INLINE_EXPORT_BYTES = 1,048,576`). For larger exports, `content_delivery` is `"deferred"`, and `exported_content` is null; deferred bytes must be retrieved via `patchdiff_read_finalized_export`.
 - **Returns**:
   ```json
   {
@@ -496,9 +501,71 @@ Atomically executes SAVE checkpointing, deterministic replay verification, and f
     "content_delivery": "inline",
     "format": "original_eol",
     "source_line_endings": {"eol": "lf", "uniform": true},
-    "is_idempotent_replay": false
+    "is_idempotent_replay": false,
+    "lock_wait_ms": 1.25,
+    "lock_hold_ms": 15.40,
+    "replay_ms": 8.12
   }
   ```
+
+### `patchdiff_read_finalized_export`
+Retrieves immutable, verified export byte streams by finalization ID with pagination and snapshot integrity verification.
+- **Profile Availability**: Available exclusively on the `full` profile (24 tools total); denied with an authorization error on `observed_v2` and other editing profiles.
+- **Purpose & Invariant**: Resolves deferred delivery (`content_delivery: "deferred"`) for targets exceeding the 1 MiB wire limit, and provides durable, byte-for-byte immutable export recovery. Unlike `patchdiff_export_target` (which exports the mutable current target state), `patchdiff_read_finalized_export` reconstructs the export directly from the immutable `TargetSnapshots` row recorded during finalization using the recorded `export_format` and `source_line_endings`. The retrieved bytes and content SHA-256 remain permanently stable regardless of subsequent target edits, version increments, or editing cycle rotations.
+- **Arguments**:
+  - `finalization_id` (`string`, required): UUID of the completed finalization.
+  - `target_file_id` (`string`, required): UUID of the canonical target.
+  - `offset` (`integer`, optional, default `0`): Byte offset within the finalized export byte stream (`0 <= offset <= total_bytes`).
+  - `limit` (`integer`, optional, default `262144` / 256 KiB): Maximum bytes to return per chunk. Capped at `1,048,576` (1 MiB).
+- **Returns**:
+  ```json
+  {
+    "status": "ok",
+    "finalization_id": "UUID",
+    "target_file_id": "UUID",
+    "content_base64": "<base64-encoded chunk>",
+    "offset": 0,
+    "bytes_read": 262144,
+    "total_bytes": 1250000,
+    "content_sha256": "sha256...",
+    "has_more": true,
+    "next_offset": 262144,
+    "format": "original_eol",
+    "content_eol": "lf"
+  }
+  ```
+- **Error Modes & Fail-Closed Semantics**:
+  - `not_found`: Returned when `finalization_id` is missing, does not match `target_file_id` (preventing cross-target leakage), or finalization status is not `"completed"`:
+    ```json
+    {
+      "status": "not_found",
+      "error": "finalization_not_found",
+      "finalization_id": "UUID",
+      "target_file_id": "UUID",
+      "failure_detail": "Finalization not found for target_file_id."
+    }
+    ```
+  - `snapshot_integrity_failure`: Returned when the underlying `TargetSnapshots` record is missing, line ending reconstruction fails, or computed byte count / SHA-256 fails to match the immutable finalization record:
+    ```json
+    {
+      "status": "error",
+      "error": "snapshot_integrity_failure",
+      "finalization_id": "UUID",
+      "target_file_id": "UUID",
+      "failure_detail": "Snapshot integrity check failed: computed sha256=... (expected ...), bytes=... (expected ...)."
+    }
+    ```
+  - `invalid_argument`: Returned when input arguments fail format validation (non-UUID strings, boolean or negative `offset`, boolean or non-positive `limit`, non-UTF-8 characters, or `offset > total_bytes` with `code: "invalid_range"`):
+    ```json
+    {
+      "status": "invalid_argument",
+      "code": "invalid_range",
+      "finalization_id": "UUID",
+      "target_file_id": "UUID",
+      "failure_detail": "offset 2000000 exceeds total bytes 1250000.",
+      "total_bytes": 1250000
+    }
+    ```
 
 ### `patchdiff_get_pdcp_log`
 Returns a bounded, newest-first page of append-only attempts (accepted and rejected).
@@ -692,4 +759,4 @@ direct selection and observation pagination; never silently truncate source.
 
 ## Versioned editor profile
 
-The opt-in `observed_v2` external profile exposes five purpose-specific tools through the existing services (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`). Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 22 handlers retain their contracts.
+The opt-in `observed_v2` external profile exposes five purpose-specific tools through the existing services (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`). Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 24 handlers retain their contracts.

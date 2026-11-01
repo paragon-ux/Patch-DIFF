@@ -30,7 +30,7 @@ def test_delegated_profile_is_opt_in_and_preserves_existing_catalogs(monkeypatch
         "observed_v2": set(EDITOR_V2_TOOLS),
         "full": set(registry.names()),
     }
-    assert len(expected["full"]) == 23
+    assert len(expected["full"]) == 24
     for profile, names in expected.items():
         assert {tool["name"] for tool in ExternalMCPAdapter(profile=profile).list_tools()} == names
     monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "observed_editor")

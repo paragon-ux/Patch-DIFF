@@ -3,7 +3,7 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       tag:
@@ -18,11 +18,128 @@ jobs:
   build:
     name: Build package distribution
     runs-on: ubuntu-latest
+    outputs:
+      validated_tag: ${{ steps.preflight.outputs.validated_tag }}
+      validated_commit: ${{ steps.verify_tag.outputs.validated_commit }}
     steps:
-      - name: Checkout repository
+      - name: Preflight validate candidate release tag format
+        id: preflight
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ -z "${INPUT_TAG:-}" ]; then
+              echo "Error: inputs.tag is required for workflow_dispatch." >&2
+              exit 1
+            fi
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "Error: Manual release workflow_dispatch must be executed from 'refs/heads/main' (got '$GITHUB_REF')." >&2
+              exit 1
+            fi
+            CANDIDATE_TAG="$INPUT_TAG"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            CANDIDATE_TAG="$REF_NAME"
+          else
+            echo "Error: Unsupported event: $EVENT_NAME" >&2
+            exit 1
+          fi
+
+          echo "Preflight validating candidate tag format: $CANDIDATE_TAG"
+
+          # Strictly reject empty, control characters, or whitespace
+          if [[ -z "$CANDIDATE_TAG" || "$CANDIDATE_TAG" =~ [[:space:]] ]]; then
+            echo "Error: Release tag must not be empty or contain whitespace." >&2
+            exit 1
+          fi
+
+          # Strict anchored regex matching: ^v[0-9]+\.[0-9]+\.[0-9]+$
+          TAG_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          if [[ ! "$CANDIDATE_TAG" =~ $TAG_REGEX ]]; then
+            echo "Error: Release tag '$CANDIDATE_TAG' does not match required anchored pattern $TAG_REGEX" >&2
+            exit 1
+          fi
+
+          echo "Candidate tag format is valid: $CANDIDATE_TAG"
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "validated_tag=$CANDIDATE_TAG" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${GITHUB_ENV:-}" ]; then
+            echo "TARGET_TAG=$CANDIDATE_TAG" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout trusted base repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify release tag ref and provenance on main
+        id: verify_tag
+        env:
+          TARGET_TAG: ${{ steps.preflight.outputs.validated_tag }}
+        run: |
+          set -euo pipefail
+          echo "Verifying git tag refs/tags/$TARGET_TAG"
+
+          # 1. Synchronize remote tags
+          git fetch origin "+refs/tags/*:refs/tags/*" --tags || true
+
+          # 2. Verify release tag exists as a ref
+          if ! git rev-parse -q --verify "refs/tags/$TARGET_TAG" >/dev/null; then
+            echo "Error: Release tag 'refs/tags/$TARGET_TAG' does not exist in repository." >&2
+            exit 1
+          fi
+
+          # 3. Verify object type is annotated tag ('tag') or lightweight tag ('commit')
+          TAG_TYPE=$(git cat-file -t "refs/tags/$TARGET_TAG" 2>/dev/null || true)
+          if [ "$TAG_TYPE" != "tag" ] && [ "$TAG_TYPE" != "commit" ]; then
+            echo "Error: 'refs/tags/$TARGET_TAG' is of type '$TAG_TYPE'; expected annotated tag or lightweight tag." >&2
+            exit 1
+          fi
+          echo "Verified tag object type: $TAG_TYPE"
+
+          # 4. Dereference tag to its immutable 40-character commit SHA
+          TAG_COMMIT=$(git rev-parse --verify "refs/tags/$TARGET_TAG^{commit}" 2>/dev/null || true)
+          if [[ ! "$TAG_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Error: Failed to dereference 'refs/tags/$TARGET_TAG' to a 40-character commit SHA." >&2
+            exit 1
+          fi
+          echo "Dereferenced tag commit: $TAG_COMMIT"
+
+          # 5. Verify the tag commit is an immutable commit on the approved branch (origin/main)
+          APPROVED_REF="origin/main"
+          if ! git rev-parse -q --verify "$APPROVED_REF" >/dev/null; then
+            APPROVED_REF="main"
+          fi
+
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" "$APPROVED_REF"; then
+            echo "Error: Tag commit $TAG_COMMIT is not an ancestor of approved branch $APPROVED_REF." >&2
+            exit 1
+          fi
+          echo "Verified: Tag commit $TAG_COMMIT is in the approved branch ($APPROVED_REF) history."
+
+          # 6. Checkout the exact verified tag commit (detached HEAD)
+          git checkout -q "$TAG_COMMIT"
+
+          # 7. Verify HEAD exactly matches the verified tag commit SHA
+          CURRENT_HEAD=$(git rev-parse HEAD)
+          if [ "$CURRENT_HEAD" != "$TAG_COMMIT" ]; then
+            echo "Error: Checked out HEAD ($CURRENT_HEAD) does not match verified tag commit ($TAG_COMMIT)." >&2
+            exit 1
+          fi
+          echo "Verified checked-out HEAD matches tag commit: $CURRENT_HEAD"
+
+          if [ -n "${GITHUB_OUTPUT:-}" ]; then
+            echo "validated_commit=$TAG_COMMIT" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "${GITHUB_ENV:-}" ]; then
+            echo "TARGET_COMMIT=$TAG_COMMIT" >> "$GITHUB_ENV"
+          fi
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -34,23 +151,22 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Validate release tag and package version match
+      - name: Validate pyproject.toml version matches verified tag
+        env:
+          TARGET_TAG: ${{ steps.preflight.outputs.validated_tag }}
         run: |
-          TARGET_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-          echo "Validating release tag: $TARGET_TAG"
-          if [[ ! "$TARGET_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "Error: Release tag $TARGET_TAG is not a valid version tag (expected v*.*.*)." >&2
-            exit 1
-          fi
-          PY_VER=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          if [ "v$PY_VER" != "$TARGET_TAG" ]; then
-            echo "Error: Tag $TARGET_TAG does not match pyproject.toml version v$PY_VER" >&2
+          set -euo pipefail
+          PY_VER=$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])')
+          EXPECTED_TAG="v$PY_VER"
+          if [ "$EXPECTED_TAG" != "$TARGET_TAG" ]; then
+            echo "Error: Tag '$TARGET_TAG' does not match pyproject.toml version '$PY_VER' (expected '$EXPECTED_TAG')." >&2
             exit 1
           fi
           echo "Verified: Tag $TARGET_TAG matches pyproject.toml version $PY_VER"
 
       - name: Verify Waymark bridge package assets
         run: |
+          set -euo pipefail
           for f in discover.mjs discovery_core.mjs worker.mjs package.json package-lock.json; do
             if [ ! -f "backend/app/waymark_bridge/$f" ]; then
               echo "Error: Missing required bridge asset backend/app/waymark_bridge/$f" >&2
@@ -68,8 +184,30 @@ jobs:
       - name: Verify distribution metadata
         run: twine check dist/*
 
+      - name: Verify artifact filenames match release version
+        env:
+          TARGET_TAG: ${{ steps.preflight.outputs.validated_tag }}
+        run: |
+          set -euo pipefail
+          VERSION="${TARGET_TAG#v}"
+          WHEEL_FOUND=$(ls dist/patchdiff_mcp-"$VERSION"-*.whl 2>/dev/null || true)
+          SDIST_FOUND=$(ls dist/patchdiff_mcp-"$VERSION".tar.gz 2>/dev/null || ls dist/patchdiff-mcp-"$VERSION".tar.gz 2>/dev/null || true)
+
+          if [ -z "$WHEEL_FOUND" ]; then
+            echo "Error: Expected wheel for version $VERSION not found in dist/" >&2
+            ls -la dist/
+            exit 1
+          fi
+          if [ -z "$SDIST_FOUND" ]; then
+            echo "Error: Expected sdist for version $VERSION not found in dist/" >&2
+            ls -la dist/
+            exit 1
+          fi
+          echo "Verified built artifacts for version $VERSION: $WHEEL_FOUND and $SDIST_FOUND"
+
       - name: Test installed wheel in clean environment
         run: |
+          set -euo pipefail
           python -m venv /tmp/smoke-venv
           /tmp/smoke-venv/bin/pip install dist/*.whl
           # Verify console script entry point exists and runs stdio JSON-RPC
@@ -86,6 +224,7 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
+    if: github.event_name == 'workflow_dispatch' && needs.build.outputs.validated_tag != ''
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -99,8 +238,25 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
+
+      - name: Verify distribution artifacts present
+        env:
+          EXPECTED_TAG: ${{ needs.build.outputs.validated_tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EXPECTED_TAG" ]; then
+            echo "Error: Missing validated release tag from build job output." >&2
+            exit 1
+          fi
+          VERSION="${EXPECTED_TAG#v}"
+          echo "Publishing release version: $VERSION for tag: $EXPECTED_TAG"
+          ls -la dist/
+          if ! ls dist/patchdiff_mcp-"$VERSION"-*.whl 1>/dev/null 2>&1; then
+            echo "Error: Downloaded artifacts missing wheel for $VERSION" >&2
+            exit 1
+          fi
+
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-

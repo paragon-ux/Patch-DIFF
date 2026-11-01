@@ -6,6 +6,7 @@ import uuid
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import MetaData, Table
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
@@ -369,7 +370,7 @@ def test_live_0004_downgrade_refuses_when_scope_observations_exist(isolated_migr
     with pytest.raises(Exception, match="Cannot downgrade 20261026_0004: recorded scope observations exist"):
         command.downgrade(config, "20261022_0003")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0006"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0007"
 
 
 def test_migration_0006_mentions_target_finalizations() -> None:
@@ -445,5 +446,38 @@ def test_live_0006_downgrade_refuses_when_finalizations_exist(isolated_migration
     with pytest.raises(Exception, match="Cannot downgrade 20261031_0006: target finalization records exist"):
         command.downgrade(config, "20261027_0005")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0006"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0007"
+
+
+def test_migration_0007_finalization_checks_reachable() -> None:
+    migration_file = MIGRATIONS / "versions" / "20261031_0007_finalization_checks.py"
+    assert migration_file.is_file()
+    source = migration_file.read_text(encoding="utf-8")
+    assert "materialized_state_checks" in source
+    assert "target_finalizations" in source
+
+    config = Config(str(MIGRATIONS / "alembic.ini"))
+    config.set_main_option("script_location", str(MIGRATIONS))
+    script = ScriptDirectory.from_config(config)
+    rev_0007 = script.get_revision("20261031_0007")
+    assert rev_0007 is not None
+    assert rev_0007.down_revision == "20261031_0006"
+    assert script.get_heads() == ["20261031_0007"]
+
+    with engine.connect() as connection:
+        columns = connection.execute(
+            text(
+                """
+                SELECT column_name, data_type, is_nullable
+                FROM information_schema.columns
+                WHERE table_name = 'target_finalizations' AND column_name = 'materialized_state_checks';
+                """
+            )
+        ).mappings().all()
+        assert len(columns) == 1
+        col = columns[0]
+        assert col["column_name"] == "materialized_state_checks"
+        assert col["data_type"] == "jsonb"
+        assert col["is_nullable"] == "YES"
+
 

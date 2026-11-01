@@ -11,7 +11,7 @@ from sqlalchemy.orm import defer
 from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.validity import validity_levels
 from app.mcp.server import registry
-from app.services.export_service import export_target, get_target
+from app.services.export_service import export_target, get_target, read_finalized_export
 from app.services.pdcp_service import (
     SubmitPDCPResult,
     preview,
@@ -449,9 +449,28 @@ def patchdiff_finalize_target(
         "failure_code": result.failure_code,
         "failure_detail": result.failure_detail,
         "is_idempotent_replay": result.is_idempotent_replay,
+        **({"lock_wait_ms": result.lock_wait_ms} if result.lock_wait_ms is not None else {}),
         **({"lock_hold_ms": result.lock_hold_ms} if result.lock_hold_ms is not None else {}),
         **({"replay_ms": result.replay_ms} if result.replay_ms is not None else {}),
     }
+
+
+@registry.register("patchdiff_read_finalized_export")
+def patchdiff_read_finalized_export(
+    *,
+    finalization_id: str,
+    target_file_id: str,
+    offset: int = 0,
+    limit: int = 262144,
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        return read_finalized_export(
+            session,
+            finalization_id=finalization_id,
+            target_file_id=target_file_id,
+            offset=offset,
+            limit=limit,
+        )
 
 
 @registry.register("patchdiff_get_pdcp_log")

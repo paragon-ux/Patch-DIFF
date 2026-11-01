@@ -10,12 +10,12 @@ from app.mcp.external_adapter import ExternalMCPAdapter, MCP_PROFILES
 from app.mcp.server import registry
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("observed_v2", 5), ("full", 23)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("observed_v2", 5), ("full", 24)])
 def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch):
     adapter = ExternalMCPAdapter(profile=profile)
     assert len(adapter.list_tools()) == count
     assert {tool["name"] for tool in adapter.list_tools()} == MCP_PROFILES[profile]
-    assert len(registry.names()) == 23
+    assert len(registry.names()) == 24
     invoked = []
     monkeypatch.setattr(type(registry), "call", lambda self, name, **kw: invoked.append(name) or {"status": "ok"})
     for name in registry.names():

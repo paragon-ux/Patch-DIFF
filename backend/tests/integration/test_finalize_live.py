@@ -1,11 +1,13 @@
 """Live PostgreSQL integration tests for atomic finalization, idempotency, and session hygiene."""
 
+import base64
 import hashlib
 import uuid
 import pytest
 from sqlalchemy import func, select
 
 from app.core.failures import FailureReason
+from app.services.export_service import read_finalized_export
 from app.services.finalize_service import finalize_target, compute_finalization_fingerprint
 from app.services.pdcp_service import submit_edits
 from app.services.target_service import initialize_target
@@ -60,7 +62,13 @@ def test_finalize_target_live_success_atomic():
     assert result.new_editing_cycle_id is not None
     assert result.new_editing_cycle_id != active_cycle_id
     assert result.materialized_state_matches is True
+    assert result.materialized_state_checks is not None
+    assert result.materialized_state_checks["content_matches"] is True
+    assert result.materialized_state_checks["stored_hash_matches"] is True
+    assert result.materialized_state_checks["recomputed_hash_matches"] is True
+    assert result.materialized_state_checks["version_matches"] is True
     assert result.is_idempotent_replay is False
+    assert result.lock_wait_ms is not None and result.lock_wait_ms >= 0
     assert result.lock_hold_ms is not None and result.lock_hold_ms > 0
     assert result.replay_ms is not None and result.replay_ms > 0
 
@@ -93,6 +101,7 @@ def test_finalize_target_live_success_atomic():
         assert fin_rec.saved_target_version == version
         assert fin_rec.content_sha256 == result.content_sha256
         assert fin_rec.exported_content == "Hello World\nSecond Line\n"
+        assert fin_rec.materialized_state_checks == result.materialized_state_checks
 
 
 def test_finalize_target_live_replay_failure_rolls_back_completely():
@@ -277,6 +286,8 @@ def test_finalize_target_live_idempotency_recovery_and_conflict():
         )
     assert res1.status == "ok"
     assert res1.is_idempotent_replay is False
+    assert res1.lock_wait_ms is not None and res1.lock_wait_ms >= 0
+    assert res1.materialized_state_checks is not None
     first_snapshot_id = res1.snapshot_id
     first_new_cycle = res1.new_editing_cycle_id
     first_content = res1.exported_content
@@ -310,6 +321,9 @@ def test_finalize_target_live_idempotency_recovery_and_conflict():
     assert res2.new_editing_cycle_id == first_new_cycle
     assert res2.exported_content == first_content
     assert res2.version == init_version
+    assert res2.materialized_state_checks == res1.materialized_state_checks
+    assert res2.lock_wait_ms is not None and res2.lock_wait_ms >= 0
+    assert res2.lock_hold_ms is not None and res2.lock_hold_ms >= 0
 
     # Ensure NO duplicate snapshots or cycles were created on retry
     with SessionLocal() as session:
@@ -335,3 +349,237 @@ def test_finalize_target_live_idempotency_recovery_and_conflict():
     assert res_conflict.status == "rejected"
     assert res_conflict.failure_code == "request_key_conflict"
     assert "has already been used with different finalization parameters" in res_conflict.failure_detail
+
+
+def test_finalize_target_live_session_hygiene_across_repeated_retries():
+    """Verify PR23-R3-SVC-002: session.in_transaction() remains False across retries and conflicts."""
+    with SessionLocal() as session:
+        init = initialize_target(
+            session,
+            filename="hygiene_multi.txt",
+            content="Hygiene Verification\n",
+            target_type="text/plain",
+        )
+        target_id = init.target_file_id
+        version = init.version
+        current_hash = init.current_hash
+
+    client_request_id = f"fin-hygiene-{uuid.uuid4()}"
+
+    # Use a SINGLE session across initial finalize, idempotent retry, and conflict
+    with SessionLocal() as session:
+        # 1. Initial finalize
+        res1 = finalize_target(
+            session,
+            target_file_id=target_id,
+            client_request_id=client_request_id,
+            expected_target_version=version,
+            expected_current_hash=current_hash,
+            format="canonical_lf",
+        )
+        assert res1.status == "ok"
+        assert res1.lock_wait_ms is not None and res1.lock_wait_ms >= 0
+        assert res1.lock_hold_ms is not None and res1.lock_hold_ms >= 0
+        assert session.in_transaction() is False
+
+        # 2. Idempotent retry on the same session
+        res2 = finalize_target(
+            session,
+            target_file_id=target_id,
+            client_request_id=client_request_id,
+            expected_target_version=version,
+            expected_current_hash=current_hash,
+            format="canonical_lf",
+        )
+        assert res2.status == "ok"
+        assert res2.is_idempotent_replay is True
+        assert res2.lock_wait_ms is not None and res2.lock_wait_ms >= 0
+        assert res2.lock_hold_ms is not None and res2.lock_hold_ms >= 0
+        assert session.in_transaction() is False
+
+        # 3. Third call (conflict) on the same session
+        res3 = finalize_target(
+            session,
+            target_file_id=target_id,
+            client_request_id=client_request_id,
+            expected_target_version=version,
+            expected_current_hash=current_hash,
+            format="crlf",
+        )
+        assert res3.status == "rejected"
+        assert res3.failure_code == "request_key_conflict"
+        assert session.in_transaction() is False
+
+
+def test_finalize_target_live_idempotent_materialized_state_checks_parity():
+    """Verify PR23-R3-SVC-003: idempotent recovery returns original immutable checks field-for-field."""
+    with SessionLocal() as session:
+        init = initialize_target(
+            session,
+            filename="checks_parity.txt",
+            content="Line 1\nLine 2\n",
+            target_type="text/plain",
+        )
+        target_id = init.target_file_id
+        init_version = init.version
+        init_hash = init.current_hash
+
+    client_request_id = f"fin-parity-{uuid.uuid4()}"
+
+    # First attempt: finalizes and persists replay checks
+    with SessionLocal() as session:
+        res1 = finalize_target(
+            session,
+            target_file_id=target_id,
+            client_request_id=client_request_id,
+            expected_target_version=init_version,
+            expected_current_hash=init_hash,
+            format="canonical_lf",
+        )
+    assert res1.status == "ok"
+    assert res1.is_idempotent_replay is False
+    assert res1.materialized_state_checks is not None
+    assert res1.materialized_state_checks["content_matches"] is True
+    assert res1.materialized_state_checks["stored_hash_matches"] is True
+    assert res1.materialized_state_checks["recomputed_hash_matches"] is True
+    assert res1.materialized_state_checks["version_matches"] is True
+
+    # Advance target version by editing
+    with SessionLocal() as session:
+        edit_res = submit_edits(
+            session,
+            target_file_id=target_id,
+            expected_target_version=init_version,
+            expected_current_hash=init_hash,
+            intent="Advance version after finalization",
+            edits=[{"match": "Line 1", "replace": "Line One"}],
+        )
+        assert edit_res.status == "accepted"
+
+    # Idempotent retry with original arguments
+    with SessionLocal() as session:
+        res2 = finalize_target(
+            session,
+            target_file_id=target_id,
+            client_request_id=client_request_id,
+            expected_target_version=init_version,
+            expected_current_hash=init_hash,
+            format="canonical_lf",
+        )
+    assert res2.status == "ok"
+    assert res2.is_idempotent_replay is True
+
+    # Immutable verification proof preserved exactly
+    assert res2.materialized_state_checks is not None
+    assert res2.materialized_state_checks == res1.materialized_state_checks
+    assert res2.materialized_state_matches is True
+
+    # Complete field-for-field parity excluding documented request-local fields
+    assert res2.finalization_id == res1.finalization_id
+    assert res2.target_file_id == res1.target_file_id
+    assert res2.version == res1.version
+    assert res2.current_hash == res1.current_hash
+    assert res2.snapshot_id == res1.snapshot_id
+    assert res2.closed_editing_cycle_id == res1.closed_editing_cycle_id
+    assert res2.new_editing_cycle_id == res1.new_editing_cycle_id
+    assert res2.exported_content == res1.exported_content
+    assert res2.content_sha256 == res1.content_sha256
+    assert res2.content_bytes == res1.content_bytes
+    assert res2.format == res1.format
+
+
+def test_read_finalized_export_large_multibyte_paging_post_edit():
+    """Verify PR23-R3-SVC-001: immutable retrieval of >1MiB export across subsequent edits with chunk pagination."""
+    # 1. Initialize large >1MiB target with multibyte UTF-8 and CRLF line endings
+    base_text = "Line with UTF-8 chars: €, ✓, 世界\r\n"
+    target_content = base_text * 35000  # ~1.2 MiB
+    assert len(target_content.encode("utf-8")) > 1_048_576
+
+    with SessionLocal() as session:
+        init = initialize_target(session, filename="large_doc.txt", content=target_content, target_type="text/plain")
+        target_id = init.target_file_id
+        v0 = init.version
+        h0 = init.current_hash
+
+    # 2. Finalize target with format original_eol
+    with SessionLocal() as session:
+        fin_res = finalize_target(
+            session,
+            target_file_id=target_id,
+            client_request_id=f"fin-{uuid.uuid4()}",
+            expected_target_version=v0,
+            expected_current_hash=h0,
+            format="original_eol",
+        )
+    assert fin_res.status == "ok"
+    assert fin_res.content_delivery == "deferred"
+    assert fin_res.exported_content is None
+    assert fin_res.finalization_id is not None
+    original_sha256 = fin_res.content_sha256
+    original_bytes = fin_res.content_bytes
+
+    # 3. Mutate target state by applying edits on the new cycle
+    with SessionLocal() as session:
+        edit_res = submit_edits(
+            session,
+            target_file_id=target_id,
+            expected_target_version=v0,
+            expected_current_hash=h0,
+            intent="Mutate document after finalization",
+            edits=[{"match": "Line with UTF-8 chars: €", "replace": "MODIFIED_HEADER", "occurrence_index": 1}],
+        )
+        assert edit_res.status == "accepted"
+
+    # 4. Page through read_finalized_export and reassemble
+    chunks = []
+    offset = 0
+    has_more = True
+    page_size = 262144
+
+    with SessionLocal() as session:
+        while has_more:
+            page = read_finalized_export(
+                session,
+                finalization_id=fin_res.finalization_id,
+                target_file_id=target_id,
+                offset=offset,
+                limit=page_size,
+            )
+            assert page["status"] == "ok"
+            assert page["finalization_id"] == str(fin_res.finalization_id)
+            assert page["target_file_id"] == str(target_id)
+            assert page["total_bytes"] == original_bytes
+            assert page["content_sha256"] == original_sha256
+
+            chunk_data = base64.b64decode(page["content_base64"])
+            assert len(chunk_data) == page["bytes_read"]
+            chunks.append(chunk_data)
+
+            has_more = page["has_more"]
+            offset = page["next_offset"]
+
+    # 5. Verify byte fidelity against original finalized state (NOT current target state)
+    reassembled = b"".join(chunks)
+    assert len(reassembled) == original_bytes
+    assert hashlib.sha256(reassembled).hexdigest() == original_sha256
+    assert b"MODIFIED_HEADER" not in reassembled  # Proves historical immutability!
+
+    # 6. Negative paths
+    with SessionLocal() as session:
+        # Wrong target ID
+        wrong_tid = uuid.uuid4()
+        res_wrong = read_finalized_export(session, finalization_id=fin_res.finalization_id, target_file_id=wrong_tid)
+        assert res_wrong["status"] == "not_found"
+        assert res_wrong["error"] == "finalization_not_found"
+
+        # Out-of-bounds offset
+        res_oob = read_finalized_export(session, finalization_id=fin_res.finalization_id, target_file_id=target_id, offset=original_bytes + 10)
+        assert res_oob["status"] == "invalid_argument"
+        assert res_oob["code"] == "invalid_range"
+
+        # Exact end offset returns 0 bytes and has_more=False
+        res_end = read_finalized_export(session, finalization_id=fin_res.finalization_id, target_file_id=target_id, offset=original_bytes)
+        assert res_end["status"] == "ok"
+        assert res_end["bytes_read"] == 0
+        assert res_end["has_more"] is False
+        assert res_end["next_offset"] is None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import uuid
 from typing import Any
@@ -10,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.line_endings import EXPORT_FORMATS, apply_eol, eol_name, export_eol
-from app.storage.models import CloudTargetFiles
+from app.storage.models import CloudTargetFiles, TargetFinalizations, TargetSnapshots
+
+DEFAULT_EXPORT_CHUNK_BYTES = 262_144  # 256 KiB
+MAX_EXPORT_CHUNK_BYTES = 1_048_576    # 1 MiB
 
 
 def get_target(session: Session, *, target_file_id: uuid.UUID | str) -> dict[str, Any]:
@@ -83,10 +87,144 @@ def export_target(
     }
 
 
+def read_finalized_export(
+    session: Session,
+    finalization_id: uuid.UUID | str,
+    target_file_id: uuid.UUID | str,
+    offset: int = 0,
+    limit: int = DEFAULT_EXPORT_CHUNK_BYTES,
+) -> dict[str, Any]:
+    finalization_uuid = _try_coerce_uuid(finalization_id)
+    if finalization_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "finalization_id": safe_input_text(finalization_id),
+            "failure_detail": "finalization_id is not a valid UUID.",
+        }
+    target_uuid = _try_coerce_uuid(target_file_id)
+    if target_uuid is None:
+        return {
+            "status": "invalid_argument",
+            "target_file_id": safe_input_text(target_file_id),
+            "failure_detail": "target_file_id is not a valid UUID.",
+        }
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        return {
+            "status": "invalid_argument",
+            "code": "invalid_offset",
+            "finalization_id": str(finalization_uuid),
+            "target_file_id": str(target_uuid),
+            "failure_detail": "offset must be a non-negative integer.",
+        }
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        return {
+            "status": "invalid_argument",
+            "code": "invalid_limit",
+            "finalization_id": str(finalization_uuid),
+            "target_file_id": str(target_uuid),
+            "failure_detail": "limit must be a positive integer.",
+        }
+
+    effective_limit = min(limit, MAX_EXPORT_CHUNK_BYTES)
+
+    finalization = session.get(TargetFinalizations, finalization_uuid)
+    if finalization is None or finalization.target_file_id != target_uuid:
+        return {
+            "status": "not_found",
+            "error": "finalization_not_found",
+            "finalization_id": safe_input_text(finalization_id),
+            "target_file_id": safe_input_text(target_file_id),
+            "failure_detail": "Finalization not found for target_file_id.",
+        }
+    if finalization.status != "completed" or finalization.snapshot_id is None:
+        return {
+            "status": "not_found",
+            "error": "finalization_not_found",
+            "finalization_id": safe_input_text(finalization_id),
+            "target_file_id": safe_input_text(target_file_id),
+            "failure_detail": "Finalization is not in completed status.",
+        }
+
+    snapshot = session.get(TargetSnapshots, finalization.snapshot_id)
+    if snapshot is None or snapshot.target_file_id != target_uuid:
+        return {
+            "status": "error",
+            "error": "snapshot_integrity_failure",
+            "finalization_id": str(finalization_uuid),
+            "target_file_id": str(target_uuid),
+            "failure_detail": "Snapshot record associated with finalization is missing or invalid.",
+        }
+
+    export_format = finalization.export_format or "original_eol"
+    eol, eol_error = export_eol(export_format, finalization.source_line_endings)
+    if eol_error is not None:
+        return {
+            "status": "error",
+            "error": "snapshot_integrity_failure",
+            "code": eol_error,
+            "finalization_id": str(finalization_uuid),
+            "target_file_id": str(target_uuid),
+            "failure_detail": f"Failed to derive export line endings: {eol_error}",
+        }
+
+    content = apply_eol(snapshot.content, eol)
+    raw_bytes = content.encode("utf-8")
+    computed_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    computed_bytes = len(raw_bytes)
+
+    if (finalization.content_sha256 is not None and computed_sha256 != finalization.content_sha256) or (
+        finalization.content_bytes is not None and computed_bytes != finalization.content_bytes
+    ):
+        return {
+            "status": "error",
+            "error": "snapshot_integrity_failure",
+            "finalization_id": str(finalization_uuid),
+            "target_file_id": str(target_uuid),
+            "failure_detail": (
+                f"Snapshot integrity check failed: computed sha256={computed_sha256} "
+                f"(expected {finalization.content_sha256}), bytes={computed_bytes} "
+                f"(expected {finalization.content_bytes})."
+            ),
+        }
+
+    total_bytes = computed_bytes
+    if offset > total_bytes:
+        return {
+            "status": "invalid_argument",
+            "code": "invalid_range",
+            "finalization_id": str(finalization_uuid),
+            "target_file_id": str(target_uuid),
+            "failure_detail": f"offset {offset} exceeds total bytes {total_bytes}.",
+            "total_bytes": total_bytes,
+        }
+
+    chunk = raw_bytes[offset : offset + effective_limit]
+    bytes_read = len(chunk)
+    end_offset = offset + bytes_read
+    has_more = end_offset < total_bytes
+    next_offset = end_offset if has_more else None
+    content_base64 = base64.b64encode(chunk).decode("ascii")
+
+    return {
+        "status": "ok",
+        "finalization_id": str(finalization_uuid),
+        "target_file_id": str(target_uuid),
+        "content_base64": content_base64,
+        "offset": offset,
+        "bytes_read": bytes_read,
+        "total_bytes": total_bytes,
+        "content_sha256": computed_sha256,
+        "has_more": has_more,
+        "next_offset": next_offset,
+        "format": export_format,
+        "content_eol": finalization.content_eol,
+    }
+
+
 def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
     if isinstance(value, uuid.UUID):
         return value
     try:
         return uuid.UUID(str(value))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, AttributeError):
         return None

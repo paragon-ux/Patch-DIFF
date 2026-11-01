@@ -69,6 +69,10 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "SELECT ... FOR UPDATE row locking. format: original_eol (default), canonical_lf, crlf, original_text. "
         "If replay verification fails, the SAVE checkpoint and cycle rotation are rolled back atomically."
     ),
+    "patchdiff_read_finalized_export": (
+        "Retrieve byte-for-byte immutable finalized export bytes by finalization ID with pagination "
+        "and integrity verification. Available in full profile only. Returns base64-encoded byte chunks."
+    ),
     "patchdiff_export_target": "Export the current target content and metadata. format: original_text (default, legacy alias of canonical LF), canonical_lf, crlf, or original_eol (restore the uniform line endings recorded at upload).",
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
     "patchdiff_get_pdcp_log": "Return bounded newest-first attempts with has_more/next_sequence; filter by status, content_hash, or exact stored client_request_id.",
@@ -144,6 +148,14 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
     "patchdiff_preview": [{"target_file_id": _EXAMPLE_TARGET, "format": "patchdiff-tx/1", "intent": "Preview an exact edit",
                            "expected_target_version": 4, "edits": [{"match": "Final", "replace": "Reviewed"}]}],
     "patchdiff_finalize_target": [{"target_file_id": _EXAMPLE_TARGET, "client_request_id": "finalize-req-1", "expected_target_version": 2, "format": "original_eol"}],
+    "patchdiff_read_finalized_export": [
+        {
+            "finalization_id": "00000000-0000-4000-8000-000000000001",
+            "target_file_id": _EXAMPLE_TARGET,
+            "offset": 0,
+            "limit": 262144,
+        }
+    ],
 }
 
 
@@ -375,6 +387,7 @@ def _argument_error(name: str, arguments: dict[str, Any]) -> dict[str, Any] | No
 
 _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "target_file_id": "Target UUID returned by patchdiff_initialize_target.",
+    "finalization_id": "Finalization UUID returned by patchdiff_finalize_target.",
     "intent": "Required advisory summary of the whole transaction; recorded, never used for matching.",
     "expected_target_version": "Version guard from your read; rejects if the target moved. Detects ABA changes that a hash cannot.",
     "expected_current_hash": "Lowercase SHA-256 of canonical LF text from your read; rejects if the content differs.",
@@ -491,6 +504,19 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     if name == "patchdiff_export_target":
         properties["format"].update({"enum": list(EXPORT_FORMATS), "default": "original_text",
                                      "description": "original_text (legacy alias of canonical_lf), canonical_lf, crlf, or original_eol."})
+    if name == "patchdiff_read_finalized_export":
+        properties["offset"].update({
+            "minimum": 0, "default": 0,
+            "description": "Byte offset in the finalized export stream; page with returned next_offset.",
+        })
+        properties["limit"].update({
+            "minimum": 1, "maximum": 1_048_576, "default": 262144,
+            "description": "Maximum bytes to return in this page (default 256KiB, capped at 1MiB).",
+        })
+        properties["finalization_id"].update({
+            "type": "string", "format": "uuid",
+            "description": "Finalization UUID returned by patchdiff_finalize_target.",
+        })
     if name == "patchdiff_save":
         properties["export_after_save"]["default"] = False
     if name == "patchdiff_preview":

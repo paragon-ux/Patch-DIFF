@@ -48,6 +48,18 @@ jobs:
         run: pytest backend/tests/unit --junitxml=.ci-results/unit.xml -ra
       - name: Resident worker lifecycle on Linux
         run: pytest backend/tests/unit/test_waymark_worker.py --junitxml=.ci-results/worker-linux.xml -ra
+      - name: Build wheel and install isolated test venv (PR23-R3-TEST-001)
+        run: |
+          pip install build
+          mkdir -p /tmp/test-pd-wheel-dist
+          python -m build --wheel --no-isolation --outdir /tmp/test-pd-wheel-dist
+          python -m venv --without-pip --system-site-packages /tmp/test-pd-wheel-venv
+          pip install --no-deps --prefix /tmp/test-pd-wheel-venv /tmp/test-pd-wheel-dist/*.whl
+          sed -i '1s|^.*$|#!/tmp/test-pd-wheel-venv/bin/python3|' /tmp/test-pd-wheel-venv/bin/patchdiff
+          chmod +x /tmp/test-pd-wheel-venv/bin/patchdiff
+          /tmp/test-pd-wheel-venv/bin/python3 -m app.waymark_bridge.bootstrap --target-dir /tmp/test-pd-wheel-venv/waymark-bridge
+          VENV_SITE=$(/tmp/test-pd-wheel-venv/bin/python3 -c 'import site; print(site.getsitepackages()[0])')
+          cp -r /tmp/test-pd-wheel-venv/waymark-bridge/node_modules "$VENV_SITE/app/waymark_bridge/"
       - name: Postgres integration tests
         env:
           PATCHDIFF_WAYMARK_MODE: resident

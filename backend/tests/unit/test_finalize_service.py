@@ -363,5 +363,204 @@ def test_finalize_target_success_commits(mock_export, mock_replay, mock_save):
     assert result.content_sha256 == content_sha256
     assert result.format == "original_eol"
     assert result.source_line_endings == {"style": "crlf"}
+    assert result.lock_wait_ms is not None and result.lock_wait_ms >= 0
+    assert result.lock_hold_ms is not None and result.lock_hold_ms >= 0
     tx.commit.assert_called_once()
     tx.rollback.assert_not_called()
+
+
+def test_materialize_finalization_helper():
+    from app.services.finalize_service import _materialize_finalization
+    from app.storage.models import TargetFinalizations
+
+    record = MagicMock(spec=TargetFinalizations)
+    record.finalization_id = uuid.uuid4()
+    record.target_file_id = uuid.uuid4()
+    record.client_request_id = "req-1"
+    record.fingerprint_version = 1
+    record.request_fingerprint = "fp-1"
+    record.status = "completed"
+    record.snapshot_id = uuid.uuid4()
+    record.closed_editing_cycle_id = uuid.uuid4()
+    record.new_editing_cycle_id = uuid.uuid4()
+    record.saved_target_version = 5
+    record.canonical_current_hash = "h5"
+    record.filename = "file.txt"
+    record.export_format = "original_eol"
+    record.content_eol = "lf"
+    record.source_line_endings = {"style": "lf"}
+    record.content_sha256 = "sha256"
+    record.content_bytes = 100
+    record.exported_content = "content"
+    record.failure_code = None
+    record.failure_detail = None
+    record.materialized_state_checks = {"content_matches": True, "stored_hash_matches": True}
+
+    detached = _materialize_finalization(record)
+    assert detached.finalization_id == record.finalization_id
+    assert detached.saved_target_version == 5
+    assert detached.materialized_state_checks == {"content_matches": True, "stored_hash_matches": True}
+    assert detached.source_line_endings == {"style": "lf"}
+    # Verify dict copies are distinct instances
+    assert detached.materialized_state_checks is not record.materialized_state_checks
+    assert detached.source_line_endings is not record.source_line_endings
+
+
+def test_finalize_target_idempotent_retry_returns_materialized_checks():
+    from app.services.finalize_service import compute_finalization_fingerprint
+
+    session = MagicMock()
+    session.in_transaction.return_value = False
+    session.dirty = set()
+    session.new = set()
+    session.deleted = set()
+    tx = MagicMock()
+    session.begin.return_value = tx
+
+    target = MagicMock()
+    target.version = 2
+    target.current_hash = "hash2"
+    target.filename = "main.py"
+    target.source_line_endings = None
+
+    tid = uuid.uuid4()
+    client_req_id = "retry-req-1"
+    _, fp = compute_finalization_fingerprint(
+        target_file_id=tid,
+        expected_target_version=2,
+        expected_current_hash="hash2",
+        format="original_eol",
+    )
+
+    existing = MagicMock()
+    existing.finalization_id = uuid.uuid4()
+    existing.target_file_id = tid
+    existing.client_request_id = client_req_id
+    existing.fingerprint_version = 1
+    existing.request_fingerprint = fp
+    existing.status = "completed"
+    existing.snapshot_id = uuid.uuid4()
+    existing.closed_editing_cycle_id = uuid.uuid4()
+    existing.new_editing_cycle_id = uuid.uuid4()
+    existing.saved_target_version = 2
+    existing.canonical_current_hash = "hash2"
+    existing.filename = "main.py"
+    existing.export_format = "original_eol"
+    existing.content_eol = "lf"
+    existing.source_line_endings = None
+    existing.content_sha256 = "hash2"
+    existing.content_bytes = 12
+    existing.exported_content = "text"
+    existing.failure_code = None
+    existing.failure_detail = None
+    existing.materialized_state_checks = {
+        "content_matches": True,
+        "stored_hash_matches": True,
+        "recomputed_hash_matches": True,
+        "version_matches": True,
+    }
+
+    session.execute.return_value.scalar_one_or_none.side_effect = [target, existing]
+
+    result = finalize_target(
+        session,
+        target_file_id=tid,
+        client_request_id=client_req_id,
+        expected_target_version=2,
+        expected_current_hash="hash2",
+        format="original_eol",
+    )
+
+    assert result.status == "ok"
+    assert result.is_idempotent_replay is True
+    assert result.materialized_state_checks == {
+        "content_matches": True,
+        "stored_hash_matches": True,
+        "recomputed_hash_matches": True,
+        "version_matches": True,
+    }
+    assert result.lock_wait_ms is not None and result.lock_wait_ms >= 0
+    assert result.lock_hold_ms is not None and result.lock_hold_ms >= 0
+    tx.rollback.assert_called_once()
+    tx.commit.assert_not_called()
+
+
+def test_read_finalized_export_validation_errors():
+    import base64
+    from app.services.export_service import read_finalized_export
+
+    session = MagicMock()
+
+    # Invalid UUIDs
+    res1 = read_finalized_export(session, "invalid-uuid", str(uuid.uuid4()))
+    assert res1["status"] == "invalid_argument"
+
+    res2 = read_finalized_export(session, str(uuid.uuid4()), "invalid-uuid")
+    assert res2["status"] == "invalid_argument"
+
+    # Invalid offset
+    res3 = read_finalized_export(session, str(uuid.uuid4()), str(uuid.uuid4()), offset=-1)
+    assert res3["status"] == "invalid_argument"
+    assert res3["code"] == "invalid_offset"
+
+    res3_bool = read_finalized_export(session, str(uuid.uuid4()), str(uuid.uuid4()), offset=True)
+    assert res3_bool["status"] == "invalid_argument"
+
+    # Invalid limit
+    res4 = read_finalized_export(session, str(uuid.uuid4()), str(uuid.uuid4()), limit=0)
+    assert res4["status"] == "invalid_argument"
+    assert res4["code"] == "invalid_limit"
+
+
+def test_read_finalized_export_not_found_and_integrity_errors():
+    from app.services.export_service import read_finalized_export
+    from app.storage.models import TargetFinalizations, TargetSnapshots
+
+    session = MagicMock()
+    fin_id = uuid.uuid4()
+    target_id = uuid.uuid4()
+
+    # Finalization not found
+    session.get.return_value = None
+    res1 = read_finalized_export(session, fin_id, target_id)
+    assert res1["status"] == "not_found"
+    assert res1["error"] == "finalization_not_found"
+
+    # Finalization belongs to another target
+    fin = MagicMock(spec=TargetFinalizations)
+    fin.target_file_id = uuid.uuid4()  # different target
+    fin.status = "completed"
+    fin.snapshot_id = uuid.uuid4()
+    session.get.return_value = fin
+    res2 = read_finalized_export(session, fin_id, target_id)
+    assert res2["status"] == "not_found"
+
+    # Snapshot not found
+    fin.target_file_id = target_id
+    session.get.side_effect = [fin, None]
+    res3 = read_finalized_export(session, fin_id, target_id)
+    assert res3["status"] == "error"
+    assert res3["error"] == "snapshot_integrity_failure"
+
+    # EOL derivation error
+    snap = MagicMock(spec=TargetSnapshots)
+    snap.target_file_id = target_id
+    snap.content = "corrupted text\n"
+    fin.export_format = "original_eol"
+    fin.source_line_endings = None
+    fin.content_sha256 = "expected_digest_mismatch"
+    fin.content_bytes = 100
+    session.get.side_effect = [fin, snap]
+    res4 = read_finalized_export(session, fin_id, target_id)
+    assert res4["status"] == "error"
+    assert res4["error"] == "snapshot_integrity_failure"
+    assert "Failed to derive export line endings" in res4["failure_detail"]
+
+    # Snapshot digest mismatch
+    fin.export_format = "canonical_lf"
+    session.get.side_effect = [fin, snap]
+    res5 = read_finalized_export(session, fin_id, target_id)
+    assert res5["status"] == "error"
+    assert res5["error"] == "snapshot_integrity_failure"
+    assert "Snapshot integrity check failed" in res5["failure_detail"]
+

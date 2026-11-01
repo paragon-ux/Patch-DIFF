@@ -56,6 +56,65 @@ def compute_finalization_fingerprint(
 
 
 @dataclass(frozen=True, slots=True)
+class _DetachedFinalizationRecord:
+    """Detached snapshot of TargetFinalizations to avoid SQLAlchemy autobegin post-rollback."""
+    finalization_id: uuid.UUID
+    target_file_id: uuid.UUID
+    client_request_id: str
+    fingerprint_version: int
+    request_fingerprint: str
+    status: str
+    snapshot_id: uuid.UUID | None
+    closed_editing_cycle_id: uuid.UUID | None
+    new_editing_cycle_id: uuid.UUID | None
+    saved_target_version: int | None
+    canonical_current_hash: str | None
+    filename: str | None
+    export_format: str | None
+    content_eol: str | None
+    source_line_endings: dict | None
+    content_sha256: str | None
+    content_bytes: int | None
+    exported_content: str | None
+    failure_code: str | None
+    failure_detail: str | None
+    materialized_state_checks: dict[str, Any] | None = None
+
+
+def _materialize_finalization(record: TargetFinalizations) -> _DetachedFinalizationRecord:
+    sle = record.source_line_endings
+    if isinstance(sle, dict):
+        sle = dict(sle)
+    msc = getattr(record, "materialized_state_checks", None)
+    if isinstance(msc, dict):
+        msc = dict(msc)
+
+    return _DetachedFinalizationRecord(
+        finalization_id=record.finalization_id,
+        target_file_id=record.target_file_id,
+        client_request_id=record.client_request_id,
+        fingerprint_version=record.fingerprint_version,
+        request_fingerprint=record.request_fingerprint,
+        status=record.status,
+        snapshot_id=record.snapshot_id,
+        closed_editing_cycle_id=record.closed_editing_cycle_id,
+        new_editing_cycle_id=record.new_editing_cycle_id,
+        saved_target_version=record.saved_target_version,
+        canonical_current_hash=record.canonical_current_hash,
+        filename=record.filename,
+        export_format=record.export_format,
+        content_eol=record.content_eol,
+        source_line_endings=sle,
+        content_sha256=record.content_sha256,
+        content_bytes=record.content_bytes,
+        exported_content=record.exported_content,
+        failure_code=record.failure_code,
+        failure_detail=record.failure_detail,
+        materialized_state_checks=msc,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class FinalizeResult:
     status: str
     target_file_id: uuid.UUID | str
@@ -68,17 +127,18 @@ class FinalizeResult:
     closed_editing_cycle_id: uuid.UUID | None = None
     new_editing_cycle_id: uuid.UUID | None = None
     materialized_state_matches: bool | None = None
-    materialized_state_checks: dict[str, bool] | None = None
+    materialized_state_checks: dict[str, Any] | None = None
     exported_content: str | None = None
     content_sha256: str | None = None
     content_bytes: int | None = None
     content_delivery: str = "inline"
     format: str | None = None
-    source_line_endings: str | None = None
+    source_line_endings: Any = None
     failure_reason: FailureReason | None = None
     failure_code: str | None = None
     failure_detail: str | None = None
     is_idempotent_replay: bool = False
+    lock_wait_ms: float | None = None
     lock_hold_ms: float | None = None
     replay_ms: float | None = None
 
@@ -174,21 +234,34 @@ def finalize_target(
         format=format,
     )
 
-    t0_lock = time.perf_counter()
+    t_lock_wait_ms: float | None = None
+    t_lock_hold_ms: float | None = None
     tx = session.begin()
     try:
-        # 2. Lock target row
+        # 2. Lock target row under SELECT ... FOR UPDATE
+        # PR23-R3-DOC-002: measure lock acquisition wait time exclusively
+        t0_wait = time.perf_counter()
         with session.no_autoflush:
             target = session.execute(select_target_for_update(target_uuid)).scalar_one_or_none()
+        t_lock_wait_ms = (time.perf_counter() - t0_wait) * 1000.0
+
+        # Start exclusive row lock-hold timer immediately after lock acquisition
+        t0_hold = time.perf_counter()
+
+        def _rollback() -> float:
+            tx.rollback()
+            return (time.perf_counter() - t0_hold) * 1000.0
 
         if target is None:
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status="rejected",
                 target_file_id=target_uuid,
                 client_request_id=client_request_id,
                 failure_reason=FailureReason.TARGET_NOT_FOUND,
                 failure_detail="Target file was not found.",
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
             )
 
         target_version = target.version
@@ -205,30 +278,37 @@ def finalize_target(
         ).scalar_one_or_none()
 
         if existing_finalization is not None:
-            tx.rollback()
-            if existing_finalization.request_fingerprint == fingerprint:
-                # Exact identical retry returns original cached receipt
+            # PR23-R3-SVC-002: Materialize all columns into a detached structure
+            # BEFORE calling tx.rollback() to prevent SQLAlchemy 2.0 autobegin.
+            cached = _materialize_finalization(existing_finalization)
+            t_lock_hold_ms = _rollback()
+
+            if cached.request_fingerprint == fingerprint:
+                # Exact identical retry returns original cached receipt with persisted checks (PR23-R3-SVC-003)
                 return FinalizeResult(
-                    status="ok" if existing_finalization.status == "completed" else existing_finalization.status,
+                    status="ok" if cached.status == "completed" else cached.status,
                     target_file_id=target_uuid,
                     client_request_id=client_request_id,
-                    finalization_id=existing_finalization.finalization_id,
-                    filename=existing_finalization.filename,
-                    version=existing_finalization.saved_target_version,
-                    current_hash=existing_finalization.canonical_current_hash,
-                    snapshot_id=existing_finalization.snapshot_id,
-                    closed_editing_cycle_id=existing_finalization.closed_editing_cycle_id,
-                    new_editing_cycle_id=existing_finalization.new_editing_cycle_id,
-                    materialized_state_matches=True if existing_finalization.status == "completed" else None,
-                    exported_content=existing_finalization.exported_content,
-                    content_sha256=existing_finalization.content_sha256,
-                    content_bytes=existing_finalization.content_bytes,
-                    content_delivery="inline" if existing_finalization.exported_content is not None else "deferred",
-                    format=existing_finalization.export_format,
-                    source_line_endings=existing_finalization.source_line_endings,
-                    failure_code=existing_finalization.failure_code,
-                    failure_detail=existing_finalization.failure_detail,
+                    finalization_id=cached.finalization_id,
+                    filename=cached.filename,
+                    version=cached.saved_target_version,
+                    current_hash=cached.canonical_current_hash,
+                    snapshot_id=cached.snapshot_id,
+                    closed_editing_cycle_id=cached.closed_editing_cycle_id,
+                    new_editing_cycle_id=cached.new_editing_cycle_id,
+                    materialized_state_matches=True if cached.status == "completed" else None,
+                    materialized_state_checks=cached.materialized_state_checks,
+                    exported_content=cached.exported_content,
+                    content_sha256=cached.content_sha256,
+                    content_bytes=cached.content_bytes,
+                    content_delivery="inline" if cached.exported_content is not None else "deferred",
+                    format=cached.export_format,
+                    source_line_endings=cached.source_line_endings,
+                    failure_code=cached.failure_code,
+                    failure_detail=cached.failure_detail,
                     is_idempotent_replay=True,
+                    lock_wait_ms=t_lock_wait_ms,
+                    lock_hold_ms=t_lock_hold_ms,
                 )
             else:
                 # Key reused with differing parameters: conflict rejection
@@ -241,11 +321,13 @@ def finalize_target(
                     failure_reason=FailureReason.CONTEXT_INVALID,
                     failure_code="request_key_conflict",
                     failure_detail=f"client_request_id '{client_request_id}' has already been used with different finalization parameters.",
+                    lock_wait_ms=t_lock_wait_ms,
+                    lock_hold_ms=t_lock_hold_ms,
                 )
 
         # 4. Check fresh guards before mutating state
         if expected_target_version is not None and target_version != expected_target_version:
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status="rejected",
                 target_file_id=target_uuid,
@@ -254,10 +336,12 @@ def finalize_target(
                 current_hash=target_hash,
                 failure_reason=FailureReason.TARGET_VERSION_MISMATCH,
                 failure_detail="expected_target_version does not match the current target version.",
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
             )
 
         if expected_current_hash is not None and target_hash != expected_current_hash:
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status="rejected",
                 target_file_id=target_uuid,
@@ -266,6 +350,8 @@ def finalize_target(
                 current_hash=target_hash,
                 failure_reason=FailureReason.TARGET_HASH_MISMATCH,
                 failure_detail="expected_current_hash does not match the current target hash.",
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
             )
 
         # 5. SAVE: checkpoint snapshot and rotate cycle
@@ -276,7 +362,7 @@ def finalize_target(
             expected_current_hash=expected_current_hash,
         )
         if save_res.status != "saved":
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status="rejected",
                 target_file_id=target_uuid,
@@ -285,6 +371,8 @@ def finalize_target(
                 current_hash=target_hash,
                 failure_reason=save_res.failure_reason or FailureReason.CONTEXT_INVALID,
                 failure_detail=save_res.failure_detail or "SAVE checkpoint failed during finalization.",
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
             )
 
         # 6. REPLAY: verify full history in memory under lock
@@ -294,7 +382,7 @@ def finalize_target(
 
         if not replay_res.materialized_state_matches:
             # Replay failed: rollback transaction completely!
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status="rejected",
                 target_file_id=target_uuid,
@@ -308,13 +396,15 @@ def finalize_target(
                     f"Replay verification failed during finalization: {replay_res.failure_detail or 'materialized state mismatch'}. "
                     "SAVE checkpoint and editing cycle rotation were rolled back atomically."
                 ),
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
                 replay_ms=t_replay_ms,
             )
 
         # 7. EXPORT: format target content
         export_res = export_target(session, target_file_id=target_uuid, format=format)
         if export_res.get("status") != "ok":
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status=export_res.get("status", "rejected"),
                 target_file_id=target_uuid,
@@ -325,12 +415,14 @@ def finalize_target(
                 failure_code=export_res.get("code"),
                 failure_detail=f"Export failed during finalization: {export_res.get('failure_detail')}",
                 source_line_endings=export_res.get("source_line_endings") or target_source_line_endings,
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
             )
 
         # 8. Content extraction and byte validation (fix PR23-IMPL-SVC-001)
         content = export_res.get("content")
         if not isinstance(content, str):
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status="rejected",
                 target_file_id=target_uuid,
@@ -339,13 +431,15 @@ def finalize_target(
                 current_hash=target_hash,
                 failure_reason=FailureReason.CONTEXT_INVALID,
                 failure_detail="Export did not return valid string content.",
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
             )
 
         content_bytes = len(content.encode("utf-8"))
         content_sha256 = export_res.get("content_sha256")
         expected_sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
         if content_sha256 != expected_sha256:
-            tx.rollback()
+            t_lock_hold_ms = _rollback()
             return FinalizeResult(
                 status="rejected",
                 target_file_id=target_uuid,
@@ -354,6 +448,8 @@ def finalize_target(
                 current_hash=target_hash,
                 failure_reason=FailureReason.CONTEXT_INVALID,
                 failure_detail="Exported content SHA-256 does not match computed bytes digest.",
+                lock_wait_ms=t_lock_wait_ms,
+                lock_hold_ms=t_lock_hold_ms,
             )
 
         # Determine delivery mode (inline vs deferred for large files > 1 MiB)
@@ -381,15 +477,18 @@ def finalize_target(
             content_sha256=content_sha256,
             content_bytes=content_bytes,
             exported_content=inline_content,
+            materialized_state_checks=replay_res.materialized_state_checks,
         )
         session.add(record)
         tx.commit()
+        t_lock_hold_ms = (time.perf_counter() - t0_hold) * 1000.0
 
     except Exception:
         tx.rollback()
         raise
-
-    t_lock_hold_ms = (time.perf_counter() - t0_lock) * 1000.0
+    finally:
+        if session.in_transaction():
+            session.rollback()
 
     return FinalizeResult(
         status="ok",
@@ -410,6 +509,7 @@ def finalize_target(
         content_delivery=delivery_mode,
         format=export_res.get("format"),
         source_line_endings=target_source_line_endings,
+        lock_wait_ms=t_lock_wait_ms,
         lock_hold_ms=t_lock_hold_ms,
         replay_ms=t_replay_ms,
     )
