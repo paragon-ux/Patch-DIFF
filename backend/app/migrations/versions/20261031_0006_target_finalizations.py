@@ -46,6 +46,12 @@ def upgrade():
     )
     op.create_index("ix_target_finalizations_target_key", "target_finalizations", ["target_file_id", "client_request_id"])
     op.create_index("ix_target_finalizations_target_created", "target_finalizations", ["target_file_id", "created_at"])
+    op.execute("""DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'patchdiff_agent') THEN
+            REVOKE ALL ON TABLE target_finalizations FROM patchdiff_agent;
+            REVOKE ALL ON TABLE alembic_version FROM patchdiff_agent;
+        END IF;
+    END $$;""")
 
 
 def downgrade():

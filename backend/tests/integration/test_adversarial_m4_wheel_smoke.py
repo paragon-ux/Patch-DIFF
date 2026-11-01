@@ -221,8 +221,10 @@ def test_adversarial_wheel_package_completeness():
             assert "patchdiff-mcp = app.mcp.external_adapter:main" in ep_content
             assert "patchdiff = app.mcp.external_adapter:main" in ep_content
 
-            # Required waymark_bridge files
+            # Required waymark_bridge and mcp/resources files (PR23-R4I-DEP-001)
             expected_bridge_files = [
+                "app/mcp/resources/__init__.py",
+                "app/mcp/resources/docker-compose.yml",
                 "app/waymark_bridge/__init__.py",
                 "app/waymark_bridge/bootstrap.py",
                 "app/waymark_bridge/discover.mjs",
@@ -232,7 +234,7 @@ def test_adversarial_wheel_package_completeness():
                 "app/waymark_bridge/worker.mjs",
             ]
             for ebf in expected_bridge_files:
-                assert ebf in names, f"Required bridge asset {ebf} missing from wheel"
+                assert ebf in names, f"Required package asset {ebf} missing from wheel"
 
             # Migrations check
             migration_files = [n for n in names if "migrations/versions" in n and n.endswith(".py")]
@@ -492,3 +494,34 @@ def test_adversarial_two_process_lifecycle_and_timing(isolated_env):
         editor_proc.terminate()
         host_proc.wait(timeout=5)
         editor_proc.wait(timeout=5)
+
+
+def test_adversarial_installed_wheel_packaged_compose_resolution(isolated_env, tmp_path):
+    """Challenge 7: Verify installed wheel resolves packaged docker-compose.yml outside checkout (PR23-R4I-DEP-001)."""
+    python_bin = isolated_env["python_bin"]
+    rt_dir = tmp_path / "wheel-runtime"
+    code = """
+import sys
+from pathlib import Path
+from app.mcp.runtime_cli import resolve_compose_workspace, ensure_runtime_credentials
+
+rt = Path(sys.argv[1])
+work_dir, compose_file = resolve_compose_workspace(repo_root=None, runtime_dir=rt)
+assert compose_file.is_file(), f"Missing compose_file: {compose_file}"
+assert str(compose_file).startswith(str(rt)), f"Compose did not materialize in runtime_dir: {compose_file}"
+assert "postgres:16.3-alpine" in compose_file.read_text(encoding="utf-8")
+creds = ensure_runtime_credentials(rt)
+assert len(creds["admin_password"]) >= 16
+assert len(creds["agent_password"]) >= 16
+print("PACKAGED_COMPOSE_OK")
+"""
+    clean_env = {k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "PATCHDIFF_REPO_ROOT"}}
+    proc = subprocess.run(
+        [str(python_bin), "-c", code, str(rt_dir)],
+        cwd="/tmp",
+        env=clean_env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "PACKAGED_COMPOSE_OK" in proc.stdout

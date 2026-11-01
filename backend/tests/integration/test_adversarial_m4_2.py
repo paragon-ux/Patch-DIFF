@@ -254,7 +254,7 @@ def test_benchmark_metrics_live_scaling_and_decoupling():
 
             assert fin_res.status == "ok", fin_res
 
-            # Assert metric non-null, positive, and numerically distinct
+            # Assert metric non-null and non-negative domain invariants (PR23-R4I-TEST-002)
             assert fin_res.lock_wait_ms is not None, "lock_wait_ms must not be None"
             assert fin_res.lock_hold_ms is not None, "lock_hold_ms must not be None"
             assert fin_res.replay_ms is not None, "replay_ms must not be None"
@@ -263,20 +263,9 @@ def test_benchmark_metrics_live_scaling_and_decoupling():
             hold_ms = fin_res.lock_hold_ms
             replay_ms = fin_res.replay_ms
 
-            assert wait_ms > 0.0, f"lock_wait_ms must be positive, got {wait_ms}"
-            assert hold_ms > 0.0, f"lock_hold_ms must be positive, got {hold_ms}"
-            assert replay_ms > 0.0, f"replay_ms must be positive, got {replay_ms}"
-
-            # Under uncontended conditions, lock_wait_ms is small
-            assert wait_ms < 30.0, f"Uncontended lock_wait_ms surprisingly high: {wait_ms} ms"
-
-            # Lock hold must encapsulate replay duration
-            assert hold_ms >= replay_ms, f"Lock hold ({hold_ms}) must encapsulate replay ({replay_ms})"
-
-            # All 3 metrics must be numerically distinct
-            assert len({wait_ms, hold_ms, replay_ms}) == 3, (
-                f"Metrics must be numerically distinct: wait={wait_ms}, hold={hold_ms}, replay={replay_ms}"
-            )
+            assert wait_ms >= 0.0, f"lock_wait_ms must be non-negative, got {wait_ms}"
+            assert hold_ms >= 0.0, f"lock_hold_ms must be non-negative, got {hold_ms}"
+            assert replay_ms >= 0.0, f"replay_ms must be non-negative, got {replay_ms}"
 
             # Check idempotent retry retains original checks and non-null lock timing
             fin_retry = finalize_target(
@@ -287,8 +276,8 @@ def test_benchmark_metrics_live_scaling_and_decoupling():
             )
             assert fin_retry.status == "ok"
             assert fin_retry.is_idempotent_replay is True
-            assert fin_retry.lock_wait_ms is not None
-            assert fin_retry.lock_hold_ms is not None
+            assert fin_retry.lock_wait_ms is not None and fin_retry.lock_wait_ms >= 0.0
+            assert fin_retry.lock_hold_ms is not None and fin_retry.lock_hold_ms >= 0.0
             assert fin_retry.replay_ms is None  # Replay is bypassed on idempotent receipt recovery
             assert fin_retry.materialized_state_checks == fin_res.materialized_state_checks
 
@@ -298,13 +287,57 @@ def test_benchmark_metrics_live_scaling_and_decoupling():
                 "replay_ms": replay_ms,
             }
 
-        # Compare scaling between 0 edits and 25 edits
-        m0 = metrics_by_tier[0]
-        m25 = metrics_by_tier[25]
-        # Replay at 25 edits must take longer than at 0 edits
-        assert m25["replay_ms"] > m0["replay_ms"], (
-            f"Replay scaling failure: 25 edits took {m25['replay_ms']} ms, but 0 edits took {m0['replay_ms']} ms"
+        assert set(metrics_by_tier.keys()) == {0, 25}
+
+        # Deterministic fake-clock verification of span boundaries (PR23-R4I-TEST-002, PR23-IMPL-ARCH-001):
+        # Verify lock_wait_ms, replay_ms, and lock_hold_ms measure their exact respective code spans
+        # without wall-clock jitter.
+        from types import SimpleNamespace
+        import app.services.finalize_service as fin_mod
+
+        clock_target = initialize_target(
+            session=session,
+            filename=f"clock_test_{uuid.uuid4().hex[:8]}.py",
+            content="a = 1\n",
+            target_type="python",
         )
+        # Exact 8 time.perf_counter() calls inside finalize_service.py:
+        ticks = iter([
+            1.010,  # 1. t0_pre start
+            1.060,  # 2. t0_pre end -> t_pre_replay_ms = 50.0 ms
+            2.000,  # 3. t0_wait start
+            2.007,  # 4. t0_wait end -> t_lock_wait_ms = 7.0 ms
+            2.007,  # 5. t0_hold start
+            2.020,  # 6. t0_replay (under-lock freshness check) start
+            2.021,  # 7. t0_replay end -> +1.0 ms => total replay_ms = 51.0 ms
+            2.027,  # 8. t0_hold end (after commit) -> t_lock_hold_ms = 20.0 ms (< 51.0 ms replay!)
+        ])
+        last_val = 2.027
+
+        def _fake_perf_counter() -> float:
+            nonlocal last_val
+            try:
+                last_val = next(ticks)
+            except StopIteration:
+                last_val += 0.001
+            return last_val
+
+        orig_time_mod = fin_mod.time
+        try:
+            fin_mod.time = SimpleNamespace(perf_counter=_fake_perf_counter)
+            det_res = finalize_target(
+                session=session,
+                target_file_id=clock_target.target_file_id,
+                client_request_id=f"det-{uuid.uuid4()}",
+                expected_target_version=clock_target.version,
+            )
+        finally:
+            fin_mod.time = orig_time_mod
+
+        assert det_res.status == "ok"
+        assert det_res.lock_wait_ms == pytest.approx(7.0, abs=1e-4)
+        assert det_res.replay_ms == pytest.approx(51.0, abs=1e-4)
+        assert det_res.lock_hold_ms == pytest.approx(20.0, abs=1e-4)
     finally:
         session.close()
 

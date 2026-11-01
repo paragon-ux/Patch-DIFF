@@ -51,12 +51,14 @@ patchdiff-mcp daemon restart --route <native|docker|both>
 patchdiff-mcp daemon status  --route <native|docker|both>
 ```
 
-You can also run Docker Compose and Alembic manually if preferred:
+You can also run Docker Compose and Alembic manually if preferred (supplying a high-entropy `POSTGRES_PASSWORD` in `.env` or environment):
 
 ```powershell
+$env:POSTGRES_USER = "patchdiff_admin"
+$env:POSTGRES_PASSWORD = "<your-high-entropy-admin-secret>"
 docker compose up -d postgres
 $env:PYTHONPATH = "backend"
-$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5433/patchdiff"
+$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff_admin:<your-high-entropy-admin-secret>@127.0.0.1:5433/patchdiff"
 .\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
 ```
 
@@ -133,7 +135,8 @@ Or add the configuration manually using your virtual environment Python (pointin
       ],
       "env": {
         "PYTHONPATH": "C:\\path\\to\\Patch-DIFF\\backend",
-        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5433/patchdiff",
+        "PATCHDIFF_DB_CREDENTIALS_FILE": "C:\\Users\\USER\\.local\\share\\patchdiff-runtime\\db_credentials.json",
+        "PATCHDIFF_ACTIVE_ROUTE": "docker",
         "PATCHDIFF_MCP_PROFILE": "observed_v2",
         "PATCHDIFF_WAYMARK_MODE": "resident"
       }

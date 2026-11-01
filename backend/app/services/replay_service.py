@@ -57,6 +57,7 @@ def replay_target(
     session: Session,
     *,
     target_file_id: uuid.UUID | str,
+    for_update: bool = True,
 ) -> ReplayResult:
     """Reconstruct target content strictly from initial snapshot + accepted logs."""
 
@@ -74,7 +75,11 @@ def replay_target(
         )
 
     with _transaction(session):
-        target = session.execute(select_target_for_update(target_uuid)).scalar_one_or_none()
+        if for_update:
+            stmt = select_target_for_update(target_uuid)
+        else:
+            stmt = select(CloudTargetFiles).where(CloudTargetFiles.target_file_id == target_uuid)
+        target = session.execute(stmt).scalar_one_or_none()
         if target is None:
             return ReplayResult(
                 status="failed",

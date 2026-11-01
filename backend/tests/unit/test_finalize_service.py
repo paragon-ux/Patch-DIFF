@@ -564,3 +564,162 @@ def test_read_finalized_export_not_found_and_integrity_errors():
     assert res5["error"] == "snapshot_integrity_failure"
     assert "Snapshot integrity check failed" in res5["failure_detail"]
 
+
+def test_read_finalized_export_multipage_verified_cache_and_tamper_detection():
+    """Verify multi-page read_finalized_export avoids O(N^2) re-encoding/hashing while detecting tampering (PR23-R4I-SVC-001)."""
+    import base64
+    from app.services import export_service
+    from app.storage.models import TargetFinalizations, TargetSnapshots
+
+    export_service._VERIFIED_EXPORT_CACHE.clear()
+    session = MagicMock()
+    fin_id = uuid.uuid4()
+    target_id = uuid.uuid4()
+    snap_id = uuid.uuid4()
+
+    payload_text = "line-alpha\nline-beta\n" * 500
+    payload_crlf = payload_text.replace("\n", "\r\n")
+    raw_bytes = payload_crlf.encode("utf-8")
+    expected_sha = hashlib.sha256(raw_bytes).hexdigest()
+
+    fin = MagicMock(spec=TargetFinalizations)
+    fin.finalization_id = fin_id
+    fin.target_file_id = target_id
+    fin.status = "completed"
+    fin.snapshot_id = snap_id
+    fin.export_format = "crlf"
+    fin.content_eol = "crlf"
+    fin.source_line_endings = {"style": "crlf"}
+    fin.content_sha256 = expected_sha
+    fin.content_bytes = len(raw_bytes)
+
+    snap = MagicMock(spec=TargetSnapshots)
+    snap.snapshot_id = snap_id
+    snap.target_file_id = target_id
+    snap.content = payload_text
+    snap.content_hash = hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
+
+    def _mock_get(model, ident):
+        if model is TargetFinalizations:
+            return fin
+        if model is TargetSnapshots:
+            return snap
+        return None
+
+    session.get.side_effect = _mock_get
+
+    with patch("app.services.export_service.apply_eol", wraps=export_service.apply_eol) as spy_eol:
+        assembled = bytearray()
+        offset = 0
+        pages = 0
+        while True:
+            page = export_service.read_finalized_export(session, fin_id, target_id, offset=offset, limit=1024)
+            assert page["status"] == "ok"
+            assembled.extend(base64.b64decode(page["content_base64"]))
+            pages += 1
+            if not page["has_more"]:
+                break
+            offset = page["next_offset"]
+
+        assert pages > 5
+        assert bytes(assembled) == raw_bytes
+        # apply_eol was invoked only ONCE on page 0 despite >5 page reads
+        assert spy_eol.call_count == 1
+
+    # Tampering with snapshot.content immediately invalidates cache and fails integrity check
+    snap.content = payload_text[:-1] + "X"
+    tampered = export_service.read_finalized_export(session, fin_id, target_id, offset=0, limit=1024)
+    assert tampered["status"] == "error"
+    assert tampered["error"] == "snapshot_integrity_failure"
+
+
+def test_finalize_target_single_lock_and_two_phase_replay_freshness():
+    """Verify real-Session finalize_target uses save_target_locked and two-phase replay freshness check (PR23-IMPL-ARCH-001, PR23-R4I-SVC-002)."""
+    from sqlalchemy.orm import Session
+    from app.services import finalize_service
+
+    session = MagicMock(spec=Session)
+    session.in_transaction.return_value = False
+    session.dirty = set()
+    session.new = set()
+    session.deleted = set()
+    pre_tx = MagicMock()
+    lock_tx = MagicMock()
+    session.begin.side_effect = [pre_tx, lock_tx]
+
+    tid = uuid.uuid4()
+    target = MagicMock()
+    target.target_file_id = tid
+    target.version = 4
+    target.current_content = "alpha\nbeta\n"
+    target.current_hash = hashlib.sha256(b"alpha\nbeta\n").hexdigest()
+    target.filename = "notes.txt"
+    target.source_line_endings = {"style": "lf"}
+    target.active_editing_cycle_id = uuid.uuid4()
+
+    session.get.return_value = target
+    # 1st execute: pre_existing in pre_tx -> None
+    # 2nd execute: select_target_for_update in lock_tx -> target
+    # 3rd execute: existing_finalization in lock_tx -> None
+    session.execute.return_value.scalar_one_or_none.side_effect = [None, target, None]
+
+    pre_replay = ReplayResult(
+        status="replayed",
+        target_file_id=tid,
+        reconstructed_content="alpha\nbeta\n",
+        reconstructed_hash=target.current_hash,
+        current_hash=target.current_hash,
+        accepted_transactions_replayed=4,
+        materialized_state_matches=True,
+        current_version=4,
+        reconstructed_version=4,
+        materialized_state_checks={
+            "content_matches": True,
+            "stored_hash_matches": True,
+            "recomputed_hash_matches": True,
+            "version_matches": True,
+        },
+    )
+    saved = SaveResult(
+        status="saved",
+        target_file_id=tid,
+        snapshot_id=uuid.uuid4(),
+        closed_editing_cycle_id=uuid.uuid4(),
+        new_editing_cycle_id=uuid.uuid4(),
+        current_hash=target.current_hash,
+        version=4,
+    )
+
+    with (
+        patch.object(finalize_service, "save_target_locked", return_value=saved) as mock_save_locked,
+        patch.object(finalize_service, "replay_target", return_value=pre_replay) as mock_replay,
+        patch.object(finalize_service, "_DEFAULT_REPLAY_TARGET", mock_replay),
+        patch.object(
+            finalize_service,
+            "export_target",
+            return_value={
+                "status": "ok",
+                "content": "alpha\nbeta\n",
+                "content_sha256": target.current_hash,
+                "format": "original_eol",
+                "content_eol": "lf",
+            },
+        ),
+    ):
+        res = finalize_target(
+            session,
+            target_file_id=tid,
+            client_request_id="req-2phase-1",
+            expected_target_version=4,
+            expected_current_hash=target.current_hash,
+        )
+
+    assert res.status == "ok"
+    # save_target_locked was called once with the already-locked target
+    mock_save_locked.assert_called_once_with(session, target=target)
+    # replay_target was called ONLY once (in the pre-lock phase with for_update=False), and reused under the lock!
+    mock_replay.assert_called_once_with(session, target_file_id=tid, for_update=False)
+    pre_tx.rollback.assert_called_once()
+    lock_tx.commit.assert_called_once()
+
+

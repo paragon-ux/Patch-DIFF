@@ -776,3 +776,207 @@ def test_finalize_single_target_deferred_missing_finalization_id(tmp_path):
     assert not dest_file.exists()
 
 
+def test_lock_marker_symlink_and_fifo_rejected(tmp_path):
+    """PR23-R4I-SCRIPT-003: Lock marker must reject symlinks and non-regular files (FIFOs)."""
+    auth_root = tmp_path / "workspace"
+    auth_root.mkdir(mode=0o700)
+    dest = auth_root / "target.txt"
+    payload = b"safe content\n"
+    expected_sha = hashlib.sha256(payload).hexdigest()
+
+    # 1. Symlink lock marker
+    outside_target = tmp_path / "outside_victim.txt"
+    outside_target.write_bytes(b"victim")
+    lock_file = auth_root / ".lock-target.txt"
+    lock_file.symlink_to(outside_target)
+
+    with pytest.raises(finalizer.PathEscapeError, match="symlink"):
+        finalizer.safe_write_back_file(
+            dest,
+            payload,
+            expected_sha256=expected_sha,
+            authorized_root=auth_root,
+        )
+    assert outside_target.read_bytes() == b"victim"
+    lock_file.unlink()
+
+    # 2. FIFO lock marker
+    if hasattr(os, "mkfifo"):
+        os.mkfifo(lock_file)
+        try:
+            with pytest.raises(finalizer.HostWriteBackError, match="not a regular file"):
+                finalizer.safe_write_back_file(
+                    dest,
+                    payload,
+                    expected_sha256=expected_sha,
+                    authorized_root=auth_root,
+                )
+        finally:
+            lock_file.unlink(missing_ok=True)
+
+
+def test_lock_marker_inode_replacement_before_replace_rejected(tmp_path):
+    """PR23-R4I-SCRIPT-003: Replacing lock marker inode mid-operation fails closed before replace."""
+    auth_root = tmp_path / "workspace"
+    auth_root.mkdir(mode=0o700)
+    dest = auth_root / "target.txt"
+    dest.write_bytes(b"original\n")
+    preimage_sha = hashlib.sha256(b"original\n").hexdigest()
+    payload = b"updated\n"
+    expected_sha = hashlib.sha256(payload).hexdigest()
+
+    def replace_lock_inode():
+        lock_path = auth_root / ".lock-target.txt"
+        lock_path.unlink()
+        lock_path.write_bytes(b"forged lock inode")
+
+    with pytest.raises(finalizer.HostWriteBackError, match="Lock marker .* identity changed"):
+        finalizer.safe_write_back_file(
+            dest,
+            payload,
+            expected_sha256=expected_sha,
+            preimage_sha256=preimage_sha,
+            authorized_root=auth_root,
+            _after_preimage_hook=replace_lock_inode,
+        )
+    assert dest.read_bytes() == b"original\n"
+
+
+def test_world_writable_authorized_root_and_subdir_rejected(tmp_path):
+    """PR23-R3-SCRIPT-001: World-writable authorized_root or intermediate directory fails closed."""
+    auth_root = tmp_path / "world_writable_root"
+    auth_root.mkdir()
+    os.chmod(auth_root, 0o777)
+    payload = b"hello\n"
+    expected_sha = hashlib.sha256(payload).hexdigest()
+
+    try:
+        with pytest.raises(finalizer.PathEscapeError, match="world-writable"):
+            finalizer.safe_write_back_file(
+                auth_root / "file.txt",
+                payload,
+                expected_sha256=expected_sha,
+                authorized_root=auth_root,
+            )
+    finally:
+        os.chmod(auth_root, 0o700)
+
+    subdir = auth_root / "sub"
+    subdir.mkdir()
+    os.chmod(subdir, 0o777)
+    try:
+        with pytest.raises(finalizer.PathEscapeError, match="world-writable"):
+            finalizer.safe_write_back_file(
+                subdir / "file.txt",
+                payload,
+                expected_sha256=expected_sha,
+                authorized_root=auth_root,
+            )
+    finally:
+        os.chmod(subdir, 0o700)
+
+
+def test_parent_directory_swap_after_preflight_rejected(tmp_path):
+    """PR23-R3-SCRIPT-001: Swapping or relocating a parent directory after preflight and before replace fails closed."""
+    auth_root = tmp_path / "auth"
+    auth_root.mkdir(mode=0o700)
+    subdir = auth_root / "nested"
+    subdir.mkdir(mode=0o700)
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir(mode=0o700)
+
+    dest = subdir / "doc.txt"
+    payload = b"new content\n"
+    expected_sha = hashlib.sha256(payload).hexdigest()
+
+    def swap_parent_with_symlink():
+        relocated = tmp_path / "relocated_nested"
+        subdir.rename(relocated)
+        subdir.symlink_to(outside_dir)
+
+    with pytest.raises(finalizer.PathEscapeError, match="swapped|replaced|parent linkage"):
+        finalizer.safe_write_back_file(
+            dest,
+            payload,
+            expected_sha256=expected_sha,
+            authorized_root=auth_root,
+            _after_preimage_hook=swap_parent_with_symlink,
+        )
+    assert not (outside_dir / "doc.txt").exists()
+
+
+def test_concurrent_external_writer_after_preimage_check_not_overwritten(tmp_path):
+    """PR23-R3-SCRIPT-003: External write interleaved after preimage check and before replace is detected and preserved."""
+    auth_root = tmp_path / "workspace"
+    auth_root.mkdir(mode=0o700)
+    dest = auth_root / "doc.txt"
+    initial_bytes = b"version A\n"
+    external_bytes = b"version B from concurrent external writer\n"
+    finalizer_bytes = b"version C from finalizer\n"
+
+    dest.write_bytes(initial_bytes)
+    preimage_sha = hashlib.sha256(initial_bytes).hexdigest()
+    expected_sha = hashlib.sha256(finalizer_bytes).hexdigest()
+
+    def interleave_external_write():
+        dest.write_bytes(external_bytes)
+
+    with pytest.raises(finalizer.PreimageMismatchError, match="modified concurrently|content changed"):
+        finalizer.safe_write_back_file(
+            dest,
+            finalizer_bytes,
+            expected_sha256=expected_sha,
+            preimage_sha256=preimage_sha,
+            authorized_root=auth_root,
+            _after_preimage_hook=interleave_external_write,
+        )
+    # External writer's bytes must remain intact!
+    assert dest.read_bytes() == external_bytes
+
+
+def test_two_host_processes_serialize_on_lock_marker(tmp_path):
+    """PR23-R4I-SCRIPT-003: Two separate Python processes writing to the same destination serialize via flock."""
+    from pathlib import Path
+    import subprocess
+    import sys
+
+    auth_root = tmp_path / "multiproc"
+    auth_root.mkdir(mode=0o700)
+    dest = auth_root / "shared.txt"
+    b0 = b"state-0\n"
+    b1 = b"state-1\n"
+    b2 = b"state-2\n"
+    dest.write_bytes(b0)
+
+    script = (
+        "import hashlib, sys; from pathlib import Path; "
+        "import examples.host_finalize as hf; "
+        "root = Path(sys.argv[1]); dest = root / 'shared.txt'; "
+        "pre = sys.argv[2]; data = sys.argv[3].encode('utf-8'); "
+        "hf.safe_write_back_file(dest, data, expected_sha256=hashlib.sha256(data).hexdigest(), "
+        "preimage_sha256=pre, authorized_root=root)"
+    )
+    repo_root = str(Path(__file__).resolve().parents[3])
+    p1 = subprocess.run(
+        [sys.executable, "-c", script, str(auth_root), hashlib.sha256(b0).hexdigest(), b1.decode("utf-8")],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert p1.returncode == 0
+    assert dest.read_bytes() == b1
+
+    # Second process with stale preimage (b0) must fail with PreimageMismatchError
+    p2_stale = subprocess.run(
+        [sys.executable, "-c", script, str(auth_root), hashlib.sha256(b0).hexdigest(), b2.decode("utf-8")],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert p2_stale.returncode != 0
+    assert "PreimageMismatchError" in p2_stale.stderr
+    assert dest.read_bytes() == b1
+
+
+

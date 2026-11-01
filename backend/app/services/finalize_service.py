@@ -16,12 +16,16 @@ from sqlalchemy.orm import Session
 from app.core.failures import FailureReason
 from app.core.input_text import invalid_text_paths, safe_input_text
 from app.core.line_endings import EXPORT_FORMATS
+from app.core.hashing import canonicalize_text
 from app.services.export_service import export_target
 from app.services.performance_events import timed
 from app.services.replay_service import replay_target
-from app.services.save_service import save_target
+from app.services.save_service import save_target, save_target_locked
 from app.storage.models import CloudTargetFiles, TargetFinalizations
 from app.storage.repositories import select_target_for_update
+
+_DEFAULT_SAVE_TARGET = save_target
+_DEFAULT_REPLAY_TARGET = replay_target
 
 _CLIENT_REQUEST_ID_RE = re.compile(r"^[\x21-\x7e]{1,128}$")
 MAX_INLINE_EXPORT_BYTES = 1_048_576  # 1 MiB UTF-8 byte cap for inline wire delivery
@@ -236,6 +240,35 @@ def finalize_target(
 
     t_lock_wait_ms: float | None = None
     t_lock_hold_ms: float | None = None
+    pre_replay_res = None
+    t_pre_replay_ms: float = 0.0
+
+    # Two-phase replay optimization (PR23-IMPL-ARCH-001):
+    # Pre-compute O(history) replay outside the FOR UPDATE row lock when operating on a live Session,
+    # then verify freshness in O(1) under the lock (falling back to under-lock replay on concurrent mutation).
+    if isinstance(session, Session) and save_target is _DEFAULT_SAVE_TARGET and replay_target is _DEFAULT_REPLAY_TARGET:
+        pre_tx = session.begin()
+        try:
+            with session.no_autoflush:
+                pre_existing = session.execute(
+                    select(TargetFinalizations.finalization_id).where(
+                        TargetFinalizations.target_file_id == target_uuid,
+                        TargetFinalizations.client_request_id == client_request_id,
+                    )
+                ).scalar_one_or_none()
+                if pre_existing is None:
+                    pre_target = session.get(CloudTargetFiles, target_uuid)
+                    if (
+                        pre_target is not None
+                        and (expected_target_version is None or pre_target.version == expected_target_version)
+                        and (expected_current_hash is None or pre_target.current_hash == expected_current_hash)
+                    ):
+                        t0_pre = time.perf_counter()
+                        pre_replay_res = replay_target(session, target_file_id=target_uuid, for_update=False)
+                        t_pre_replay_ms = (time.perf_counter() - t0_pre) * 1000.0
+        finally:
+            pre_tx.rollback()
+
     tx = session.begin()
     try:
         # 2. Lock target row under SELECT ... FOR UPDATE
@@ -354,13 +387,16 @@ def finalize_target(
                 lock_hold_ms=t_lock_hold_ms,
             )
 
-        # 5. SAVE: checkpoint snapshot and rotate cycle
-        save_res = save_target(
-            session,
-            target_file_id=target_uuid,
-            expected_target_version=expected_target_version,
-            expected_current_hash=expected_current_hash,
-        )
+        # 5. SAVE: checkpoint snapshot and rotate cycle using already-locked target (PR23-R4I-SVC-002)
+        if save_target is _DEFAULT_SAVE_TARGET and isinstance(session, Session):
+            save_res = save_target_locked(session, target=target)
+        else:
+            save_res = save_target(
+                session,
+                target_file_id=target_uuid,
+                expected_target_version=expected_target_version,
+                expected_current_hash=expected_current_hash,
+            )
         if save_res.status != "saved":
             t_lock_hold_ms = _rollback()
             return FinalizeResult(
@@ -375,10 +411,25 @@ def finalize_target(
                 lock_hold_ms=t_lock_hold_ms,
             )
 
-        # 6. REPLAY: verify full history in memory under lock
+        # 6. REPLAY: verify freshness of pre-lock replay in O(1) under lock, or run fallback replay (PR23-IMPL-ARCH-001)
         t0_replay = time.perf_counter()
-        replay_res = replay_target(session, target_file_id=target_uuid)
-        t_replay_ms = (time.perf_counter() - t0_replay) * 1000.0
+        if (
+            pre_replay_res is not None
+            and pre_replay_res.current_version == target_version
+            and pre_replay_res.current_hash == target_hash
+            and (
+                not pre_replay_res.materialized_state_matches
+                or canonicalize_text(target.current_content) == pre_replay_res.reconstructed_content
+            )
+        ):
+            replay_res = pre_replay_res
+            t_replay_ms = t_pre_replay_ms + (time.perf_counter() - t0_replay) * 1000.0
+        else:
+            if replay_target is _DEFAULT_REPLAY_TARGET:
+                replay_res = replay_target(session, target_file_id=target_uuid, for_update=False)
+            else:
+                replay_res = replay_target(session, target_file_id=target_uuid)
+            t_replay_ms = (time.perf_counter() - t0_replay) * 1000.0
 
         if not replay_res.materialized_state_matches:
             # Replay failed: rollback transaction completely!

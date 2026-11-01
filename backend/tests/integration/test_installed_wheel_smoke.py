@@ -26,20 +26,43 @@ from app.core.config import settings
 
 @pytest.fixture(scope="module")
 def isolated_wheel_installation(tmp_path_factory):
-    """PR23-R3-TEST-001: Authentic, non-skipped isolated wheel installation in /tmp/test-pd-wheel-venv."""
+    """PR23-R3-TEST-001: Authentic, non-skipped isolated wheel installation in /tmp/test-pd-wheel-venv verified by wheel SHA-256."""
+    import hashlib
+
     repo_root = Path(__file__).resolve().parents[3]
     venv_dir = Path("/tmp/test-pd-wheel-venv")
-    patchdiff_bin = venv_dir / "bin" / "patchdiff"
+    patchdiff_bin = venv_dir / "bin" / "patchdiff-mcp"
     python_bin = venv_dir / "bin" / "python3"
     bridge_dir = venv_dir / "waymark-bridge"
+    sha_marker = venv_dir / "WHEEL_SHA256.txt"
 
     from app.services.waymark_adapter import resolve_node_executable
     node_path = resolve_node_executable()
 
-    # Determine if fresh installation or verification of existing venv is needed
+    # Always build wheel from current working tree and compute its SHA-256 so stale venvs are never reused
+    dist_dir = tmp_path_factory.mktemp("wheel-dist")
+    build_cmd = [
+        sys.executable,
+        "-m",
+        "build",
+        "--wheel",
+        "--no-isolation",
+        "--outdir",
+        str(dist_dir),
+    ]
+    subprocess.run(build_cmd, cwd=str(repo_root), check=True, capture_output=True, text=True)
+    wheels = list(dist_dir.glob("patchdiff_mcp-*.whl"))
+    assert wheels, f"No built wheel found in {dist_dir}"
+    wheel_path = wheels[0]
+    wheel_sha256 = hashlib.sha256(wheel_path.read_bytes()).hexdigest()
+
     needs_install = True
-    if patchdiff_bin.is_file() and python_bin.is_file():
-        # Verify app importable from venv without PYTHONPATH
+    if (
+        patchdiff_bin.is_file()
+        and python_bin.is_file()
+        and sha_marker.is_file()
+        and sha_marker.read_text(encoding="utf-8").strip() == wheel_sha256
+    ):
         check = subprocess.run(
             [str(python_bin), "-c", "import app; print(app.__file__)"],
             cwd="/tmp",
@@ -51,21 +74,6 @@ def isolated_wheel_installation(tmp_path_factory):
             needs_install = False
 
     if needs_install:
-        dist_dir = tmp_path_factory.mktemp("wheel-dist")
-        build_cmd = [
-            sys.executable,
-            "-m",
-            "build",
-            "--wheel",
-            "--no-isolation",
-            "--outdir",
-            str(dist_dir),
-        ]
-        subprocess.run(build_cmd, cwd=str(repo_root), check=True, capture_output=True, text=True)
-        wheels = list(dist_dir.glob("patchdiff_mcp-*.whl"))
-        assert wheels, f"No built wheel found in {dist_dir}"
-        wheel_path = wheels[0]
-
         venv_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             [sys.executable, "-m", "venv", "--without-pip", str(venv_dir)],
@@ -100,6 +108,8 @@ def isolated_wheel_installation(tmp_path_factory):
                 content[0] = f"#!{python_bin}"
                 script_bin.write_text("\n".join(content) + "\n", encoding="utf-8")
                 script_bin.chmod(0o755)
+
+        sha_marker.write_text(wheel_sha256 + "\n", encoding="utf-8")
 
     # Ensure Waymark bridge is bootstrapped with pinned Node
     site_packages_dirs = list(venv_dir.glob("lib/python*/site-packages"))

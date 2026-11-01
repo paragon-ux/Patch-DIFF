@@ -123,66 +123,76 @@ def save_target(
                 failure_detail="expected_current_hash does not match the current target hash.",
             )
 
-        old_cycle = session.get(EditingCycles, target.active_editing_cycle_id)
-        if old_cycle is None:
-            return SaveResult(
-                status="rejected",
-                target_file_id=target.target_file_id,
-                snapshot_id=None,
-                closed_editing_cycle_id=None,
-                new_editing_cycle_id=None,
-                current_hash=target.current_hash,
-                version=target.version,
-                failure_reason=FailureReason.CONTEXT_INVALID,
-                failure_detail="Target active editing cycle was not found.",
-            )
+        return save_target_locked(session, target=target, _after_snapshot=_after_snapshot)
 
-        snapshot = TargetSnapshots(
-            target_file_id=target.target_file_id,
-            editing_cycle_id=old_cycle.editing_cycle_id,
-            content=target.current_content,
-            content_hash=target.current_hash,
-            version=target.version,
-            snapshot_reason="save_checkpoint",
-            base_pdcp_log_id=target.latest_accepted_pdcp_log_id,
-        )
-        session.add(snapshot)
-        session.flush()
 
-        if _after_snapshot is not None:
-            _after_snapshot()
-
-        next_cycle_index = (
-            session.scalar(
-                select(func.coalesce(func.max(EditingCycles.cycle_index), -1)).where(
-                    EditingCycles.target_file_id == target.target_file_id
-                )
-            )
-            + 1
-        )
-        new_cycle = EditingCycles(
-            target_file_id=target.target_file_id,
-            cycle_index=next_cycle_index,
-            status="active",
-        )
-        old_cycle.status = "closed"
-        old_cycle.closed_at = func.now()
-        old_cycle.save_snapshot_id = snapshot.snapshot_id
-        session.flush()
-        session.add(new_cycle)
-        session.flush()
-        target.active_editing_cycle_id = new_cycle.editing_cycle_id
-        session.flush()
-
+def save_target_locked(
+    session: Session,
+    *,
+    target: CloudTargetFiles,
+    _after_snapshot=None,
+) -> SaveResult:
+    """Execute SAVE checkpoint and editing-cycle rotation on an already-locked, guard-verified target row (PR23-R4I-SVC-002)."""
+    old_cycle = session.get(EditingCycles, target.active_editing_cycle_id)
+    if old_cycle is None:
         return SaveResult(
-            status="saved",
+            status="rejected",
             target_file_id=target.target_file_id,
-            snapshot_id=snapshot.snapshot_id,
-            closed_editing_cycle_id=old_cycle.editing_cycle_id,
-            new_editing_cycle_id=new_cycle.editing_cycle_id,
+            snapshot_id=None,
+            closed_editing_cycle_id=None,
+            new_editing_cycle_id=None,
             current_hash=target.current_hash,
             version=target.version,
+            failure_reason=FailureReason.CONTEXT_INVALID,
+            failure_detail="Target active editing cycle was not found.",
         )
+
+    snapshot = TargetSnapshots(
+        target_file_id=target.target_file_id,
+        editing_cycle_id=old_cycle.editing_cycle_id,
+        content=target.current_content,
+        content_hash=target.current_hash,
+        version=target.version,
+        snapshot_reason="save_checkpoint",
+        base_pdcp_log_id=target.latest_accepted_pdcp_log_id,
+    )
+    session.add(snapshot)
+    session.flush()
+
+    if _after_snapshot is not None:
+        _after_snapshot()
+
+    next_cycle_index = (
+        session.scalar(
+            select(func.coalesce(func.max(EditingCycles.cycle_index), -1)).where(
+                EditingCycles.target_file_id == target.target_file_id
+            )
+        )
+        + 1
+    )
+    new_cycle = EditingCycles(
+        target_file_id=target.target_file_id,
+        cycle_index=next_cycle_index,
+        status="active",
+    )
+    old_cycle.status = "closed"
+    old_cycle.closed_at = func.now()
+    old_cycle.save_snapshot_id = snapshot.snapshot_id
+    session.flush()
+    session.add(new_cycle)
+    session.flush()
+    target.active_editing_cycle_id = new_cycle.editing_cycle_id
+    session.flush()
+
+    return SaveResult(
+        status="saved",
+        target_file_id=target.target_file_id,
+        snapshot_id=snapshot.snapshot_id,
+        closed_editing_cycle_id=old_cycle.editing_cycle_id,
+        new_editing_cycle_id=new_cycle.editing_cycle_id,
+        current_hash=target.current_hash,
+        version=target.version,
+    )
 
 
 def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:

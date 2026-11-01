@@ -17,7 +17,8 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from pathlib import Path
-from sqlalchemy import text, select, func
+from urllib.parse import urlparse, urlunparse
+from sqlalchemy import create_engine, text, select, func
 
 from app.core.failures import FailureReason
 from app.services.finalize_service import finalize_target
@@ -28,47 +29,97 @@ from app.storage.models import CloudTargetFiles, TargetFinalizations, TargetSnap
 from app.storage.repositories import select_target_for_update
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "app" / "migrations"
+DISPOSABLE_DB_PREFIX = "patchdiff_test_disposable_"
 
 
-def get_alembic_config() -> Config:
+def assert_disposable_migration_db(db_url: str) -> str:
+    """Guard against running destructive migration downgrades or table deletes on a shared database (PR23-R4I-TEST-001)."""
+    parsed = urlparse(db_url)
+    dbname = (parsed.path or "").lstrip("/")
+    if not dbname.startswith(DISPOSABLE_DB_PREFIX):
+        raise RuntimeError(
+            f"Refusing to run destructive migration downgrade/delete on non-disposable database {dbname!r}; "
+            f"expected database name starting with {DISPOSABLE_DB_PREFIX!r}."
+        )
+    return dbname
+
+
+def _build_db_url_with_name(base_url: str, dbname: str) -> str:
+    parsed = urlparse(base_url)
+    return urlunparse((parsed.scheme, parsed.netloc, f"/{dbname}", parsed.params, parsed.query, parsed.fragment))
+
+
+def get_alembic_config(db_url: str | None = None) -> Config:
     cfg = Config(str(MIGRATIONS_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
+    if db_url is not None:
+        cfg.set_main_option("sqlalchemy.url", db_url)
     return cfg
 
 
-def test_adversarial_migration_0007_schema_and_reversibility():
-    """Adversarially challenge migration 0007 against live PostgreSQL."""
-    cfg = get_alembic_config()
+def test_adversarial_migration_0007_schema_and_reversibility(monkeypatch: pytest.MonkeyPatch):
+    """Adversarially challenge migration 0007 in an isolated disposable database without touching shared state (PR23-R4I-TEST-001)."""
+    base_url = engine.url.render_as_string(hide_password=False)
 
-    # Ensure clean target_finalizations state before testing unpopulated downgrade/upgrade
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM target_finalizations WHERE materialized_state_checks IS NOT NULL"))
+    # 0. Guard must refuse to operate on the shared database
+    with pytest.raises(RuntimeError, match="Refusing to run destructive migration"):
+        assert_disposable_migration_db(base_url)
 
-    # 1. Downgrade to 20261031_0006
-    command.downgrade(cfg, "20261031_0006")
+    disposable_db = f"{DISPOSABLE_DB_PREFIX}m3_2_{uuid.uuid4().hex[:8]}"
+    disposable_url = _build_db_url_with_name(base_url, disposable_db)
+    assert_disposable_migration_db(disposable_url)
 
-    with engine.connect() as conn:
-        cols = conn.execute(text("""
-            SELECT column_name, data_type, is_nullable
-            FROM information_schema.columns
-            WHERE table_name = 'target_finalizations' AND column_name = 'materialized_state_checks';
-        """)).fetchall()
-        assert len(cols) == 0, "Column must be completely dropped after downgrade to 0006"
+    admin_engine = create_engine(base_url, isolation_level="AUTOCOMMIT")
+    disposable_engine = None
+    try:
+        with admin_engine.connect() as admin_conn:
+            admin_conn.execute(text(f'CREATE DATABASE "{disposable_db}"'))
 
-    # 2. Upgrade back to head (20261031_0007)
-    command.upgrade(cfg, "head")
+        monkeypatch.setenv("PATCHDIFF_DATABASE_URL", disposable_url)
+        cfg = get_alembic_config(disposable_url)
+        disposable_engine = create_engine(disposable_url)
 
-    with engine.connect() as conn:
-        cols = conn.execute(text("""
-            SELECT column_name, data_type, is_nullable, udt_name
-            FROM information_schema.columns
-            WHERE table_name = 'target_finalizations' AND column_name = 'materialized_state_checks';
-        """)).fetchall()
-        assert len(cols) == 1, "Column must exist after upgrade to 0007"
-        col_name, data_type, is_nullable, udt_name = cols[0]
-        assert col_name == "materialized_state_checks"
-        assert data_type == "USER-DEFINED" or udt_name == "jsonb", f"Expected jsonb, got {data_type} / {udt_name}"
-        assert is_nullable == "YES", f"Expected nullable=YES, got {is_nullable}"
+        # Upgrade fresh disposable database to head (20261031_0007)
+        command.upgrade(cfg, "head")
+
+        # 1. Downgrade to 20261031_0006 in isolated disposable DB
+        command.downgrade(cfg, "20261031_0006")
+
+        with disposable_engine.connect() as conn:
+            cols = conn.execute(text("""
+                SELECT column_name, data_type, is_nullable
+                FROM information_schema.columns
+                WHERE table_name = 'target_finalizations' AND column_name = 'materialized_state_checks';
+            """)).fetchall()
+            assert len(cols) == 0, "Column must be completely dropped after downgrade to 0006"
+
+        # 2. Upgrade back to head (20261031_0007)
+        command.upgrade(cfg, "head")
+
+        with disposable_engine.connect() as conn:
+            cols = conn.execute(text("""
+                SELECT column_name, data_type, is_nullable, udt_name
+                FROM information_schema.columns
+                WHERE table_name = 'target_finalizations' AND column_name = 'materialized_state_checks';
+            """)).fetchall()
+            assert len(cols) == 1, "Column must exist after upgrade to 0007"
+            col_name, data_type, is_nullable, udt_name = cols[0]
+            assert col_name == "materialized_state_checks"
+            assert data_type == "USER-DEFINED" or udt_name == "jsonb", f"Expected jsonb, got {data_type} / {udt_name}"
+            assert is_nullable == "YES", f"Expected nullable=YES, got {is_nullable}"
+    finally:
+        if disposable_engine is not None:
+            disposable_engine.dispose()
+        with admin_engine.connect() as admin_conn:
+            admin_conn.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = :dname AND pid <> pg_backend_pid()"
+                ),
+                {"dname": disposable_db},
+            )
+            admin_conn.execute(text(f'DROP DATABASE IF EXISTS "{disposable_db}"'))
+        admin_engine.dispose()
 
 
 def test_adversarial_finalization_checks_persistence_and_idempotent_parity():
@@ -219,14 +270,14 @@ def test_adversarial_lock_contention_wait_vs_hold_separation():
     thread_b_result = {}
 
     def holder_process_a():
-        """Process/Thread A acquires row lock and holds it for 350ms."""
+        """Process/Thread A acquires row lock and holds it for 450ms."""
         with SessionLocal() as session:
             tx = session.begin()
             # Lock the target row
             session.execute(select_target_for_update(target_id)).scalar_one()
             lock_acquired_event.set()
-            # Hold lock for 350ms
-            time.sleep(0.35)
+            # Hold lock for 450ms so competitor still waits >= 250ms after pre-lock replay
+            time.sleep(0.45)
             tx.rollback()
             contention_release_event.set()
 

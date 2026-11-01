@@ -112,7 +112,7 @@ patchdiff-mcp daemon status  --route <native|docker|both>
 
 ### 2. Connect via MCP Stdio Adapter
 
-PatchDIFF exposes a stdio JSON-RPC MCP adapter (`patchdiff-mcp`, `uvx patchdiff-mcp`, or `python -m app.mcp.external_adapter`). You can auto-configure your MCP host config with `patchdiff-mcp setup --route both --update-mcp-config --mcp-route <native|docker>`, or configure `claude_desktop_config.json` / `mcp_config.json` directly:
+PatchDIFF exposes a stdio JSON-RPC MCP adapter (`patchdiff-mcp`, `uvx patchdiff-mcp`, or `python -m app.mcp.external_adapter`). Running `patchdiff-mcp setup --route both --update-mcp-config --mcp-route <native|docker>` generates per-installation 256-bit `scram-sha-256` credentials in `~/.local/share/patchdiff-runtime/db_credentials.json` (`0600`), provisions separate PostgreSQL roles (`patchdiff_admin` for `full` host lifecycle vs. least-privilege `patchdiff_agent` for `observed_v2` agent editing), and atomically writes your host `mcp_config.json`:
 
 ```json
 {
@@ -121,7 +121,8 @@ PatchDIFF exposes a stdio JSON-RPC MCP adapter (`patchdiff-mcp`, `uvx patchdiff-
       "command": "patchdiff-mcp",
       "args": [],
       "env": {
-        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5434/patchdiff",
+        "PATCHDIFF_DB_CREDENTIALS_FILE": "/home/user/.local/share/patchdiff-runtime/db_credentials.json",
+        "PATCHDIFF_ACTIVE_ROUTE": "native",
         "PATCHDIFF_MCP_PROFILE": "observed_v2",
         "PATCHDIFF_WAYMARK_MODE": "resident"
       }
@@ -130,20 +131,21 @@ PatchDIFF exposes a stdio JSON-RPC MCP adapter (`patchdiff-mcp`, `uvx patchdiff-
 }
 ```
 
-*(Use port `5434` for the `native` route or port `5433` for the `docker` route).*
+*(Use `"PATCHDIFF_ACTIVE_ROUTE": "native"` for port `5434` or `"docker"` for port `5433`, or pass `PATCHDIFF_DATABASE_URL` directly).*
 
 See [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) for full host integration details.
 
 ---
 
-## MCP Profiles & Tool Surface
+## MCP Profiles, Migration & Compatibility (`PR23-IMPL-DOC-002`)
 
 External MCP defaults to the **5-tool `observed_v2` profile**: `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`.
 
 Configure the profile via `PATCHDIFF_MCP_PROFILE`:
-- **`observed_v2`** (default, 5 tools): Streamlined agent editing with explicit AST snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte hard ceiling). See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
-- **`full`** (24 tools): Complete trusted-host tool suite including document initialization, `patchdiff_finalize_target`, `patchdiff_read_finalized_export`, `patchdiff_save`, `patchdiff_replay`, audit inspection, and legacy compatibility wrappers.
-- **Legacy compatibility profiles** (`editor` [7], `observed` [6], `unobserved` [5], `observed_editor` [4], `unobserved_editor` [3], `hybrid_editor` [1]): Retained for backward compatibility with a once-per-process stderr migration notice.
+- **`observed_v2`** (default, 5 tools): Streamlined agent editing with explicit AST snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte hard ceiling). Intentionally excludes target initialization and finalization tools (`Unknown PatchDIFF MCP tool: <name>`) and connects as the least-privilege `patchdiff_agent` DB role. See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
+- **`full`** (24 tools): Complete trusted-host tool suite (`patchdiff_admin` DB role) including `patchdiff_initialize_target`, `patchdiff_finalize_target`, `patchdiff_read_finalized_export`, `patchdiff_save`, `patchdiff_replay`, audit inspection, and legacy compatibility wrappers. Hosts must run a separate `full` process (or call the Python service layer) to initialize targets before agent editing and to finalize/export targets after agent editing.
+- **Legacy compatibility profiles** (`editor` [7], `observed` [6], `unobserved` [5], `observed_editor` [4], `unobserved_editor` [3], `hybrid_editor` [1]): Retained for backward compatibility with a once-per-process stderr migration notice. Existing integrations expecting the 7-tool `editor` default must explicitly set `PATCHDIFF_MCP_PROFILE=editor`.
+- **PostgreSQL Port Mapping**: Docker Compose now binds `127.0.0.1:5433:5432` by default (configurable via `PATCHDIFF_POSTGRES_PORT`) and native user-space clusters bind `127.0.0.1:5434` (`PATCHDIFF_NATIVE_POSTGRES_PORT`) so neither collides with a host PostgreSQL instance on `5432`.
 
 ---
 

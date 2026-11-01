@@ -347,7 +347,7 @@ Constraints and indexes:
 - `INDEX (target_file_id, created_at)` (`ix_target_finalizations_target_created`)
 
 Retention, recovery, and downgrade semantics:
-- Under `SELECT ... FOR UPDATE` on `cloud_target_files`, `finalize_target` checks `uq_target_finalizations_target_key` before evaluating version/hash guards. Matching `(target_file_id, client_request_id, request_fingerprint)` returns the detached original receipt (`is_idempotent_replay: true`) including persisted `materialized_state_checks` without rotating another cycle, even if the target has since advanced. Conflicting fingerprints reject with `request_id_conflict` without mutating state.
+- Under `SELECT ... FOR UPDATE` on `cloud_target_files`, `finalize_target` checks `uq_target_finalizations_target_key` before evaluating version/hash guards. Matching `(target_file_id, client_request_id, request_fingerprint)` returns the detached original receipt (`is_idempotent_replay: true`) including persisted `materialized_state_checks` without rotating another cycle, even if the target has since advanced. Conflicting fingerprints reject with `request_key_conflict` without mutating state.
 - For deferred exports (`content_bytes > 1,048,576`, where `exported_content` is `NULL`), `patchdiff_read_finalized_export` reconstructs the exact finalized bytes from the immutable `target_snapshots` row (`snapshot_id`) and recorded `export_format` / `source_line_endings`, verifying full byte count and `content_sha256` before returning base64 chunks.
 - Downgrading migration `20261031_0007` refuses while any row in `target_finalizations` has `materialized_state_checks IS NOT NULL`. Downgrading migration `20261031_0006` refuses while any row exists in `target_finalizations`.
 

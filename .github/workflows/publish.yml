@@ -3,7 +3,7 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
     inputs:
       tag:
@@ -16,11 +16,26 @@ permissions:
 
 jobs:
   build:
-    name: Build package distribution
+    name: Build and verify package distribution
     runs-on: ubuntu-latest
     outputs:
       validated_tag: ${{ steps.preflight.outputs.validated_tag }}
       validated_commit: ${{ steps.verify_tag.outputs.validated_commit }}
+      artifacts_sha256: ${{ steps.checksums.outputs.artifacts_sha256 }}
+    services:
+      postgres:
+        image: postgres:16.3-alpine
+        env:
+          POSTGRES_DB: patchdiff
+          POSTGRES_USER: patchdiff_release_test
+          POSTGRES_PASSWORD: release_smoke_test_secret_9f8e7d6c
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U patchdiff_release_test -d patchdiff"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Preflight validate candidate release tag format
         id: preflight
@@ -151,20 +166,25 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Validate pyproject.toml version matches verified tag
+      - name: Validate pyproject.toml name and version match verified tag
         env:
           TARGET_TAG: ${{ steps.preflight.outputs.validated_tag }}
         run: |
           set -euo pipefail
+          PY_NAME=$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["name"])')
           PY_VER=$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])')
+          if [ "$PY_NAME" != "patchdiff-mcp" ]; then
+            echo "Error: pyproject.toml name '$PY_NAME' must be 'patchdiff-mcp'." >&2
+            exit 1
+          fi
           EXPECTED_TAG="v$PY_VER"
           if [ "$EXPECTED_TAG" != "$TARGET_TAG" ]; then
             echo "Error: Tag '$TARGET_TAG' does not match pyproject.toml version '$PY_VER' (expected '$EXPECTED_TAG')." >&2
             exit 1
           fi
-          echo "Verified: Tag $TARGET_TAG matches pyproject.toml version $PY_VER"
+          echo "Verified: Package $PY_NAME and tag $TARGET_TAG match pyproject.toml version $PY_VER"
 
-      - name: Verify Waymark bridge package assets
+      - name: Verify Waymark bridge and packaged compose assets
         run: |
           set -euo pipefail
           for f in discover.mjs discovery_core.mjs worker.mjs package.json package-lock.json; do
@@ -173,7 +193,11 @@ jobs:
               exit 1
             fi
           done
-          echo "All Waymark bridge assets verified in backend/app/waymark_bridge/"
+          if [ ! -f "backend/app/mcp/resources/docker-compose.yml" ]; then
+            echo "Error: Missing packaged backend/app/mcp/resources/docker-compose.yml" >&2
+            exit 1
+          fi
+          echo "All Waymark bridge and runtime compose assets verified."
 
       - name: Install build dependencies
         run: pip install build twine
@@ -184,7 +208,7 @@ jobs:
       - name: Verify distribution metadata
         run: twine check dist/*
 
-      - name: Verify artifact filenames match release version
+      - name: Verify artifact filenames and wheel metadata match release version
         env:
           TARGET_TAG: ${{ steps.preflight.outputs.validated_tag }}
         run: |
@@ -203,19 +227,66 @@ jobs:
             ls -la dist/
             exit 1
           fi
-          echo "Verified built artifacts for version $VERSION: $WHEEL_FOUND and $SDIST_FOUND"
+          python -c "
+          import zipfile
+          with zipfile.ZipFile('$WHEEL_FOUND') as zf:
+              meta = [n for n in zf.namelist() if n.endswith('.dist-info/METADATA')][0]
+              text = zf.read(meta).decode('utf-8')
+              assert 'Name: patchdiff-mcp' in text, text
+              assert 'Version: $VERSION' in text, text
+          "
+          echo "Verified built artifacts and wheel METADATA for patchdiff-mcp==$VERSION"
 
-      - name: Test installed wheel in clean environment
+      - name: Test installed wheel in clean environment with Postgres and Waymark
+        env:
+          PATCHDIFF_DATABASE_URL: postgresql+psycopg://patchdiff_release_test:release_smoke_test_secret_9f8e7d6c@localhost:5432/patchdiff
+          PATCHDIFF_WAYMARK_MODE: resident
         run: |
           set -euo pipefail
           python -m venv /tmp/smoke-venv
           /tmp/smoke-venv/bin/pip install dist/*.whl
           cd /tmp
-          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --bridge-dir /tmp/smoke-venv/waymark-bridge
-          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --check-only --bridge-dir /tmp/smoke-venv/waymark-bridge
-          # Verify console script entry point exists and runs stdio JSON-RPC outside repo checkout
-          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | PATCHDIFF_WAYMARK_BRIDGE_DIR=/tmp/smoke-venv/waymark-bridge /tmp/smoke-venv/bin/patchdiff-mcp | grep -q "patchdiff_commit_bundle"
-          echo "Installed wheel MCP and Waymark bridge smoke test passed."
+          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --target-dir /tmp/smoke-venv/waymark-bridge
+          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --check-only --target-dir /tmp/smoke-venv/waymark-bridge
+          # Run Alembic migrations from the installed wheel
+          INI_PATH=$(/tmp/smoke-venv/bin/python -c "import app.mcp.runtime_cli as rc; print(rc.get_alembic_ini_path())")
+          /tmp/smoke-venv/bin/python -m alembic -c "$INI_PATH" upgrade head
+          # Execute end-to-end initialize -> observe_scopes -> commit_bundle -> finalize_target via installed wheel
+          PATCHDIFF_WAYMARK_BRIDGE_DIR=/tmp/smoke-venv/waymark-bridge /tmp/smoke-venv/bin/python -c '
+          import json, os, subprocess, uuid
+          env_full = {**os.environ, "PATCHDIFF_MCP_PROFILE": "full"}
+          env_v2 = {**os.environ, "PATCHDIFF_MCP_PROFILE": "observed_v2"}
+          p_full = subprocess.Popen(["/tmp/smoke-venv/bin/patchdiff-mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env_full)
+          p_v2 = subprocess.Popen(["/tmp/smoke-venv/bin/patchdiff-mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env_v2)
+          def rpc(proc, i, name, args):
+              proc.stdin.write(json.dumps({"jsonrpc":"2.0","id":i,"method":"tools/call","params":{"name":name,"arguments":args}}) + "\n")
+              proc.stdin.flush()
+              res = json.loads(proc.stdout.readline())
+              assert not res["result"].get("isError"), res
+              return json.loads(res["result"]["content"][0]["text"])
+          try:
+              init = rpc(p_full, 1, "patchdiff_initialize_target", {"filename":"rel.py","content":"def f():\n    return 1\n","content_type":"text/x-python"})
+              tid = init["target_file_id"]
+              obs = rpc(p_v2, 2, "patchdiff_observe_scopes", {"target_file_id":tid,"selections":[{"symbol_name":"f"}]})
+              oid = obs["scopes"][0]["observation_id"]
+              com = rpc(p_v2, 3, "patchdiff_commit_bundle", {"snapshot":obs["snapshot"],"intent":"update f","client_request_id":str(uuid.uuid4()),"groups":[{"observation_id":oid,"operations":[{"op":"match","match":"return 1","replace":"return 2"}]}]})
+              assert com["status"] == "accepted"
+              fin = rpc(p_full, 4, "patchdiff_finalize_target", {"target_file_id":tid,"expected_target_version":1,"client_request_id":str(uuid.uuid4())})
+              assert fin["status"] == "ok" and "return 2" in fin["exported_content"]
+          finally:
+              p_full.terminate(); p_v2.terminate()
+          '
+          echo "Installed wheel full Postgres + Waymark + MCP lifecycle verification passed."
+
+      - name: Generate SHA-256 checksum manifest
+        id: checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.whl *.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          DIGEST=$(sha256sum SHA256SUMS.txt | awk '{print $1}')
+          echo "artifacts_sha256=$DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Store distribution artifacts
         uses: actions/upload-artifact@v4
@@ -242,9 +313,10 @@ jobs:
           name: python-package-distributions
           path: dist/
 
-      - name: Verify distribution artifacts present
+      - name: Verify distribution artifacts and SHA-256 checksums
         env:
           EXPECTED_TAG: ${{ needs.build.outputs.validated_tag }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.build.outputs.artifacts_sha256 }}
         run: |
           set -euo pipefail
           if [ -z "$EXPECTED_TAG" ]; then
@@ -253,8 +325,16 @@ jobs:
           fi
           VERSION="${EXPECTED_TAG#v}"
           echo "Publishing release version: $VERSION for tag: $EXPECTED_TAG"
-          ls -la dist/
-          if ! ls dist/patchdiff_mcp-"$VERSION"-*.whl 1>/dev/null 2>&1; then
+          cd dist
+          ls -la
+          ACTUAL_MANIFEST_SHA256=$(sha256sum SHA256SUMS.txt | awk '{print $1}')
+          if [ "$ACTUAL_MANIFEST_SHA256" != "$EXPECTED_MANIFEST_SHA256" ]; then
+            echo "Error: SHA256SUMS.txt digest mismatch ($ACTUAL_MANIFEST_SHA256 != $EXPECTED_MANIFEST_SHA256)" >&2
+            exit 1
+          fi
+          sha256sum -c SHA256SUMS.txt
+          rm -f SHA256SUMS.txt
+          if ! ls patchdiff_mcp-"$VERSION"-*.whl 1>/dev/null 2>&1; then
             echo "Error: Downloaded artifacts missing wheel for $VERSION" >&2
             exit 1
           fi

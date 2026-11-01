@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections import OrderedDict
 import hashlib
 import uuid
 from typing import Any
@@ -15,6 +16,8 @@ from app.storage.models import CloudTargetFiles, TargetFinalizations, TargetSnap
 
 DEFAULT_EXPORT_CHUNK_BYTES = 262_144  # 256 KiB
 MAX_EXPORT_CHUNK_BYTES = 1_048_576    # 1 MiB
+_MAX_CACHED_EXPORTS = 8
+_VERIFIED_EXPORT_CACHE: OrderedDict[uuid.UUID, tuple[tuple[Any, ...], bytes, str]] = OrderedDict()
 
 
 def get_target(session: Session, *, target_file_id: uuid.UUID | str) -> dict[str, Any]:
@@ -167,25 +170,48 @@ def read_finalized_export(
             "failure_detail": f"Failed to derive export line endings: {eol_error}",
         }
 
-    content = apply_eol(snapshot.content, eol)
-    raw_bytes = content.encode("utf-8")
-    computed_sha256 = hashlib.sha256(raw_bytes).hexdigest()
-    computed_bytes = len(raw_bytes)
+    # Bounded integrity-verified export buffer cache (PR23-R4I-SVC-001):
+    # Avoids repeating apply_eol + UTF-8 encode + SHA-256 across paged reads of the same immutable
+    # finalized snapshot while re-verifying immediately if any DB column or snapshot content mutates.
+    state_guard = (
+        export_format,
+        finalization.content_sha256,
+        finalization.content_bytes,
+        getattr(snapshot, "content_hash", None),
+        len(snapshot.content),
+        hash(snapshot.content),
+    )
+    cached_entry = _VERIFIED_EXPORT_CACHE.get(finalization_uuid)
+    if cached_entry is not None and cached_entry[0] == state_guard:
+        _VERIFIED_EXPORT_CACHE.move_to_end(finalization_uuid)
+        _, raw_bytes, computed_sha256 = cached_entry
+        computed_bytes = len(raw_bytes)
+    else:
+        content = apply_eol(snapshot.content, eol)
+        raw_bytes = content.encode("utf-8")
+        computed_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        computed_bytes = len(raw_bytes)
 
-    if (finalization.content_sha256 is not None and computed_sha256 != finalization.content_sha256) or (
-        finalization.content_bytes is not None and computed_bytes != finalization.content_bytes
-    ):
-        return {
-            "status": "error",
-            "error": "snapshot_integrity_failure",
-            "finalization_id": str(finalization_uuid),
-            "target_file_id": str(target_uuid),
-            "failure_detail": (
-                f"Snapshot integrity check failed: computed sha256={computed_sha256} "
-                f"(expected {finalization.content_sha256}), bytes={computed_bytes} "
-                f"(expected {finalization.content_bytes})."
-            ),
-        }
+        if (finalization.content_sha256 is not None and computed_sha256 != finalization.content_sha256) or (
+            finalization.content_bytes is not None and computed_bytes != finalization.content_bytes
+        ):
+            _VERIFIED_EXPORT_CACHE.pop(finalization_uuid, None)
+            return {
+                "status": "error",
+                "error": "snapshot_integrity_failure",
+                "finalization_id": str(finalization_uuid),
+                "target_file_id": str(target_uuid),
+                "failure_detail": (
+                    f"Snapshot integrity check failed: computed sha256={computed_sha256} "
+                    f"(expected {finalization.content_sha256}), bytes={computed_bytes} "
+                    f"(expected {finalization.content_bytes})."
+                ),
+            }
+
+        _VERIFIED_EXPORT_CACHE[finalization_uuid] = (state_guard, raw_bytes, computed_sha256)
+        _VERIFIED_EXPORT_CACHE.move_to_end(finalization_uuid)
+        while len(_VERIFIED_EXPORT_CACHE) > _MAX_CACHED_EXPORTS:
+            _VERIFIED_EXPORT_CACHE.popitem(last=False)
 
     total_bytes = computed_bytes
     if offset > total_bytes:

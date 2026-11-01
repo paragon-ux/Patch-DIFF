@@ -473,7 +473,7 @@ Atomically executes SAVE checkpointing, deterministic replay verification, and f
 - **Timing & Latency Instrumentation**:
   - `lock_wait_ms` (`float`, optional): Elapsed time in milliseconds spent waiting to acquire the row lock on `cloud_target_files` via `SELECT ... FOR UPDATE`.
   - `lock_hold_ms` (`float`, optional): Elapsed time in milliseconds from exclusive row lock acquisition until transaction commit or rollback completes.
-  - `replay_ms` (`float`, optional): Elapsed time in milliseconds spent executing in-memory replay verification under row lock.
+  - `replay_ms` (`float`, optional): Elapsed time in milliseconds spent executing in-memory replay verification (pre-lock read phase plus under-lock $O(1)$ freshness check or fallback replay).
 - **Bounded Delivery**: Inline content is capped at 1 MiB (`MAX_INLINE_EXPORT_BYTES = 1,048,576`). For larger exports, `content_delivery` is `"deferred"`, and `exported_content` is null; deferred bytes must be retrieved via `patchdiff_read_finalized_export`.
 - **Returns**:
   ```json
@@ -510,7 +510,7 @@ Atomically executes SAVE checkpointing, deterministic replay verification, and f
 
 ### `patchdiff_read_finalized_export`
 Retrieves immutable, verified export byte streams by finalization ID with pagination and snapshot integrity verification.
-- **Profile Availability**: Available exclusively on the `full` profile (24 tools total); denied with an authorization error on `observed_v2` and other editing profiles.
+- **Profile Availability**: Available exclusively on the `full` profile (24 tools total); on `observed_v2` and other editing profiles, `tools/call` fails closed with an MCP tool error (`isError: true`, `content[0].text: "Unknown PatchDIFF MCP tool: patchdiff_read_finalized_export"`).
 - **Purpose & Invariant**: Resolves deferred delivery (`content_delivery: "deferred"`) for targets exceeding the 1 MiB wire limit, and provides durable, byte-for-byte immutable export recovery. Unlike `patchdiff_export_target` (which exports the mutable current target state), `patchdiff_read_finalized_export` reconstructs the export directly from the immutable `TargetSnapshots` row recorded during finalization using the recorded `export_format` and `source_line_endings`. The retrieved bytes and content SHA-256 remain permanently stable regardless of subsequent target edits, version increments, or editing cycle rotations.
 - **Arguments**:
   - `finalization_id` (`string`, required): UUID of the completed finalization.

@@ -18,15 +18,15 @@ Trusted host harnesses use `full` to initialize targets, perform database migrat
 execute atomic finalization. Excluded tools are uncallable as well as unadvertised. An agent
 cannot override a profile per request.
 
-### Operator and Agent Process Isolation (`PR23-PLAN-MCP-003`)
+### Operator and Agent Process & Database Role Isolation (`PR23-PLAN-MCP-003`, `PR23-R4I-ARCH-001`, `PR23-IMPL-DOC-002`)
 
 The MCP profile is an interface boundary, not an operating system security boundary.
-Hosts must enforce process and credential isolation:
-- The model/agent receives only an `observed_v2` stdio connection.
-- Operator database credentials (`PATCHDIFF_DATABASE_URL`), admin shell access, and
-  `full`-profile process handles must be held exclusively by the host process.
-- The agent must not have permissions to launch arbitrary child processes or inspect host
-  environment variables containing database credentials.
+Hosts must enforce process, filesystem, and database role isolation:
+- **Breaking Default Profile & Two-Process Bootstrap (`PR23-IMPL-DOC-002`)**: External MCP startup defaults to `PATCHDIFF_MCP_PROFILE=observed_v2` (5 tools: `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`), which intentionally omits target initialization and lifecycle tools (`patchdiff_initialize_target`, `patchdiff_save`, `patchdiff_replay`, `patchdiff_finalize_target`, `patchdiff_read_finalized_export`). Calling any excluded tool on an editing profile returns `isError: true` with `"Unknown PatchDIFF MCP tool: <name>"`. Hosts must run a separate trusted host process with `PATCHDIFF_MCP_PROFILE=full` (or invoke the Python service layer directly) to initialize targets before handing `target_file_id` to the `observed_v2` agent session, and to finalize/export targets after agent editing completes. Legacy 7-tool integrations must explicitly set `PATCHDIFF_MCP_PROFILE=editor`.
+- **Dual-Route Ports & Per-Installation Credentials (`PR23-R4I-ARCH-001`)**: `patchdiff-mcp setup --route <native|docker|both>` provisions user-space native PostgreSQL on `127.0.0.1:5434` and Docker Compose PostgreSQL on `127.0.0.1:5433` (avoiding port `5432` host collisions). Setup generates per-installation 256-bit secrets (`secrets.token_urlsafe(32)`) in `0600` `~/.local/share/patchdiff-runtime/db_credentials.json`, enforces `scram-sha-256` on all local Unix socket and TCP loopback connections (rejecting `trust` and known defaults like `patchdiff`), and provisions two distinct PostgreSQL roles:
+  - `patchdiff_admin`: used exclusively by `PATCHDIFF_MCP_PROFILE=full` and Alembic migrations.
+  - `patchdiff_agent`: least-privilege role (`NOSUPERUSER NOCREATEDB NOCREATEROLE`) bound to `observed_v2` agent sessions, with `GRANT SELECT, INSERT, UPDATE` only on editing tables and `REVOKE ALL ON TABLE target_finalizations, alembic_version` plus `REVOKE CREATE ON SCHEMA public`.
+- The model/agent receives only an `observed_v2` stdio connection using `patchdiff_agent` credentials (`PATCHDIFF_DB_ROLE=agent`), with no read access to `0600` operator `db_credentials.json` or `full`-profile handles.
 - When strict observation is required across all submissions, set
   `PATCHDIFF_STRICT_OBSERVATION_MODE=1`. In strict mode, PatchDIFF rejects all unobserved
   write submissions (`patchdiff_submit_edits`, `patchdiff_submit_operations`, etc.) with
@@ -437,18 +437,18 @@ The write-back protocol enforces five non-negotiable security guarantees:
    - *Pre-replace verification*: After writing and fsyncing the unique temporary file (`.tmp-{leaf_name}-{uuid}`), the descriptor is rewound (`lseek(temp_fd, 0, SEEK_SET)`), re-read, and its digest verified against `expected_sha256` before initiating rename.
    - *Post-replace verification*: After atomic rename, the destination is re-opened read-only relative to `parent_dir_fd` and re-verified against `expected_sha256` as defense-in-depth.
 
-3. **Enforceable Per-File Cooperative Writer Coordination (`PR23-R3-SCRIPT-003`)**:
+3. **Enforceable Per-File Cooperative Writer Coordination (`PR23-R3-SCRIPT-003`, `PR23-R4I-SCRIPT-003`)**:
    - Neither `os.replace` nor an unlocked preimage check provides a compare-and-swap guarantee. Racing host processes can overwrite each other's changes or install stale edits.
    - Locking the destination file inode directly is flawed: `os.replace` detaches and replaces the directory entry with a fresh inode, causing concurrent waiters to hold a dead inode while subsequent operations race unprotected.
-   - `safe_write_back_file` coordinates cooperating writers via a dedicated `.lock-{leaf_name}` marker file in the pinned parent directory:
+   - `safe_write_back_file` coordinates writers via a dedicated `.lock-{leaf_name}` marker file in the pinned parent directory opened with `O_NOFOLLOW`, verified as a regular file via `os.fstat`, and re-verified for `(st_dev, st_ino)` identity after `fcntl.flock(LOCK_EX)` (`_acquire_verified_lock_fd`):
      ```python
-     lock_fd = os.open(f".lock-{leaf_name}", os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600, dir_fd=parent_dir_fd)
+     lock_fd = os.open(f".lock-{leaf_name}", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=parent_dir_fd)
      fcntl.flock(lock_fd, fcntl.LOCK_EX)
      ```
    - The exclusive lock is acquired *before* reading existing disk bytes and is held continuously across:
-     a. Preimage inspection and verification
+     a. Preimage inspection and `(st_dev, st_ino)` recording
      b. Temporary file creation, payload write, and file fsync
-     c. Pre-replace descriptor digest verification
+     c. Pre-replace descriptor digest verification plus directory chain `(st_dev, st_ino)` and destination preimage re-verification (`_verify_directory_chain`, `_verify_trusted_directory_fd`)
      d. Descriptor-relative atomic replacement: `os.replace(temp_name, leaf_name, src_dir_fd=parent_dir_fd, dst_dir_fd=parent_dir_fd)`
      e. Parent directory fsync: `os.fsync(parent_dir_fd)`
      f. Post-write verification
@@ -462,9 +462,9 @@ The write-back protocol enforces five non-negotiable security guarantees:
      - If the file does not exist: `PreimageMismatchError` is raised (preimage was expected, but file was absent).
    - If destination exists as a symlink or directory, it is rejected with `PathEscapeError` or `HostWriteBackError`.
 
-5. **Truthful Multi-Stage Status Reporting & Chunked Deferred Retrieval (`PR23-R3-SCRIPT-004`, `PR23-R3-SVC-001`)**:
-   - `finalize_single_target` distinctly tracks database finalization outcome (`db_status`) and filesystem write-back outcome (`disk_status`):
-     - `receipt["db_status"]`: `"ok"` or `"rejected"`. Indicates PostgreSQL transaction status.
+5. **Truthful Multi-Stage Status Reporting & Chunked Deferred Retrieval (`PR23-R3-SCRIPT-004`, `PR23-R3-SVC-001`, `PR23-R4I-DOC-002`)**:
+   - `finalize_single_target` distinctly tracks database/export outcome (`db_status`) and filesystem write-back outcome (`disk_status`):
+     - `receipt["db_status"]`: `"ok"`, `"rejected"`, `"invalid_argument"`, `"not_found"`, or `"error"` (for example when deferred export chunk retrieval or digest verification fails). Indicates the database/export stage status prior to or independent of disk write-back.
      - `receipt["disk_status"]`: `"written"`, `"skipped"`, or `"error"`. Indicates host write-back status.
      - `receipt["written_destination"]`: Installed file path if written, otherwise `None`.
      - `receipt["status"]`: Overall status; set to `"ok"` only if database finalization succeeded AND requested disk write-back succeeded. If write-back fails or is incomplete, `receipt["status"]` is `"error"` (or raises `HostWriteBackError` if `raise_on_disk_error=True`). Never reports false success.

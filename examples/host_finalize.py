@@ -195,6 +195,164 @@ def _read_all_fd(fd: int) -> bytes:
     return b"".join(chunks)
 
 
+def _verify_trusted_directory_fd(
+    fd: int,
+    label: str,
+    *,
+    allow_sticky_world_writable: bool = False,
+) -> tuple[int, int]:
+    """Verify directory fd is a live regular directory owned by a trusted user without unsafe world-write permissions."""
+    try:
+        st = os.fstat(fd)
+    except OSError as exc:
+        raise PathEscapeError(f"Failed to fstat directory {label}: {exc}") from exc
+
+    if not stat.S_ISDIR(st.st_mode):
+        raise PathEscapeError(f"Descriptor for {label} is not a directory.")
+    if st.st_nlink < 1:
+        raise PathEscapeError(f"Directory {label} has been unlinked (st_nlink={st.st_nlink}).")
+
+    if hasattr(os, "geteuid"):
+        euid = os.geteuid()
+        if st.st_uid not in (euid, 0):
+            raise PathEscapeError(
+                f"Directory {label} is owned by untrusted uid {st.st_uid} (expected {euid} or 0)."
+            )
+
+    if st.st_mode & stat.S_IWOTH:
+        is_sticky = bool(st.st_mode & getattr(stat, "S_ISVTX", 0o1000))
+        if not (allow_sticky_world_writable and is_sticky):
+            raise PathEscapeError(
+                f"Directory {label} is world-writable (mode={ oct(st.st_mode & 0o7777) }); "
+                "refusing write-back in untrusted directory."
+            )
+
+    return (st.st_dev, st.st_ino)
+
+
+def _verify_directory_chain(
+    root_fd: int,
+    root_dev_ino: tuple[int, int],
+    chain: list[tuple[int, str, int, tuple[int, int]]],
+    *,
+    root_path: Path | None = None,
+) -> None:
+    """Verify that the pinned root and every traversed subdirectory remain attached and un-swapped."""
+    cur_st = os.fstat(root_fd)
+    if (cur_st.st_dev, cur_st.st_ino) != root_dev_ino or cur_st.st_nlink < 1:
+        raise PathEscapeError("Authorized root directory identity changed or was unlinked during write-back.")
+    if root_path is not None:
+        try:
+            path_st = os.lstat(str(root_path))
+        except OSError as exc:
+            raise PathEscapeError(f"Authorized root path {root_path} vanished during write-back: {exc}") from exc
+        if stat.S_ISLNK(path_st.st_mode) or (path_st.st_dev, path_st.st_ino) != root_dev_ino:
+            raise PathEscapeError(f"Authorized root {root_path} was replaced or relocated during write-back.")
+
+    for parent_fd, comp_name, child_fd, expected_dev_ino in chain:
+        child_fstat = os.fstat(child_fd)
+        if (child_fstat.st_dev, child_fstat.st_ino) != expected_dev_ino or child_fstat.st_nlink < 1:
+            raise PathEscapeError(f"Directory component {comp_name!r} identity changed or was unlinked.")
+        if child_fstat.st_mode & stat.S_IWOTH:
+            raise PathEscapeError(f"Directory component {comp_name!r} became world-writable during traversal.")
+        try:
+            entry_lstat = os.lstat(comp_name, dir_fd=parent_fd)
+        except OSError as exc:
+            raise PathEscapeError(f"Directory component {comp_name!r} was removed or renamed: {exc}") from exc
+        if stat.S_ISLNK(entry_lstat.st_mode) or (entry_lstat.st_dev, entry_lstat.st_ino) != expected_dev_ino:
+            raise PathEscapeError(
+                f"Directory component {comp_name!r} was swapped or replaced after traversal."
+            )
+        try:
+            dotdot_st = os.stat("..", dir_fd=child_fd)
+            parent_st = os.fstat(parent_fd)
+            if (dotdot_st.st_dev, dotdot_st.st_ino) != (parent_st.st_dev, parent_st.st_ino):
+                raise PathEscapeError(
+                    f"Directory component {comp_name!r} parent linkage ('..') no longer matches parent directory."
+                )
+        except OSError as exc:
+            raise PathEscapeError(f"Failed to verify parent linkage for {comp_name!r}: {exc}") from exc
+
+
+def _acquire_verified_lock_fd(parent_dir_fd: int, lock_name: str) -> tuple[int, tuple[int, int]]:
+    """Open and lock .lock-{leaf} with O_NOFOLLOW, regular-file fstat verification, and post-flock inode identity check."""
+    if fcntl is None or not hasattr(fcntl, "flock"):
+        raise HostWriteBackError("POSIX fcntl.flock writer coordination is required on this platform.")
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise HostWriteBackError("OS does not support O_NOFOLLOW; refusing unsafe lock marker open.")
+
+    for _attempt in range(3):
+        try:
+            pre_st = os.lstat(lock_name, dir_fd=parent_dir_fd)
+            if stat.S_ISLNK(pre_st.st_mode):
+                raise PathEscapeError(f"Lock marker {lock_name!r} is a symlink.")
+            if not stat.S_ISREG(pre_st.st_mode):
+                raise HostWriteBackError(f"Lock marker {lock_name!r} is not a regular file.")
+        except FileNotFoundError:
+            pass
+
+        lock_flags = (
+            os.O_CREAT
+            | os.O_RDWR
+            | os.O_NOFOLLOW
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NONBLOCK", 0)
+        )
+        try:
+            fd = os.open(lock_name, lock_flags, 0o600, dir_fd=parent_dir_fd)
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise PathEscapeError(f"Lock marker {lock_name!r} is a symlink (ELOOP).") from exc
+            raise HostWriteBackError(f"Failed to open lock file {lock_name!r}: {exc}") from exc
+
+        try:
+            fd_st = os.fstat(fd)
+            if not stat.S_ISREG(fd_st.st_mode):
+                raise HostWriteBackError(
+                    f"Lock marker {lock_name!r} descriptor is not a regular file (mode={oct(fd_st.st_mode)})."
+                )
+            if hasattr(os, "geteuid") and fd_st.st_uid not in (os.geteuid(), 0):
+                raise HostWriteBackError(
+                    f"Lock marker {lock_name!r} is owned by untrusted uid {fd_st.st_uid}."
+                )
+
+            fcntl.flock(fd, fcntl.LOCK_EX)
+
+            # Verify after acquiring flock that the directory entry still points to this exact open regular file inode
+            post_fd_st = os.fstat(fd)
+            if post_fd_st.st_nlink < 1:
+                os.close(fd)
+                continue
+            try:
+                dir_entry_st = os.lstat(lock_name, dir_fd=parent_dir_fd)
+            except FileNotFoundError:
+                os.close(fd)
+                continue
+            if stat.S_ISLNK(dir_entry_st.st_mode):
+                raise PathEscapeError(f"Lock marker {lock_name!r} was replaced with a symlink during lock wait.")
+            if not stat.S_ISREG(dir_entry_st.st_mode):
+                raise HostWriteBackError(f"Lock marker {lock_name!r} was replaced with a non-regular file.")
+            if (dir_entry_st.st_dev, dir_entry_st.st_ino) != (post_fd_st.st_dev, post_fd_st.st_ino):
+                os.close(fd)
+                continue
+
+            return fd, (post_fd_st.st_dev, post_fd_st.st_ino)
+        except Exception:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
+
+    raise HostWriteBackError(
+        f"Lock marker {lock_name!r} inode was repeatedly replaced during lock acquisition (concurrent tampering detected)."
+    )
+
+
 def safe_write_back_file(
     destination_path: Path | str,
     data: bytes,
@@ -203,24 +361,22 @@ def safe_write_back_file(
     preimage_sha256: str | None = None,
     authorized_root: Path | str | None = None,
     allow_unconditional_overwrite: bool = False,
+    _after_preimage_hook=None,
 ) -> Path:
     """Safely and atomically write exported bytes to a local destination file.
 
-    Guarantees:
-    1. Pre-write digest verification (PR23-R3-SCRIPT-002): validates data is bytes
-       and its SHA-256 matches expected_sha256 before any filesystem interaction.
-    2. Descriptor-relative filesystem containment (PR23-R3-SCRIPT-001): pins authorized_root
-       and traverses path components via descriptor-relative operations with O_NOFOLLOW
-       to prevent symlink swaps, TOCTOU races, and directory traversal escape.
-    3. Writer coordination & locking (PR23-R3-SCRIPT-003): acquires exclusive lock on
-       .lock-{dest.name} before verifying preimage and holds lock across write and replace.
-    4. Mandatory preimage check (PR23-R3-SCRIPT-005): requires preimage_sha256 when
-       destination file exists unless allow_unconditional_overwrite=True.
-    5. Exclusive temp creation & verification: writes to unique .tmp file in pinned parent
-       directory, fsyncs, and verifies digest on descriptor before replacement.
-    6. Atomic descriptor-relative replace: renames temp file to destination using parent dir_fd.
-    7. Directory fsync & defense-in-depth verification: syncs parent directory and confirms
-       installed file digest.
+    Threat Model & Boundaries (PR23-PLAN-ARCH-002, PR23-R3-SCRIPT-001/003, PR23-R4I-SCRIPT-003):
+    - PostgreSQL commit and host filesystem write-back are separate resource boundaries; there is no
+      cross-resource distributed transaction between PostgreSQL and the local OS filesystem.
+    - Enforces descriptor-relative traversal with O_NOFOLLOW, trusted directory ownership/permission
+      checks (rejecting world-writable directories inside authorized_root), parent linkage ('..') and
+      (st_dev, st_ino) chain verification before replacement, and O_NOFOLLOW regular-file lock-marker
+      inode verification.
+    - Writer coordination uses fcntl.flock on the verified lock marker for cooperating host writers,
+      plus pre-replace destination (st_dev, st_ino, st_mtime_ns, st_size) and content digest re-verification
+      to detect uncooperative concurrent modifications before replacement. Hostile privileged local users or
+      kernel-level adversaries who mutate directory hierarchies while bypassing permissions are outside scope
+      and cause fail-closed termination where detectable.
     """
     # 1. Pre-write digest verification (PR23-R3-SCRIPT-002)
     if not isinstance(data, (bytes, bytearray)):
@@ -241,16 +397,27 @@ def safe_write_back_file(
             f"Pre-write digest verification failed: data hash {data_hash} does not match expected_sha256 {expected_sha256}."
         )
 
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise HostWriteBackError("Platform lacks required O_NOFOLLOW / O_DIRECTORY descriptor safeguards.")
+
     # 2. Descriptor-relative traversal (PR23-R3-SCRIPT-001)
     dest = Path(destination_path)
     opened_fds: list[int] = []
     lock_fd: int | None = None
     temp_name: str | None = None
     parent_dir_fd: int | None = None
+    root_fd: int | None = None
+    root_dev_ino: tuple[int, int] | None = None
+    auth_root_resolved: Path | None = None
+    dir_chain: list[tuple[int, str, int, tuple[int, int]]] = []
 
     try:
         if authorized_root is not None:
-            auth_root = Path(authorized_root).resolve()
+            raw_auth_root = Path(authorized_root)
+            if raw_auth_root.is_symlink():
+                raise PathEscapeError(f"Authorized root {raw_auth_root} must not be a symlink.")
+            auth_root = raw_auth_root.resolve()
+            auth_root_resolved = auth_root
             if not auth_root.is_dir():
                 raise PathEscapeError(f"Authorized root {auth_root} does not exist or is not a directory.")
 
@@ -259,7 +426,7 @@ def safe_write_back_file(
                     lexical_rel = dest.relative_to(auth_root)
                 except ValueError:
                     try:
-                        lexical_rel = dest.relative_to(Path(authorized_root))
+                        lexical_rel = dest.relative_to(raw_auth_root)
                     except ValueError:
                         raise PathEscapeError(f"Destination {dest} is outside authorized root {auth_root}.")
                 rel_parts = lexical_rel.parts
@@ -277,11 +444,22 @@ def safe_write_back_file(
             leaf_name = clean_parts[-1]
 
             try:
-                auth_flags = os.O_DIRECTORY | os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                auth_flags = (
+                    os.O_DIRECTORY
+                    | os.O_RDONLY
+                    | os.O_NOFOLLOW
+                    | getattr(os, "O_CLOEXEC", 0)
+                )
                 auth_fd = os.open(str(auth_root), auth_flags)
             except OSError as exc:
                 raise PathEscapeError(f"Cannot open authorized root {auth_root}: {exc}") from exc
             opened_fds.append(auth_fd)
+            root_fd = auth_fd
+            root_dev_ino = _verify_trusted_directory_fd(
+                auth_fd,
+                f"authorized_root({auth_root})",
+                allow_sticky_world_writable=False,
+            )
             current_fd = auth_fd
 
             for comp in dir_components:
@@ -291,7 +469,7 @@ def safe_write_back_file(
                 comp_flags = (
                     os.O_DIRECTORY
                     | os.O_RDONLY
-                    | getattr(os, "O_NOFOLLOW", 0)
+                    | os.O_NOFOLLOW
                     | getattr(os, "O_CLOEXEC", 0)
                 )
                 try:
@@ -320,6 +498,12 @@ def safe_write_back_file(
                         raise PathEscapeError(f"Error traversing component {comp!r}: {exc}") from exc
 
                 opened_fds.append(next_fd)
+                comp_dev_ino = _verify_trusted_directory_fd(
+                    next_fd,
+                    f"component({comp})",
+                    allow_sticky_world_writable=False,
+                )
+                dir_chain.append((current_fd, comp, next_fd, comp_dev_ino))
                 current_fd = next_fd
 
             parent_dir_fd = current_fd
@@ -335,7 +519,7 @@ def safe_write_back_file(
             parent_flags = (
                 os.O_DIRECTORY
                 | os.O_RDONLY
-                | getattr(os, "O_NOFOLLOW", 0)
+                | os.O_NOFOLLOW
                 | getattr(os, "O_CLOEXEC", 0)
             )
             try:
@@ -343,25 +527,27 @@ def safe_write_back_file(
             except OSError as exc:
                 raise PathEscapeError(f"Cannot open destination parent {dest_parent}: {exc}") from exc
             opened_fds.append(parent_dir_fd)
+            root_fd = parent_dir_fd
+            root_dev_ino = _verify_trusted_directory_fd(
+                parent_dir_fd,
+                f"destination_parent({dest_parent})",
+                allow_sticky_world_writable=True,
+            )
+            auth_root_resolved = dest_parent.resolve()
             leaf_name = abs_dest.name
-            resolved_dest = dest_parent.resolve() / leaf_name
+            resolved_dest = auth_root_resolved / leaf_name
 
         if "/" in leaf_name or "\\" in leaf_name or leaf_name in (".", ".."):
             raise PathEscapeError(f"Invalid destination leaf name: {leaf_name!r}")
 
-        # 3. Writer coordination & locking (PR23-R3-SCRIPT-003)
+        # 3. Writer coordination & hardened lock marker (PR23-R3-SCRIPT-003, PR23-R4I-SCRIPT-003)
         lock_name = f".lock-{leaf_name}"
-        lock_flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
-        try:
-            lock_fd = os.open(lock_name, lock_flags, 0o600, dir_fd=parent_dir_fd)
-            opened_fds.append(lock_fd)
-        except OSError as exc:
-            raise HostWriteBackError(f"Failed to open lock file {lock_name!r}: {exc}") from exc
+        lock_fd, lock_dev_ino = _acquire_verified_lock_fd(parent_dir_fd, lock_name)
+        opened_fds.append(lock_fd)
 
-        if fcntl is not None and hasattr(fcntl, "flock"):
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
-        else:
-            raise HostWriteBackError("POSIX fcntl.flock writer coordination is required on this platform.")
+        # Verify directory hierarchy integrity after acquiring lock
+        assert root_fd is not None and root_dev_ino is not None
+        _verify_directory_chain(root_fd, root_dev_ino, dir_chain, root_path=auth_root_resolved)
 
         # 4. Leaf validation & preimage check (PR23-R3-SCRIPT-005) - held under lock!
         try:
@@ -371,7 +557,9 @@ def safe_write_back_file(
             dest_exists = False
             st = None
 
+        preimage_stat_sig: tuple[int, int, int, int] | None = None
         if dest_exists:
+            assert st is not None
             if stat.S_ISLNK(st.st_mode):
                 raise PathEscapeError(f"Destination {leaf_name!r} is a symlink.")
             if stat.S_ISDIR(st.st_mode):
@@ -384,27 +572,43 @@ def safe_write_back_file(
                     f"Destination file {resolved_dest} already exists; preimage_sha256 is required unless allow_unconditional_overwrite=True"
                 )
 
-            if preimage_sha256 is not None:
-                read_fd = os.open(leaf_name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_dir_fd)
-                try:
+            read_fd = os.open(
+                leaf_name,
+                os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+                dir_fd=parent_dir_fd,
+            )
+            try:
+                read_st = os.fstat(read_fd)
+                if not stat.S_ISREG(read_st.st_mode) or (read_st.st_dev, read_st.st_ino) != (st.st_dev, st.st_ino):
+                    raise PreimageMismatchError(f"Destination {resolved_dest} changed during preimage open.")
+                preimage_stat_sig = (read_st.st_dev, read_st.st_ino, read_st.st_mtime_ns, read_st.st_size)
+                if preimage_sha256 is not None:
                     existing_bytes = _read_all_fd(read_fd)
-                finally:
-                    os.close(read_fd)
-
-                actual_preimage = hashlib.sha256(existing_bytes).hexdigest()
-                if actual_preimage != preimage_sha256.lower():
-                    raise PreimageMismatchError(
-                        f"Destination {resolved_dest} on disk has hash {actual_preimage}, expected {preimage_sha256}."
-                    )
+                    actual_preimage = hashlib.sha256(existing_bytes).hexdigest()
+                    if actual_preimage != preimage_sha256.lower():
+                        raise PreimageMismatchError(
+                            f"Destination {resolved_dest} on disk has hash {actual_preimage}, expected {preimage_sha256}."
+                        )
+            finally:
+                os.close(read_fd)
         else:
             if preimage_sha256 is not None:
                 raise PreimageMismatchError(
                     f"Destination file {resolved_dest} does not exist, but preimage_sha256 was expected."
                 )
 
+        if _after_preimage_hook is not None:
+            _after_preimage_hook()
+
         # 5. Write to temporary file in pinned parent directory
         temp_name = f".tmp-{leaf_name}-{uuid.uuid4().hex}"
-        temp_flags = os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_CLOEXEC", 0)
+        temp_flags = (
+            os.O_CREAT
+            | os.O_EXCL
+            | os.O_RDWR
+            | os.O_NOFOLLOW
+            | getattr(os, "O_CLOEXEC", 0)
+        )
         temp_fd = os.open(temp_name, temp_flags, 0o600, dir_fd=parent_dir_fd)
         try:
             view = memoryview(data_bytes)
@@ -423,19 +627,68 @@ def safe_write_back_file(
         finally:
             os.close(temp_fd)
 
-        # 6. Atomic replacement
+        # 6. Pre-replace containment & concurrent-modification verification (PR23-R3-SCRIPT-001/003, PR23-R4I-SCRIPT-003)
+        _verify_directory_chain(root_fd, root_dev_ino, dir_chain, root_path=auth_root_resolved)
+
+        try:
+            lock_check_st = os.lstat(lock_name, dir_fd=parent_dir_fd)
+        except OSError as exc:
+            raise HostWriteBackError(f"Lock marker {lock_name!r} vanished before replacement: {exc}") from exc
+        if not stat.S_ISREG(lock_check_st.st_mode) or (lock_check_st.st_dev, lock_check_st.st_ino) != lock_dev_ino:
+            raise HostWriteBackError(f"Lock marker {lock_name!r} identity changed before replacement.")
+
+        if not allow_unconditional_overwrite:
+            try:
+                cur_dest_st = os.lstat(leaf_name, dir_fd=parent_dir_fd)
+                cur_exists = True
+            except FileNotFoundError:
+                cur_dest_st = None
+                cur_exists = False
+
+            if cur_exists != dest_exists:
+                raise PreimageMismatchError(
+                    f"Destination {resolved_dest} existence changed concurrently before replacement."
+                )
+            if cur_exists and cur_dest_st is not None:
+                if stat.S_ISLNK(cur_dest_st.st_mode):
+                    raise PathEscapeError(f"Destination {leaf_name!r} was replaced with a symlink before replacement.")
+                cur_sig = (cur_dest_st.st_dev, cur_dest_st.st_ino, cur_dest_st.st_mtime_ns, cur_dest_st.st_size)
+                if cur_sig != preimage_stat_sig:
+                    raise PreimageMismatchError(
+                        f"Destination {resolved_dest} was modified concurrently by an external writer before replacement."
+                    )
+                if preimage_sha256 is not None:
+                    recheck_fd = os.open(
+                        leaf_name,
+                        os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+                        dir_fd=parent_dir_fd,
+                    )
+                    try:
+                        recheck_bytes = _read_all_fd(recheck_fd)
+                    finally:
+                        os.close(recheck_fd)
+                    if hashlib.sha256(recheck_bytes).hexdigest() != preimage_sha256.lower():
+                        raise PreimageMismatchError(
+                            f"Destination {resolved_dest} content changed concurrently before replacement."
+                        )
+
+        # 7. Atomic replacement
         os.replace(temp_name, leaf_name, src_dir_fd=parent_dir_fd, dst_dir_fd=parent_dir_fd)
         temp_name = None
 
-        # 7. Parent directory fsync
+        # 8. Parent directory fsync
         if hasattr(os, "fsync"):
             try:
                 os.fsync(parent_dir_fd)
             except OSError:
                 pass
 
-        # 8. Post-write verification under lock (defense in depth)
-        verify_fd = os.open(leaf_name, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_dir_fd)
+        # 9. Post-write verification under lock (defense in depth)
+        verify_fd = os.open(
+            leaf_name,
+            os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+            dir_fd=parent_dir_fd,
+        )
         try:
             installed_bytes = _read_all_fd(verify_fd)
             installed_hash = hashlib.sha256(installed_bytes).hexdigest()
