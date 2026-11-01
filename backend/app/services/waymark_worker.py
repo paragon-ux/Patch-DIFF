@@ -238,12 +238,23 @@ class _Generation:
     def poison(self, error):
         with self.lock:
             if self.error is None:
+                if self.proc is not None and self.proc.stderr is not None:
+                    try:
+                        import select
+                        while select.select([self.proc.stderr], [], [], 0.05)[0]:
+                            chunk = self.proc.stderr.read(4096)
+                            if not chunk:
+                                break
+                            self.stderr_output.extend(chunk)
+                    except Exception:
+                        pass
                 if self.stderr_output:
                     stderr_msg = self.stderr_output.decode("utf-8", errors="replace").strip()
                     if stderr_msg:
                         import sys
                         sys.stderr.write(f"[waymark_worker poison child stderr] {stderr_msg}\n")
                         sys.stderr.flush()
+                        error = _error(error.code.replace("WAYMARK_WORKER_", ""), f"{error} | worker stderr: {stderr_msg}")
                 self.error = error
             self.ready = False
         self._kill()
@@ -264,7 +275,8 @@ class _Generation:
         while len(result) < size:
             raw = self.proc.stdout.read(min(65536, size - len(result)))
             if not raw:
-                raise ValueError("Partial frame or child exit")
+                exit_code = self.proc.poll() if self.proc else None
+                raise ValueError(f"Partial frame or child exit: expected {size} bytes, got {len(result)} (child poll={exit_code})")
             result.extend(raw)
         return bytes(result)
 
@@ -276,12 +288,12 @@ class _Generation:
                     result_pending = self.expected is not None and self.expected[0] == "result"
                 limit = RESULT_LIMIT + CONTROL_LIMIT if result_pending else CONTROL_LIMIT
                 if not 0 < size <= limit:
-                    raise ValueError("Invalid frame size")
+                    raise ValueError(f"Invalid frame size: {size} (limit={limit})")
                 value = _strict_json(self._read_exact(size))
                 with self.lock:
                     expected = self.expected
                     if not expected or not isinstance(value, dict):
-                        raise ValueError("Unsolicited frame")
+                        raise ValueError(f"Unsolicited frame: expected={expected} value={value}")
                     kind, request_id = expected
                     extra = {"ready": {"engine_version", "bridge_sha256", "worker_pid"},
                              "closed": set(), "result": {"result", "result_bytes"}}[kind]
@@ -289,12 +301,17 @@ class _Generation:
                             value["protocol"] != PROTOCOL or value["type"] != kind or
                             value["generation"] != self.id or value["id"] != request_id or
                             (kind != "result" and size > CONTROL_LIMIT)):
-                        raise ValueError("Frame association mismatch")
+                        raise ValueError(f"Frame association mismatch: expected={expected} value={value} gen_id={self.id}")
                     self.expected = None
                 self.frames.put_nowait(value)
-        except (OSError, ValueError, KeyError, TypeError, queue.Full):
+        except (OSError, ValueError, KeyError, TypeError, queue.Full) as exc:
             if not self.stopping.is_set():
-                self.poison(_error("PROTOCOL_ERROR", "Worker lost frame association or exited."))
+                import sys, traceback
+                exit_code = self.proc.poll() if self.proc else None
+                sys.stderr.write(f"[waymark_worker _read_frames exc] {type(exc).__name__}: {exc} (child poll={exit_code})\n")
+                traceback.print_exc(file=sys.stderr)
+                sys.stderr.flush()
+                self.poison(_error("PROTOCOL_ERROR", f"Worker lost frame association or exited: {type(exc).__name__}: {exc} (child poll={exit_code})"))
 
     def _read_stderr(self):
         count = 0
@@ -357,9 +374,11 @@ class _Generation:
                 if self.owner.closed:
                     raise _error("CANCELLED", "Serving process is shutting down.")
                 if self.error:
+                    if write_errors:
+                        raise _error("PROTOCOL_ERROR", f"{self.error} | write_errors: {write_errors}")
                     raise self.error
                 if write_errors:
-                    raise _error("PROTOCOL_ERROR", "Worker pipe write failed.")
+                    raise _error("PROTOCOL_ERROR", f"Worker pipe write failed: {write_errors}")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise subprocess.TimeoutExpired("Waymark worker", timeout)

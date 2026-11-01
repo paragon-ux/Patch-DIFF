@@ -13,7 +13,7 @@ const keys = (value, names) => value && !Array.isArray(value) &&
   Object.keys(value).sort().join(",") === names.sort().join(",");
 const fail = (reason = "unspecified") => {
   try {
-    process.stderr.write(`[worker.mjs fail] ${reason}\n`);
+    fs.writeSync(2, `[worker.mjs fail] ${reason}\n`);
   } catch {}
   process.kill(process.pid, "SIGKILL");
 };
