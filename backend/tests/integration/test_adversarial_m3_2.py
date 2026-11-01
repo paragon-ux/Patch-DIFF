@@ -40,6 +40,10 @@ def test_adversarial_migration_0007_schema_and_reversibility():
     """Adversarially challenge migration 0007 against live PostgreSQL."""
     cfg = get_alembic_config()
 
+    # Ensure clean target_finalizations state before testing unpopulated downgrade/upgrade
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM target_finalizations WHERE materialized_state_checks IS NOT NULL"))
+
     # 1. Downgrade to 20261031_0006
     command.downgrade(cfg, "20261031_0006")
 

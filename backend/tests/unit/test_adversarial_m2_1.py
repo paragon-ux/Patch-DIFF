@@ -1068,3 +1068,45 @@ def test_multiprocess_serialized_pipeline_with_backoff_and_retry(tmp_path: Path)
     # Verify that exactly revision 10 was reached cleanly
     final_content = target_file.read_bytes().decode("utf-8").strip()
     assert final_content == f"revision {total_revisions}"
+
+
+def test_safe_write_back_without_authorized_root_rejects_symlinks_and_dotdot(tmp_path: Path):
+    """Regression test (PR23-R4-SCRIPT-001): when authorized_root is None, leaf symlinks, parent symlinks, and '..' are rejected."""
+    victim = tmp_path / "victim.txt"
+    victim.write_bytes(b"original victim\n")
+    link_leaf = tmp_path / "link_leaf.txt"
+    link_leaf.symlink_to(victim)
+
+    payload = b"new content\n"
+    expected_hash = hashlib.sha256(payload).hexdigest()
+
+    # 1. Leaf symlink when authorized_root=None must raise PathEscapeError without overwriting victim
+    with pytest.raises(finalizer.PathEscapeError, match="symlink"):
+        finalizer.safe_write_back_file(
+            link_leaf,
+            payload,
+            expected_sha256=expected_hash,
+            allow_unconditional_overwrite=True,
+        )
+    assert victim.read_bytes() == b"original victim\n"
+
+    # 2. Parent symlink when authorized_root=None must raise PathEscapeError
+    real_dir = tmp_path / "real_dir"
+    real_dir.mkdir()
+    link_dir = tmp_path / "link_dir"
+    link_dir.symlink_to(real_dir)
+    with pytest.raises(finalizer.PathEscapeError, match="symlink"):
+        finalizer.safe_write_back_file(
+            link_dir / "nested.txt",
+            payload,
+            expected_sha256=expected_hash,
+        )
+
+    # 3. Parent traversal ('..') when authorized_root=None must raise PathEscapeError
+    with pytest.raises(finalizer.PathEscapeError, match="parent traversal"):
+        finalizer.safe_write_back_file(
+            Path(str(real_dir) + "/../escape.txt"),
+            payload,
+            expected_sha256=expected_hash,
+        )
+

@@ -28,7 +28,7 @@ Read project artifacts in this order:
 3. `docs/papers/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/spec/MCP_TOOLS.md` (MCP tool schemas and request/response contracts)
 5. `docs/spec/PATCHDIFF_CORE_SPEC.md` (deterministic runtime, validation stages, replay profiles)
-6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `0001` through `0005`)
+6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `0001` through `0007`)
 7. `docs/spec/PDCP_FORMAT.md` (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement, and pointer to `docs/legacy/LEGACY_COMPATIBILITY.md`)
 8. `docs/spec/MCP_EDITOR_V2.md` (streamlined 5-tool `observed_v2` profile and compact receipts)
 9. `docs/guides/HOST_INTEGRATION_GUIDE.md` (host-owned loop, prompt hygiene rules, and usage guide)
@@ -102,7 +102,7 @@ The PatchDIFF MCP service provides:
 - **Authoritative bounded reads & exact search**: `patchdiff_read_target` (`start`, `length`, `next_start`), `patchdiff_read_lines` (inclusive LF ranges and range-relative `next_offset`), `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`)
 - **Guarded atomic transaction submission**: `patchdiff_submit_edits` (typed matches), `patchdiff_submit_operations` (guarded match/span), `patchdiff_submit_replacement` (sole explicit whole-target replacement) and `patchdiff_submit_pdcp` (legacy `.pdcp`), each supporting `client_request_id` idempotency and `parent_pdcp_log_id` retry lineage
 - **Advisory evaluation**: `patchdiff_preview` uses a coherent observation and the shared read-only evaluator, with bounded facts/diagnostics and no audit, retry key or mutation; later submission rechecks its guards.
-- **Checkpointing, replay, and bounded history**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
+- **Checkpointing, replay, finalization, and bounded history**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_finalize_target`, `patchdiff_read_finalized_export`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
 - **Convenience / deprecated compatibility wrappers**: `patchdiff_build_prompt_context` (convenience bounded prefix), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
 
 ## Expected Modernized Host Workflow
@@ -144,8 +144,8 @@ exposes five purpose-specific external tools through the same services with
 explicit snapshots and bounded typed receipts (see [the v2 contract](docs/spec/MCP_EDITOR_V2.md));
 legacy profiles `editor` (7 tools), `unobserved` (5 tools), `observed` (6 tools),
 and `observed_editor` (4 tools) remain available with advisory stderr notices;
-explicit compatibility `full` advertises and permits all 23 tools (including
-`patchdiff_finalize_target`). Editing profiles deny lifecycle calls;
+explicit compatibility `full` advertises and permits all 24 tools (including
+`patchdiff_finalize_target` and `patchdiff_read_finalized_export`). Editing profiles deny lifecycle calls;
 trusted lifecycle/legacy clients opt into `full`; the internal registry retains
 all handlers. Strict observed service admission remains independent. The frozen
 comparative Gate 2 stays closed.
@@ -172,7 +172,7 @@ Use:
 - FastAPI
 - Postgres (`postgres:16.3-alpine` via Docker Compose)
 - SQLAlchemy 2.x
-- Alembic migrations (`20260510_0001`, `20261020_0002` and `20261022_0003`)
+- Alembic migrations (`20260510_0001` through `20261031_0007`)
 - pytest
 - Stdio MCP JSON-RPC adapter (`backend/app/mcp/external_adapter.py`)
 
@@ -210,5 +210,5 @@ Use the workspace skills in `.agents/skills/`:
 
 - `.agents/skills/patchdiff-core-runtime/SKILL.md`: Deterministic core runtime (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`, and `.pdcp` v0.2.3 parsing, protocol validation, overlapping match enumeration, disambiguation, sequential application, `ValidationStage`, and `change_facts`).
 - `.agents/skills/patchdiff-mcp-orchestration/SKILL.md`: MCP tool surface, stdio JSON-RPC adapter, `TYPED_EDIT_JSON_SCHEMA`, authoritative reads/search, host-owned retry, and deprecated wrapper maintenance.
-- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001` through `0005`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
+- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001` through `0007`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
 - `.agents/skills/patchdiff-testing-review/SKILL.md`: Unit, live Postgres integration, stdio subprocess E2E testing, and documentation consistency review.

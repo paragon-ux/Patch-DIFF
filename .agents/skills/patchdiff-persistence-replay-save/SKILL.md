@@ -57,6 +57,12 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
    - Adds unique constraint `uq_target_scope_observations_bundle_ordinal` and indexes.
    - Partial unique index on `accepted_pdcp_log_id` ensuring historical single-observation linkage remains unique while batch observations link atomically.
    - Guarded downgrade: refuses while bundled observations or batch records exist.
+6. `20261031_0006_target_finalizations.py`:
+   - Adds `target_finalizations` table for durable `patchdiff_finalize_target` idempotency (`uq_target_finalizations_target_key` on `(target_file_id, client_request_id)`), linking the immutable `snapshot_id`, closed/new editing cycles, saved version/hash, export format/EOL, `content_sha256`, `content_bytes`, and inline/deferred `exported_content`.
+   - Guarded downgrade: refuses while any `target_finalizations` records exist.
+7. `20261031_0007_finalization_checks.py`:
+   - Adds nullable JSONB `materialized_state_checks` to `target_finalizations` so idempotent finalization retries return the exact persisted component-level replay verification booleans.
+   - Guarded downgrade: refuses while any `target_finalizations` row has `materialized_state_checks IS NOT NULL`.
 
 Migrations must always run cleanly on live Postgres:
 ```powershell

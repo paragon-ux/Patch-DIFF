@@ -17,7 +17,7 @@ Host Filesystem (Untouched during editing)
   |                                                                             |--> [PostgreSQL Substrate]
   +---> [Agent B] ---> patchdiff_observe_scopes ---> patchdiff_commit_bundle ---+    (SELECT ... FOR UPDATE)
   |
-  +---> [Host Finalization] ---> patchdiff_finalize_target ---> Atomic Disk Write
+  +---> [Host Finalization] ---> patchdiff_finalize_target ---> Host-Owned Verified Disk Write-Back
 ```
 
 ### 1.1 In-Flight Git Conflict Elimination
@@ -36,7 +36,7 @@ Under PatchDIFF:
 
 In accordance with [PR Review Standard v1.1.0](standards/PR_REVIEW_STANDARD.md):
 - **Database transaction atomicity**: Guaranteed. PostgreSQL enforces per-target ACID state transitions, append-only logs, and manifest ledgers.
-- **In-flight merge avoidance**: Guaranteed. Unfinalized edits do not touch disk or Git working trees.
+- **In-flight working-tree isolation**: Guaranteed within the PostgreSQL substrate. Unfinalized PatchDIFF transactions do not touch disk or Git working trees.
 - **Semantic / Task correctness**: Host-owned. PatchDIFF validates exact match/span bounds and transaction consistency; it does not synthesize agent intents or guarantee that two independently valid edits achieve an overall business goal.
 - **Physical disk write-back**: Host-owned. The host installs exported bytes onto physical media using atomic file replacement protocols.
 
@@ -54,7 +54,7 @@ In accordance with [PR Review Standard v1.1.0](standards/PR_REVIEW_STANDARD.md):
 ### 2.2 Profile Evolution
 
 - **Default Profile (`observed_v2`)**: Streamlined 5-tool external editing surface for autonomous agents (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`).
-- **Lifecycle & Administrative Profile (`full`)**: Comprehensive 23-tool surface for trusted host harnesses, including document ingestion, export, SAVE checkpointing, deterministic replay, and single-roundtrip `patchdiff_finalize_target`.
+- **Lifecycle & Administrative Profile (`full`)**: Comprehensive 24-tool surface for trusted host harnesses, including document ingestion, export, SAVE checkpointing, deterministic replay, single-roundtrip `patchdiff_finalize_target`, and immutable paginated `patchdiff_read_finalized_export`.
 - **Legacy Profiles Transition**: Historical profiles (`editor`, `unobserved`, `unobserved_editor`, `hybrid_editor`, `observed`, `observed_editor`) remain supported under a deprecation notice window on stderr, ensuring existing harness configurations continue operating cleanly without stdout JSON-RPC pollution.
 
 ### 2.3 Independent Version Domains (`PR23-PLAN-DEP-005`)

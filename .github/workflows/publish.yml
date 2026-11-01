@@ -210,9 +210,12 @@ jobs:
           set -euo pipefail
           python -m venv /tmp/smoke-venv
           /tmp/smoke-venv/bin/pip install dist/*.whl
-          # Verify console script entry point exists and runs stdio JSON-RPC
-          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | /tmp/smoke-venv/bin/patchdiff | grep -q "patchdiff_commit_bundle"
-          echo "Installed wheel MCP smoke test passed."
+          cd /tmp
+          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --bridge-dir /tmp/smoke-venv/waymark-bridge
+          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --check-only --bridge-dir /tmp/smoke-venv/waymark-bridge
+          # Verify console script entry point exists and runs stdio JSON-RPC outside repo checkout
+          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | PATCHDIFF_WAYMARK_BRIDGE_DIR=/tmp/smoke-venv/waymark-bridge /tmp/smoke-venv/bin/patchdiff | grep -q "patchdiff_commit_bundle"
+          echo "Installed wheel MCP and Waymark bridge smoke test passed."
 
       - name: Store distribution artifacts
         uses: actions/upload-artifact@v4

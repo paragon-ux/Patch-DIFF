@@ -325,13 +325,26 @@ def safe_write_back_file(
             parent_dir_fd = current_fd
             resolved_dest = auth_root.joinpath(*clean_parts)
         else:
-            resolved_dest = dest.resolve()
-            dest_parent = resolved_dest.parent
+            if any(p == ".." for p in dest.parts):
+                raise PathEscapeError(f"Destination {dest} contains parent traversal ('..').")
+            abs_dest = dest if dest.is_absolute() else (Path.cwd() / dest)
+            dest_parent = abs_dest.parent
+            if dest_parent.is_symlink():
+                raise PathEscapeError(f"Destination parent {dest_parent} is a symlink.")
             dest_parent.mkdir(parents=True, exist_ok=True)
-            parent_flags = os.O_DIRECTORY | os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-            parent_dir_fd = os.open(str(dest_parent), parent_flags)
+            parent_flags = (
+                os.O_DIRECTORY
+                | os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            try:
+                parent_dir_fd = os.open(str(dest_parent), parent_flags)
+            except OSError as exc:
+                raise PathEscapeError(f"Cannot open destination parent {dest_parent}: {exc}") from exc
             opened_fds.append(parent_dir_fd)
-            leaf_name = resolved_dest.name
+            leaf_name = abs_dest.name
+            resolved_dest = dest_parent.resolve() / leaf_name
 
         if "/" in leaf_name or "\\" in leaf_name or leaf_name in (".", ".."):
             raise PathEscapeError(f"Invalid destination leaf name: {leaf_name!r}")

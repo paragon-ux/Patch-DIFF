@@ -481,3 +481,31 @@ def test_migration_0007_finalization_checks_reachable() -> None:
         assert col["is_nullable"] == "YES"
 
 
+def test_live_0007_downgrade_refuses_when_finalization_checks_exist(isolated_migrations):
+    from app.services.finalize_service import finalize_target
+
+    config, connection = isolated_migrations
+    command.upgrade(config, "head")
+    connection.commit()
+    with Session(bind=connection) as session:
+        target = initialize_target(
+            session,
+            filename="sample_0007.py",
+            content="def alpha():\n    return 1\n",
+            target_type="text/x-python",
+        )
+        fin = finalize_target(
+            session,
+            target_file_id=target.target_file_id,
+            client_request_id="req-0007-check",
+            expected_target_version=target.version,
+        )
+        assert fin.status == "ok" and fin.materialized_state_checks is not None
+    connection.commit()
+    with pytest.raises(Exception, match="Cannot downgrade 20261031_0007: recorded finalization checks exist"):
+        command.downgrade(config, "20261031_0006")
+    connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0007"
+
+
+

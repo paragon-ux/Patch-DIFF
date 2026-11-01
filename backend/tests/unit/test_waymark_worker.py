@@ -353,3 +353,50 @@ def test_exchange_writer_catches_value_error_on_closed_stream():
         generation.exchange("discover", "1", {}, 0.5, "result")
     assert "Worker pipe write failed." in str(exc_info.value)
 
+
+def test_poison_preserves_specific_error_code_and_no_double_prefix():
+    """Regression test (PR23-R4-SVC-001): specific error codes like RSS_LIMIT are not overwritten by write_errors, and stderr enrichment does not double-prefix."""
+    import uuid
+    from types import SimpleNamespace
+    from app.services import waymark_worker as worker
+
+    class Frames:
+        def empty(self):
+            return True
+
+        def get(self, timeout):
+            raise queue.Empty()
+
+    def broken_write(data):
+        raise BrokenPipeError("Pipe broke after RSS kill")
+
+    generation = object.__new__(worker._Generation)
+    generation.id, generation.lock = str(uuid.uuid4()), threading.Lock()
+    generation.error, generation.expected, generation.frames = None, None, Frames()
+    generation.ready = True
+    generation.stderr_output = bytearray(b"fatal heap diagnostic")
+    generation.owner = SimpleNamespace(closed=False, notify=lambda: None)
+    generation.proc = SimpleNamespace(
+        stdin=SimpleNamespace(write=broken_write),
+        poll=lambda: 0,
+    )
+
+    generation.poison(worker._error("RSS_LIMIT", "Worker exceeded its sampled RSS limit."))
+    assert generation.error.code == "WAYMARK_WORKER_RSS_LIMIT"
+    assert str(generation.error).count("WAYMARK_WORKER_RSS_LIMIT:") == 1
+    assert "worker stderr: fatal heap diagnostic" in str(generation.error)
+
+    # Reset expected so exchange enters the poll loop where both self.error and write_errors are set
+    generation.error = None
+    generation.expected = None
+
+    def broken_write_and_poison(data):
+        generation.poison(worker._error("RSS_LIMIT", "Worker exceeded its sampled RSS limit."))
+        raise BrokenPipeError("Pipe broke after RSS kill")
+
+    generation.proc.stdin.write = broken_write_and_poison
+    with pytest.raises(worker.WaymarkWorkerError) as exc_info:
+        generation.exchange("discover", "1", {}, 0.5, "result")
+    assert exc_info.value.code == "WAYMARK_WORKER_RSS_LIMIT"
+
+

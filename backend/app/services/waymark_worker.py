@@ -51,6 +51,7 @@ class WaymarkWorkerError(RuntimeError):
     """Infrastructure failure: propagate through transaction ownership, never audit a verdict."""
     def __init__(self, code, message):
         self.code = code
+        self.message = message
         super().__init__(f"{code}: {message}")
 
 
@@ -238,23 +239,11 @@ class _Generation:
     def poison(self, error):
         with self.lock:
             if self.error is None:
-                if self.proc is not None and self.proc.stderr is not None:
-                    try:
-                        import select
-                        while select.select([self.proc.stderr], [], [], 0.05)[0]:
-                            chunk = self.proc.stderr.read(4096)
-                            if not chunk:
-                                break
-                            self.stderr_output.extend(chunk)
-                    except Exception:
-                        pass
                 if self.stderr_output:
-                    stderr_msg = self.stderr_output.decode("utf-8", errors="replace").strip()
+                    stderr_msg = bytes(self.stderr_output[:512]).decode("utf-8", errors="replace").strip()
                     if stderr_msg:
-                        import sys
-                        sys.stderr.write(f"[waymark_worker poison child stderr] {stderr_msg}\n")
-                        sys.stderr.flush()
-                        error = _error(error.code.replace("WAYMARK_WORKER_", ""), f"{error} | worker stderr: {stderr_msg}")
+                        base_msg = getattr(error, "message", str(error))
+                        error = WaymarkWorkerError(error.code, f"{base_msg} | worker stderr: {stderr_msg}")
                 self.error = error
             self.ready = False
         self._kill()
@@ -306,11 +295,7 @@ class _Generation:
                 self.frames.put_nowait(value)
         except (OSError, ValueError, KeyError, TypeError, queue.Full) as exc:
             if not self.stopping.is_set():
-                import sys, traceback
                 exit_code = self.proc.poll() if self.proc else None
-                sys.stderr.write(f"[waymark_worker _read_frames exc] {type(exc).__name__}: {exc} (child poll={exit_code})\n")
-                traceback.print_exc(file=sys.stderr)
-                sys.stderr.flush()
                 self.poison(_error("PROTOCOL_ERROR", f"Worker lost frame association or exited: {type(exc).__name__}: {exc} (child poll={exit_code})"))
 
     def _read_stderr(self):
@@ -321,13 +306,9 @@ class _Generation:
                 if not raw:
                     return
                 count += len(raw)
-                self.stderr_output.extend(raw)
-                try:
-                    import sys
-                    sys.stderr.write(f"[waymark_worker stderr] {raw.decode('utf-8', errors='replace')}")
-                    sys.stderr.flush()
-                except Exception:
-                    pass
+                with self.lock:
+                    if len(self.stderr_output) < STDERR_LIMIT:
+                        self.stderr_output.extend(raw[:STDERR_LIMIT - len(self.stderr_output)])
                 if count > STDERR_LIMIT:
                     self.poison(_error("PROTOCOL_ERROR", "Worker exceeded the stderr limit."))
                     return
@@ -374,8 +355,9 @@ class _Generation:
                 if self.owner.closed:
                     raise _error("CANCELLED", "Serving process is shutting down.")
                 if self.error:
-                    if write_errors:
-                        raise _error("PROTOCOL_ERROR", f"{self.error} | write_errors: {write_errors}")
+                    if write_errors and self.error.code == "WAYMARK_WORKER_PROTOCOL_ERROR":
+                        base_msg = getattr(self.error, "message", str(self.error))
+                        raise _error("PROTOCOL_ERROR", f"Worker pipe write failed. {base_msg} ({write_errors[0]})")
                     raise self.error
                 if write_errors:
                     raise _error("PROTOCOL_ERROR", "Worker pipe write failed.")

@@ -14,7 +14,7 @@ Only migration `20261022_0003` adds storage (below); everything else uses existi
 
 ## Scope
 
-This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema`, `20261020_0002_typed_ledger` and `20261022_0003_source_line_endings`.
+This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema`, `20261020_0002_typed_ledger`, `20261022_0003_source_line_endings`, `20261026_0004_target_scope_observations`, `20261027_0005_observation_bundles`, `20261031_0006_target_finalizations`, and `20261031_0007_finalization_checks`.
 
 The schema supports:
 - canonical target storage in Postgres (`cloud_target_files`)
@@ -311,3 +311,43 @@ Replay independently verifies canonical record/hash, exact links, bundle, group
 order, target/cycle/version/preimage and all original scope hashes. Ledger facts
 carry group/operation ordinals, observation IDs, original scope bounds and local
 sequential operation coordinates. [Full durable contract](STRUCTURAL_BATCH_EDITING.md#durable-evidence-and-replay).
+
+### `target_finalizations` (Migrations `20261031_0006` and `20261031_0007`)
+Durable per-target finalization ledger produced by `patchdiff_finalize_target` (`backend/app/services/finalize_service.py`) under `SELECT ... FOR UPDATE` on `cloud_target_files`.
+
+| Column | Type | Constraints | Notes |
+| --- | --- | --- | --- |
+| `finalization_id` | UUID | PK | Immutable finalization receipt identifier |
+| `target_file_id` | UUID | FK -> `cloud_target_files.target_file_id` NOT NULL | Owning target |
+| `client_request_id` | VARCHAR(128) | NOT NULL | Mandatory printable ASCII idempotency key |
+| `fingerprint_version` | INTEGER | NOT NULL DEFAULT `1` | Request envelope schema version |
+| `request_fingerprint` | VARCHAR(64) | NOT NULL | SHA-256 of canonical `(target_file_id, expected_target_version, expected_current_hash, format)` envelope |
+| `status` | TEXT | NOT NULL | `'completed'` |
+| `snapshot_id` | UUID | FK -> `target_snapshots.snapshot_id` NULLABLE | Immutable SAVE checkpoint snapshot created by this finalization |
+| `closed_editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NULLABLE | Editing cycle closed by this finalization |
+| `new_editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NULLABLE | New active editing cycle opened by this finalization |
+| `saved_target_version` | BIGINT | NULLABLE | Target version at finalization time |
+| `canonical_current_hash` | VARCHAR(64) | NULLABLE | SHA-256 of canonical LF target content at finalization time |
+| `filename` | TEXT | NULLABLE | Target filename at finalization time |
+| `export_format` | TEXT | NULLABLE | Requested export format (`original_eol`, `canonical_lf`, `crlf`, `original_text`) |
+| `content_eol` | TEXT | NULLABLE | Materialized line-ending style (`lf` or `crlf`) |
+| `source_line_endings` | JSONB | NULLABLE | Recorded upload line-ending facts at finalization time |
+| `content_sha256` | VARCHAR(64) | NULLABLE | SHA-256 of the exported byte payload |
+| `content_bytes` | BIGINT | NULLABLE | UTF-8 byte length of the exported payload |
+| `exported_content` | TEXT | NULLABLE | Inline exported text when `content_bytes <= 1,048,576`; `NULL` when `content_delivery = 'deferred'` |
+| `materialized_state_checks` | JSONB | NULLABLE | Migration `20261031_0007`: persisted component-level replay verification booleans (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`) |
+| `failure_code` | TEXT | NULLABLE | Reserved for non-completed rows |
+| `failure_detail` | TEXT | NULLABLE | Reserved for non-completed rows |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Insert timestamp |
+
+Constraints and indexes:
+- `UNIQUE (target_file_id, client_request_id)` (`uq_target_finalizations_target_key`)
+- `CHECK ((status = 'completed' AND snapshot_id IS NOT NULL AND closed_editing_cycle_id IS NOT NULL AND new_editing_cycle_id IS NOT NULL AND saved_target_version IS NOT NULL AND canonical_current_hash IS NOT NULL AND content_sha256 IS NOT NULL) OR (status != 'completed' AND failure_detail IS NOT NULL))` (`ck_target_finalizations_status_fields`)
+- `INDEX (target_file_id, client_request_id)` (`ix_target_finalizations_target_key`)
+- `INDEX (target_file_id, created_at)` (`ix_target_finalizations_target_created`)
+
+Retention, recovery, and downgrade semantics:
+- Under `SELECT ... FOR UPDATE` on `cloud_target_files`, `finalize_target` checks `uq_target_finalizations_target_key` before evaluating version/hash guards. Matching `(target_file_id, client_request_id, request_fingerprint)` returns the detached original receipt (`is_idempotent_replay: true`) including persisted `materialized_state_checks` without rotating another cycle, even if the target has since advanced. Conflicting fingerprints reject with `request_id_conflict` without mutating state.
+- For deferred exports (`content_bytes > 1,048,576`, where `exported_content` is `NULL`), `patchdiff_read_finalized_export` reconstructs the exact finalized bytes from the immutable `target_snapshots` row (`snapshot_id`) and recorded `export_format` / `source_line_endings`, verifying full byte count and `content_sha256` before returning base64 chunks.
+- Downgrading migration `20261031_0007` refuses while any row in `target_finalizations` has `materialized_state_checks IS NOT NULL`. Downgrading migration `20261031_0006` refuses while any row exists in `target_finalizations`.
+

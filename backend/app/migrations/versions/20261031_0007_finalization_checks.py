@@ -23,4 +23,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("""DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM target_finalizations WHERE materialized_state_checks IS NOT NULL) THEN
+            RAISE EXCEPTION 'Cannot downgrade 20261031_0007: recorded finalization checks exist';
+        END IF;
+    END $$;""")
     op.drop_column("target_finalizations", "materialized_state_checks")

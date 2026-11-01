@@ -31,4 +31,5 @@ def test_downgrade_drops_materialized_state_checks_column() -> None:
     with redirect_stdout(buffer):
         command.downgrade(_config(), "20261031_0007:20261031_0006", sql=True)
     sql = buffer.getvalue()
+    assert "Cannot downgrade 20261031_0007: recorded finalization checks exist" in sql
     assert "ALTER TABLE target_finalizations DROP COLUMN materialized_state_checks" in sql

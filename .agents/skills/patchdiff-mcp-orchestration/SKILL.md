@@ -32,7 +32,7 @@ When orchestrating in an active Git repository:
 
 ## Tool Surface Overview
 
-PatchDIFF retains 22 internal tool handlers. The external adapter defaults to the 7-tool editor profile; explicit unobserved/observed/full profiles expose 5/6/22 tools and enforce identical lists for advertisement and calls. Opt-in observed_editor exposes only read_target, find_occurrences, observe_scope and submit_observed_operations (4 tools), denying lifecycle calls on delegated editor connections. Trusted lifecycle clients and older integrations select PATCHDIFF_MCP_PROFILE=full before startup. The existing functional areas include:
+PatchDIFF retains 24 internal tool handlers. The external adapter defaults to the 5-tool `observed_v2` profile (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`); explicit compatibility `full` exposes all 24 tools (including `patchdiff_finalize_target` and `patchdiff_read_finalized_export`), while legacy profiles `editor` (7 tools), `unobserved`/`unobserved_editor` (5 tools), `hybrid_editor`/`observed` (6 tools), and `observed_editor` (4 tools) remain available with a one-time stderr deprecation notice per process/profile and enforce identical lists for advertisement and calls. Editing profiles deny lifecycle and finalization calls on delegated editor connections. Trusted lifecycle clients and older integrations select `PATCHDIFF_MCP_PROFILE=full` before startup. The existing functional areas include:
 
 1. **Target Lifecycle**:
    - `patchdiff_handle_upload`: register uploaded file content as a target.
@@ -48,9 +48,11 @@ PatchDIFF retains 22 internal tool handlers. The external adapter defaults to th
    - `patchdiff_submit_pdcp`: legacy `.pdcp` text submission (frozen v0.2.3 format).
    - `patchdiff_submit_operations`: guarded match/span transactions (tx/2, profile 0.3.0).
    - `patchdiff_submit_replacement`: guarded sole replace_all (tx/3, profile 0.4.0); valid fresh oversize is a structured no-attempt admission error.
-4. **Checkpoints, Replay & History**:
+4. **Checkpoints, Replay, Finalization & History**:
    - `patchdiff_save`: snapshots target and rotates editing cycle; optional `expected_target_version` and `expected_current_hash` guards.
    - `patchdiff_replay`: deterministically reconstructs target from initial state and accepted history.
+   - `patchdiff_finalize_target`: atomically SAVE-checkpoints, replay-verifies, and exports a target under `SELECT ... FOR UPDATE` with mandatory `client_request_id` idempotency and version/hash guard (`full` profile only).
+   - `patchdiff_read_finalized_export`: paginated base64 retrieval of immutable finalized export bytes from the saved snapshot referenced by `finalization_id`, verified against `content_sha256` and `content_bytes` (`full` profile only).
    - `patchdiff_get_pdcp_log`: bounded newest-first inspection of attempt history.
    - `patchdiff_get_manifest_ledger`: bounded inspection of accepted changes with runtime facts.
 5. **Bounded Preview & Deprecated Wrappers**:
@@ -119,7 +121,7 @@ Validate context_chars as a non-bool integer >=0, default 40 and cap 400. Both h
 
 ## Goal F additions
 
-- Tools: `patchdiff_submit_operations` (tx/2), `patchdiff_submit_replacement` (tx/3), `patchdiff_read_lines` and `patchdiff_preview`. The full compatibility profile retains 22 tools and the existing examples, and `x-patchdiff-capabilities` built from the runtime constants.
+- Tools: `patchdiff_submit_operations` (tx/2), `patchdiff_submit_replacement` (tx/3), `patchdiff_read_lines` and `patchdiff_preview`. The full compatibility profile retains 24 tools (22 prior tools plus `patchdiff_finalize_target` and `patchdiff_read_finalized_export`) and the existing examples, and `x-patchdiff-capabilities` built from the runtime constants.
 - Submissions accept boolean `include_correlation_id`; the UUID is response-only and never part of request identity.
 - Rejections return immutable `diagnostic.failure_context` and fresh, response-only `current_context`; exact recovery keeps the original diagnostic. Near misses are computed only after a service-owned commit releases the lock (banded exact Levenshtein within the 1,000,000-cell cap) and are omitted for caller-owned transactions.
 - Preview is advisory: no writes, locks or request keys; a payload bounded to 32,768 bytes with explicit omission metadata; submission always rechecks guards.
@@ -133,4 +135,4 @@ Legacy profiles retain the existing observe/observed-submit names. The opt-in ve
 
 ## Versioned observed editor view
 
-Opt-in observed_v2 exposes 5 external purposes; no registry/runtime/migration is added. Follow `docs/spec/MCP_EDITOR_V2.md` for exact names, explicit snapshot normalization, distinct transaction/current receipt states, 8192-byte whole logical commit/error bound, negotiated 2025 output schemas/structured results and 2024 text fallback. Preserve all old profile contracts. Do not prevalidate operational inputs in a way that bypasses known-target audit or exact keyed recovery. Verify large single-scope compatibility, audited malformed values, conflict logging, post-advance recovery, real stdio denials and deterministic five-file --editor-v2 --host-finalize. No model coaching or inferred performance claims.
+Default `observed_v2` exposes 5 external purposes over the existing handlers (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`); `full` exposes all 24 tools including durable finalization (`patchdiff_finalize_target` and `patchdiff_read_finalized_export`, migrations `0006` and `0007`). Follow `docs/spec/MCP_EDITOR_V2.md` for exact names, explicit snapshot normalization, distinct transaction/current receipt states, 8192-byte whole logical commit/error bound, negotiated 2025 output schemas/structured results and 2024 text fallback. Preserve all old profile contracts. Do not prevalidate operational inputs in a way that bypasses known-target audit or exact keyed recovery. Verify large single-scope compatibility, audited malformed values, conflict logging, post-advance recovery, real stdio denials and deterministic five-file --editor-v2 --host-finalize. No model coaching or inferred performance claims.
