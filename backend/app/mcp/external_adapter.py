@@ -348,7 +348,7 @@ def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.st
 
 
 def main() -> None:
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 1 and sys.argv[1] in {"setup", "daemon", "-h", "--help"}:
         from app.mcp.runtime_cli import main as cli_main
         raise SystemExit(cli_main(sys.argv[1:]))
     sys.stdin.reconfigure(encoding="utf-8", errors="strict")
