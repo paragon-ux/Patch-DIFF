@@ -378,7 +378,7 @@ class _Generation:
                         raise _error("PROTOCOL_ERROR", f"{self.error} | write_errors: {write_errors}")
                     raise self.error
                 if write_errors:
-                    raise _error("PROTOCOL_ERROR", f"Worker pipe write failed: {write_errors}")
+                    raise _error("PROTOCOL_ERROR", "Worker pipe write failed.")
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise subprocess.TimeoutExpired("Waymark worker", timeout)
