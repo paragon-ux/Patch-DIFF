@@ -263,11 +263,9 @@ class ExternalMCPAdapter:
                         payload = _registered_tools.submit_editor_operations(**normalized)
                     else:
                         payload = registry.call(route, **normalized)
-                except Exception as exc:  # An infrastructure failure cannot establish a transaction outcome.
-                    import traceback
-                    traceback.print_exc(file=sys.stderr)
+                except Exception:  # An infrastructure failure cannot establish a transaction outcome.
                     payload = {"status": "outcome_unknown", "code": "execution_failed",
-                               "failure_detail": f"Tool execution failed: {type(exc).__name__}: {exc}"}
+                               "failure_detail": "Tool execution failed; transaction outcome is unknown."}
         success = is_success(name, payload)
         projected = project_result(name, payload, arguments=arguments)
         result = {"content": [{"type": "text", "text": _dumps(projected, sort_keys=True, separators=(",", ":"))}],
