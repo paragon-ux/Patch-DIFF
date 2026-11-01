@@ -6,6 +6,9 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 
+// Defense-in-depth: redirect console.log/info to console.error so stdout remains clean binary IPC frames
+console.log = console.info = (...args) => console.error(...args);
+
 const PROTOCOL = "patchdiff-waymark-worker/1";
 const CONTROL_LIMIT = 4096;
 const RESULT_LIMIT = 2 * 1024 * 1024;

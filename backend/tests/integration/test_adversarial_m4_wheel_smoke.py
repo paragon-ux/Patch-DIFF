@@ -161,6 +161,22 @@ with tempfile.TemporaryDirectory() as td:
     except RuntimeError as exc:
         assert "waymark-engine is not installed" in str(exc)
         print("MISSING_MODULE_RAISED_OK")
+
+# 4. Test verify_installed_bridge detects unpatched web-tree-sitter
+with tempfile.TemporaryDirectory() as td:
+    tpath = Path(td)
+    for bf in BRIDGE_FILES:
+        (tpath / bf).write_text("// dummy")
+    (tpath / "node_modules" / "waymark-engine").mkdir(parents=True)
+    (tpath / "node_modules" / "waymark-engine" / "package.json").write_text('{"version": "4.1.0"}')
+    (tpath / "node_modules" / "web-tree-sitter").mkdir(parents=True)
+    (tpath / "node_modules" / "web-tree-sitter" / "tree-sitter.js").write_text('// unpatched code')
+    try:
+        verify_installed_bridge(tpath)
+        print("UNPATCHED_TS_FAILED_TO_RAISE")
+    except RuntimeError as exc:
+        assert "missing C++ scanner patch" in str(exc)
+        print("UNPATCHED_TS_RAISED_OK")
 """
     proc = subprocess.run(
         [str(python_bin), "-c", code],
@@ -174,6 +190,7 @@ with tempfile.TemporaryDirectory() as td:
     assert "REJECTED_v20.11.0" in proc.stdout
     assert "EMPTY_DIR_RAISED_OK" in proc.stdout
     assert "MISSING_MODULE_RAISED_OK" in proc.stdout
+    assert "UNPATCHED_TS_RAISED_OK" in proc.stdout
 
 
 def test_adversarial_wheel_package_completeness():

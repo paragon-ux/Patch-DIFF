@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /** Compatibility one-shot CLI over the shared fresh evaluator. */
+// Defense-in-depth: redirect console.log/info to console.error so stdout remains clean JSON output
+console.log = console.info = (...args) => console.error(...args);
 import { evaluateDiscovery, WAYMARK_ENGINE_VERSION, recordTiming } from "./discovery_core.mjs";
 async function readInputPayload() {
   const args = process.argv.slice(2);

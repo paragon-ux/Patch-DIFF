@@ -83,6 +83,23 @@ def verify_installed_bridge(bridge_dir: Path) -> str:
         raise RuntimeError(
             f"Installed waymark-engine version is {version!r}, expected {EXPECTED_WAYMARK_ENGINE_VERSION!r}"
         )
+
+    ts_candidates = [
+        bridge_dir / "node_modules" / "web-tree-sitter" / "tree-sitter.js",
+        bridge_dir / "node_modules" / "waymark-engine" / "node_modules" / "web-tree-sitter" / "tree-sitter.js",
+    ]
+    ts_found = False
+    for ts_path in ts_candidates:
+        if ts_path.is_file():
+            ts_found = True
+            content = ts_path.read_text(encoding="utf-8", errors="replace")
+            if 'wasmImports["_Znwm"]' not in content:
+                raise RuntimeError(
+                    f"web-tree-sitter at {ts_path} is missing C++ scanner patch (wasmImports['_Znwm'])"
+                )
+    if not ts_found:
+        raise RuntimeError(f"web-tree-sitter/tree-sitter.js not found in {bridge_dir / 'node_modules'}")
+
     return version
 
 
@@ -145,6 +162,24 @@ def bootstrap_bridge(
         ) from exc
     except (subprocess.SubprocessError, OSError) as exc:
         raise RuntimeError(f"Failed to execute npm at {npm_path}: {exc}") from exc
+
+    # Explicitly run patch-web-tree-sitter.cjs (skipped because --ignore-scripts was passed to npm ci)
+    patch_script = dest / "node_modules" / "waymark-engine" / "scripts" / "patch-web-tree-sitter.cjs"
+    if not patch_script.is_file():
+        raise RuntimeError(f"patch-web-tree-sitter.cjs not found at {patch_script}")
+    try:
+        subprocess.run(
+            [node_path, str(patch_script), "--strict"],
+            cwd=str(dest),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30.0,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"patch-web-tree-sitter failed in {dest} with code {exc.returncode}: {exc.stderr}"
+        ) from exc
 
     verify_installed_bridge(dest)
     return dest
