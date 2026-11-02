@@ -47,7 +47,7 @@ def test_populated_historical_observation_upgrade_downgrade_upgrade(isolated_mig
 @pytest.mark.parametrize("accepted,remove_links", [(False, False), (True, False), (True, True)])
 def test_downgrade_refuses_bundle_and_accepted_batch_evidence(isolated_migrations, accepted, remove_links):
     config, connection = isolated_migrations
-    command.upgrade(config, "20261027_0005")
+    command.upgrade(config, "head")
     connection.commit()
     with Session(bind=connection) as session:
         target = initialize_target(session, filename="migrate.py", content="def a():\n    return 1\n\ndef b():\n    return 1\n", target_type="text/x-python")
@@ -61,6 +61,8 @@ def test_downgrade_refuses_bundle_and_accepted_batch_evidence(isolated_migration
             assert result.status == "accepted"
             assert session.scalar(text("SELECT count(DISTINCT accepted_pdcp_log_id) FROM target_scope_observations")) == 1
     connection.commit()
+    # Seed with the current runtime, then exercise the original populated 0005 boundary.
+    command.downgrade(config, "20261027_0005")
     if remove_links:
         # Corrupt test-only authority to prove the durable accepted format independently blocks downgrade.
         connection.execute(text("DELETE FROM target_scope_observations"))

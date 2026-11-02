@@ -39,7 +39,7 @@ No remote tags or GitHub releases existed when checked on 2026-10-22. `v0.1.0` i
 
 - MIT license and package license/readme metadata must be present in source and built artifacts. Third-party dependency licenses are separate from the project license.
 - Resolve/install the exact reviewed dependency lock in an isolated environment; run dependency consistency, current advisory checks and the complete suite after implementation is finished. Include the Python/platform and exact lock hash in evidence.
-- Build and inspect a wheel without publishing. Smoke-test the installed artifact's MCP initialization/discovery and health endpoints from outside the source checkout. The documented deployment still uses a source checkout and its migration configuration; no standalone PyPI deployment is certified by an editable install.
+- Build and inspect a wheel without publishing. Smoke-test the installed artifact's MCP initialization/discovery and health endpoints from outside the source checkout. An editable install does not certify the wheel; installed-artifact checks must resolve dependencies in a fresh pip-enabled venv and exercise the packaged migrations, Compose assets and Waymark bridge.
 - Verify a private security-reporting channel. It was disabled at review time; see [SECURITY.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/SECURITY.md). This is a publication prerequisite, not an invitation to post sensitive reports publicly.
 - Reassess the pinned PostgreSQL container image and deployment configuration for the intended environment. A PyPI advisory check does not cover operating-system/container vulnerabilities. Bind development services to loopback; do not recreate existing data volumes as part of verification.
 - Use the final merged source revision for release artifacts and checksums, then attach those exact artifacts to any approved release. Do not copy source-tree test results to a different wheel or tag without checking identity.
@@ -48,3 +48,10 @@ No remote tags or GitHub releases existed when checked on 2026-10-22. `v0.1.0` i
 ## Evidence limits
 
 The suite covers Python 3.11, live PostgreSQL and actual stdio workflows on the environments recorded with the checks. Broader Python/host/platform support requires its own evidence. The offline evaluator measures deterministic bytes and outcomes, not model success or tokens. Representative production datasets, performance thresholds, full-history secret scanning and container vulnerability assessment are not established by the existing local checks. Keep these limits visible in any release announcement.
+
+
+## PR23 publication authorization
+
+Distribution name remains exactly `patchdiff-mcp`, version `0.1.0`. Before release, the owner supplies dated, nonsecret evidence of control/registration rights on both PyPI and TestPyPI, protected environment `pypi` requiring an independent reviewer other than the dispatcher and deployment restricted to `main`, plus the exact repository/workflow/environment Trusted Publisher mapping. YAML alone cannot establish these external settings. Missing evidence means `RELEASE_BLOCKED_EXTERNAL`; do not rename or publish implicitly.
+
+The release workflow accepts only manual dispatch from `main` with a validated existing semantic version tag, verifies tag commit equals fetched `origin/main` and package version, then builds and re-tests that exact wheel/sdist. The publish job alone receives OIDC under protected `pypi`; it verifies the stored artifact checksum manifest before upload. PR checks and tag pushes cannot publish. A local `uvx --from <absolute wheel> patchdiff` test proves local entrypoint semantics, never PyPI-hosted availability. Creating tags, merging and publication each require separate owner authorization.

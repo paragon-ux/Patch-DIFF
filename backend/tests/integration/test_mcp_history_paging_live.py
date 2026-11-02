@@ -19,6 +19,9 @@ from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs
 from backend.tests.integration.helpers import create_target
 
 
+from backend.tests.mcp_process import mcp_popen, mcp_run
+
+
 def history_with_gaps():
     target_id = create_target("alpha")
     other_id = create_target("other")
@@ -166,7 +169,7 @@ def test_real_stdio_history_pages_keep_both_orders_and_cursor_metadata():
          "params": {"name": name, "arguments": arguments}}
         for index, (name, arguments) in enumerate(calls, 1)
     ]
-    process = subprocess.run([sys.executable, "-m", "app.mcp.external_adapter"],
+    process = mcp_run([sys.executable, "-m", "app.mcp.external_adapter"],
         input="\n".join(json.dumps(message) for message in messages) + "\n",
         capture_output=True, text=True, encoding="utf-8", timeout=30, cwd=backend,
         env={**os.environ, "PYTHONPATH": str(backend),

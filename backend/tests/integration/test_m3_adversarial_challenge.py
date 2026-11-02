@@ -350,7 +350,12 @@ def test_read_finalized_export_multiple_post_finalization_edits():
 
 
 def test_read_finalized_export_tampering_and_integrity_failure():
-    """Verify snapshot tampering or corruption returns closed snapshot_integrity_failure."""
+    """Verify DB immutability triggers block normal tampering and application layer returns snapshot_integrity_failure on storage corruption."""
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.exc import DBAPIError
+    from app.storage.db import create_bootstrap_engine
+    from app.storage.models import TargetFinalizationExportChunks
+
     text = "Integrity check file content.\n"
     with SessionLocal() as session:
         init = initialize_target(session, filename="tamper_test.txt", content=text, target_type="text/plain")
@@ -367,33 +372,72 @@ def test_read_finalized_export_tampering_and_integrity_failure():
         fin_id = fin.finalization_id
         snapshot_id = fin.snapshot_id
 
-    # Tamper 1: Modify snapshot content in database directly
+    # 0. Verify DB immutability trigger / least privilege prevents normal session from mutating snapshot or chunk rows
     with SessionLocal() as session:
         snap = session.get(TargetSnapshots, snapshot_id)
         assert snap is not None
         snap.content = "TAMPERED_CONTENT_CORRUPTED"
-        session.commit()
+        with pytest.raises(DBAPIError):
+            session.commit()
+        session.rollback()
 
-    # read_finalized_export MUST reject with snapshot_integrity_failure
-    with SessionLocal() as session:
-        res_tampered = read_finalized_export(session, fin_id, target_id)
-        assert res_tampered["status"] == "error"
-        assert res_tampered["error"] == "snapshot_integrity_failure"
-        assert "Snapshot integrity check failed" in res_tampered["failure_detail"]
+    boot_engine = create_bootstrap_engine()
+    try:
+        # Simulate low-level storage corruption bypassing user triggers via bootstrap owner
+        with boot_engine.begin() as conn:
+            conn.execute(sa_text("ALTER TABLE target_finalization_export_chunks DISABLE TRIGGER USER"))
+            conn.execute(sa_text("ALTER TABLE target_snapshots DISABLE TRIGGER USER"))
+            # Corrupt chunk hash first
+            conn.execute(
+                sa_text("UPDATE target_finalization_export_chunks SET payload_sha256 = :bad WHERE finalization_id = :fid"),
+                {"bad": "0" * 64, "fid": fin_id},
+            )
 
-    # Tamper 2: Snapshot belongs to another target_file_id
-    with SessionLocal() as session:
-        other_target = initialize_target(session, filename="other_target.txt", content="Other\n", target_type="text/plain")
-        snap = session.get(TargetSnapshots, snapshot_id)
-        snap.target_file_id = other_target.target_file_id
-        session.commit()
+        with SessionLocal() as session:
+            res_chunk_corrupt = read_finalized_export(session, fin_id, target_id)
+            assert res_chunk_corrupt["status"] == "error"
+            assert res_chunk_corrupt["error"] == "snapshot_integrity_failure"
 
-    # read_finalized_export MUST reject with snapshot_integrity_failure
-    with SessionLocal() as session:
-        res_mismatch = read_finalized_export(session, fin_id, target_id)
-        assert res_mismatch["status"] == "error"
-        assert res_mismatch["error"] == "snapshot_integrity_failure"
-        assert "Snapshot record associated with finalization is missing or invalid" in res_mismatch["failure_detail"]
+        # Tamper 1: Remove chunk rows (historical backfill path) and corrupt snapshot content
+        with boot_engine.begin() as conn:
+            conn.execute(
+                sa_text("DELETE FROM target_finalization_export_chunks WHERE finalization_id = :fid"),
+                {"fid": fin_id},
+            )
+            conn.execute(
+                sa_text("UPDATE target_snapshots SET content = 'TAMPERED_CONTENT_CORRUPTED' WHERE snapshot_id = :sid"),
+                {"sid": snapshot_id},
+            )
+
+        # read_finalized_export MUST reject with snapshot_integrity_failure
+        with SessionLocal() as session:
+            res_tampered = read_finalized_export(session, fin_id, target_id)
+            assert res_tampered["status"] == "error"
+            assert res_tampered["error"] == "snapshot_integrity_failure"
+            assert "Snapshot content does not match" in res_tampered["failure_detail"]
+
+        # Tamper 2: Snapshot belongs to another target_file_id
+        with SessionLocal() as session:
+            other_target = initialize_target(session, filename="other_target.txt", content="Other\n", target_type="text/plain")
+            other_target_id = other_target.target_file_id
+
+        with boot_engine.begin() as conn:
+            conn.execute(
+                sa_text("UPDATE target_snapshots SET target_file_id = :otid WHERE snapshot_id = :sid"),
+                {"otid": other_target_id, "sid": snapshot_id},
+            )
+
+        # read_finalized_export MUST reject with snapshot_integrity_failure
+        with SessionLocal() as session:
+            res_mismatch = read_finalized_export(session, fin_id, target_id)
+            assert res_mismatch["status"] == "error"
+            assert res_mismatch["error"] == "snapshot_integrity_failure"
+            assert "Snapshot record associated with finalization is missing" in res_mismatch["failure_detail"]
+    finally:
+        with boot_engine.begin() as conn:
+            conn.execute(sa_text("ALTER TABLE target_finalization_export_chunks ENABLE TRIGGER USER"))
+            conn.execute(sa_text("ALTER TABLE target_snapshots ENABLE TRIGGER USER"))
+        boot_engine.dispose()
 
 
 # ==============================================================================
@@ -577,7 +621,7 @@ def test_finalize_target_lock_wait_vs_hold_under_contention():
 
     # In main thread, schedule finalize_target after starting release timer
     def delayed_release():
-        time.sleep(0.20)  # Hold for 200ms
+        time.sleep(0.28)  # Hold across pre-lock replay (~60ms) + >=180ms under-lock wait
         release_lock_event.set()
 
     t_releaser = threading.Thread(target=delayed_release)

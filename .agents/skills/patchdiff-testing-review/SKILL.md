@@ -40,21 +40,14 @@ PatchDIFF verification spans four rigorous layers:
 
 ## How To Run Tests
 
-```powershell
-# 1. Pure unit tests
-.\.venv\Scripts\python.exe -m pytest backend/tests/unit -q
-
-# 2. Live Postgres integration tests (Postgres running on localhost:5432)
-$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
-.\.venv\Scripts\python.exe -m pytest backend/tests/integration -q
-
-# 3. Full test suite
-$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
-.\.venv\Scripts\python.exe -m pytest -q
-
-# 4. Offline evaluation
-.\.venv\Scripts\python.exe backend/tests/verification/offline_eval.py
+```bash
+python -m pytest backend/tests/unit -q
+PATCHDIFF_WAYMARK_MODE=resident python -m pytest backend/tests/integration -q
+PATCHDIFF_WAYMARK_MODE=resident python -m backend.tests.verification.offline_eval
+zensical build --clean
 ```
+
+Use explicitly configured private test role credentials against disposable PostgreSQL. No known/default DSN is supported.
 
 ## Review Checklist
 
@@ -104,8 +97,16 @@ When testing or reviewing Goal F behavior, cover:
 
 ## Structural batch verification
 
-Cover 2/5/20/32 scopes, one discovery per snapshot, bounded complete issuance, scope-local sequential semantics, atomic rejection/rollback, concurrent writers, committed-response-loss recovery, corrupted all-scope replay authority and populated 0004/0005 roundtrips/refusal. Test exact editor/unobserved/observed/full 7/5/6/22 catalogs plus opt-in observed_editor (4), with forbidden calls including SAVE/replay denied in-process and over real stdio. Run the documented Python/JSON/Markdown examples and `backend/tests/verification/structural_batch/verify.py`; the latter is a deterministic five-file oracle check, not authorization for a comparative model run or Gate 2 approval. Preserve frozen experiment bytes.
+Cover 2/5/20/32 scopes, one discovery per snapshot, bounded complete issuance, scope-local sequential semantics, atomic rejection/rollback, concurrent writers, committed-response-loss recovery, corrupted all-scope replay authority and populated 0004/0005 roundtrips/refusal. Test exact legacy editor/unobserved/observed and full 7/5/6/24 catalogs, plus observed_editor (4) and default observed_v2 (5). Both delegated observed profiles deny lifecycle calls in-process and over real stdio; legacy catalogs retain SAVE/replay names, while the delegated SQL role denies lifecycle writes. Trusted lifecycle tests use an operator-owned full session. Run the documented Python/JSON/Markdown examples and `backend/tests/verification/structural_batch/verify.py`; the latter is a deterministic five-file oracle check, not authorization for a comparative model run or Gate 2 approval. Preserve frozen experiment bytes.
 
 ## Versioned observed editor view
 
-Opt-in observed_v2 exposes 5 external purposes; no registry/runtime/migration is added. Follow `docs/spec/MCP_EDITOR_V2.md` for exact names, explicit snapshot normalization, distinct transaction/current receipt states, 8192-byte whole logical commit/error bound, negotiated 2025 output schemas/structured results and 2024 text fallback. Preserve all old profile contracts. Do not prevalidate operational inputs in a way that bypasses known-target audit or exact keyed recovery. Verify large single-scope compatibility, audited malformed values, conflict logging, post-advance recovery, real stdio denials and deterministic five-file --editor-v2 --host-finalize. No model coaching or inferred performance claims.
+Default observed_v2 exposes 5 external purposes over the shared registry and runtime. Follow `docs/spec/MCP_EDITOR_V2.md` for exact names, explicit snapshot normalization, distinct transaction/current receipt states, 8192-byte whole logical commit/error bound, negotiated 2025 output schemas/structured results and 2024 text fallback. Preserve all old profile contracts. Do not prevalidate operational inputs in a way that bypasses known-target audit or exact keyed recovery. Verify large single-scope compatibility, audited malformed values, conflict logging, post-advance recovery, real stdio denials and deterministic five-file --editor-v2 --host-finalize. No model coaching or inferred performance claims.
+
+## PR23 isolated acceptance
+
+Run unit tests, full live PostgreSQL 16 integration, offline evaluation and documentation build on the executed exact head. Always use PATCHDIFF_WAYMARK_MODE=resident for integration and verification. Use fresh disposable databases for migrations, privilege tests and replay-race barriers; never downgrade the application DB. Test both nonsuperuser service roles with direct SQL denials and immutable-history triggers.
+
+Wheel acceptance creates a new pip-enabled venv with dependency resolution, pip check, wheel/sdist hashes, pip freeze and import-path provenance; no borrowed host site-packages, shebang rewriting or source PYTHONPATH. Bootstrap/check Node 22 bridge from packaged assets outside checkout. Dedicated Linux three-UID fixtures exercise real editor/operator processes, denied model escalation, guarded commit, finalization, >1-MiB paging, disk equality and local-wheel uvx. Tests stop only their own containers and preserve volumes; never remove Docker resources. Missing prerequisites fail instead of skipping.
+
+External PyPI/TestPyPI name control, protected pypi environment/independent review and Trusted Publisher settings require actual owner evidence. Glama live ingestion remains post-merge. An implementer records FIXED_PENDING_INDEPENDENT_REVIEW while all original ledger entries remain OPEN.

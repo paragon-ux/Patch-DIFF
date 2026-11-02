@@ -1,9 +1,6 @@
 name: Publish to PyPI
 
 on:
-  push:
-    tags:
-      - 'v[0-9]*.[0-9]*.[0-9]*'
   workflow_dispatch:
     inputs:
       tag:
@@ -17,143 +14,107 @@ permissions:
 jobs:
   build:
     name: Build and verify package distribution
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       validated_tag: ${{ steps.preflight.outputs.validated_tag }}
       validated_commit: ${{ steps.verify_tag.outputs.validated_commit }}
       artifacts_sha256: ${{ steps.checksums.outputs.artifacts_sha256 }}
-    services:
-      postgres:
-        image: postgres:16.3-alpine
-        env:
-          POSTGRES_DB: patchdiff
-          POSTGRES_USER: patchdiff_release_test
-          POSTGRES_PASSWORD: release_smoke_test_secret_9f8e7d6c
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U patchdiff_release_test -d patchdiff"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
-      - name: Preflight validate candidate release tag format
+      - name: Preflight validate manual workflow_dispatch and candidate release tag format
         id: preflight
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
           GITHUB_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
 
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            if [ -z "${INPUT_TAG:-}" ]; then
-              echo "Error: inputs.tag is required for workflow_dispatch." >&2
-              exit 1
-            fi
-            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-              echo "Error: Manual release workflow_dispatch must be executed from 'refs/heads/main' (got '$GITHUB_REF')." >&2
-              exit 1
-            fi
-            CANDIDATE_TAG="$INPUT_TAG"
-          elif [ "$EVENT_NAME" = "push" ]; then
-            CANDIDATE_TAG="$REF_NAME"
-          else
-            echo "Error: Unsupported event: $EVENT_NAME" >&2
+          if [ "$EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "Error: Release workflow may only run via manual workflow_dispatch (got '$EVENT_NAME')." >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Error: Manual release workflow_dispatch must be executed from 'refs/heads/main' (got '$GITHUB_REF')." >&2
+            exit 1
+          fi
+          if [ -z "${INPUT_TAG:-}" ]; then
+            echo "Error: inputs.tag is required for workflow_dispatch." >&2
             exit 1
           fi
 
-          echo "Preflight validating candidate tag format: $CANDIDATE_TAG"
-
-          # Strictly reject empty, control characters, or whitespace
+          CANDIDATE_TAG="$INPUT_TAG"
           if [[ -z "$CANDIDATE_TAG" || "$CANDIDATE_TAG" =~ [[:space:]] ]]; then
             echo "Error: Release tag must not be empty or contain whitespace." >&2
             exit 1
           fi
 
-          # Strict anchored regex matching: ^v[0-9]+\.[0-9]+\.[0-9]+$
           TAG_REGEX='^v[0-9]+\.[0-9]+\.[0-9]+$'
           if [[ ! "$CANDIDATE_TAG" =~ $TAG_REGEX ]]; then
             echo "Error: Release tag '$CANDIDATE_TAG' does not match required anchored pattern $TAG_REGEX" >&2
             exit 1
           fi
 
-          echo "Candidate tag format is valid: $CANDIDATE_TAG"
           if [ -n "${GITHUB_OUTPUT:-}" ]; then
             echo "validated_tag=$CANDIDATE_TAG" >> "$GITHUB_OUTPUT"
           fi
-          if [ -n "${GITHUB_ENV:-}" ]; then
-            echo "TARGET_TAG=$CANDIDATE_TAG" >> "$GITHUB_ENV"
-          fi
 
-      - name: Checkout trusted base repository
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Verify release tag ref and provenance on main
+      - name: Verify fetched tag ref equals origin/main HEAD before code checkout
         id: verify_tag
         env:
           TARGET_TAG: ${{ steps.preflight.outputs.validated_tag }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          echo "Verifying git tag refs/tags/$TARGET_TAG"
+          VERIFY_DIR="$(mktemp -d)"
+          trap 'rm -rf "$VERIFY_DIR"' EXIT
+          git -C "$VERIFY_DIR" init -q
+          git -C "$VERIFY_DIR" remote add origin "$REPO_URL"
+          git -C "$VERIFY_DIR" -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" \
+            fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main" "+refs/tags/$TARGET_TAG:refs/tags/$TARGET_TAG"
 
-          # 1. Synchronize remote tags
-          git fetch origin "+refs/tags/*:refs/tags/*" --tags || true
-
-          # 2. Verify release tag exists as a ref
-          if ! git rev-parse -q --verify "refs/tags/$TARGET_TAG" >/dev/null; then
-            echo "Error: Release tag 'refs/tags/$TARGET_TAG' does not exist in repository." >&2
+          if ! git -C "$VERIFY_DIR" rev-parse -q --verify "refs/tags/$TARGET_TAG" >/dev/null; then
+            echo "Error: Release tag 'refs/tags/$TARGET_TAG' does not exist." >&2
             exit 1
           fi
 
-          # 3. Verify object type is annotated tag ('tag') or lightweight tag ('commit')
-          TAG_TYPE=$(git cat-file -t "refs/tags/$TARGET_TAG" 2>/dev/null || true)
+          TAG_TYPE=$(git -C "$VERIFY_DIR" cat-file -t "refs/tags/$TARGET_TAG" 2>/dev/null || true)
           if [ "$TAG_TYPE" != "tag" ] && [ "$TAG_TYPE" != "commit" ]; then
-            echo "Error: 'refs/tags/$TARGET_TAG' is of type '$TAG_TYPE'; expected annotated tag or lightweight tag." >&2
+            echo "Error: 'refs/tags/$TARGET_TAG' has unexpected git object type '$TAG_TYPE'." >&2
             exit 1
           fi
-          echo "Verified tag object type: $TAG_TYPE"
 
-          # 4. Dereference tag to its immutable 40-character commit SHA
-          TAG_COMMIT=$(git rev-parse --verify "refs/tags/$TARGET_TAG^{commit}" 2>/dev/null || true)
+          TAG_COMMIT=$(git -C "$VERIFY_DIR" rev-parse --verify "refs/tags/$TARGET_TAG^{commit}" 2>/dev/null || true)
+          MAIN_HEAD=$(git -C "$VERIFY_DIR" rev-parse --verify "refs/remotes/origin/main^{commit}" 2>/dev/null || true)
           if [[ ! "$TAG_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Error: Failed to dereference 'refs/tags/$TARGET_TAG' to a 40-character commit SHA." >&2
+            echo "Error: Failed to dereference tag to 40-hex commit SHA." >&2
             exit 1
           fi
-          echo "Dereferenced tag commit: $TAG_COMMIT"
-
-          # 5. Verify the tag commit is an immutable commit on the approved branch (origin/main)
-          APPROVED_REF="origin/main"
-          if ! git rev-parse -q --verify "$APPROVED_REF" >/dev/null; then
-            APPROVED_REF="main"
-          fi
-
-          if ! git merge-base --is-ancestor "$TAG_COMMIT" "$APPROVED_REF"; then
-            echo "Error: Tag commit $TAG_COMMIT is not an ancestor of approved branch $APPROVED_REF." >&2
+          if [ "$TAG_COMMIT" != "$MAIN_HEAD" ]; then
+            echo "Error: Tag commit ($TAG_COMMIT) does not equal current origin/main HEAD ($MAIN_HEAD)." >&2
             exit 1
           fi
-          echo "Verified: Tag commit $TAG_COMMIT is in the approved branch ($APPROVED_REF) history."
-
-          # 6. Checkout the exact verified tag commit (detached HEAD)
-          git checkout -q "$TAG_COMMIT"
-
-          # 7. Verify HEAD exactly matches the verified tag commit SHA
-          CURRENT_HEAD=$(git rev-parse HEAD)
-          if [ "$CURRENT_HEAD" != "$TAG_COMMIT" ]; then
-            echo "Error: Checked out HEAD ($CURRENT_HEAD) does not match verified tag commit ($TAG_COMMIT)." >&2
-            exit 1
-          fi
-          echo "Verified checked-out HEAD matches tag commit: $CURRENT_HEAD"
 
           if [ -n "${GITHUB_OUTPUT:-}" ]; then
             echo "validated_commit=$TAG_COMMIT" >> "$GITHUB_OUTPUT"
           fi
-          if [ -n "${GITHUB_ENV:-}" ]; then
-            echo "TARGET_COMMIT=$TAG_COMMIT" >> "$GITHUB_ENV"
+
+      - name: Checkout verified tag commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.verify_tag.outputs.validated_commit }}
+          fetch-depth: 0
+
+      - name: Confirm checked-out HEAD matches verified tag commit
+        env:
+          EXPECTED_COMMIT: ${{ steps.verify_tag.outputs.validated_commit }}
+        run: |
+          set -euo pipefail
+          ACTUAL_HEAD="$(git rev-parse HEAD)"
+          if [ "$ACTUAL_HEAD" != "$EXPECTED_COMMIT" ]; then
+            echo "Error: Checked-out HEAD ($ACTUAL_HEAD) != verified commit ($EXPECTED_COMMIT)." >&2
+            exit 1
           fi
 
       - name: Set up Python 3.11
@@ -171,18 +132,17 @@ jobs:
           TARGET_TAG: ${{ steps.preflight.outputs.validated_tag }}
         run: |
           set -euo pipefail
-          PY_NAME=$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["name"])')
-          PY_VER=$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])')
-          if [ "$PY_NAME" != "patchdiff-mcp" ]; then
-            echo "Error: pyproject.toml name '$PY_NAME' must be 'patchdiff-mcp'." >&2
-            exit 1
-          fi
-          EXPECTED_TAG="v$PY_VER"
-          if [ "$EXPECTED_TAG" != "$TARGET_TAG" ]; then
-            echo "Error: Tag '$TARGET_TAG' does not match pyproject.toml version '$PY_VER' (expected '$EXPECTED_TAG')." >&2
-            exit 1
-          fi
-          echo "Verified: Package $PY_NAME and tag $TARGET_TAG match pyproject.toml version $PY_VER"
+          python -c '
+          import os, pathlib, tomllib
+          data = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
+          name = data["project"]["name"]
+          ver = data["project"]["version"]
+          target_tag = os.environ["TARGET_TAG"]
+          if name != "patchdiff-mcp":
+              raise SystemExit(f"Error: pyproject.toml name {name!r} must be '\''patchdiff-mcp'\''")
+          if f"v{ver}" != target_tag:
+              raise SystemExit(f"Error: Tag {target_tag!r} does not match pyproject.toml version {ver!r}")
+          '
 
       - name: Verify Waymark bridge and packaged compose assets
         run: |
@@ -197,13 +157,12 @@ jobs:
             echo "Error: Missing packaged backend/app/mcp/resources/docker-compose.yml" >&2
             exit 1
           fi
-          echo "All Waymark bridge and runtime compose assets verified."
 
       - name: Install build dependencies
         run: pip install build twine
 
       - name: Build sdist and wheel
-        run: python -m build
+        run: python -m build --wheel --sdist
 
       - name: Verify distribution metadata
         run: twine check dist/*
@@ -216,67 +175,40 @@ jobs:
           VERSION="${TARGET_TAG#v}"
           WHEEL_FOUND=$(ls dist/patchdiff_mcp-"$VERSION"-*.whl 2>/dev/null || true)
           SDIST_FOUND=$(ls dist/patchdiff_mcp-"$VERSION".tar.gz 2>/dev/null || ls dist/patchdiff-mcp-"$VERSION".tar.gz 2>/dev/null || true)
-
-          if [ -z "$WHEEL_FOUND" ]; then
-            echo "Error: Expected wheel for version $VERSION not found in dist/" >&2
+          if [ -z "$WHEEL_FOUND" ] || [ -z "$SDIST_FOUND" ]; then
+            echo "Error: Expected wheel/sdist for version $VERSION not found in dist/" >&2
             ls -la dist/
             exit 1
           fi
-          if [ -z "$SDIST_FOUND" ]; then
-            echo "Error: Expected sdist for version $VERSION not found in dist/" >&2
-            ls -la dist/
-            exit 1
-          fi
-          python -c "
-          import zipfile
-          with zipfile.ZipFile('$WHEEL_FOUND') as zf:
-              meta = [n for n in zf.namelist() if n.endswith('.dist-info/METADATA')][0]
-              text = zf.read(meta).decode('utf-8')
-              assert 'Name: patchdiff-mcp' in text, text
-              assert 'Version: $VERSION' in text, text
-          "
-          echo "Verified built artifacts and wheel METADATA for patchdiff-mcp==$VERSION"
+          WHEEL_PATH="$WHEEL_FOUND" EXPECTED_VERSION="$VERSION" python -c '
+          import os, zipfile
+          wheel_path = os.environ["WHEEL_PATH"]
+          expected_ver = os.environ["EXPECTED_VERSION"]
+          with zipfile.ZipFile(wheel_path) as zf:
+              meta = [n for n in zf.namelist() if n.endswith(".dist-info/METADATA")][0]
+              text = zf.read(meta).decode("utf-8")
+              assert "Name: patchdiff-mcp" in text, text
+              assert f"Version: {expected_ver}" in text, text
+          '
 
-      - name: Test installed wheel in clean environment with Postgres and Waymark
+      - name: Stage G clean dependency-resolved wheel two-process smoke test
         env:
-          PATCHDIFF_DATABASE_URL: postgresql+psycopg://patchdiff_release_test:release_smoke_test_secret_9f8e7d6c@localhost:5432/patchdiff
           PATCHDIFF_WAYMARK_MODE: resident
+          PATCHDIFF_TEST_EVIDENCE_DIR: ${{ github.workspace }}/.ci-results
         run: |
           set -euo pipefail
-          python -m venv /tmp/smoke-venv
-          /tmp/smoke-venv/bin/pip install dist/*.whl
-          cd /tmp
-          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --target-dir /tmp/smoke-venv/waymark-bridge
-          /tmp/smoke-venv/bin/python -m app.waymark_bridge.bootstrap --check-only --target-dir /tmp/smoke-venv/waymark-bridge
-          # Run Alembic migrations from the installed wheel
-          INI_PATH=$(/tmp/smoke-venv/bin/python -c "import app.mcp.runtime_cli as rc; print(rc.get_alembic_ini_path())")
-          /tmp/smoke-venv/bin/python -m alembic -c "$INI_PATH" upgrade head
-          # Execute end-to-end initialize -> observe_scopes -> commit_bundle -> finalize_target via installed wheel
-          PATCHDIFF_WAYMARK_BRIDGE_DIR=/tmp/smoke-venv/waymark-bridge /tmp/smoke-venv/bin/python -c '
-          import json, os, subprocess, uuid
-          env_full = {**os.environ, "PATCHDIFF_MCP_PROFILE": "full"}
-          env_v2 = {**os.environ, "PATCHDIFF_MCP_PROFILE": "observed_v2"}
-          p_full = subprocess.Popen(["/tmp/smoke-venv/bin/patchdiff-mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env_full)
-          p_v2 = subprocess.Popen(["/tmp/smoke-venv/bin/patchdiff-mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env_v2)
-          def rpc(proc, i, name, args):
-              proc.stdin.write(json.dumps({"jsonrpc":"2.0","id":i,"method":"tools/call","params":{"name":name,"arguments":args}}) + "\n")
-              proc.stdin.flush()
-              res = json.loads(proc.stdout.readline())
-              assert not res["result"].get("isError"), res
-              return json.loads(res["result"]["content"][0]["text"])
-          try:
-              init = rpc(p_full, 1, "patchdiff_initialize_target", {"filename":"rel.py","content":"def f():\n    return 1\n","content_type":"text/x-python"})
-              tid = init["target_file_id"]
-              obs = rpc(p_v2, 2, "patchdiff_observe_scopes", {"target_file_id":tid,"selections":[{"symbol_name":"f"}]})
-              oid = obs["scopes"][0]["observation_id"]
-              com = rpc(p_v2, 3, "patchdiff_commit_bundle", {"snapshot":obs["snapshot"],"intent":"update f","client_request_id":str(uuid.uuid4()),"groups":[{"observation_id":oid,"operations":[{"op":"match","match":"return 1","replace":"return 2"}]}]})
-              assert com["status"] == "accepted"
-              fin = rpc(p_full, 4, "patchdiff_finalize_target", {"target_file_id":tid,"expected_target_version":1,"client_request_id":str(uuid.uuid4())})
-              assert fin["status"] == "ok" and "return 2" in fin["exported_content"]
-          finally:
-              p_full.terminate(); p_v2.terminate()
-          '
-          echo "Installed wheel full Postgres + Waymark + MCP lifecycle verification passed."
+          python -m pip install -r requirements.lock
+          export PATCHDIFF_TEST_WHEEL_PATH="$(realpath dist/patchdiff_mcp-*.whl)"
+          python -m pytest backend/tests/integration/test_installed_wheel_smoke.py backend/tests/integration/test_adversarial_m4_wheel_smoke.py -q
+
+      - name: Retain installed-artifact acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-wheel-acceptance
+          path: .ci-results/
+          include-hidden-files: true
+          if-no-files-found: error
 
       - name: Generate SHA-256 checksum manifest
         id: checksums
@@ -298,13 +230,13 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
-    if: github.event_name == 'workflow_dispatch' && needs.build.outputs.validated_tag != ''
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.build.outputs.validated_tag != ''
     runs-on: ubuntu-latest
     environment:
       name: pypi
       url: https://pypi.org/p/patchdiff-mcp
     permissions:
-      id-token: write # Mandatory for PyPI Trusted Publishing (OIDC)
+      id-token: write
       contents: read
     steps:
       - name: Download distribution artifacts
@@ -324,9 +256,7 @@ jobs:
             exit 1
           fi
           VERSION="${EXPECTED_TAG#v}"
-          echo "Publishing release version: $VERSION for tag: $EXPECTED_TAG"
           cd dist
-          ls -la
           ACTUAL_MANIFEST_SHA256=$(sha256sum SHA256SUMS.txt | awk '{print $1}')
           if [ "$ACTUAL_MANIFEST_SHA256" != "$EXPECTED_MANIFEST_SHA256" ]; then
             echo "Error: SHA256SUMS.txt digest mismatch ($ACTUAL_MANIFEST_SHA256 != $EXPECTED_MANIFEST_SHA256)" >&2

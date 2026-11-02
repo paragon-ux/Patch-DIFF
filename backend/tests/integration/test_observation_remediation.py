@@ -8,6 +8,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.mcp import tools  # noqa: F401
 from app.mcp.server import registry
 from app.storage.db import SessionLocal
+from backend.tests.integration.helpers import maintenance_session
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles, TargetScopeObservations
 
 
@@ -39,7 +40,7 @@ def test_observed_replay_rejects_missing_or_tampered_authority(mutation):
     pristine = registry.call("patchdiff_replay", target_file_id=tid)
     assert pristine["status"] == "success" and pristine["materialized_state_matches"] is True
     other, other_obs = initialized()
-    with SessionLocal.begin() as session:
+    with maintenance_session("target_scope_observations", "append_only_pdcp_logs") as session:
         row = session.get(TargetScopeObservations, uuid.UUID(obs["observation_id"]))
         log = session.get(AppendOnlyPdcpLogs, uuid.UUID(accepted["pdcp_log_id"]))
         diagnostic = dict(log.diagnostic_json)

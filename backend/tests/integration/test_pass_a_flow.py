@@ -20,9 +20,13 @@ from app.services import pdcp_service, near_miss_service
 from app.services.pdcp_service import submit_edits, submit_operations, submit_pdcp
 from app.services.replay_service import replay_target
 from app.storage.db import SessionLocal
+from backend.tests.integration.helpers import maintenance_session
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
 from app.storage.repositories import select_target_for_update
 from backend.tests.integration.helpers import create_target, pdcp_for
+
+
+from backend.tests.mcp_process import mcp_popen, mcp_run
 
 
 def span(start=0, end=1, expected_text="a", replace="A", **extra):
@@ -173,7 +177,7 @@ def test_mixed_historical_protocols_replay_and_new_profile_fail_closed():
         current = submit_operations(session, **args(target_id, [span(0, 1, "b", "c")], expected_target_version=1, client_request_id="new"))
         assert current.status == "accepted"
         assert submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("c", "d")), expected_target_version=2).status == "accepted"
-    with SessionLocal() as session:
+    with maintenance_session("append_only_pdcp_logs", rollback=True) as session:
         logs = session.scalars(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id).order_by(AppendOnlyPdcpLogs.log_sequence)).all()
         assert [log.runtime_version for log in logs] == [RUNTIME_VERSION, OPERATIONS_RUNTIME_VERSION, RUNTIME_VERSION]
         assert replay_target(session, target_file_id=target_id).reconstructed_content == "d"
@@ -182,7 +186,6 @@ def test_mixed_historical_protocols_replay_and_new_profile_fail_closed():
             session.flush()
             result = replay_target(session, target_file_id=target_id)
             assert result.status == "failed" and result.failure_reason.value == "replay_protocol_invalid"
-        session.rollback()
     with SessionLocal() as session:
         assert replay_target(session, target_file_id=target_id).materialized_state_matches is True
 
@@ -299,7 +302,7 @@ def test_original_near_miss_inputs_and_result_stay_separate_from_fresh_recovery(
 
 def test_real_stdio_operations_schema_correlation_candidates_and_replay():
     backend = Path(__file__).resolve().parents[2]
-    process = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], stdin=subprocess.PIPE,
+    process = mcp_popen([sys.executable, "-m", "app.mcp.external_adapter"], stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=backend,
         env={**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url})
     sequence = 0
@@ -361,7 +364,7 @@ def test_expected_enrichment_omission_and_historical_recovery_do_not_rewrite_row
         with SessionLocal() as session:
             first = submit_edits(session, **arguments)
     assert first.status == "rejected" and first.near_misses["omission_reason"] == "work_budget_exhausted"
-    with SessionLocal.begin() as session:
+    with maintenance_session("append_only_pdcp_logs") as session:
         log = session.get(AppendOnlyPdcpLogs, first.pdcp_log_id)
         historical = {key: value for key, value in log.diagnostic_json.items() if key != "near_miss_query"}
         log.diagnostic_json = historical

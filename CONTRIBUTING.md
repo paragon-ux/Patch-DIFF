@@ -35,7 +35,8 @@ The core runtime (`backend/app/core/`, `backend/app/pdcp/`) must remain pure and
 
 ### Prerequisites
 - Python 3.11+
-- Docker & Docker Compose
+- Linux/WSL2 POSIX runtime, with separate operator, editor-service and model UIDs
+- Docker & Docker Compose v2
 - PostgreSQL 16+ (via Docker Compose `postgres:16.3-alpine`)
 - Node.js 22+ (for external Waymark integrations)
 
@@ -50,14 +51,13 @@ pip install --upgrade pip
 pip install -r requirements.lock
 pip install --no-deps -e .
 
-# 3. Provision PostgreSQL & run migrations (supports native on 5434, docker on 5433, or both)
-patchdiff-mcp setup --route both
-
-# Manage database daemons identically across either or both routes:
-patchdiff-mcp daemon start   --route <native|docker|both>
-patchdiff-mcp daemon stop    --route <native|docker|both>
-patchdiff-mcp daemon restart --route <native|docker|both>
-patchdiff-mcp daemon status  --route <native|docker|both>
+# 3. Follow docs/guides/CLAUDE_DESKTOP_SETUP.md for accounts and private credentials,
+# then provision the sole managed PostgreSQL 16.3 Compose service as operator:
+patchdiff-mcp-setup
+patchdiff-mcp-daemon start
+patchdiff-mcp-daemon stop
+patchdiff-mcp-daemon restart
+patchdiff-mcp-daemon status
 ```
 
 ---
@@ -67,18 +67,13 @@ patchdiff-mcp daemon status  --route <native|docker|both>
 Do not claim completion or submit a PR unless all relevant tests pass against live PostgreSQL:
 
 ```bash
-# 1. Pure runtime unit tests (1,020 tests)
-pytest backend/tests/unit -q
-
-# 2. Live PostgreSQL integration tests (561 tests)
-export PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
-pytest backend/tests/integration -q
-
-# 3. Offline evaluation (wire payload bytes and verdict equivalence)
-python backend/tests/verification/offline_eval.py
-
-# 4. Five-file resident and versioned editor verification
-python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize
+# Configure private test credentials against a dedicated disposable PostgreSQL 16 instance.
+# Never use the configured application database for corruption/migration tests.
+python -m pytest backend/tests/unit -q
+PATCHDIFF_WAYMARK_MODE=resident python -m pytest backend/tests/integration -q
+PATCHDIFF_WAYMARK_MODE=resident python -m backend.tests.verification.offline_eval
+PATCHDIFF_WAYMARK_MODE=resident python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize
+zensical build --clean
 ```
 
 ---
@@ -88,7 +83,7 @@ python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-
 - All database schema changes require an Alembic migration script under `backend/app/migrations/versions/`.
 - Migrations must be strictly additive.
 - Migration scripts must verify safe downgrade refusal when newer feature rows exist.
-- Always verify the migration cycle before opening a PR:
+- Always verify the migration cycle before opening a PR in a fresh disposable database using explicit bootstrap credentials; never downgrade the configured application database:
   ```bash
   alembic -c backend/app/migrations/alembic.ini upgrade head
   alembic -c backend/app/migrations/alembic.ini downgrade -1

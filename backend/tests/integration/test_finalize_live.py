@@ -583,3 +583,376 @@ def test_read_finalized_export_large_multibyte_paging_post_edit():
         assert res_end["bytes_read"] == 0
         assert res_end["has_more"] is False
         assert res_end["next_offset"] is None
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def _replay_query_phases():
+    from sqlalchemy import event
+    from app.storage.db import get_engine
+    phases = []
+    locked = False
+    def trace(_conn, _cursor, statement, _parameters, _context, _many):
+        nonlocal locked
+        if "cloud_target_files" in statement and "FOR UPDATE" in statement:
+            locked = True
+            phases.append("row_lock")
+        if "append_only_pdcp_logs.pdcp_content" in statement:
+            phases.append("locked_replay" if locked else "pre_replay")
+    engine = get_engine()
+    event.listen(engine, "before_cursor_execute", trace)
+    try:
+        yield phases
+    finally:
+        event.remove(engine, "before_cursor_execute", trace)
+
+
+@pytest.mark.parametrize("corrupt_log_hash", [False, True])
+def test_stage_c_live_history_revision_race_and_raw_content_check(corrupt_log_hash):
+    """Verify Stage C (PR23-IMPL-ARCH-001, PR23-R5-DB-001): pre-lock REPEATABLE READ READ ONLY replay + history_revision & raw content check under lock."""
+    import threading
+    from sqlalchemy import text as sa_text
+    import app.services.finalize_service as fin_mod
+    from app.storage.db import create_bootstrap_engine
+    from app.storage.models import AppendOnlyPdcpLogs
+    from app.pdcp.typed import build_record, canonical_record_json
+
+    with SessionLocal() as session:
+        init = initialize_target(
+            session,
+            filename="stage_c_race.txt",
+            content="Alpha\nBeta\n",
+            target_type="text/plain",
+        )
+        target_id = init.target_file_id
+        v0 = init.version
+        h0 = init.current_hash
+        cycle_id = init.active_editing_cycle_id
+
+    # 1. Deterministic barrier: between pre-lock replay and SELECT ... FOR UPDATE,
+    # a concurrent transaction inserts an accepted log row (which triggers DB history_revision + 1)
+    # without changing version or current_hash. Under lock, finalize_target must detect the
+    # history_revision mismatch and fall back to under-lock replay (which detects the extra accepted log!).
+    hook_fired = []
+    revisions = []
+
+    def _race_hook(*_args):
+        hook_fired.append(target_id)
+        record = canonical_record_json(build_record(
+            target_file_id=str(target_id), intent="race",
+            edits=[{"match": "Alpha", "replace": "Gamma"}],
+            expected_target_version=v0, expected_current_hash=h0,
+        ))
+        with SessionLocal() as race_session:
+            with race_session.begin():
+                race_session.add(
+                    AppendOnlyPdcpLogs(
+                        pdcp_log_id=uuid.uuid4(),
+                        target_file_id=target_id,
+                        editing_cycle_id=cycle_id,
+                        submission_source="race_test",
+                        pdcp_content=record,
+                        pdcp_content_hash=hashlib.sha256(b"race" if corrupt_log_hash else record.encode()).hexdigest(),
+                        protocol_version="patchdiff-tx/1",
+                        runtime_version="patchdiff-mvp-0.2.2",
+                        status="accepted",
+                        change_count=1,
+                        before_hash=h0,
+                        after_hash=hashlib.sha256(b"Gamma\nBeta\n").hexdigest(),
+                        before_version=0,
+                        after_version=1,
+                    )
+                )
+
+                race_session.flush()
+                revisions.append(race_session.get(CloudTargetFiles, target_id).history_revision)
+
+    orig_hook = fin_mod._AFTER_PRE_REPLAY_HOOK
+    fin_mod._AFTER_PRE_REPLAY_HOOK = _race_hook
+    try:
+        with _replay_query_phases() as phases, SessionLocal() as session:
+            res_race = finalize_target(
+                session,
+                target_file_id=target_id,
+                client_request_id=f"fin-race-{uuid.uuid4()}",
+                expected_target_version=v0,
+                expected_current_hash=h0,
+                format="canonical_lf",
+            )
+    finally:
+        fin_mod._AFTER_PRE_REPLAY_HOOK = orig_hook
+
+    assert len(hook_fired) == 1
+    assert revisions == [1]
+    assert phases.count("row_lock") == 1
+    assert "pre_replay" in phases and "locked_replay" in phases, phases
+    with SessionLocal() as session:
+        assert session.get(CloudTargetFiles, target_id).history_revision == 1
+        assert session.scalar(select(func.count()).select_from(TargetSnapshots).where(
+            TargetSnapshots.target_file_id == target_id)) == 1
+        assert session.scalar(select(func.count()).select_from(TargetFinalizations).where(
+            TargetFinalizations.target_file_id == target_id)) == 0
+    assert res_race.status == "rejected"
+    assert res_race.failure_reason == FailureReason.REPLAY_HASH_MISMATCH
+
+    # 2. Under-lock raw content check: if current_content is corrupted while (version, current_hash, history_revision) match
+    with SessionLocal() as session:
+        init2 = initialize_target(
+            session,
+            filename="stage_c_raw_corrupt.txt",
+            content="Clean line\n",
+            target_type="text/plain",
+        )
+        tid2 = init2.target_file_id
+        v2 = init2.version
+        h2 = init2.current_hash
+
+    def _corrupt_raw_content_hook(*_args):
+        boot_engine = create_bootstrap_engine()
+        try:
+            with boot_engine.begin() as conn:
+                conn.execute(
+                    sa_text("UPDATE cloud_target_files SET current_content = 'Corrupted line\n' WHERE target_file_id = :tid"),
+                    {"tid": tid2},
+                )
+        finally:
+            boot_engine.dispose()
+
+    fin_mod._AFTER_PRE_REPLAY_HOOK = _corrupt_raw_content_hook
+    try:
+        with SessionLocal() as session:
+            res_corrupt = finalize_target(
+                session,
+                target_file_id=tid2,
+                client_request_id=f"fin-raw-{uuid.uuid4()}",
+                expected_target_version=v2,
+                expected_current_hash=h2,
+                format="canonical_lf",
+            )
+    finally:
+        fin_mod._AFTER_PRE_REPLAY_HOOK = orig_hook
+
+    assert res_corrupt.status == "rejected"
+    assert res_corrupt.failure_reason == FailureReason.REPLAY_HASH_MISMATCH
+
+
+def test_stage_c_legal_observation_link_retries_failed_pre_replay(monkeypatch):
+    """A legal link changes history identity without changing target version/hash."""
+    import app.services.finalize_service as module
+    from app.mcp import tools  # noqa: F401
+    from app.mcp.server import registry
+    from app.pdcp.typed import build_record, canonical_record_json
+    from app.storage.models import AppendOnlyPdcpLogs, TargetScopeObservations
+
+    before = "def work():\n    return 1\n"
+    after = before.replace("return 1", "return 2")
+    with SessionLocal() as session:
+        initial = initialize_target(session, filename="link_race.py", content=before,
+                                    target_type="text/x-python")
+    observation = registry.call("patchdiff_observe_scope", target_file_id=str(initial.target_file_id),
+                                symbol_name="work")
+    assert observation["status"] == "observed"
+    log_id = uuid.uuid4()
+    record = canonical_record_json(build_record(
+        target_file_id=str(initial.target_file_id), intent="Link race",
+        edits=[{"match": "return 1", "replace": "return 2"}],
+        expected_target_version=0, expected_current_hash=initial.current_hash))
+    after_hash = hashlib.sha256(after.encode()).hexdigest()
+    with SessionLocal.begin() as session:
+        session.add(AppendOnlyPdcpLogs(
+            pdcp_log_id=log_id, target_file_id=initial.target_file_id,
+            editing_cycle_id=initial.active_editing_cycle_id, submission_source="race_test",
+            pdcp_content=record, pdcp_content_hash=hashlib.sha256(record.encode()).hexdigest(),
+            protocol_version="patchdiff-tx/1", runtime_version="patchdiff-mvp-0.2.2",
+            status="accepted", change_count=1, before_hash=initial.current_hash,
+            after_hash=after_hash, before_version=0, after_version=1,
+            diagnostic_json={key: observation[key] for key in (
+                "observation_id", "scope_start", "scope_end", "observed_scope_hash")}))
+        session.flush()
+        target = session.get(CloudTargetFiles, initial.target_file_id)
+        target.current_content, target.current_hash, target.version = after, after_hash, 1
+        target.latest_accepted_pdcp_log_id = log_id
+    revisions = []
+    def link_after_pre_replay():
+        with SessionLocal.begin() as session:
+            target = session.get(CloudTargetFiles, initial.target_file_id)
+            revisions.append(target.history_revision)
+            obs = session.get(TargetScopeObservations, uuid.UUID(observation["observation_id"]))
+            obs.accepted_pdcp_log_id = log_id
+            session.flush()
+            session.refresh(target)
+            revisions.append(target.history_revision)
+            assert (target.version, target.current_hash, target.current_content) == (1, after_hash, after)
+    monkeypatch.setattr(module, "_AFTER_PRE_REPLAY_HOOK", link_after_pre_replay)
+    with _replay_query_phases() as phases, SessionLocal() as session:
+        final = finalize_target(session, target_file_id=initial.target_file_id,
+                                client_request_id=str(uuid.uuid4()), expected_target_version=1,
+                                expected_current_hash=after_hash, format="canonical_lf")
+    assert revisions == [1, 2]
+    assert phases.count("row_lock") == 1
+    assert "pre_replay" in phases and "locked_replay" in phases, phases
+    assert final.status == "ok" and final.materialized_state_matches is True
+    assert all(final.materialized_state_checks.values())
+    assert final.exported_content == after
+    with SessionLocal() as session:
+        assert session.get(CloudTargetFiles, initial.target_file_id).history_revision == 2
+        assert session.scalar(select(func.count()).select_from(TargetSnapshots).where(
+            TargetSnapshots.target_file_id == initial.target_file_id)) == 2
+        assert session.scalar(select(func.count()).select_from(TargetFinalizations).where(
+            TargetFinalizations.target_file_id == initial.target_file_id)) == 1
+
+
+def test_stage_f_live_chunked_export_boundaries_and_concurrent_historical_backfill():
+    """Verify Stage F (PR23-R4I-SVC-001): 256-KiB export chunks, boundary sizes, concurrent backfill, and 10-MiB bounded paging."""
+    import threading
+    from sqlalchemy import text as sa_text
+    import app.services.export_service as exp_mod
+    from app.storage.db import create_bootstrap_engine
+    from app.storage.models import TargetFinalizationExportChunks
+
+    # 1. Confirm unbounded _VERIFIED_EXPORT_CACHE is completely removed
+    assert not hasattr(exp_mod, "_VERIFIED_EXPORT_CACHE")
+    assert exp_mod.DEFAULT_EXPORT_CHUNK_BYTES == 262_144
+    assert exp_mod.MAX_EXPORT_CHUNK_BYTES == 1_048_576
+
+    # 2. Boundary sizes: 0 bytes, 262,144 bytes (1 chunk), 262,145 bytes (2 chunks)
+    for size, expected_chunks in ((0, 0), (262_144, 1), (262_145, 2)):
+        content = ("A" * (size - 1) + "\n") if size > 0 else ""
+        with SessionLocal() as session:
+            init = initialize_target(session, filename=f"boundary_{size}.txt", content=content, target_type="text/plain")
+            fin = finalize_target(
+                session,
+                target_file_id=init.target_file_id,
+                client_request_id=f"fin-b-{size}-{uuid.uuid4()}",
+                expected_target_version=init.version,
+                expected_current_hash=init.current_hash,
+                format="canonical_lf",
+            )
+            assert fin.status == "ok"
+            chunk_count = session.execute(
+                select(func.count())
+                .select_from(TargetFinalizationExportChunks)
+                .where(TargetFinalizationExportChunks.finalization_id == fin.finalization_id)
+            ).scalar()
+            assert chunk_count == expected_chunks
+
+            # Read with non-aligned offset/limit if size > 100
+            if size == 0:
+                page = read_finalized_export(session, fin.finalization_id, init.target_file_id, offset=0, limit=1024)
+                assert page["status"] == "ok" and page["bytes_read"] == 0 and page["has_more"] is False
+            elif size == 262_145:
+                # Span across chunk 0 and chunk 1 boundary
+                page = read_finalized_export(session, fin.finalization_id, init.target_file_id, offset=262_140, limit=5)
+                assert page["status"] == "ok"
+                assert page["bytes_read"] == 5
+                assert base64.b64decode(page["content_base64"]) == b"AAAA\n"
+                assert page["has_more"] is False
+
+                # Concurrent historical backfill test: clear chunk rows via bootstrap with trigger disabled,
+                # then run two threads calling read_finalized_export concurrently!
+                fid = fin.finalization_id
+                tid = init.target_file_id
+
+    boot_engine = create_bootstrap_engine()
+    try:
+        with boot_engine.begin() as conn:
+            conn.execute(sa_text("ALTER TABLE target_finalization_export_chunks DISABLE TRIGGER USER"))
+            conn.execute(
+                sa_text("DELETE FROM target_finalization_export_chunks WHERE finalization_id = :fid"),
+                {"fid": fid},
+            )
+            conn.execute(sa_text("ALTER TABLE target_finalization_export_chunks ENABLE TRIGGER USER"))
+    finally:
+        boot_engine.dispose()
+
+    barrier = threading.Barrier(2)
+    results = [None, None]
+
+    def _concurrent_reader(idx: int):
+        with SessionLocal() as s:
+            barrier.wait(timeout=5.0)
+            results[idx] = read_finalized_export(s, fid, tid, offset=0, limit=300_000)
+
+    t1 = threading.Thread(target=_concurrent_reader, args=(0,))
+    t2 = threading.Thread(target=_concurrent_reader, args=(1,))
+    t1.start()
+    t2.start()
+    t1.join(timeout=10.0)
+    t2.join(timeout=10.0)
+
+    assert results[0] is not None and results[0]["status"] == "ok"
+    assert results[1] is not None and results[1]["status"] == "ok"
+    assert results[0]["bytes_read"] == 262_145
+    assert results[1]["bytes_read"] == 262_145
+    with SessionLocal() as persisted:
+        assert persisted.scalar(select(func.count()).select_from(TargetFinalizationExportChunks).where(
+            TargetFinalizationExportChunks.finalization_id == fid)) == 2
+
+    # 3. 10-MiB chunked export pagination test verifying <= 5 chunks read per 1-MiB page
+    line_1k = ("0123456789abcdef" * 63) + "0123456789abcde\n"  # 1024 bytes
+    ten_mib_text = line_1k * (10 * 1024)  # 10 MiB = 10,485,760 bytes (40 chunks of 256 KiB)
+    with SessionLocal() as session:
+        init10 = initialize_target(session, filename="ten_mib.txt", content=ten_mib_text, target_type="text/plain")
+        fin10 = finalize_target(
+            session,
+            target_file_id=init10.target_file_id,
+            client_request_id=f"fin-10m-{uuid.uuid4()}",
+            expected_target_version=init10.version,
+            expected_current_hash=init10.current_hash,
+            format="canonical_lf",
+        )
+        assert fin10.status == "ok"
+        assert fin10.content_delivery == "deferred"
+        assert fin10.content_bytes == 10 * 1024 * 1024
+
+        total_chunks_10m = session.execute(
+            select(func.count())
+            .select_from(TargetFinalizationExportChunks)
+            .where(TargetFinalizationExportChunks.finalization_id == fin10.finalization_id)
+        ).scalar()
+        assert total_chunks_10m == 40
+
+        # Non-aligned 1-MiB page starting at offset 100 (spans chunks 0..4 = 5 chunks)
+        p_unaligned = read_finalized_export(
+            session,
+            fin10.finalization_id,
+            init10.target_file_id,
+            offset=100,
+            limit=1_048_576,
+        )
+        assert p_unaligned["status"] == "ok"
+        assert p_unaligned["bytes_read"] == 1_048_576
+        assert p_unaligned["has_more"] is True
+        assert p_unaligned["next_offset"] == 1_048_676
+
+
+def test_chunk_insert_failure_rolls_back_snapshot_cycle_receipt_and_chunks():
+    from sqlalchemy import event
+    from app.storage.db import get_engine
+    from app.storage.models import TargetFinalizationExportChunks
+    with SessionLocal() as session:
+        initial = initialize_target(session, filename="chunk_failure.txt", content="pinned bytes",
+                                    target_type="text/plain")
+    engine = get_engine()
+    def fail_chunk(_conn, _cursor, statement, _parameters, _context, _many):
+        if statement.startswith("INSERT INTO target_finalization_export_chunks"):
+            raise RuntimeError("injected chunk insert failure")
+    event.listen(engine, "before_cursor_execute", fail_chunk)
+    try:
+        with SessionLocal() as session, pytest.raises(RuntimeError, match="injected chunk insert"):
+            finalize_target(session, target_file_id=initial.target_file_id,
+                            client_request_id=str(uuid.uuid4()), expected_target_version=0,
+                            format="canonical_lf")
+        assert not session.in_transaction()
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_chunk)
+    with SessionLocal() as session:
+        target = session.get(CloudTargetFiles, initial.target_file_id)
+        assert target.active_editing_cycle_id == initial.active_editing_cycle_id
+        for model, expected in ((TargetSnapshots, 1), (EditingCycles, 1), (TargetFinalizations, 0)):
+            assert session.scalar(select(func.count()).select_from(model).where(
+                model.target_file_id == initial.target_file_id)) == expected
+        assert session.scalar(select(func.count()).select_from(TargetFinalizationExportChunks).join(
+            TargetFinalizations).where(TargetFinalizations.target_file_id == initial.target_file_id)) == 0

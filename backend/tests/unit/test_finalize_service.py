@@ -528,6 +528,7 @@ def test_read_finalized_export_not_found_and_integrity_errors():
 
     # Finalization belongs to another target
     fin = MagicMock(spec=TargetFinalizations)
+    fin.finalization_id = fin_id
     fin.target_file_id = uuid.uuid4()  # different target
     fin.status = "completed"
     fin.snapshot_id = uuid.uuid4()
@@ -535,43 +536,65 @@ def test_read_finalized_export_not_found_and_integrity_errors():
     res2 = read_finalized_export(session, fin_id, target_id)
     assert res2["status"] == "not_found"
 
-    # Snapshot not found
+    # Historical backfill when no chunks exist yet: snapshot not found
     fin.target_file_id = target_id
-    session.get.side_effect = [fin, None]
+    fin.export_format = "canonical_lf"
+    fin.source_line_endings = {"style": "lf"}
+    fin.content_sha256 = "0" * 64
+    fin.content_bytes = 100
+    # 1st execute: _query_chunk_aggregate -> (0, 0, None, None)
+    # 2nd execute: host-only receipt lock capability
+    # 3rd execute: SELECT locked TargetFinalizations -> fin
+    # 3rd execute: _query_chunk_aggregate under lock -> (0, 0, None, None)
+    # 4th execute: SELECT TargetSnapshots -> None
+    res_agg_zero = MagicMock()
+    res_agg_zero.one.return_value = (0, 0, None, None)
+    res_locked_fin = MagicMock()
+    res_locked_fin.scalar_one_or_none.return_value = fin
+    res_snap_none = MagicMock()
+    res_snap_none.scalar_one_or_none.return_value = None
+
+    session.execute.side_effect = [res_agg_zero, MagicMock(), res_locked_fin, res_agg_zero, res_snap_none]
+    session.get.return_value = fin
     res3 = read_finalized_export(session, fin_id, target_id)
     assert res3["status"] == "error"
     assert res3["error"] == "snapshot_integrity_failure"
 
-    # EOL derivation error
+    # EOL derivation error (caught before chunk query)
     snap = MagicMock(spec=TargetSnapshots)
     snap.target_file_id = target_id
     snap.content = "corrupted text\n"
+    snap.content_hash = hashlib.sha256(b"corrupted text\n").hexdigest()
     fin.export_format = "original_eol"
     fin.source_line_endings = None
-    fin.content_sha256 = "expected_digest_mismatch"
+    fin.content_sha256 = "0" * 64
     fin.content_bytes = 100
-    session.get.side_effect = [fin, snap]
+    fin.canonical_current_hash = snap.content_hash
+    session.get.return_value = fin
     res4 = read_finalized_export(session, fin_id, target_id)
     assert res4["status"] == "error"
     assert res4["error"] == "snapshot_integrity_failure"
     assert "Failed to derive export line endings" in res4["failure_detail"]
 
-    # Snapshot digest mismatch
+    # Snapshot digest mismatch during historical backfill
     fin.export_format = "canonical_lf"
-    session.get.side_effect = [fin, snap]
+    res_snap = MagicMock()
+    res_snap.scalar_one_or_none.return_value = snap
+    session.execute.side_effect = [res_agg_zero, MagicMock(), res_locked_fin, res_agg_zero, res_snap]
+    session.get.return_value = fin
     res5 = read_finalized_export(session, fin_id, target_id)
     assert res5["status"] == "error"
     assert res5["error"] == "snapshot_integrity_failure"
     assert "Snapshot integrity check failed" in res5["failure_detail"]
 
 
-def test_read_finalized_export_multipage_verified_cache_and_tamper_detection():
-    """Verify multi-page read_finalized_export avoids O(N^2) re-encoding/hashing while detecting tampering (PR23-R4I-SVC-001)."""
+def test_read_finalized_export_chunked_storage_no_cache_and_tamper_detection():
+    """Verify multi-page read_finalized_export reads immutable 256-KiB chunks without _VERIFIED_EXPORT_CACHE or TargetSnapshots.content (PR23-R4I-SVC-001)."""
     import base64
     from app.services import export_service
-    from app.storage.models import TargetFinalizations, TargetSnapshots
+    from app.storage.models import TargetFinalizationExportChunks, TargetFinalizations
 
-    export_service._VERIFIED_EXPORT_CACHE.clear()
+    assert not hasattr(export_service, "_VERIFIED_EXPORT_CACHE")
     session = MagicMock()
     fin_id = uuid.uuid4()
     target_id = uuid.uuid4()
@@ -593,20 +616,18 @@ def test_read_finalized_export_multipage_verified_cache_and_tamper_detection():
     fin.content_sha256 = expected_sha
     fin.content_bytes = len(raw_bytes)
 
-    snap = MagicMock(spec=TargetSnapshots)
-    snap.snapshot_id = snap_id
-    snap.target_file_id = target_id
-    snap.content = payload_text
-    snap.content_hash = hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
+    chunk_row = MagicMock(spec=TargetFinalizationExportChunks)
+    chunk_row.finalization_id = fin_id
+    chunk_row.chunk_index = 0
+    chunk_row.payload = raw_bytes
+    chunk_row.payload_sha256 = expected_sha
+    chunk_row.byte_length = len(raw_bytes)
 
-    def _mock_get(model, ident):
-        if model is TargetFinalizations:
-            return fin
-        if model is TargetSnapshots:
-            return snap
-        return None
-
-    session.get.side_effect = _mock_get
+    session.get.return_value = fin
+    exec_result = MagicMock()
+    exec_result.one.return_value = (1, len(raw_bytes), 0, 0)
+    exec_result.scalars.return_value.all.return_value = [chunk_row]
+    session.execute.return_value = exec_result
 
     with patch("app.services.export_service.apply_eol", wraps=export_service.apply_eol) as spy_eol:
         assembled = bytearray()
@@ -623,18 +644,18 @@ def test_read_finalized_export_multipage_verified_cache_and_tamper_detection():
 
         assert pages > 5
         assert bytes(assembled) == raw_bytes
-        # apply_eol was invoked only ONCE on page 0 despite >5 page reads
-        assert spy_eol.call_count == 1
+        # apply_eol is NEVER invoked when reading persisted chunks
+        assert spy_eol.call_count == 0
 
-    # Tampering with snapshot.content immediately invalidates cache and fails integrity check
-    snap.content = payload_text[:-1] + "X"
+    # Tampering with chunk payload immediately fails chunk SHA-256 verification
+    chunk_row.payload = raw_bytes[:-1] + b"X"
     tampered = export_service.read_finalized_export(session, fin_id, target_id, offset=0, limit=1024)
     assert tampered["status"] == "error"
     assert tampered["error"] == "snapshot_integrity_failure"
 
 
 def test_finalize_target_single_lock_and_two_phase_replay_freshness():
-    """Verify real-Session finalize_target uses save_target_locked and two-phase replay freshness check (PR23-IMPL-ARCH-001, PR23-R4I-SVC-002)."""
+    """Verify real-Session finalize_target uses REPEATABLE READ READ ONLY pre-replay and verifies (version, current_hash, history_revision) + raw content under lock (PR23-IMPL-ARCH-001, PR23-R5-DB-001)."""
     from sqlalchemy.orm import Session
     from app.services import finalize_service
 
@@ -651,6 +672,7 @@ def test_finalize_target_single_lock_and_two_phase_replay_freshness():
     target = MagicMock()
     target.target_file_id = tid
     target.version = 4
+    target.history_revision = 9
     target.current_content = "alpha\nbeta\n"
     target.current_hash = hashlib.sha256(b"alpha\nbeta\n").hexdigest()
     target.filename = "notes.txt"
@@ -658,10 +680,16 @@ def test_finalize_target_single_lock_and_two_phase_replay_freshness():
     target.active_editing_cycle_id = uuid.uuid4()
 
     session.get.return_value = target
-    # 1st execute: pre_existing in pre_tx -> None
-    # 2nd execute: select_target_for_update in lock_tx -> target
-    # 3rd execute: existing_finalization in lock_tx -> None
-    session.execute.return_value.scalar_one_or_none.side_effect = [None, target, None]
+    # 1st execute: SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY
+    # 2nd execute: pre_existing in pre_tx -> None
+    # 3rd execute: pre_target in pre_tx -> target
+    # 4th execute: select_target_for_update in lock_tx -> target
+    # 5th execute: existing_finalization in lock_tx -> None
+    res_none = MagicMock()
+    res_none.scalar_one_or_none.return_value = None
+    res_target = MagicMock()
+    res_target.scalar_one_or_none.return_value = target
+    session.execute.side_effect = [MagicMock(), res_none, res_target, res_target, res_none]
 
     pre_replay = ReplayResult(
         status="replayed",
@@ -673,6 +701,7 @@ def test_finalize_target_single_lock_and_two_phase_replay_freshness():
         materialized_state_matches=True,
         current_version=4,
         reconstructed_version=4,
+        current_history_revision=9,
         materialized_state_checks={
             "content_matches": True,
             "stored_hash_matches": True,
@@ -715,11 +744,113 @@ def test_finalize_target_single_lock_and_two_phase_replay_freshness():
         )
 
     assert res.status == "ok"
-    # save_target_locked was called once with the already-locked target
     mock_save_locked.assert_called_once_with(session, target=target)
-    # replay_target was called ONLY once (in the pre-lock phase with for_update=False), and reused under the lock!
     mock_replay.assert_called_once_with(session, target_file_id=tid, for_update=False)
     pre_tx.rollback.assert_called_once()
     lock_tx.commit.assert_called_once()
 
 
+def test_finalize_target_history_revision_drift_triggers_locked_replay_fallback():
+    """Verify that if history_revision changes between pre-lock replay and FOR UPDATE lock, finalize_target re-runs replay_target under lock even if version and current_hash are unchanged."""
+    from sqlalchemy.orm import Session
+    from app.services import finalize_service
+
+    session = MagicMock(spec=Session)
+    session.in_transaction.return_value = False
+    session.dirty = set()
+    session.new = set()
+    session.deleted = set()
+    pre_tx = MagicMock()
+    lock_tx = MagicMock()
+    session.begin.side_effect = [pre_tx, lock_tx]
+
+    tid = uuid.uuid4()
+    target = MagicMock()
+    target.target_file_id = tid
+    target.version = 4
+    target.history_revision = 10  # Bumped from 9 to 10 before lock acquisition!
+    target.current_content = "alpha\nbeta\n"
+    target.current_hash = hashlib.sha256(b"alpha\nbeta\n").hexdigest()
+    target.filename = "notes.txt"
+    target.source_line_endings = {"style": "lf"}
+    target.active_editing_cycle_id = uuid.uuid4()
+
+    session.get.return_value = target
+    res_none = MagicMock()
+    res_none.scalar_one_or_none.return_value = None
+    res_target = MagicMock()
+    res_target.scalar_one_or_none.return_value = target
+    session.execute.side_effect = [MagicMock(), res_none, res_target, res_target, res_none]
+
+    pre_replay = ReplayResult(
+        status="replayed",
+        target_file_id=tid,
+        reconstructed_content="alpha\nbeta\n",
+        reconstructed_hash=target.current_hash,
+        current_hash=target.current_hash,
+        accepted_transactions_replayed=4,
+        materialized_state_matches=True,
+        current_version=4,
+        reconstructed_version=4,
+        current_history_revision=9,  # Observed revision 9 pre-lock
+        materialized_state_checks={
+            "content_matches": True,
+            "stored_hash_matches": True,
+            "recomputed_hash_matches": True,
+            "version_matches": True,
+        },
+    )
+    locked_replay = ReplayResult(
+        status="replayed",
+        target_file_id=tid,
+        reconstructed_content="alpha\nbeta\n",
+        reconstructed_hash=target.current_hash,
+        current_hash=target.current_hash,
+        accepted_transactions_replayed=4,
+        materialized_state_matches=True,
+        current_version=4,
+        reconstructed_version=4,
+        current_history_revision=10,
+        materialized_state_checks={
+            "content_matches": True,
+            "stored_hash_matches": True,
+            "recomputed_hash_matches": True,
+            "version_matches": True,
+        },
+    )
+    saved = SaveResult(
+        status="saved",
+        target_file_id=tid,
+        snapshot_id=uuid.uuid4(),
+        closed_editing_cycle_id=uuid.uuid4(),
+        new_editing_cycle_id=uuid.uuid4(),
+        current_hash=target.current_hash,
+        version=4,
+    )
+
+    with (
+        patch.object(finalize_service, "save_target_locked", return_value=saved),
+        patch.object(finalize_service, "replay_target", side_effect=[pre_replay, locked_replay]) as mock_replay,
+        patch.object(finalize_service, "_DEFAULT_REPLAY_TARGET", mock_replay),
+        patch.object(
+            finalize_service,
+            "export_target",
+            return_value={
+                "status": "ok",
+                "content": "alpha\nbeta\n",
+                "content_sha256": target.current_hash,
+                "format": "original_eol",
+                "content_eol": "lf",
+            },
+        ),
+    ):
+        res = finalize_target(
+            session,
+            target_file_id=tid,
+            client_request_id="req-2phase-drift",
+            expected_target_version=4,
+            expected_current_hash=target.current_hash,
+        )
+
+    assert res.status == "ok"
+    assert mock_replay.call_count == 2

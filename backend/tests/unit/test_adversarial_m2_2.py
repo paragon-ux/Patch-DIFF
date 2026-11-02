@@ -15,6 +15,16 @@ import uuid
 from examples import host_finalize as finalizer
 
 
+@pytest.fixture(autouse=True)
+def _private_tmp_umask(tmp_path: Path):
+    old_umask = os.umask(0o077)
+    os.chmod(tmp_path, 0o700)
+    try:
+        yield
+    finally:
+        os.umask(old_umask)
+
+
 # -----------------------------------------------------------------------------
 # Helpers & Mock Factories
 # -----------------------------------------------------------------------------
@@ -179,6 +189,7 @@ def test_deferred_export_multi_page_success(tmp_path):
         target_file_id=tid,
         client_request_id="req-deferred-ok",
         destination_path=dest,
+        authorized_root=tmp_path,
     )
 
     assert receipt["status"] == "ok"
@@ -192,7 +203,7 @@ def test_deferred_export_multi_page_success(tmp_path):
 
 @pytest.mark.parametrize("corrupt_page", [0, 1, 3])
 def test_deferred_export_corrupted_base64_in_stream(tmp_path, corrupt_page):
-    """Verify corrupted base64 at any page fails closed: status='error', disk_status='error', no disk write."""
+    """Verify corrupted base64 at any page fails closed: status='error', disk_status='rejected', no disk write."""
     payload = b"D" * (262144 * 4)  # 4 full pages
     tid, fid, expected_sha, calls, mock_call = _make_chunked_export_mocks(
         payload, corrupt_b64_page=corrupt_page
@@ -204,12 +215,13 @@ def test_deferred_export_corrupted_base64_in_stream(tmp_path, corrupt_page):
         target_file_id=tid,
         client_request_id=f"req-b64-corrupt-{corrupt_page}",
         destination_path=dest,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error", "Must never report status='ok' on corrupted base64"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert "Invalid base64 payload" in receipt["disk_error"]
     assert not dest.exists(), "Destination file must never be created on stream failure"
@@ -229,12 +241,13 @@ def test_deferred_export_midstream_tool_error(tmp_path, error_page):
         target_file_id=tid,
         client_request_id=f"req-tool-err-{error_page}",
         destination_path=dest,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert "Deferred read failed" in receipt["disk_error"]
     assert not dest.exists()
@@ -254,11 +267,12 @@ def test_deferred_export_tool_exception_midstream(tmp_path):
         target_file_id=tid,
         client_request_id="req-exc-stream",
         destination_path=dest,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert not dest.exists()
 
@@ -272,6 +286,7 @@ def test_deferred_export_tool_exception_midstream(tmp_path):
             target_file_id=tid_2,
             client_request_id="req-exc-stream-raise",
             destination_path=dest,
+            authorized_root=tmp_path,
             raise_on_disk_error=True,
         )
     assert not dest.exists()
@@ -290,12 +305,13 @@ def test_deferred_export_assembled_sha256_mismatch(tmp_path):
         target_file_id=tid,
         client_request_id="req-tampered-sha",
         destination_path=dest,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert "Deferred assembled bytes SHA-256" in receipt["disk_error"]
     assert not dest.exists()
@@ -315,12 +331,13 @@ def test_deferred_export_assembled_length_mismatch(tmp_path):
         target_file_id=tid,
         client_request_id="req-length-mismatch",
         destination_path=dest,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "Deferred assembled bytes length" in receipt["disk_error"]
     assert not dest.exists()
 
@@ -339,12 +356,13 @@ def test_deferred_export_pagination_anomalies_fail_closed(tmp_path, trap):
         target_file_id=tid,
         client_request_id=f"req-trap-{trap}",
         destination_path=dest,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert "Invalid pagination response" in receipt["disk_error"]
     assert not dest.exists()
@@ -366,6 +384,7 @@ def test_deferred_export_multibyte_utf8_split_across_chunks(tmp_path):
         target_file_id=tid,
         client_request_id="req-utf8-split",
         destination_path=dest,
+        authorized_root=tmp_path,
     )
 
     assert receipt["status"] == "ok"
@@ -386,6 +405,7 @@ def test_deferred_export_zero_length_file(tmp_path):
         target_file_id=tid,
         client_request_id="req-empty-deferred",
         destination_path=dest,
+        authorized_root=tmp_path,
     )
 
     assert receipt["status"] == "ok"
@@ -426,13 +446,14 @@ def test_preimage_overwrite_existing_without_preimage_rejected(tmp_path):
         target_file_id=tid,
         client_request_id="req-preimage-missing",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256=None,  # Missing!
         allow_unconditional_overwrite=False,
         raise_on_disk_error=False,
     )
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert "preimage_sha256 is required unless allow_unconditional_overwrite=True" in receipt["disk_error"]
     # Existing disk content MUST be unmodified
@@ -445,6 +466,7 @@ def test_preimage_overwrite_existing_without_preimage_rejected(tmp_path):
             target_file_id=tid,
             client_request_id="req-preimage-missing-raise",
             destination_path=dest,
+            authorized_root=tmp_path,
             preimage_sha256=None,
             allow_unconditional_overwrite=False,
             raise_on_disk_error=True,
@@ -480,6 +502,7 @@ def test_preimage_overwrite_existing_with_matching_preimage_succeeds(tmp_path):
         target_file_id=tid,
         client_request_id="req-preimage-match",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256=original_sha,  # Matching!
         allow_unconditional_overwrite=False,
     )
@@ -519,6 +542,7 @@ def test_preimage_overwrite_existing_with_mismatched_preimage_fails(tmp_path):
         target_file_id=tid,
         client_request_id="req-preimage-mismatch",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256=bogus_sha,  # Mismatch!
         allow_unconditional_overwrite=False,
         raise_on_disk_error=False,
@@ -526,7 +550,7 @@ def test_preimage_overwrite_existing_with_mismatched_preimage_fails(tmp_path):
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "has hash" in receipt["disk_error"] and "expected" in receipt["disk_error"]
     assert dest.read_bytes() == original_data
 
@@ -558,6 +582,7 @@ def test_preimage_allow_unconditional_overwrite(tmp_path):
         target_file_id=tid,
         client_request_id="req-unconditional-ok",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256=None,
         allow_unconditional_overwrite=True,  # Explicit override!
     )
@@ -592,12 +617,13 @@ def test_preimage_unconditional_flag_with_mismatched_preimage_still_fails(tmp_pa
         target_file_id=tid,
         client_request_id="req-unconditional-bad-preimage",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256="bad" * 21 + "0",  # Provided but wrong!
         allow_unconditional_overwrite=True,
         raise_on_disk_error=False,
     )
     assert receipt["status"] == "error"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert dest.read_bytes() == original_data
 
 
@@ -626,12 +652,13 @@ def test_preimage_new_file_with_preimage_fails(tmp_path):
         target_file_id=tid,
         client_request_id="req-new-file-bad-preimage",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256="f" * 64,  # Expected nonexistent file to have a hash!
         raise_on_disk_error=False,
     )
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "does not exist, but preimage_sha256 was expected" in receipt["disk_error"]
     assert not dest.exists()
 
@@ -642,6 +669,7 @@ def test_preimage_new_file_with_preimage_fails(tmp_path):
             target_file_id=tid,
             client_request_id="req-new-file-bad-preimage-raise",
             destination_path=dest,
+            authorized_root=tmp_path,
             preimage_sha256="f" * 64,
             raise_on_disk_error=True,
         )
@@ -672,6 +700,7 @@ def test_preimage_new_file_without_preimage_succeeds(tmp_path):
         target_file_id=tid,
         client_request_id="req-brand-new",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256=None,
     )
     assert receipt["status"] == "ok"
@@ -705,6 +734,7 @@ def test_preimage_case_insensitivity(tmp_path):
         target_file_id=tid,
         client_request_id="req-case-insens",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256=upper_sha,
     )
     assert receipt["status"] == "ok"
@@ -717,7 +747,7 @@ def test_preimage_case_insensitivity(tmp_path):
 # =============================================================================
 
 def test_status_separation_destination_path_none(tmp_path):
-    """Verify that when destination_path is None, db_status='ok', disk_status='skipped', status='ok'."""
+    """Verify that when destination_path is None, db_status='ok', disk_status='not_requested', status='ok'."""
     tid = str(uuid.uuid4())
     called = []
 
@@ -744,14 +774,14 @@ def test_status_separation_destination_path_none(tmp_path):
 
     assert receipt["status"] == "ok"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "skipped"
+    assert receipt["disk_status"] == "not_requested"
     assert receipt["written_destination"] is None
     assert called == ["patchdiff_finalize_target"]
 
 
 @pytest.mark.parametrize("rejection_status", ["rejected", "invalid_argument", "not_found", "error"])
 def test_status_separation_db_failure_skips_disk(tmp_path, rejection_status):
-    """Verify that when DB finalization returns non-ok status, disk_status='skipped' and disk is untouched."""
+    """Verify that when DB finalization returns non-ok status, disk_status='rejected' and disk is untouched."""
     tid = str(uuid.uuid4())
     dest = tmp_path / "never_written.bin"
 
@@ -767,11 +797,12 @@ def test_status_separation_db_failure_skips_disk(tmp_path, rejection_status):
         target_file_id=tid,
         client_request_id=f"req-db-fail-{rejection_status}",
         destination_path=dest,
+        authorized_root=tmp_path,
     )
 
     assert receipt["status"] == rejection_status
     assert receipt["db_status"] == rejection_status
-    assert receipt["disk_status"] == "skipped"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert not dest.exists(), "Write-back must never be attempted if DB finalization was not 'ok'"
 
@@ -800,13 +831,14 @@ def test_status_separation_disk_error_preserves_db_status_ok(tmp_path):
         target_file_id=tid,
         client_request_id="req-partial-status",
         destination_path=dest,
+        authorized_root=tmp_path,
         preimage_sha256=None,
         allow_unconditional_overwrite=False,
         raise_on_disk_error=False,
     )
 
     assert receipt["db_status"] == "ok", "Database state succeeded and must be reported as 'ok'"
-    assert receipt["disk_status"] == "error", "Disk write failed and must be reported as 'error'"
+    assert receipt["disk_status"] == "rejected", "Disk write failed and must be reported as 'rejected'"
     assert receipt["status"] == "error", "Overall lifecycle status must be 'error' to prevent false host success"
     assert receipt["written_destination"] is None
     assert "preimage_sha256 is required" in receipt["disk_error"]

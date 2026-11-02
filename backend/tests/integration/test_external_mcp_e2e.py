@@ -17,6 +17,9 @@ from backend.tests.integration.helpers import pdcp_for
 BACKEND = Path(__file__).resolve().parents[2]
 
 
+from backend.tests.mcp_process import mcp_popen, mcp_run
+
+
 def _call(adapter: ExternalMCPAdapter, name: str, arguments: dict) -> dict:
     result = adapter.handle_request(
         {
@@ -205,7 +208,7 @@ def test_real_stdio_subprocess_mcp_full_modernized_workflow() -> None:
         "PYTHONPATH": str(BACKEND),
         "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url,
     }
-    proc = subprocess.Popen(
+    proc = mcp_popen(
         [sys.executable, "-m", "app.mcp.external_adapter"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,

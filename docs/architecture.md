@@ -66,7 +66,9 @@ flowchart TD
 
 ## 3. Four-Tier Architecture
 
-PatchDIFF enforces a strict separation of concerns across four distinct operational tiers:
+PatchDIFF enforces a strict separation of concerns across four distinct operational tiers. Linux/WSL2 deployment also separates the operator, trusted `patchdiff-mcp-agent` service and untrusted `patchdiff-model` shell UIDs; profiles alone are not authentication. Docker Compose PostgreSQL 16.3 Alpine is the sole managed database runtime, with explicit unmanaged external connections supported.
+
+Migration `20261101_0008` binds consistent pre-lock replay to the locked target's version, hash, history revision and raw content, with authoritative replay fallback. Finalization commits SAVE, receipt and immutable 256-KiB export chunks together. Host filesystem installation is a separate operation requiring a private authorized root and cooperating writers sharing a permanent flock marker; a lock-ignoring same-UID writer is unsupported, and post-rename fsync failure is `durability_uncertain`.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐

@@ -24,7 +24,7 @@ It must keep the same invariants as the external adapter:
 
 ## Prerequisites
 
-From the repo root, provision either the `native` (`127.0.0.1:5434`) or `docker` (`127.0.0.1:5433`) PostgreSQL route (or `both`):
+Install from the repository, then follow [the three-UID deployment guide](docs/guides/CLAUDE_DESKTOP_SETUP.md). Docker Compose on `127.0.0.1:5433` is the only managed PostgreSQL runtime.
 
 ```bash
 python -m venv .venv
@@ -33,8 +33,8 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.lock
 python -m pip install --no-deps -e .
 
-# Provision both routes (native on 5434 + docker on 5433) and run migrations:
-patchdiff-mcp setup --route both
+# As operator after the required accounts and private paths exist:
+patchdiff-mcp-setup
 ```
 
 ## Submit Typed Edits (Primary `patchdiff-tx/1`)

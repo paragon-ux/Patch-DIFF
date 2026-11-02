@@ -123,6 +123,7 @@ def test_host_finalize_documentation_and_contract_parity():
     assert issubclass(host_finalize.HostWriteBackError, Exception)
     assert issubclass(host_finalize.PreimageMismatchError, host_finalize.HostWriteBackError)
     assert issubclass(host_finalize.PathEscapeError, host_finalize.HostWriteBackError)
+    assert issubclass(host_finalize.DurabilityUncertainError, host_finalize.HostWriteBackError)
 
     # 2. safe_write_back_file signature
     sig_swb = inspect.signature(host_finalize.safe_write_back_file)
@@ -140,6 +141,15 @@ def test_host_finalize_documentation_and_contract_parity():
     assert kw_only["authorized_root"].default is None
     assert "allow_unconditional_overwrite" in kw_only
     assert kw_only["allow_unconditional_overwrite"].default is False
+
+    # Omitting authorized_root at runtime fails closed with PathEscapeError (PR23-PLAN-ARCH-002)
+    import hashlib
+    with pytest.raises(host_finalize.PathEscapeError, match="requires an explicit authorized_root"):
+        host_finalize.safe_write_back_file(
+            "/tmp/forbidden.txt",
+            b"hello",
+            expected_sha256=hashlib.sha256(b"hello").hexdigest(),
+        )
 
     # 3. finalize_single_target signature
     sig_fst = inspect.signature(host_finalize.finalize_single_target)
@@ -168,6 +178,7 @@ def test_host_finalize_documentation_and_contract_parity():
     assert fst_kw["allow_unconditional_overwrite"].default is False
     assert "raise_on_disk_error" in fst_kw
     assert fst_kw["raise_on_disk_error"].default is False
+    assert callable(getattr(host_finalize, "reconcile_finalized_write_back", None))
 
     # 4. Text alignment in HOST_INTEGRATION_GUIDE.md and MCP_TOOLS.md
     guide_path = Path("docs/guides/HOST_INTEGRATION_GUIDE.md")

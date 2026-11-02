@@ -28,7 +28,7 @@ Read project artifacts in this order:
 3. `docs/papers/MODERNIZATION_CHANGE_DOC.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/spec/MCP_TOOLS.md` (MCP tool schemas and request/response contracts)
 5. `docs/spec/PATCHDIFF_CORE_SPEC.md` (deterministic runtime, validation stages, replay profiles)
-6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `0001` through `0007`)
+6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `0001` through `0008`)
 7. `docs/spec/PDCP_FORMAT.md` (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement, and pointer to `docs/legacy/LEGACY_COMPATIBILITY.md`)
 8. `docs/spec/MCP_EDITOR_V2.md` (streamlined 5-tool `observed_v2` profile and compact receipts)
 9. `docs/guides/HOST_INTEGRATION_GUIDE.md` (host-owned loop, prompt hygiene rules, and usage guide)
@@ -172,7 +172,7 @@ Use:
 - FastAPI
 - Postgres (`postgres:16.3-alpine` via Docker Compose)
 - SQLAlchemy 2.x
-- Alembic migrations (`20260510_0001` through `20261031_0007`)
+- Alembic migrations (`20260510_0001` through `20261101_0008`)
 - pytest
 - Stdio MCP JSON-RPC adapter (`backend/app/mcp/external_adapter.py`)
 
@@ -210,5 +210,5 @@ Use the workspace skills in `.agents/skills/`:
 
 - `.agents/skills/patchdiff-core-runtime/SKILL.md`: Deterministic core runtime (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`, and `.pdcp` v0.2.3 parsing, protocol validation, overlapping match enumeration, disambiguation, sequential application, `ValidationStage`, and `change_facts`).
 - `.agents/skills/patchdiff-mcp-orchestration/SKILL.md`: MCP tool surface, stdio JSON-RPC adapter, `TYPED_EDIT_JSON_SCHEMA`, authoritative reads/search, host-owned retry, and deprecated wrapper maintenance.
-- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001` through `0007`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
+- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001` through `0008`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
 - `.agents/skills/patchdiff-testing-review/SKILL.md`: Unit, live Postgres integration, stdio subprocess E2E testing, and documentation consistency review.

@@ -16,13 +16,9 @@ from app.services.export_service import export_target
 from app.services.pdcp_service import submit_edits
 from app.services.replay_service import replay_target
 from app.services.target_service import initialize_target
-from app.storage.db import engine
+from app.storage.db import engine, get_engine, SessionLocal
 from backend.tests.integration.helpers import pdcp_for
-
-
 from sqlalchemy import text
-
-from app.storage.db import SessionLocal
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -123,7 +119,8 @@ def test_live_postgres_schema_has_0002_columns_and_unique_index() -> None:
 @pytest.fixture
 def isolated_migrations():
     schema = "patchdiff_migration_" + uuid.uuid4().hex
-    with engine.connect() as connection:
+    boot_engine = get_engine(role="patchdiff_bootstrap")
+    with boot_engine.connect() as connection:
         connection.execute(CreateSchema(schema))
         connection.commit()
         try:
@@ -281,10 +278,12 @@ def test_populated_0002_upgrade_downgrade_upgrade_through_0003_preserves_history
 
 def test_live_0003_downgrade_refuses_when_line_endings_are_recorded(isolated_migrations):
     config, connection = isolated_migrations
-    command.upgrade(config, "20261022_0003")
+    command.upgrade(config, "head")
     connection.commit()
     with Session(bind=connection) as session:
         target = initialize_target(session, filename="crlf.txt", content="one\r\ntwo\r\n", target_type="text/plain")
+    command.downgrade(config, "20261022_0003")
+    connection.commit()
     recorded = connection.scalar(text("SELECT source_line_endings FROM cloud_target_files"))
     assert recorded["style"] == "crlf" and recorded["crlf"] == 2 and recorded["normalized"] is True
     baseline = snapshot(connection)
@@ -294,6 +293,8 @@ def test_live_0003_downgrade_refuses_when_line_endings_are_recorded(isolated_mig
     connection.rollback()
     assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261022_0003"
     assert snapshot(connection) == baseline
+    command.upgrade(config, "head")
+    connection.commit()
     with Session(bind=connection) as session:
         exported = export_target(session, target_file_id=target.target_file_id, format="original_eol")
         assert exported["content"] == "one\r\ntwo\r\n" and exported["content_eol"] == "crlf"
@@ -370,7 +371,7 @@ def test_live_0004_downgrade_refuses_when_scope_observations_exist(isolated_migr
     with pytest.raises(Exception, match="Cannot downgrade 20261026_0004: recorded scope observations exist"):
         command.downgrade(config, "20261022_0003")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0007"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261101_0008"
 
 
 def test_migration_0006_mentions_target_finalizations() -> None:
@@ -446,7 +447,7 @@ def test_live_0006_downgrade_refuses_when_finalizations_exist(isolated_migration
     with pytest.raises(Exception, match="Cannot downgrade 20261031_0006: target finalization records exist"):
         command.downgrade(config, "20261027_0005")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0007"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261101_0008"
 
 
 def test_migration_0007_finalization_checks_reachable() -> None:
@@ -462,7 +463,10 @@ def test_migration_0007_finalization_checks_reachable() -> None:
     rev_0007 = script.get_revision("20261031_0007")
     assert rev_0007 is not None
     assert rev_0007.down_revision == "20261031_0006"
-    assert script.get_heads() == ["20261031_0007"]
+    rev_0008 = script.get_revision("20261101_0008")
+    assert rev_0008 is not None
+    assert rev_0008.down_revision == "20261031_0007"
+    assert script.get_heads() == ["20261101_0008"]
 
     with engine.connect() as connection:
         columns = connection.execute(
@@ -482,6 +486,31 @@ def test_migration_0007_finalization_checks_reachable() -> None:
 
 
 def test_live_0007_downgrade_refuses_when_finalization_checks_exist(isolated_migrations):
+    config, connection = isolated_migrations
+    command.upgrade(config, "20261031_0007")
+    connection.commit()
+    target = seed_legacy_target(connection)
+    connection.execute(
+        text(
+            """
+            INSERT INTO target_finalizations (
+                finalization_id, target_file_id, client_request_id, fingerprint_version,
+                request_fingerprint, status, failure_detail, materialized_state_checks, created_at
+            ) VALUES (
+                :fin_id, :tid, 'req-0007-check', 1, 'fp0007', 'failed', 'check refusal', '{"content_matches": true}'::jsonb, now()
+            )
+            """
+        ),
+        {"fin_id": uuid.uuid4(), "tid": target.target_file_id},
+    )
+    connection.commit()
+    with pytest.raises(Exception, match="Cannot downgrade 20261031_0007: recorded finalization checks exist"):
+        command.downgrade(config, "20261031_0006")
+    connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0007"
+
+
+def test_live_0008_downgrade_refuses_when_export_chunks_exist(isolated_migrations):
     from app.services.finalize_service import finalize_target
 
     config, connection = isolated_migrations
@@ -490,22 +519,22 @@ def test_live_0007_downgrade_refuses_when_finalization_checks_exist(isolated_mig
     with Session(bind=connection) as session:
         target = initialize_target(
             session,
-            filename="sample_0007.py",
+            filename="sample_0008.py",
             content="def alpha():\n    return 1\n",
             target_type="text/x-python",
         )
         fin = finalize_target(
             session,
             target_file_id=target.target_file_id,
-            client_request_id="req-0007-check",
+            client_request_id="req-0008-check",
             expected_target_version=target.version,
         )
-        assert fin.status == "ok" and fin.materialized_state_checks is not None
+        assert fin.status == "ok"
     connection.commit()
-    with pytest.raises(Exception, match="Cannot downgrade 20261031_0007: recorded finalization checks exist"):
-        command.downgrade(config, "20261031_0006")
+    with pytest.raises(Exception, match="Cannot downgrade 20261101_0008: finalized export chunks exist"):
+        command.downgrade(config, "20261031_0007")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261031_0007"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261101_0008"
 
 
 

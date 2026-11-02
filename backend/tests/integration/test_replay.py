@@ -14,7 +14,7 @@ from app.storage.models import (
     CurrentPdcpFiles,
     TargetSnapshots,
 )
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target, pdcp_for, maintenance_session
 
 
 def test_replay_reconstructs_current_target_from_accepted_logs() -> None:
@@ -32,9 +32,11 @@ def test_replay_reconstructs_current_target_from_accepted_logs() -> None:
 
 def test_replay_ignores_current_pdcp_manifest_ledger_and_save_snapshots_as_authoritative() -> None:
     target_id = create_target("old")
-    with SessionLocal() as session:
+    with maintenance_session("append_only_manifest_ledger", "target_snapshots") as session:
         submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        session.flush()
         save_target(session, target_file_id=target_id)
+        session.flush()
         current_pdcp = session.scalar(select(CurrentPdcpFiles).where(CurrentPdcpFiles.target_file_id == target_id))
         current_pdcp.pdcp_content = "corrupted display state"
         ledger = session.scalar(
@@ -48,6 +50,7 @@ def test_replay_ignores_current_pdcp_manifest_ledger_and_save_snapshots_as_autho
             )
         )
         save_snapshot.content = "mutated save snapshot"
+        session.flush()
         result = replay_target(session, target_file_id=target_id)
 
     assert result.status == "success"
@@ -56,7 +59,7 @@ def test_replay_ignores_current_pdcp_manifest_ledger_and_save_snapshots_as_autho
 
 def test_replay_protocol_failure_for_corrupted_accepted_pdcp_log() -> None:
     target_id = create_target("old")
-    with SessionLocal() as session:
+    with maintenance_session("append_only_pdcp_logs") as session:
         submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
         log = session.scalar(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id))
         log.pdcp_content = "not a pdcp"
@@ -70,7 +73,7 @@ def test_replay_protocol_failure_for_corrupted_accepted_pdcp_log() -> None:
 
 def test_replay_transaction_failure_for_corrupted_accepted_pdcp_applicability() -> None:
     target_id = create_target("old")
-    with SessionLocal() as session:
+    with maintenance_session("append_only_pdcp_logs") as session:
         submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
         log = session.scalar(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id))
         log.pdcp_content = pdcp_for(target_id, ("missing", "new"))
@@ -84,7 +87,7 @@ def test_replay_transaction_failure_for_corrupted_accepted_pdcp_applicability() 
 
 def test_replay_hash_mismatch_for_corrupted_after_hash() -> None:
     target_id = create_target("old")
-    with SessionLocal() as session:
+    with maintenance_session("append_only_pdcp_logs") as session:
         submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
         log = session.scalar(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id))
         log.after_hash = "a" * 64

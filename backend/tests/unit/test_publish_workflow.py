@@ -34,14 +34,13 @@ def _load_workflow():
 
 
 def test_publish_workflow_yaml_validity_and_structure():
-    """Verify that publish.yml is valid YAML with expected jobs, triggers, and permissions."""
+    """Verify that publish.yml is valid YAML with expected jobs, manual-only trigger, and permissions."""
     doc = _load_workflow()
     assert doc.get("name") == "Publish to PyPI"
 
     # Triggers (in PyYAML 1.1 unquoted 'on' evaluates to True)
     triggers = doc.get("on") or doc.get(True) or {}
-    assert "push" in triggers, "Workflow must trigger on push"
-    assert "tags" in triggers["push"], "Push trigger must filter on tags"
+    assert "push" not in triggers, "Stage H: push: tags must be removed; only manual workflow_dispatch is permitted"
     assert "workflow_dispatch" in triggers, "Workflow must support workflow_dispatch"
     dispatch_inputs = triggers["workflow_dispatch"].get("inputs", {})
     assert "tag" in dispatch_inputs, "workflow_dispatch must have 'tag' input"
@@ -78,7 +77,7 @@ def test_publish_workflow_no_inline_expressions_in_run_blocks():
 
 
 def test_publish_workflow_untrusted_inputs_bound_via_env():
-    """Verify that untrusted inputs (inputs.tag, github.ref_name, github.event_name, github.ref) are mapped strictly in env:."""
+    """Verify that untrusted inputs (inputs.tag, github.event_name, github.ref) are mapped strictly in env:."""
     doc = _load_workflow()
     build_steps = doc["jobs"]["build"]["steps"]
 
@@ -90,9 +89,6 @@ def test_publish_workflow_untrusted_inputs_bound_via_env():
     assert "INPUT_TAG" in step_env, "INPUT_TAG must be bound in env"
     assert "${{ inputs.tag }}" in step_env["INPUT_TAG"]
 
-    assert "REF_NAME" in step_env, "REF_NAME must be bound in env"
-    assert "${{ github.ref_name }}" in step_env["REF_NAME"]
-
     assert "EVENT_NAME" in step_env, "EVENT_NAME must be bound in env"
     assert "${{ github.event_name }}" in step_env["EVENT_NAME"]
 
@@ -101,24 +97,29 @@ def test_publish_workflow_untrusted_inputs_bound_via_env():
 
 
 def test_publish_workflow_checkout_pins_main_after_preflight():
-    """Verify that repository checkout occurs after preflight and pins ref: main with fetch-depth: 0."""
+    """Verify that fetched tag ref is verified against origin/main HEAD before actions/checkout runs."""
     doc = _load_workflow()
     build_steps = doc["jobs"]["build"]["steps"]
 
-    # First step is preflight, second is checkout
+    # Step 0 is preflight, Step 1 verifies fetched tag ref against origin/main HEAD, Step 2 is checkout
     first_step = build_steps[0]
     assert "checkout" not in first_step.get("name", "").lower()
     assert "uses" not in first_step or "actions/checkout" not in first_step.get("uses", "")
 
-    checkout_step = build_steps[1]
+    verify_step = build_steps[1]
+    assert verify_step.get("id") == "verify_tag"
+    assert "actions/checkout" not in verify_step.get("uses", "")
+    assert "+refs/heads/main:refs/remotes/origin/main" in verify_step.get("run", "")
+
+    checkout_step = build_steps[2]
     assert "actions/checkout" in checkout_step.get("uses", "")
     with_clause = checkout_step.get("with", {})
-    assert with_clause.get("ref") == "main", "Checkout must pin approved branch 'main'"
+    assert with_clause.get("ref") == "${{ steps.verify_tag.outputs.validated_commit }}"
     assert with_clause.get("fetch-depth") == 0, "Checkout must specify fetch-depth: 0 for history"
 
 
 def test_publish_workflow_publish_job_condition_and_permissions():
-    """Verify that publish job is gated strictly to manual workflow_dispatch and OIDC token is isolated."""
+    """Verify that publish job is gated strictly to manual workflow_dispatch on main and OIDC token is isolated."""
     doc = _load_workflow()
 
     # Top-level permissions must be read-only
@@ -130,7 +131,11 @@ def test_publish_workflow_publish_job_condition_and_permissions():
 
     publish_job = doc["jobs"]["publish"]
     assert publish_job.get("needs") == "build", "Publish job must depend on build"
-    expected_if = "github.event_name == 'workflow_dispatch' && needs.build.outputs.validated_tag != ''"
+    expected_if = (
+        "github.event_name == 'workflow_dispatch' && "
+        "github.ref == 'refs/heads/main' && "
+        "needs.build.outputs.validated_tag != ''"
+    )
     assert publish_job.get("if") == expected_if, (
         f"Publish job condition must be '{expected_if}', got '{publish_job.get('if')}'"
     )

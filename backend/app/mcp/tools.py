@@ -42,12 +42,18 @@ from app.services.finalize_service import finalize_target
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
 from app.services.target_service import initialize_target
-from app.storage.db import SessionLocal
 from app.storage.models import (
     AppendOnlyManifestLedger,
     AppendOnlyPdcpLogs,
     CloudTargetFiles,
 )
+
+
+def SessionLocal() -> Any:
+    """Lazy session factory so importing app.mcp.tools does not import app.storage.db before profile resolution."""
+    from app.storage.db import SessionLocal as _SessionLocal
+    return _SessionLocal()
+
 
 _UNSET = object()
 # include_content pages: later entries stop carrying pdcp_content past this many UTF-8 bytes.

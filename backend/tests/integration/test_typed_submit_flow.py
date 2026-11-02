@@ -17,6 +17,7 @@ from app.services.pdcp_service import submit_edits, submit_pdcp
 from app.services.regeneration_service import request_regeneration
 from app.services.replay_service import replay_target
 from app.storage.db import SessionLocal
+from backend.tests.integration.helpers import maintenance_session
 from app.storage.models import (
     AppendOnlyManifestLedger,
     AppendOnlyPdcpLogs,
@@ -505,6 +506,7 @@ def test_replay_detects_tampered_before_hash_broken_version_chain_and_unknown_pr
     target_id = create_target("a")
     with SessionLocal() as session:
         submit_edits(session, target_file_id=target_id, intent="x", edits=[_edit("a", "b")], expected_target_version=0)
+    with maintenance_session("append_only_pdcp_logs", rollback=True) as session:
         log = session.scalars(
             select(AppendOnlyPdcpLogs).where(
                 AppendOnlyPdcpLogs.target_file_id == target_id,
@@ -536,16 +538,14 @@ def test_replay_detects_tampered_before_hash_broken_version_chain_and_unknown_pr
         session.flush()
         assert replay_target(session, target_file_id=target_id).failure_reason is FailureReason.REPLAY_HASH_MISMATCH
 
-        session.rollback()
 
     # Corrupted initial snapshot hash is also caught by replay
-    with SessionLocal() as session:
+    with maintenance_session("target_snapshots", rollback=True) as session:
         target = session.get(CloudTargetFiles, target_id)
         snap = session.get(TargetSnapshots, target.initial_snapshot_id)
         snap.content_hash = "0" * 64
         session.flush()
         assert replay_target(session, target_file_id=target_id).failure_reason is FailureReason.REPLAY_HASH_MISMATCH
-        session.rollback()
 
 
 def test_legacy_runtime_log_with_overlap_acceptance_still_replays() -> None:

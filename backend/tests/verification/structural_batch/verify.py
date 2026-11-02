@@ -19,6 +19,8 @@ import tempfile
 import threading
 import time
 
+from backend.tests.mcp_process import mcp_popen
+
 REPO = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO))
 from backend.tests.verification.structural_batch.evaluate import complete_primary
@@ -57,7 +59,7 @@ class MCP:
         self.response_mode = env.get("PATCHDIFF_MCP_RESPONSE_MODE", "detailed")
         self.stderr = tempfile.TemporaryFile()
         try:
-            self.process = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=REPO,
+            self.process = mcp_popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=REPO,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr, env=env)
         except BaseException:
             self.stderr.close()
@@ -196,8 +198,8 @@ def run(destination, database_url=None, *, host_finalize=False, editor_v2=False)
                     assert "evidence" in accepted and "presentation" not in accepted
             replay = None
             if not host_finalize:
-                saved = editor.call("patchdiff_save", target_file_id=tid, expected_target_version=1, expected_current_hash=accepted["after_hash"])
-                replay = editor.call("patchdiff_replay", target_file_id=tid)
+                saved = lifecycle.call("patchdiff_save", target_file_id=tid, expected_target_version=1, expected_current_hash=accepted["after_hash"])
+                replay = lifecycle.call("patchdiff_replay", target_file_id=tid)
                 assert saved["status"] == "saved" and replay["status"] == "success" and replay["materialized_state_matches"]
                 exported = lifecycle.call("patchdiff_export_target", target_file_id=tid)
                 (exports / name).write_bytes(exported["content"].encode("utf-8"))

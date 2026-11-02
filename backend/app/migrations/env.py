@@ -8,8 +8,6 @@ from app.core.config import settings
 from app.storage.models import Base
 
 config = context.config
-_db_url = config.attributes.get("database_url") or os.getenv("PATCHDIFF_DATABASE_URL") or settings.database_url
-config.set_main_option("sqlalchemy.url", _db_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -18,8 +16,14 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
+    offline_url = (
+        config.attributes.get("database_url")
+        or os.getenv("PATCHDIFF_DATABASE_URL")
+        or config.get_main_option("sqlalchemy.url")
+        or "postgresql+psycopg://"
+    )
     context.configure(
-        url=settings.database_url,
+        url=offline_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -38,6 +42,12 @@ def run_migrations_online() -> None:
             context.run_migrations()
         return
 
+    db_url = (
+        config.attributes.get("database_url")
+        or os.getenv("PATCHDIFF_DATABASE_URL")
+        or settings.database_url
+    )
+    config.set_main_option("sqlalchemy.url", db_url)
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

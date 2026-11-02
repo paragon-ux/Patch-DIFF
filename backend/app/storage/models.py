@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Identity, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import BigInteger, CHAR, CheckConstraint, ForeignKey, Identity, Index, Integer, LargeBinary, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -79,6 +79,7 @@ class CloudTargetFiles(TimestampMixin, Base):
     current_content: Mapped[str] = mapped_column(Text, nullable=False)
     current_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    history_revision: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     # Raw upload line-ending facts recorded before LF canonicalization (0003); NULL = unknown.
     source_line_endings: Mapped[dict | None] = mapped_column(JSONB)
     active_editing_cycle_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -348,3 +349,26 @@ class TargetFinalizations(TimestampMixin, Base):
     failure_code: Mapped[str | None] = mapped_column(Text)
     failure_detail: Mapped[str | None] = mapped_column(Text)
 
+
+class TargetFinalizationExportChunks(Base):
+    __tablename__ = "target_finalization_export_chunks"
+    __table_args__ = (
+        CheckConstraint(
+            "byte_length > 0 AND byte_length <= 262144",
+            name="ck_target_finalization_export_chunks_byte_length",
+        ),
+        CheckConstraint(
+            "chunk_index >= 0",
+            name="ck_target_finalization_export_chunks_chunk_index",
+        ),
+    )
+
+    finalization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("target_finalizations.finalization_id"),
+        primary_key=True,
+    )
+    chunk_index: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    payload_sha256: Mapped[str] = mapped_column(CHAR(64), nullable=False)
+    byte_length: Mapped[int] = mapped_column(Integer, nullable=False)

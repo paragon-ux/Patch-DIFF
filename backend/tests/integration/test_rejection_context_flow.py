@@ -15,8 +15,12 @@ from app.core.hashing import canonical_sha256
 from app.mcp.tools import _submit_result_to_payload
 from app.services.pdcp_service import submit_edits, submit_pdcp
 from app.storage.db import SessionLocal
+from backend.tests.integration.helpers import maintenance_session
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
 from backend.tests.integration.helpers import create_target, pdcp_for
+
+
+from backend.tests.mcp_process import mcp_popen, mcp_run
 
 
 def _counts(session, target_id):
@@ -114,7 +118,7 @@ def test_recovered_rejection_keeps_exact_original_diagnostic_and_fresh_locked_co
         first = submit(session, **args)
     if historical:
         # Fixture a pre-F01 row; this is not a product retrofit or an API mutation.
-        with SessionLocal.begin() as session:
+        with maintenance_session("append_only_pdcp_logs") as session:
             log = session.get(AppendOnlyPdcpLogs, first.pdcp_log_id)
             log.diagnostic_json = {key: value for key, value in log.diagnostic_json.items() if key != "failure_context"}
     with SessionLocal() as session:
@@ -216,7 +220,7 @@ def test_corrupt_non_ascii_hash_retains_identity_but_still_obeys_json_byte_caps(
 def test_real_stdio_rejection_context_and_recovery_with_independent_sql():
     backend = Path(__file__).resolve().parents[2]
     env = {**os.environ, "PYTHONPATH": str(backend), "PATCHDIFF_MCP_PROFILE": "full", "PATCHDIFF_DATABASE_URL": settings.database_url}
-    proc = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=backend, env=env,
+    proc = mcp_popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=backend, env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     sequence = 0
     def call(name, arguments):

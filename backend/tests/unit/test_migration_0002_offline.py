@@ -26,7 +26,8 @@ def _config() -> Config:
 
 def test_typed_ledger_revision_sits_between_initial_and_line_ending_revisions() -> None:
     script = ScriptDirectory.from_config(_config())
-    assert script.get_heads() == ["20261031_0007"]
+    assert script.get_heads() == ["20261101_0008"]
+    assert script.get_revision("20261101_0008").down_revision == "20261031_0007"
     assert script.get_revision("20261031_0007").down_revision == "20261031_0006"
     assert script.get_revision("20261031_0006").down_revision == "20261027_0005"
     assert script.get_revision("20261027_0005").down_revision == "20261026_0004"

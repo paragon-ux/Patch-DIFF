@@ -21,9 +21,12 @@ from backend.tests.integration.test_observed_batch import initialized, request, 
 ROOT = Path(__file__).resolve().parents[3]
 
 
+from backend.tests.mcp_process import mcp_popen, mcp_run
+
+
 @contextmanager
 def peer(profile):
-    process = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=ROOT,
+    process = mcp_popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=ROOT,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env={**os.environ, "PYTHONPATH": str(ROOT / "backend"), "PATCHDIFF_DATABASE_URL": settings.database_url,
              "PATCHDIFF_MCP_PROFILE": profile})
@@ -85,7 +88,7 @@ def test_delegated_editor_stdio_denies_lifecycle_and_every_unadvertised_route():
         assert {tool["name"] for tool in rpc("tools/list")["tools"]} == allowed
 
 def test_unknown_profile_fails_startup_without_advertisement():
-    completed = subprocess.run([sys.executable, "-m", "app.mcp.external_adapter"], cwd=ROOT,
+    completed = mcp_run([sys.executable, "-m", "app.mcp.external_adapter"], cwd=ROOT,
         input=b'{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n', capture_output=True, timeout=30,
         env={**os.environ, "PYTHONPATH": str(ROOT / "backend"), "PATCHDIFF_MCP_PROFILE": "unknown"})
     assert completed.returncode != 0 and completed.stdout == b"" and b"Unknown PATCHDIFF_MCP_PROFILE" in completed.stderr
@@ -120,6 +123,7 @@ def test_real_postgres_stdio_response_lost_after_commit_recovers_once():
         recovered = json.loads(reply["content"][0]["text"])
         assert recovered["status"] == "accepted" and recovered["deduplicated"] and recovered["pdcp_log_id"] == log_id
         assert recovered["before_version"] == 0 and recovered["after_version"] == 1 and recovered["group_count"] == 2
+    with peer("full") as (_, rpc):
         for name in ("patchdiff_save", "patchdiff_replay"):
             result = json.loads(rpc("tools/call", {"name": name, "arguments": {"target_file_id": target["target_file_id"]}})["content"][0]["text"])
             assert result["status"] in {"saved", "success"}

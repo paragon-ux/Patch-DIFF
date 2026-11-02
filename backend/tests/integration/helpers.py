@@ -44,3 +44,36 @@ def create_target(content: str = "old", *, target_type: str = "text/plain") -> u
             target_type=target_type,
         )
         return initialized.target_file_id
+
+
+from contextlib import contextmanager
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from app.storage.db import create_bootstrap_engine
+
+
+@contextmanager
+def maintenance_session(*tables, rollback=False):
+    """Inject deliberate corruption in a disposable DB as bootstrap, never a service.
+
+    Trigger disable, fault injection and re-enable share one transaction. On any
+    exception the DDL and data roll back together. This is test-only maintenance.
+    """
+    permitted = {"append_only_pdcp_logs", "append_only_manifest_ledger", "target_snapshots",
+                 "target_scope_observations", "target_finalization_export_chunks"}
+    assert tables and set(tables) <= permitted
+    engine = create_bootstrap_engine()
+    try:
+        with Session(engine, autoflush=False, expire_on_commit=False) as session:
+            with session.begin() as transaction:
+                for table in tables:
+                    session.execute(text(f'ALTER TABLE {table} DISABLE TRIGGER trg_immutable_{table}'))
+                yield session
+                session.flush()
+                if rollback:
+                    transaction.rollback()
+                else:
+                    for table in tables:
+                        session.execute(text(f'ALTER TABLE {table} ENABLE TRIGGER trg_immutable_{table}'))
+    finally:
+        engine.dispose()

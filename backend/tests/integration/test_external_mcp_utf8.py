@@ -18,13 +18,16 @@ from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, Clo
 BACKEND = Path(__file__).resolve().parents[2]
 
 
+from backend.tests.mcp_process import mcp_popen, mcp_run
+
+
 def _request(request_id: int, name: str, arguments: dict) -> dict:
     return {"jsonrpc": "2.0", "id": request_id, "method": "tools/call", "params": {"name": name, "arguments": arguments}}
 
 
 def _exchange(messages: list[dict], env: dict[str, str], escaped: bool) -> list[dict]:
     wire = b"".join((json.dumps(message, ensure_ascii=escaped) + "\n").encode("utf-8") for message in messages)
-    proc = subprocess.run(
+    proc = mcp_run(
         [sys.executable, "-m", "app.mcp.external_adapter"],
         input=wire, capture_output=True, cwd=BACKEND, env=env, timeout=30,
     )
@@ -107,7 +110,7 @@ def test_live_stdio_unicode_and_audit_survive_ambient_codepages(ambient_encoding
         "target_file_id": target_id, "expected_target_version": 1, "intent": "Must not reach dispatch.",
         "edits": [{"match": replacement, "replace": "INVALID_WIRE"}],
     }), ensure_ascii=True) + "\n").encode("ascii").replace(b"INVALID_WIRE", b"\xff")
-    proc = subprocess.run(
+    proc = mcp_run(
         [sys.executable, "-m", "app.mcp.external_adapter"],
         input=malformed, capture_output=True, cwd=BACKEND, env=env, timeout=30,
     )

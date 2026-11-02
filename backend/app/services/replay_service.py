@@ -46,6 +46,7 @@ class ReplayResult:
     materialized_state_checks: dict[str, bool] | None = None
     reconstructed_version: int | None = None
     current_version: int | None = None
+    current_history_revision: int | None = None
     failure_reason: FailureReason | None = None
     failure_detail: str | None = None
     pdcp_log_id: uuid.UUID | None = None
@@ -78,7 +79,11 @@ def replay_target(
         if for_update:
             stmt = select_target_for_update(target_uuid)
         else:
-            stmt = select(CloudTargetFiles).where(CloudTargetFiles.target_file_id == target_uuid)
+            stmt = (
+                select(CloudTargetFiles)
+                .where(CloudTargetFiles.target_file_id == target_uuid)
+                .execution_options(populate_existing=True)
+            )
         target = session.execute(stmt).scalar_one_or_none()
         if target is None:
             return ReplayResult(
@@ -325,6 +330,11 @@ def replay_target(
             current_hash=target.current_hash,
             reconstructed_version=expected_version,
             current_version=target.version,
+            current_history_revision=(
+                int(target.history_revision)
+                if getattr(target, "history_revision", None) is not None
+                else None
+            ),
             accepted_transactions_replayed=len(accepted_logs),
             materialized_state_matches=all(checks.values()),
             materialized_state_checks=checks,
@@ -431,6 +441,11 @@ def _failed(
         reconstructed_hash=reconstructed_hash,
         current_hash=target.current_hash,
         current_version=target.version,
+        current_history_revision=(
+            int(target.history_revision)
+            if getattr(target, "history_revision", None) is not None
+            else None
+        ),
         accepted_transactions_replayed=replayed,
         failure_reason=reason,
         failure_detail=detail,

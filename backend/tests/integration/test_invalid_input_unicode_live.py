@@ -24,6 +24,9 @@ from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, Clo
 from backend.tests.integration.helpers import create_target, pdcp_for
 
 
+from backend.tests.mcp_process import mcp_popen, mcp_run
+
+
 def arguments(target_id, value="\ud800"):
     return dict(target_file_id=target_id, expected_target_version=0, intent="Unicode rejection",
                 edits=[{"match": "alpha", "replace": value}], client_request_id="unicode-attempt")
@@ -218,7 +221,7 @@ def test_real_stdio_invalid_unicode_is_a_domain_rejection_with_readable_evidence
          "params": {"name": name, "arguments": kwargs}}
         for index, (name, kwargs) in enumerate(calls, 1)
     ]
-    process = subprocess.run([sys.executable, "-m", "app.mcp.external_adapter"],
+    process = mcp_run([sys.executable, "-m", "app.mcp.external_adapter"],
         input="\n".join(json.dumps(message, ensure_ascii=True) for message in messages) + "\n",
         capture_output=True, text=True, encoding="utf-8", timeout=30, cwd=backend,
         env={**os.environ, "PYTHONPATH": str(backend),

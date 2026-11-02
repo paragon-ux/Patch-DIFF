@@ -14,6 +14,7 @@ from app.pdcp.typed import canonical_record_json
 from app.services import scope_observation_service as observations
 from app.services.pdcp_service import submit_observed_operations
 from app.storage.db import SessionLocal
+from backend.tests.integration.helpers import maintenance_session
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles, TargetScopeObservations
 
 
@@ -186,7 +187,7 @@ def test_batch_replay_fails_closed_on_corrupted_authority(mutation, monkeypatch)
     before = state(target)[:2]
     other, _ = initialized()
     registry.call("patchdiff_save", target_file_id=target["target_file_id"])
-    with SessionLocal.begin() as session:
+    with maintenance_session("target_scope_observations", "append_only_pdcp_logs") as session:
         row = session.get(TargetScopeObservations, uuid.UUID(bundle["scopes"][0]["observation_id"]))
         log = session.get(AppendOnlyPdcpLogs, uuid.UUID(accepted["pdcp_log_id"]))
         record = json.loads(log.pdcp_content)
@@ -308,7 +309,7 @@ def test_batch_invalid_authority_rejects_entire_request(mutation, code):
     other, other_selectors = initialized()
     other_args = request(other, observe(other, other_selectors))
     other_log = submit(other_args)["pdcp_log_id"]
-    with SessionLocal.begin() as session:
+    with maintenance_session("target_scope_observations") as session:
         row = session.get(TargetScopeObservations, uuid.UUID(bundle["scopes"][-1]["observation_id"]))
         if mutation == "target": row.target_file_id = uuid.UUID(other["target_file_id"])
         if mutation == "cycle": row.editing_cycle_id = uuid.UUID(other["active_editing_cycle_id"])
@@ -451,7 +452,7 @@ def test_batch_runtime_cannot_reinterpret_an_unobserved_historical_format():
                             expected_target_version=0, intent="Unobserved edit",
                             edits=[{"match": "abcd", "replace": "ABCD", "occurrence_index": 1}])
     assert accepted["status"] == "accepted"
-    with SessionLocal.begin() as session:
+    with maintenance_session("append_only_pdcp_logs") as session:
         log = session.get(AppendOnlyPdcpLogs, uuid.UUID(accepted["pdcp_log_id"]))
         log.runtime_version = "patchdiff-observed-batch-r1"
     replay = registry.call("patchdiff_replay", target_file_id=target["target_file_id"])

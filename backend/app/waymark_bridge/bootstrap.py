@@ -126,7 +126,9 @@ def bootstrap_bridge(
             src = Path(__file__).resolve().parents[3] / "integrations" / "waymark" / fname
         if not src.is_file():
             raise RuntimeError(f"Source bridge file {fname} not found in package or repo.")
-        shutil.copy2(src, dest / fname)
+        target = dest / fname
+        if src.resolve() != target.resolve():
+            shutil.copy2(src, target)
 
     # Check if already cleanly installed
     try:

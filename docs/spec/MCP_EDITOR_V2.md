@@ -2,7 +2,7 @@
 
 `PATCHDIFF_MCP_PROFILE=observed_v2` selects five external tool purposes at process
 startup. It is opt-in. The existing editor (7), unobserved (5), observed (6),
-observed_editor (4) and full (22) profiles retain their tool sets, argument contracts
+observed_editor (4) and full (24) profiles retain their tool sets, argument contracts
 and response presentation. The internal registry still has 22 handlers. These
 external aliases dispatch to the existing observation and observed-submission
 services; they introduce no transaction format, runtime, migration or replay path.

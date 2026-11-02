@@ -8,9 +8,9 @@ import re
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.failures import FailureReason
@@ -21,14 +21,16 @@ from app.services.export_service import export_target
 from app.services.performance_events import timed
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target, save_target_locked
-from app.storage.models import CloudTargetFiles, TargetFinalizations
+from app.storage.models import CloudTargetFiles, TargetFinalizationExportChunks, TargetFinalizations
 from app.storage.repositories import select_target_for_update
 
 _DEFAULT_SAVE_TARGET = save_target
 _DEFAULT_REPLAY_TARGET = replay_target
+_AFTER_PRE_REPLAY_HOOK: Callable[[], None] | None = None
 
 _CLIENT_REQUEST_ID_RE = re.compile(r"^[\x21-\x7e]{1,128}$")
 MAX_INLINE_EXPORT_BYTES = 1_048_576  # 1 MiB UTF-8 byte cap for inline wire delivery
+EXPORT_CHUNK_BYTES = 262_144         # 256 KiB immutable PostgreSQL chunk slice size
 
 
 def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
@@ -244,12 +246,14 @@ def finalize_target(
     t_pre_replay_ms: float = 0.0
 
     # Two-phase replay optimization (PR23-IMPL-ARCH-001):
-    # Pre-compute O(history) replay outside the FOR UPDATE row lock when operating on a live Session,
-    # then verify freshness in O(1) under the lock (falling back to under-lock replay on concurrent mutation).
+    # Pre-compute O(history) replay in a consistent REPEATABLE READ READ ONLY snapshot outside the
+    # FOR UPDATE row lock, then verify (version, current_hash, history_revision) + raw content under the lock
+    # (falling back to under-lock replay on any concurrent mutation or failed pre-replay).
     if isinstance(session, Session) and save_target is _DEFAULT_SAVE_TARGET and replay_target is _DEFAULT_REPLAY_TARGET:
         pre_tx = session.begin()
         try:
             with session.no_autoflush:
+                session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
                 pre_existing = session.execute(
                     select(TargetFinalizations.finalization_id).where(
                         TargetFinalizations.target_file_id == target_uuid,
@@ -257,7 +261,11 @@ def finalize_target(
                     )
                 ).scalar_one_or_none()
                 if pre_existing is None:
-                    pre_target = session.get(CloudTargetFiles, target_uuid)
+                    pre_target = session.execute(
+                        select(CloudTargetFiles)
+                        .where(CloudTargetFiles.target_file_id == target_uuid)
+                        .execution_options(populate_existing=True)
+                    ).scalar_one_or_none()
                     if (
                         pre_target is not None
                         and (expected_target_version is None or pre_target.version == expected_target_version)
@@ -268,6 +276,8 @@ def finalize_target(
                         t_pre_replay_ms = (time.perf_counter() - t0_pre) * 1000.0
         finally:
             pre_tx.rollback()
+        if _AFTER_PRE_REPLAY_HOOK is not None:
+            _AFTER_PRE_REPLAY_HOOK()
 
     tx = session.begin()
     try:
@@ -299,6 +309,11 @@ def finalize_target(
 
         target_version = target.version
         target_hash = target.current_hash
+        target_history_revision = (
+            int(target.history_revision)
+            if getattr(target, "history_revision", None) is not None
+            else None
+        )
         target_filename = target.filename
         target_source_line_endings = target.source_line_endings
 
@@ -411,16 +426,30 @@ def finalize_target(
                 lock_hold_ms=t_lock_hold_ms,
             )
 
-        # 6. REPLAY: verify freshness of pre-lock replay in O(1) under lock, or run fallback replay (PR23-IMPL-ARCH-001)
+        # 6. REPLAY: verify (version, current_hash, history_revision) + raw content under lock, or fallback to under-lock replay
         t0_replay = time.perf_counter()
         if (
             pre_replay_res is not None
-            and pre_replay_res.current_version == target_version
-            and pre_replay_res.current_hash == target_hash
-            and (
-                not pre_replay_res.materialized_state_matches
-                or canonicalize_text(target.current_content) == pre_replay_res.reconstructed_content
+            and pre_replay_res.status in ("replayed", "success")
+            and pre_replay_res.materialized_state_matches is True
+            and isinstance(pre_replay_res.materialized_state_checks, dict)
+            and all(
+                pre_replay_res.materialized_state_checks.get(k) is True
+                for k in (
+                    "content_matches",
+                    "stored_hash_matches",
+                    "recomputed_hash_matches",
+                    "version_matches",
+                )
             )
+            and pre_replay_res.target_file_id == target_uuid
+            and pre_replay_res.current_version == target_version
+            and pre_replay_res.reconstructed_version == target_version
+            and pre_replay_res.current_hash == target_hash
+            and pre_replay_res.reconstructed_hash == target_hash
+            and pre_replay_res.current_history_revision is not None
+            and pre_replay_res.current_history_revision == target_history_revision
+            and target.current_content == pre_replay_res.reconstructed_content
         ):
             replay_res = pre_replay_res
             t_replay_ms = t_pre_replay_ms + (time.perf_counter() - t0_replay) * 1000.0
@@ -486,9 +515,10 @@ def finalize_target(
                 lock_hold_ms=t_lock_hold_ms,
             )
 
-        content_bytes = len(content.encode("utf-8"))
+        raw_export_bytes = content.encode("utf-8")
+        content_bytes = len(raw_export_bytes)
         content_sha256 = export_res.get("content_sha256")
-        expected_sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        expected_sha256 = hashlib.sha256(raw_export_bytes).hexdigest()
         if content_sha256 != expected_sha256:
             t_lock_hold_ms = _rollback()
             return FinalizeResult(
@@ -507,7 +537,7 @@ def finalize_target(
         inline_content = content if content_bytes <= MAX_INLINE_EXPORT_BYTES else None
         delivery_mode = "inline" if content_bytes <= MAX_INLINE_EXPORT_BYTES else "deferred"
 
-        # 9. Persist durable finalization identity
+        # 9. Persist durable finalization identity and immutable 256-KiB export chunks in the same transaction
         finalization_id = uuid.uuid4()
         record = TargetFinalizations(
             finalization_id=finalization_id,
@@ -531,6 +561,20 @@ def finalize_target(
             materialized_state_checks=replay_res.materialized_state_checks,
         )
         session.add(record)
+        if isinstance(session, Session) and hasattr(session, "flush"):
+            session.flush()
+        if content_bytes > 0:
+            for chunk_idx, start_byte in enumerate(range(0, content_bytes, EXPORT_CHUNK_BYTES)):
+                chunk_payload = raw_export_bytes[start_byte : start_byte + EXPORT_CHUNK_BYTES]
+                session.add(
+                    TargetFinalizationExportChunks(
+                        finalization_id=finalization_id,
+                        chunk_index=chunk_idx,
+                        payload=chunk_payload,
+                        payload_sha256=hashlib.sha256(chunk_payload).hexdigest(),
+                        byte_length=len(chunk_payload),
+                    )
+                )
         tx.commit()
         t_lock_hold_ms = (time.perf_counter() - t0_hold) * 1000.0
 

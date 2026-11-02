@@ -34,7 +34,7 @@ Authoritative technical specifications and tool schemas:
 
 - [**PATCHDIFF_CORE_SPEC.md**](spec/PATCHDIFF_CORE_SPEC.md): Pure deterministic core runtime, validation stages (`ValidationStage`), overlapping-match enumeration, sequential simulation, and replay engine.
 - [**MCP_TOOLS.md**](spec/MCP_TOOLS.md): Complete Model Context Protocol tool contracts, schemas, byte budgets, and request/response representations.
-- [**DATA_MODEL.md**](spec/DATA_MODEL.md): PostgreSQL relational substrate, row-locking concurrency model (`SELECT ... FOR UPDATE`), and Alembic migrations `20260510_0001` through `20261031_0007`.
+- [**DATA_MODEL.md**](spec/DATA_MODEL.md): PostgreSQL relational substrate, row-locking concurrency model (`SELECT ... FOR UPDATE`), and Alembic migrations `20260510_0001` through `20261101_0008`.
 - [**PDCP_FORMAT.md**](spec/PDCP_FORMAT.md): Declarative transaction input formats: typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), and guarded sole replacement (`patchdiff-tx/3`).
 - [**MCP_EDITOR_V2.md**](spec/MCP_EDITOR_V2.md): Streamlined 5-tool `observed_v2` editor profile with explicit reusable snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte logical ceiling).
 - [**STRUCTURAL_BATCH_EDITING.md**](spec/STRUCTURAL_BATCH_EDITING.md): Multi-scope AST observation and atomic batch execution contracts.
@@ -47,7 +47,7 @@ Authoritative technical specifications and tool schemas:
 Practical guides for integrating PatchDIFF with agents and desktop tools:
 
 - [**HOST_INTEGRATION_GUIDE.md**](guides/HOST_INTEGRATION_GUIDE.md): Host-owned loop, prompt hygiene rules, reading slices, guarded submissions, handling rejections, and retry orchestration.
-- [**CLAUDE_DESKTOP_SETUP.md**](guides/CLAUDE_DESKTOP_SETUP.md): Step-by-step configuration for connecting MCP hosts (Claude Desktop, Antigravity) to PatchDIFF via stdio MCP, including dual-route PostgreSQL provisioning (`patchdiff-mcp setup` / `patchdiff-mcp daemon` for `native` port `5434` and `docker` port `5433`).
+- [**CLAUDE_DESKTOP_SETUP.md**](guides/CLAUDE_DESKTOP_SETUP.md): Step-by-step configuration for connecting MCP hosts (Claude Desktop, Antigravity) to PatchDIFF via stdio MCP, including Docker-only managed PostgreSQL on loopback `5433`, explicit external database connections, and the three-UID/three-role security boundary.
 - [**OBSERVED_EDITOR_WORKFLOW.md**](guides/OBSERVED_EDITOR_WORKFLOW.md): End-to-end walkthrough for agents using structural observation and atomic batch submission.
 
 ---

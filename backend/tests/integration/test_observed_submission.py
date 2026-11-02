@@ -26,6 +26,9 @@ from app.storage.models import (
 from backend.tests.integration.helpers import pdcp_for
 
 
+from backend.tests.mcp_process import mcp_popen, mcp_run
+
+
 def _init_tenants_target() -> dict:
     content = (
         json.dumps(
@@ -669,7 +672,7 @@ def test_stdio_mcp_subprocess_end_to_end_observe_and_strict_submit() -> None:
     env["PATCHDIFF_STRICT_OBSERVATION_MODE"] = "1"
     env["PATCHDIFF_MCP_PROFILE"] = "full"
 
-    proc = subprocess.Popen(
+    proc = mcp_popen(
         [sys.executable, "-m", "app.mcp.external_adapter"],
         cwd=str(repo_root),
         stdin=subprocess.PIPE,

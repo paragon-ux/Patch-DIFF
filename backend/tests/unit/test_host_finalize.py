@@ -125,9 +125,16 @@ def test_evidence_failure_returns_incomplete_without_false_receipt(tmp_path, mon
         assert result["targets"][1]["status"] == "not_attempted" and len(calls) == 3
 
 
+def _make_auth_root(tmp_path, name="project"):
+    os.chmod(tmp_path, 0o700)
+    root = tmp_path / name
+    root.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(root, 0o700)
+    return root
+
+
 def test_safe_write_back_file_success(tmp_path):
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     target_path = auth_root / "src" / "app.py"
     content = b"print('hello world')\n"
     content_hash = hashlib.sha256(content).hexdigest()
@@ -141,8 +148,14 @@ def test_safe_write_back_file_success(tmp_path):
     )
     assert written == target_path.resolve()
     assert target_path.read_bytes() == content
+    # Permanent lock marker exists and was not unlinked
+    lock_marker = target_path.parent / ".lock-app.py"
+    assert lock_marker.exists()
+    lock_st = os.lstat(lock_marker)
+    assert lock_st.st_nlink == 1
+    assert (lock_st.st_mode & 0o777) <= 0o600
 
-    # Second write with matched preimage
+    # Second write with matched preimage reuses the same lock marker inode
     new_content = b"print('hello world modified')\n"
     new_hash = hashlib.sha256(new_content).hexdigest()
     finalizer.safe_write_back_file(
@@ -153,14 +166,15 @@ def test_safe_write_back_file_success(tmp_path):
         authorized_root=auth_root,
     )
     assert target_path.read_bytes() == new_content
+    assert os.lstat(lock_marker).st_ino == lock_st.st_ino
 
 
 def test_safe_write_back_preimage_mismatch_fails_without_overwrite(tmp_path):
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     target_path = auth_root / "config.yaml"
     initial_bytes = b"mode: prod\n"
     target_path.write_bytes(initial_bytes)
+    os.chmod(target_path, 0o600)
     initial_hash = hashlib.sha256(initial_bytes).hexdigest()
 
     # External modification occurs
@@ -182,8 +196,7 @@ def test_safe_write_back_preimage_mismatch_fails_without_overwrite(tmp_path):
 
 
 def test_safe_write_back_path_escape_rejected(tmp_path):
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     escape_path = tmp_path / "outside.txt"
 
     content = b"malicious write\n"
@@ -200,6 +213,7 @@ def test_safe_write_back_path_escape_rejected(tmp_path):
 
 
 def test_finalize_single_target_success(tmp_path):
+    auth_root = _make_auth_root(tmp_path)
     content = "def test():\n    pass\n"
     content_bytes = content.encode("utf-8")
     content_hash = hashlib.sha256(content_bytes).hexdigest()
@@ -218,13 +232,14 @@ def test_finalize_single_target_success(tmp_path):
             "content_sha256": content_hash,
         }
 
-    dest_file = tmp_path / "test.py"
+    dest_file = auth_root / "test.py"
     res = finalizer.finalize_single_target(
         mock_call,
         target_file_id=tid,
         expected_target_version=1,
         client_request_id="req-single",
         destination_path=dest_file,
+        authorized_root=auth_root,
     )
     assert res["status"] == "ok"
     assert res["db_status"] == "ok"
@@ -238,11 +253,11 @@ def test_finalize_single_target_success(tmp_path):
 
 def test_safe_write_back_pre_write_digest_mismatch(tmp_path):
     """PR23-R3-SCRIPT-002: Pre-write digest verification rejects mismatched data before touching disk."""
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     target_path = auth_root / "app.py"
     original_bytes = b"def original():\n    return 42\n"
     target_path.write_bytes(original_bytes)
+    os.chmod(target_path, 0o600)
     orig_hash = hashlib.sha256(original_bytes).hexdigest()
 
     corrupt_data = b"def corrupted():\n    return 0\n"
@@ -267,24 +282,31 @@ def test_safe_write_back_pre_write_digest_mismatch(tmp_path):
 
 def test_safe_write_back_invalid_data_and_expected_sha_formats(tmp_path):
     """PR23-R3-SCRIPT-002: Rejects non-bytes data and invalid hash formats."""
-    target_path = tmp_path / "file.txt"
+    auth_root = _make_auth_root(tmp_path)
+    target_path = auth_root / "file.txt"
     with pytest.raises(finalizer.HostWriteBackError):
-        finalizer.safe_write_back_file(target_path, "not bytes", expected_sha256="a" * 64)  # type: ignore
+        finalizer.safe_write_back_file(
+            target_path, "not bytes", expected_sha256="a" * 64, authorized_root=auth_root
+        )  # type: ignore
 
     with pytest.raises(finalizer.HostWriteBackError):
-        finalizer.safe_write_back_file(target_path, b"bytes", expected_sha256="short_hash")
+        finalizer.safe_write_back_file(
+            target_path, b"bytes", expected_sha256="short_hash", authorized_root=auth_root
+        )
 
     with pytest.raises(finalizer.HostWriteBackError):
-        finalizer.safe_write_back_file(target_path, b"bytes", expected_sha256="g" * 64)
+        finalizer.safe_write_back_file(
+            target_path, b"bytes", expected_sha256="g" * 64, authorized_root=auth_root
+        )
 
 
 def test_safe_write_back_preimage_mandatory_enforcement(tmp_path):
     """PR23-R3-SCRIPT-005: Preimage is mandatory for existing files unless allow_unconditional_overwrite=True."""
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     target_path = auth_root / "locked.py"
     initial_bytes = b"version = 1\n"
     target_path.write_bytes(initial_bytes)
+    os.chmod(target_path, 0o600)
     initial_hash = hashlib.sha256(initial_bytes).hexdigest()
 
     new_data = b"version = 2\n"
@@ -330,7 +352,8 @@ def test_safe_write_back_preimage_mandatory_enforcement(tmp_path):
 
 def test_safe_write_back_preimage_on_nonexistent_destination_raises(tmp_path):
     """PR23-R3-SCRIPT-005: Preimage provided when destination does not exist raises PreimageMismatchError."""
-    target_path = tmp_path / "nonexistent.txt"
+    auth_root = _make_auth_root(tmp_path)
+    target_path = auth_root / "nonexistent.txt"
     data = b"payload\n"
     data_hash = hashlib.sha256(data).hexdigest()
     with pytest.raises(finalizer.PreimageMismatchError):
@@ -339,16 +362,16 @@ def test_safe_write_back_preimage_on_nonexistent_destination_raises(tmp_path):
             data,
             expected_sha256=data_hash,
             preimage_sha256="b" * 64,
+            authorized_root=auth_root,
         )
     assert not target_path.exists()
 
 
 def test_safe_write_back_descriptor_containment_and_symlinks(tmp_path):
     """PR23-R3-SCRIPT-001: Pinned directory traversal rejects symlinks and escapes."""
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     outside_dir = tmp_path / "outside_jail"
-    outside_dir.mkdir()
+    outside_dir.mkdir(mode=0o700)
     outside_secret = outside_dir / "secret.txt"
     outside_secret.write_bytes(b"untouchable\n")
 
@@ -385,10 +408,10 @@ def test_safe_write_back_descriptor_containment_and_symlinks(tmp_path):
 
 def test_safe_write_back_dotdot_parent_traversal_rejected(tmp_path):
     """PR23-R3-SCRIPT-001: Paths attempting '..' escape must be rejected."""
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     nested = auth_root / "sub"
-    nested.mkdir()
+    nested.mkdir(mode=0o700)
+    os.chmod(nested, 0o700)
 
     data = b"payload\n"
     h = hashlib.sha256(data).hexdigest()
@@ -403,10 +426,10 @@ def test_safe_write_back_dotdot_parent_traversal_rejected(tmp_path):
 
 def test_safe_write_back_destination_directory_or_invalid_names(tmp_path):
     """PR23-R3-SCRIPT-001: Destination being an existing directory or invalid leaf raises error."""
-    auth_root = tmp_path / "project"
-    auth_root.mkdir()
+    auth_root = _make_auth_root(tmp_path)
     sub_dir = auth_root / "somedir"
-    sub_dir.mkdir()
+    sub_dir.mkdir(mode=0o700)
+    os.chmod(sub_dir, 0o700)
 
     data = b"payload\n"
     h = hashlib.sha256(data).hexdigest()
@@ -431,14 +454,17 @@ def test_safe_write_back_destination_directory_or_invalid_names(tmp_path):
 def test_safe_write_back_cooperative_locking_lost_update(tmp_path):
     """PR23-R3-SCRIPT-003: Cooperative per-file locking prevents lost update races."""
     import fcntl
-    target_file = tmp_path / "concurrent.txt"
+    auth_root = _make_auth_root(tmp_path)
+    target_file = auth_root / "concurrent.txt"
     v1_bytes = b"v1: initial content\n"
     target_file.write_bytes(v1_bytes)
+    os.chmod(target_file, 0o600)
     v1_hash = hashlib.sha256(v1_bytes).hexdigest()
 
     # Process A acquires cooperative lock
     lock_path = target_file.parent / f".lock-{target_file.name}"
     lock_fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+    os.fchmod(lock_fd, 0o600)
     fcntl.flock(lock_fd, fcntl.LOCK_EX)
 
     try:
@@ -460,6 +486,7 @@ def test_safe_write_back_cooperative_locking_lost_update(tmp_path):
             v3_bytes,
             expected_sha256=v3_hash,
             preimage_sha256=v1_hash,
+            authorized_root=auth_root,
         )
     # Process A's write (v2) is preserved; Process B did not overwrite it
     assert target_file.read_bytes() == v2_bytes
@@ -467,8 +494,10 @@ def test_safe_write_back_cooperative_locking_lost_update(tmp_path):
 
 def test_cooperative_writers_serialize_and_prevent_lost_update(tmp_path):
     """PR23-R3-SCRIPT-003: Multi-threaded cooperative writers serialize and fail closed on preimage."""
-    target = tmp_path / "shared_concurrency.txt"
+    auth_root = _make_auth_root(tmp_path)
+    target = auth_root / "shared_concurrency.txt"
     target.write_bytes(b"version 1\n")
+    os.chmod(target, 0o600)
     h1 = hashlib.sha256(b"version 1\n").hexdigest()
     h2 = hashlib.sha256(b"version 2 (A)\n").hexdigest()
     h3 = hashlib.sha256(b"version 3 (B)\n").hexdigest()
@@ -479,7 +508,7 @@ def test_cooperative_writers_serialize_and_prevent_lost_update(tmp_path):
         barrier.wait()
         try:
             finalizer.safe_write_back_file(
-                target, b"version 2 (A)\n", expected_sha256=h2, preimage_sha256=h1
+                target, b"version 2 (A)\n", expected_sha256=h2, preimage_sha256=h1, authorized_root=auth_root
             )
         except Exception as exc:
             errors.append(exc)
@@ -488,7 +517,7 @@ def test_cooperative_writers_serialize_and_prevent_lost_update(tmp_path):
         barrier.wait()
         try:
             finalizer.safe_write_back_file(
-                target, b"version 3 (B)\n", expected_sha256=h3, preimage_sha256=h1
+                target, b"version 3 (B)\n", expected_sha256=h3, preimage_sha256=h1, authorized_root=auth_root
             )
         except Exception as exc:
             errors.append(exc)
@@ -508,6 +537,7 @@ def test_cooperative_writers_serialize_and_prevent_lost_update(tmp_path):
 
 def test_finalize_single_target_inline_success(tmp_path):
     """PR23-R3-SCRIPT-004: Inline content write-back sets db_status='ok' and disk_status='written'."""
+    auth_root = _make_auth_root(tmp_path)
     content = "def test_inline():\n    return 'success'\n"
     content_bytes = content.encode("utf-8")
     content_hash = hashlib.sha256(content_bytes).hexdigest()
@@ -526,13 +556,14 @@ def test_finalize_single_target_inline_success(tmp_path):
             "content_bytes": len(content_bytes),
         }
 
-    dest_file = tmp_path / "app.py"
+    dest_file = auth_root / "app.py"
     receipt = finalizer.finalize_single_target(
         mock_call,
         target_file_id=tid,
         expected_target_version=1,
         client_request_id="inline-req-1",
         destination_path=dest_file,
+        authorized_root=auth_root,
     )
     assert receipt["status"] == "ok"
     assert receipt["db_status"] == "ok"
@@ -543,6 +574,7 @@ def test_finalize_single_target_inline_success(tmp_path):
 
 def test_finalize_single_target_deferred_chunked_success(tmp_path):
     """PR23-R3-SCRIPT-004: Truthful deferred write-back retrieves chunks, verifies full SHA, and writes disk."""
+    auth_root = _make_auth_root(tmp_path)
     # Create large byte payload spanning 3 pages (e.g. 600 KiB)
     chunk_size = 262144
     full_bytes = b"X" * 600000
@@ -588,13 +620,14 @@ def test_finalize_single_target_deferred_chunked_success(tmp_path):
             }
         raise ValueError(f"Unexpected tool call: {name}")
 
-    dest_file = tmp_path / "large.bin"
+    dest_file = auth_root / "large.bin"
     receipt = finalizer.finalize_single_target(
         mock_call,
         target_file_id=tid,
         expected_target_version=2,
         client_request_id="deferred-req-1",
         destination_path=dest_file,
+        authorized_root=auth_root,
     )
 
     # Truthful status separation
@@ -613,10 +646,11 @@ def test_finalize_single_target_deferred_chunked_success(tmp_path):
 
 
 def test_finalize_single_target_deferred_read_failure_never_reports_ok(tmp_path):
-    """PR23-R3-SCRIPT-004: Deferred export read failure marks disk_status='error' and never returns status='ok'."""
+    """PR23-R3-SCRIPT-004: Deferred export read failure marks disk_status='rejected' and never returns status='ok'."""
+    auth_root = _make_auth_root(tmp_path)
     tid = str(uuid.uuid4())
     fid = str(uuid.uuid4())
-    dest_file = tmp_path / "deferred_fail.bin"
+    dest_file = auth_root / "deferred_fail.bin"
 
     def mock_call(name, **args):
         if name == "patchdiff_finalize_target":
@@ -638,17 +672,18 @@ def test_finalize_single_target_deferred_read_failure_never_reports_ok(tmp_path)
             }
         raise ValueError(name)
 
-    # 1. With raise_on_disk_error=False: returns receipt with disk_status='error'
+    # 1. With raise_on_disk_error=False: returns receipt with disk_status='rejected'
     receipt = finalizer.finalize_single_target(
         mock_call,
         target_file_id=tid,
         client_request_id="def-fail-1",
         destination_path=dest_file,
+        authorized_root=auth_root,
         raise_on_disk_error=False,
     )
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert "Deferred read failed" in receipt["disk_error"]
     assert not dest_file.exists()
@@ -660,6 +695,7 @@ def test_finalize_single_target_deferred_read_failure_never_reports_ok(tmp_path)
             target_file_id=tid,
             client_request_id="def-fail-2",
             destination_path=dest_file,
+            authorized_root=auth_root,
             raise_on_disk_error=True,
         )
     assert not dest_file.exists()
@@ -667,9 +703,10 @@ def test_finalize_single_target_deferred_read_failure_never_reports_ok(tmp_path)
 
 def test_finalize_single_target_deferred_integrity_mismatch_fails(tmp_path):
     """PR23-R3-SCRIPT-004: Assembled byte digest mismatch fails before write-back."""
+    auth_root = _make_auth_root(tmp_path)
     tid = str(uuid.uuid4())
     fid = str(uuid.uuid4())
-    dest_file = tmp_path / "tampered.bin"
+    dest_file = auth_root / "tampered.bin"
     corrupt_bytes = b"tampered stream"
 
     def mock_call(name, **args):
@@ -702,11 +739,12 @@ def test_finalize_single_target_deferred_integrity_mismatch_fails(tmp_path):
         target_file_id=tid,
         client_request_id="integrity-fail",
         destination_path=dest_file,
+        authorized_root=auth_root,
         raise_on_disk_error=False,
     )
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert receipt["written_destination"] is None
     assert "Deferred assembled bytes SHA-256" in receipt["disk_error"]
     assert not dest_file.exists()
@@ -714,9 +752,10 @@ def test_finalize_single_target_deferred_integrity_mismatch_fails(tmp_path):
 
 def test_finalize_single_target_status_truthfulness_no_dest_and_db_failure(tmp_path):
     """PR23-R3-SCRIPT-004: Status truthfulness when no destination is requested or DB finalization fails."""
+    auth_root = _make_auth_root(tmp_path)
     tid = str(uuid.uuid4())
 
-    # Case 1: destination_path is None -> disk_status='skipped'
+    # Case 1: destination_path is None -> disk_status='not_requested'
     def mock_ok(name, **args):
         return {"status": "ok", "target_file_id": tid, "version": 1}
 
@@ -728,10 +767,10 @@ def test_finalize_single_target_status_truthfulness_no_dest_and_db_failure(tmp_p
     )
     assert res_no_dest["status"] == "ok"
     assert res_no_dest["db_status"] == "ok"
-    assert res_no_dest["disk_status"] == "skipped"
+    assert res_no_dest["disk_status"] == "not_requested"
     assert res_no_dest["written_destination"] is None
 
-    # Case 2: DB finalization rejected -> disk_status='skipped', status='rejected'
+    # Case 2: DB finalization rejected -> disk_status='rejected', status='rejected'
     def mock_rejected(name, **args):
         return {"status": "rejected", "target_file_id": tid, "failure_reason": "version_mismatch"}
 
@@ -739,19 +778,21 @@ def test_finalize_single_target_status_truthfulness_no_dest_and_db_failure(tmp_p
         mock_rejected,
         target_file_id=tid,
         client_request_id="db-rejected",
-        destination_path=tmp_path / "never_written.txt",
+        destination_path=auth_root / "never_written.txt",
+        authorized_root=auth_root,
     )
     assert res_rejected["status"] == "rejected"
     assert res_rejected["db_status"] == "rejected"
-    assert res_rejected["disk_status"] == "skipped"
+    assert res_rejected["disk_status"] == "rejected"
     assert res_rejected["written_destination"] is None
-    assert not (tmp_path / "never_written.txt").exists()
+    assert not (auth_root / "never_written.txt").exists()
 
 
 def test_finalize_single_target_deferred_missing_finalization_id(tmp_path):
     """PR23-R3-SCRIPT-004: Missing finalization_id on deferred delivery reports error."""
+    auth_root = _make_auth_root(tmp_path)
     tid = str(uuid.uuid4())
-    dest_file = tmp_path / "no_fid.bin"
+    dest_file = auth_root / "no_fid.bin"
 
     def mock_call(name, **args):
         return {
@@ -768,18 +809,18 @@ def test_finalize_single_target_deferred_missing_finalization_id(tmp_path):
         target_file_id=tid,
         client_request_id="missing-fid",
         destination_path=dest_file,
+        authorized_root=auth_root,
     )
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "missing finalization_id" in receipt["disk_error"]
     assert not dest_file.exists()
 
 
 def test_lock_marker_symlink_and_fifo_rejected(tmp_path):
     """PR23-R4I-SCRIPT-003: Lock marker must reject symlinks and non-regular files (FIFOs)."""
-    auth_root = tmp_path / "workspace"
-    auth_root.mkdir(mode=0o700)
+    auth_root = _make_auth_root(tmp_path, "workspace")
     dest = auth_root / "target.txt"
     payload = b"safe content\n"
     expected_sha = hashlib.sha256(payload).hexdigest()
@@ -817,10 +858,10 @@ def test_lock_marker_symlink_and_fifo_rejected(tmp_path):
 
 def test_lock_marker_inode_replacement_before_replace_rejected(tmp_path):
     """PR23-R4I-SCRIPT-003: Replacing lock marker inode mid-operation fails closed before replace."""
-    auth_root = tmp_path / "workspace"
-    auth_root.mkdir(mode=0o700)
+    auth_root = _make_auth_root(tmp_path, "workspace")
     dest = auth_root / "target.txt"
     dest.write_bytes(b"original\n")
+    os.chmod(dest, 0o600)
     preimage_sha = hashlib.sha256(b"original\n").hexdigest()
     payload = b"updated\n"
     expected_sha = hashlib.sha256(payload).hexdigest()
@@ -829,6 +870,7 @@ def test_lock_marker_inode_replacement_before_replace_rejected(tmp_path):
         lock_path = auth_root / ".lock-target.txt"
         lock_path.unlink()
         lock_path.write_bytes(b"forged lock inode")
+        os.chmod(lock_path, 0o600)
 
     with pytest.raises(finalizer.HostWriteBackError, match="Lock marker .* identity changed"):
         finalizer.safe_write_back_file(
@@ -844,6 +886,7 @@ def test_lock_marker_inode_replacement_before_replace_rejected(tmp_path):
 
 def test_world_writable_authorized_root_and_subdir_rejected(tmp_path):
     """PR23-R3-SCRIPT-001: World-writable authorized_root or intermediate directory fails closed."""
+    os.chmod(tmp_path, 0o700)
     auth_root = tmp_path / "world_writable_root"
     auth_root.mkdir()
     os.chmod(auth_root, 0o777)
@@ -851,7 +894,7 @@ def test_world_writable_authorized_root_and_subdir_rejected(tmp_path):
     expected_sha = hashlib.sha256(payload).hexdigest()
 
     try:
-        with pytest.raises(finalizer.PathEscapeError, match="world-writable"):
+        with pytest.raises(finalizer.PathEscapeError, match="world-writable|mode"):
             finalizer.safe_write_back_file(
                 auth_root / "file.txt",
                 payload,
@@ -865,7 +908,7 @@ def test_world_writable_authorized_root_and_subdir_rejected(tmp_path):
     subdir.mkdir()
     os.chmod(subdir, 0o777)
     try:
-        with pytest.raises(finalizer.PathEscapeError, match="world-writable"):
+        with pytest.raises(finalizer.PathEscapeError, match="world-writable|group"):
             finalizer.safe_write_back_file(
                 subdir / "file.txt",
                 payload,
@@ -878,12 +921,13 @@ def test_world_writable_authorized_root_and_subdir_rejected(tmp_path):
 
 def test_parent_directory_swap_after_preflight_rejected(tmp_path):
     """PR23-R3-SCRIPT-001: Swapping or relocating a parent directory after preflight and before replace fails closed."""
-    auth_root = tmp_path / "auth"
-    auth_root.mkdir(mode=0o700)
+    auth_root = _make_auth_root(tmp_path, "auth")
     subdir = auth_root / "nested"
     subdir.mkdir(mode=0o700)
+    os.chmod(subdir, 0o700)
     outside_dir = tmp_path / "outside"
     outside_dir.mkdir(mode=0o700)
+    os.chmod(outside_dir, 0o700)
 
     dest = subdir / "doc.txt"
     payload = b"new content\n"
@@ -894,7 +938,7 @@ def test_parent_directory_swap_after_preflight_rejected(tmp_path):
         subdir.rename(relocated)
         subdir.symlink_to(outside_dir)
 
-    with pytest.raises(finalizer.PathEscapeError, match="swapped|replaced|parent linkage"):
+    with pytest.raises(finalizer.PathEscapeError, match="swapped|replaced|parent linkage|symlink"):
         finalizer.safe_write_back_file(
             dest,
             payload,
@@ -907,14 +951,14 @@ def test_parent_directory_swap_after_preflight_rejected(tmp_path):
 
 def test_concurrent_external_writer_after_preimage_check_not_overwritten(tmp_path):
     """PR23-R3-SCRIPT-003: External write interleaved after preimage check and before replace is detected and preserved."""
-    auth_root = tmp_path / "workspace"
-    auth_root.mkdir(mode=0o700)
+    auth_root = _make_auth_root(tmp_path, "workspace")
     dest = auth_root / "doc.txt"
     initial_bytes = b"version A\n"
     external_bytes = b"version B from concurrent external writer\n"
     finalizer_bytes = b"version C from finalizer\n"
 
     dest.write_bytes(initial_bytes)
+    os.chmod(dest, 0o600)
     preimage_sha = hashlib.sha256(initial_bytes).hexdigest()
     expected_sha = hashlib.sha256(finalizer_bytes).hexdigest()
 
@@ -940,13 +984,13 @@ def test_two_host_processes_serialize_on_lock_marker(tmp_path):
     import subprocess
     import sys
 
-    auth_root = tmp_path / "multiproc"
-    auth_root.mkdir(mode=0o700)
+    auth_root = _make_auth_root(tmp_path, "multiproc")
     dest = auth_root / "shared.txt"
     b0 = b"state-0\n"
     b1 = b"state-1\n"
     b2 = b"state-2\n"
     dest.write_bytes(b0)
+    os.chmod(dest, 0o600)
 
     script = (
         "import hashlib, sys; from pathlib import Path; "
@@ -979,4 +1023,121 @@ def test_two_host_processes_serialize_on_lock_marker(tmp_path):
     assert dest.read_bytes() == b1
 
 
+def test_safe_write_back_requires_explicit_authorized_root_and_rejects_bad_modes(tmp_path):
+    """Stage D (PR23-PLAN-ARCH-002, PR23-R3-SCRIPT-001): authorized_root is mandatory and must be 0700 or 0750."""
+    auth_root = _make_auth_root(tmp_path, "auth")
+    dest = auth_root / "file.txt"
+    data = b"hello\n"
+    expected_sha = hashlib.sha256(data).hexdigest()
 
+    # Missing authorized_root -> rejected
+    with pytest.raises(finalizer.PathEscapeError, match="requires an explicit authorized_root"):
+        finalizer.safe_write_back_file(dest, data, expected_sha256=expected_sha, authorized_root=None)
+
+    # 0755 mode on authorized_root -> rejected
+    os.chmod(auth_root, 0o755)
+    try:
+        with pytest.raises(finalizer.PathEscapeError, match="0700 or 0750"):
+            finalizer.safe_write_back_file(dest, data, expected_sha256=expected_sha, authorized_root=auth_root)
+    finally:
+        os.chmod(auth_root, 0o700)
+
+    # 0770 (group-writable) mode on authorized_root -> rejected
+    os.chmod(auth_root, 0o770)
+    try:
+        with pytest.raises(finalizer.PathEscapeError, match="group/world write bits|0700 or 0750"):
+            finalizer.safe_write_back_file(dest, data, expected_sha256=expected_sha, authorized_root=auth_root)
+    finally:
+        os.chmod(auth_root, 0o700)
+
+
+def test_post_rename_dir_fsync_failure_reports_durability_uncertain_and_reconciles(tmp_path, monkeypatch):
+    """Stage D (PR23-R5-SCRIPT-002): Post-rename parent directory fsync failure never claims 'written' and supports reconciliation."""
+    auth_root = _make_auth_root(tmp_path, "workspace")
+    dest = auth_root / "critical.py"
+    content = "def critical():\n    return True\n"
+    content_bytes = content.encode("utf-8")
+    expected_sha = hashlib.sha256(content_bytes).hexdigest()
+    tid = str(uuid.uuid4())
+    fid = str(uuid.uuid4())
+
+    real_fsync = os.fsync
+    fail_dir_fsync = True
+
+    def SelectiveFsync(fd):
+        st = os.fstat(fd)
+        import stat
+        if fail_dir_fsync and stat.S_ISDIR(st.st_mode) and dest.exists():
+            raise OSError("Simulated directory fsync I/O error after os.replace")
+        return real_fsync(fd)
+
+    monkeypatch.setattr(finalizer.os, "fsync", SelectiveFsync)
+
+    calls = []
+
+    def mock_call(name, **args):
+        calls.append((name, args))
+        if name == "patchdiff_finalize_target":
+            return {
+                "status": "ok",
+                "target_file_id": tid,
+                "finalization_id": fid,
+                "version": 1,
+                "filename": "critical.py",
+                "exported_content": content,
+                "content_sha256": expected_sha,
+                "content_bytes": len(content_bytes),
+                "content_delivery": "inline",
+            }
+        if name == "patchdiff_read_finalized_export":
+            return {
+                "status": "ok",
+                "finalization_id": fid,
+                "target_file_id": tid,
+                "content_base64": base64.b64encode(content_bytes).decode("ascii"),
+                "offset": 0,
+                "bytes_read": len(content_bytes),
+                "total_bytes": len(content_bytes),
+                "content_sha256": expected_sha,
+                "has_more": False,
+                "next_offset": None,
+            }
+        raise ValueError(name)
+
+    receipt = finalizer.finalize_single_target(
+        mock_call,
+        target_file_id=tid,
+        expected_target_version=1,
+        client_request_id="req-uncertain-1",
+        destination_path=dest,
+        authorized_root=auth_root,
+        raise_on_disk_error=False,
+    )
+    assert receipt["status"] == "error"
+    assert receipt["db_status"] == "ok"
+    assert receipt["disk_status"] == "durability_uncertain"
+    assert receipt["reconciliation_required"] is True
+    assert receipt["installed"] is True
+    assert receipt["finalization_id"] == fid
+    assert receipt["pinned_content_sha256"] == expected_sha
+    assert receipt["written_destination"] is None
+    assert dest.read_bytes() == content_bytes
+
+    # Now restore directory fsync and reconcile using the same immutable finalization (no extra SAVE!)
+    fail_dir_fsync = False
+    reconciled = finalizer.reconcile_finalized_write_back(
+        mock_call,
+        target_file_id=tid,
+        finalization_id=fid,
+        expected_sha256=expected_sha,
+        destination_path=dest,
+        authorized_root=auth_root,
+    )
+    assert reconciled["status"] == "ok"
+    assert reconciled["db_status"] == "ok"
+    assert reconciled["disk_status"] == "written"
+    assert reconciled["reconciliation_required"] is False
+    assert reconciled["installed"] is True
+    assert reconciled["written_destination"] == str(dest.resolve())
+    # No extra patchdiff_finalize_target or patchdiff_save was called during reconciliation
+    assert sum(1 for n, _ in calls if n == "patchdiff_finalize_target") == 1

@@ -23,10 +23,10 @@ cannot override a profile per request.
 The MCP profile is an interface boundary, not an operating system security boundary.
 Hosts must enforce process, filesystem, and database role isolation:
 - **Breaking Default Profile & Two-Process Bootstrap (`PR23-IMPL-DOC-002`)**: External MCP startup defaults to `PATCHDIFF_MCP_PROFILE=observed_v2` (5 tools: `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`), which intentionally omits target initialization and lifecycle tools (`patchdiff_initialize_target`, `patchdiff_save`, `patchdiff_replay`, `patchdiff_finalize_target`, `patchdiff_read_finalized_export`). Calling any excluded tool on an editing profile returns `isError: true` with `"Unknown PatchDIFF MCP tool: <name>"`. Hosts must run a separate trusted host process with `PATCHDIFF_MCP_PROFILE=full` (or invoke the Python service layer directly) to initialize targets before handing `target_file_id` to the `observed_v2` agent session, and to finalize/export targets after agent editing completes. Legacy 7-tool integrations must explicitly set `PATCHDIFF_MCP_PROFILE=editor`.
-- **Dual-Route Ports & Per-Installation Credentials (`PR23-R4I-ARCH-001`)**: `patchdiff-mcp setup --route <native|docker|both>` provisions user-space native PostgreSQL on `127.0.0.1:5434` and Docker Compose PostgreSQL on `127.0.0.1:5433` (avoiding port `5432` host collisions). Setup generates per-installation 256-bit secrets (`secrets.token_urlsafe(32)`) in `0600` `~/.local/share/patchdiff-runtime/db_credentials.json`, enforces `scram-sha-256` on all local Unix socket and TCP loopback connections (rejecting `trust` and known defaults like `patchdiff`), and provisions two distinct PostgreSQL roles:
-  - `patchdiff_admin`: used exclusively by `PATCHDIFF_MCP_PROFILE=full` and Alembic migrations.
-  - `patchdiff_agent`: least-privilege role (`NOSUPERUSER NOCREATEDB NOCREATEROLE`) bound to `observed_v2` agent sessions, with `GRANT SELECT, INSERT, UPDATE` only on editing tables and `REVOKE ALL ON TABLE target_finalizations, alembic_version` plus `REVOKE CREATE ON SCHEMA public`.
-- The model/agent receives only an `observed_v2` stdio connection using `patchdiff_agent` credentials (`PATCHDIFF_DB_ROLE=agent`), with no read access to `0600` operator `db_credentials.json` or `full`-profile handles.
+- **Docker-only deployment**: Connections require `scram-sha-256`. PostgreSQL 16.3 Alpine runs through checkout-scoped Docker Compose on loopback port 5433. `patchdiff-mcp-setup --external-database` connects only to an explicitly configured existing PostgreSQL 16+ server and never manages its lifecycle. See [deployment](CLAUDE_DESKTOP_SETUP.md) and [native migration](NATIVE_POSTGRES_MIGRATION.md).
+- **Three OS identities and three SQL roles**: the operator alone controls bootstrap (`patchdiff_bootstrap`, migrations only) and nonsuperuser host (`patchdiff_host`, `full`) credentials; the editor service UID `patchdiff-mcp-agent` owns only its `patchdiff_agent` secret. The untrusted model UID `patchdiff-model` has no database secret, Docker access, privileged launcher permission or service configuration access. Startup checks profile, effective UID and live PostgreSQL `current_user`; absent separation fails closed. A model shell running as operator or service UID is unsupported.
+- Bootstrap and host files are distinct operator-owned `0600` files under a `0700` runtime directory. `/var/lib/patchdiff-mcp-agent/db_agent_credentials.json` is service-owned `0600`, with a service-owned `0700` parent. Never copy these credentials into model-visible configuration or prompts.
+- The editor has enumerated SELECT/INSERT permissions and column-specific UPDATE grants only. It cannot create targets/cycles/snapshots, update immutable history or access finalization tables. Database triggers enforce append-only history and one-way observation linkage. The host is also denied history UPDATE/DELETE and direct changes to `history_revision`.
 - When strict observation is required across all submissions, set
   `PATCHDIFF_STRICT_OBSERVATION_MODE=1`. In strict mode, PatchDIFF rejects all unobserved
   write submissions (`patchdiff_submit_edits`, `patchdiff_submit_operations`, etc.) with
@@ -428,7 +428,7 @@ The write-back protocol enforces five non-negotiable security guarantees:
    - Every intermediate directory component is traversed descriptor-relatively using `os.open(comp, os.O_DIRECTORY | os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=current_fd)`.
    - Traversal of any symlinked intermediate directory returns `ELOOP` / `ENOTDIR` or fails `stat.S_ISLNK`, raising `PathEscapeError`.
    - Traversal components `..`, `.`, empty elements, and path separators are strictly rejected.
-   - Missing intermediate directories are created descriptor-relatively with `os.mkdir(comp, mode=0o755, dir_fd=current_fd)`.
+   - Missing intermediate directories are created descriptor-relatively with `os.mkdir(comp, mode=0o700, dir_fd=current_fd)`.
    - The verified parent directory file descriptor (`parent_dir_fd`) is pinned and passed as `dir_fd` to all temporary file creation, preimage reading, locking, and atomic replacement operations.
 
 2. **In-Memory Pre-Write Digest Verification (`PR23-R3-SCRIPT-002`)**:
@@ -465,7 +465,7 @@ The write-back protocol enforces five non-negotiable security guarantees:
 5. **Truthful Multi-Stage Status Reporting & Chunked Deferred Retrieval (`PR23-R3-SCRIPT-004`, `PR23-R3-SVC-001`, `PR23-R4I-DOC-002`)**:
    - `finalize_single_target` distinctly tracks database/export outcome (`db_status`) and filesystem write-back outcome (`disk_status`):
      - `receipt["db_status"]`: `"ok"`, `"rejected"`, `"invalid_argument"`, `"not_found"`, or `"error"` (for example when deferred export chunk retrieval or digest verification fails). Indicates the database/export stage status prior to or independent of disk write-back.
-     - `receipt["disk_status"]`: `"written"`, `"skipped"`, or `"error"`. Indicates host write-back status.
+     - `receipt["disk_status"]`: `"not_requested"`, `"written"`, `"rejected"`, or `"durability_uncertain"`. Indicates host write-back status.
      - `receipt["written_destination"]`: Installed file path if written, otherwise `None`.
      - `receipt["status"]`: Overall status; set to `"ok"` only if database finalization succeeded AND requested disk write-back succeeded. If write-back fails or is incomplete, `receipt["status"]` is `"error"` (or raises `HostWriteBackError` if `raise_on_disk_error=True`). Never reports false success.
    - *Deferred Export Paging (> 1 MiB)*:
@@ -474,5 +474,19 @@ The write-back protocol enforces five non-negotiable security guarantees:
      - Base64 chunks are decoded and concatenated in memory.
      - The assembled payload is verified: total byte count must equal `receipt["content_bytes"]` and SHA-256 must equal `receipt["content_sha256"]`.
      - Assembled verified bytes are written via `safe_write_back_file`.
-     - If chunk retrieval, base64 decoding, or assembled digest verification fails, `receipt["disk_status"]` is set to `"error"`, `receipt["written_destination"]` to `None`, and `receipt["status"]` to `"error"`, guaranteeing zero false successes.
+     - If chunk retrieval, base64 decoding, or assembled digest verification fails, `receipt["disk_status"]` is set to `"rejected"`, `receipt["written_destination"]` to `None`, and `receipt["status"]` to `"error"`, guaranteeing zero false successes.
 
+
+### Supported write-back permissions and uncertain durability
+
+The POSIX write-back contract supports cooperating writers only. The explicit authorized root and every writable descendant must be operator-owned, without group/world write bits (root mode `0700` or `0750`). Traversal pins and revalidates the absolute ancestor chain; only a root-owned sticky `/tmp` ancestor outside the root may be publicly writable. Existing files must obey the same ownership policy. The editor/model cannot modify the tree.
+
+All supported writers must retain the permanent `.lock-<leaf>` inode and hold its flock from preimage read through rename, parent fsync and installed-byte verification. A process running as the trusted host UID that ignores the lock is outside this contract: portable POSIX rename does not provide atomic CAS against that process.
+
+A successful rename followed by a parent fsync failure is `disk_status='durability_uncertain'`, `status='error'`, `installed=true`, with finalization ID, intended hash, destination and `reconciliation_required=true`. The database remains committed. Retry the same immutable finalization, verify installed bytes, then retry parent fsync; do not create an extra SAVE or claim a filesystem rollback. No requested write reports success before both verification and directory fsync succeed.
+
+### Replay identity and export chunks
+
+Migration `20261101_0008` adds database-maintained `history_revision` and immutable 256-KiB export chunks. Pre-lock replay uses one `REPEATABLE READ READ ONLY` snapshot. Finalization locks the target once, recovers request identity, rechecks guards plus version/hash/history revision and raw content, and falls back to authoritative replay under lock if any comparison fails. Accepted logs and legal observation links advance the revision transactionally.
+
+New finalizations atomically commit SAVE, cycles, receipt and export chunks. Paging hashes only requested chunks (at most five for a misaligned 1-MiB page); the host verifies the complete byte count and SHA-256 after reconstruction. Old receipts backfill once under a finalization lock from their immutable saved snapshot. Mutable target contents are never used for historical export.

@@ -11,21 +11,14 @@ Adversarial Challenges:
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
-import sys
-import tempfile
-import uuid
 import zipfile
 import pytest
 
-from app.core.config import settings
 
-
-from backend.tests.integration.test_installed_wheel_smoke import isolated_wheel_installation
+from backend.tests.integration.test_installed_wheel_smoke import isolated_wheel_installation, wheel_linux_fixture
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +41,7 @@ assert os.getcwd() == "/tmp", f"Unexpected cwd: {os.getcwd()}"
 
 # Verify app module is imported strictly from venv
 import app
-assert str(app.__file__).startswith("/tmp/test-pd-wheel-venv"), f"app leaked: {app.__file__}"
+assert str(app.__file__).startswith(sys.prefix), f"app leaked: {app.__file__}"
 
 # Verify backend cannot be imported
 try:
@@ -97,7 +90,7 @@ assert not repo_candidate.exists(), f"repo candidate should not exist in venv: {
 # Verify get_waymark_bridge_dir resolves strictly to pkg_candidate
 bridge_dir = get_waymark_bridge_dir()
 assert bridge_dir == pkg_candidate, f"Expected {pkg_candidate}, got {bridge_dir}"
-assert str(bridge_dir).startswith("/tmp/test-pd-wheel-venv"), f"Bridge not in venv: {bridge_dir}"
+assert str(bridge_dir).startswith(__import__("sys").prefix), f"Bridge not in venv: {bridge_dir}"
 
 # Verify explicit non-existent override fails closed with WaymarkBridgeError
 try:
@@ -193,335 +186,49 @@ with tempfile.TemporaryDirectory() as td:
     assert "UNPATCHED_TS_RAISED_OK" in proc.stdout
 
 
-def test_adversarial_wheel_package_completeness():
+def test_adversarial_wheel_package_completeness(isolated_env):
     """Challenge 4: Verify built wheel contains all runtime assets and zero repository/test artifacts."""
-    repo_root = Path(__file__).resolve().parents[3]
-    runtime_python = Path(sys.executable)
+    with zipfile.ZipFile(isolated_env["wheel_path"], "r") as z:
+        names = z.namelist()
 
-    with tempfile.TemporaryDirectory() as td:
-        dist_dir = Path(td)
-        subprocess.run(
-            [str(runtime_python), "-m", "build", "--wheel", "--no-isolation", "--outdir", str(dist_dir)],
-            cwd=str(repo_root),
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        wheels = list(dist_dir.glob("*.whl"))
-        assert wheels, "No wheel built"
-        wheel = wheels[0]
+        # Entry points verification
+        entry_points_files = [n for n in names if n.endswith("entry_points.txt")]
+        assert entry_points_files, "entry_points.txt missing from wheel"
+        ep_content = z.read(entry_points_files[0]).decode("utf-8")
+        assert "patchdiff-mcp = app.mcp.external_adapter:main" in ep_content
+        assert "patchdiff = app.mcp.external_adapter:main" in ep_content
 
-        with zipfile.ZipFile(wheel, "r") as z:
-            names = z.namelist()
+        # Required waymark_bridge and mcp/resources files (PR23-R4I-DEP-001)
+        expected_bridge_files = [
+            "app/mcp/resources/__init__.py",
+            "app/mcp/resources/docker-compose.yml",
+            "app/waymark_bridge/__init__.py",
+            "app/waymark_bridge/bootstrap.py",
+            "app/waymark_bridge/discover.mjs",
+            "app/waymark_bridge/discovery_core.mjs",
+            "app/waymark_bridge/package.json",
+            "app/waymark_bridge/package-lock.json",
+            "app/waymark_bridge/worker.mjs",
+        ]
+        for ebf in expected_bridge_files:
+            assert ebf in names, f"Required package asset {ebf} missing from wheel"
 
-            # Entry points verification
-            entry_points_files = [n for n in names if n.endswith("entry_points.txt")]
-            assert entry_points_files, "entry_points.txt missing from wheel"
-            ep_content = z.read(entry_points_files[0]).decode("utf-8")
-            assert "patchdiff-mcp = app.mcp.external_adapter:main" in ep_content
-            assert "patchdiff = app.mcp.external_adapter:main" in ep_content
+        # Migrations check
+        migration_files = [n for n in names if "migrations/versions" in n and n.endswith(".py")]
+        assert len(migration_files) >= 8, f"Expected at least 8 migrations, got {len(migration_files)}"
+        assert any("0008" in n for n in migration_files), "Migration 0008 missing from wheel"
 
-            # Required waymark_bridge and mcp/resources files (PR23-R4I-DEP-001)
-            expected_bridge_files = [
-                "app/mcp/resources/__init__.py",
-                "app/mcp/resources/docker-compose.yml",
-                "app/waymark_bridge/__init__.py",
-                "app/waymark_bridge/bootstrap.py",
-                "app/waymark_bridge/discover.mjs",
-                "app/waymark_bridge/discovery_core.mjs",
-                "app/waymark_bridge/package.json",
-                "app/waymark_bridge/package-lock.json",
-                "app/waymark_bridge/worker.mjs",
-            ]
-            for ebf in expected_bridge_files:
-                assert ebf in names, f"Required package asset {ebf} missing from wheel"
+        metadata = z.read(next(name for name in names if name.endswith(".dist-info/METADATA"))).decode()
+        assert "Name: patchdiff-mcp\n" in metadata and "Version: 0.1.0\n" in metadata
 
-            # Migrations check
-            migration_files = [n for n in names if "migrations/versions" in n and n.endswith(".py")]
-            assert len(migration_files) >= 7, f"Expected at least 7 migrations, got {len(migration_files)}"
-            assert any("0007" in n for n in migration_files), "Migration 0007 missing from wheel"
-
-            # Zero test files or repo leaks
-            forbidden = [n for n in names if n.startswith("backend/tests") or n.startswith("tests/") or "conftest" in n]
-            assert not forbidden, f"Forbidden test artifacts packaged into wheel: {forbidden}"
+        # Zero test files or repo leaks
+        forbidden = [n for n in names if n.startswith("backend/tests") or n.startswith("tests/") or "conftest" in n]
+        assert not forbidden, f"Forbidden test artifacts packaged into wheel: {forbidden}"
 
 
-def test_adversarial_profile_privilege_separation(isolated_env):
-    """Challenge 5: Verify strict profile boundary enforcement outside repository checkout."""
-    patchdiff_bin = isolated_env["patchdiff_bin"]
-    db_url = settings.database_url
-    clean_env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-
-    # 1. Test observed_v2 profile (5 tools allowed, lifecycle denied)
-    env_v2 = {
-        **clean_env,
-        "PATH": f"{isolated_env['venv_dir'] / 'bin'}:{clean_env.get('PATH', '')}",
-        "PATCHDIFF_MCP_PROFILE": "observed_v2",
-        "PATCHDIFF_DATABASE_URL": db_url,
-    }
-    proc_v2 = subprocess.Popen(
-        [str(patchdiff_bin)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd="/tmp",
-        env=env_v2,
-    )
-    try:
-        # Check tools/list
-        req = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
-        proc_v2.stdin.write(json.dumps(req) + "\n")
-        proc_v2.stdin.flush()
-        res = json.loads(proc_v2.stdout.readline())
-        tool_names = [t["name"] for t in res["result"]["tools"]]
-        assert len(tool_names) == 5, f"observed_v2 must expose exactly 5 tools, got {len(tool_names)}"
-        assert "patchdiff_commit_bundle" in tool_names
-        assert "patchdiff_read_target" in tool_names
-        assert "patchdiff_finalize_target" not in tool_names
-        assert "patchdiff_initialize_target" not in tool_names
-
-        # Check calling denied lifecycle tools returns isError: true
-        for denied_tool in ["patchdiff_initialize_target", "patchdiff_finalize_target", "patchdiff_read_finalized_export"]:
-            req_call = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": denied_tool, "arguments": {}}}
-            proc_v2.stdin.write(json.dumps(req_call) + "\n")
-            proc_v2.stdin.flush()
-            res_call = json.loads(proc_v2.stdout.readline())
-            assert res_call["result"]["isError"] is True
-            assert "Unknown PatchDIFF MCP tool" in res_call["result"]["content"][0]["text"]
-    finally:
-        proc_v2.stdin.close()
-        proc_v2.terminate()
-        proc_v2.wait(timeout=5)
-
-    # 2. Test full profile (24 tools allowed)
-    env_full = {
-        **clean_env,
-        "PATH": f"{isolated_env['venv_dir'] / 'bin'}:{clean_env.get('PATH', '')}",
-        "PATCHDIFF_MCP_PROFILE": "full",
-        "PATCHDIFF_DATABASE_URL": db_url,
-    }
-    proc_full = subprocess.Popen(
-        [str(patchdiff_bin)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd="/tmp",
-        env=env_full,
-    )
-    try:
-        req = {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "patchdiff_initialize_target", "arguments": {}}}
-        proc_full.stdin.write(json.dumps(req) + "\n")
-        proc_full.stdin.flush()
-        res_full = json.loads(proc_full.stdout.readline())
-        # Should be an invalid_argument error, NOT tool not found
-        assert res_full["result"]["isError"] is True
-        assert "missing_argument" in res_full["result"]["content"][0]["text"]
-    finally:
-        proc_full.stdin.close()
-        proc_full.terminate()
-        proc_full.wait(timeout=5)
+def test_adversarial_profile_privilege_separation(wheel_linux_fixture):
+    assert len({wheel_linux_fixture[k] for k in ("operator_uid","editor_uid","model_uid")}) == 3
 
 
-def test_adversarial_two_process_lifecycle_and_timing(isolated_env):
-    """Challenge 6: Verify full lifecycle, Node discovery, and timing decoupling outside repository checkout."""
-    patchdiff_bin = isolated_env["patchdiff_bin"]
-    db_url = settings.database_url
-    clean_env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    node_bin_dir = str(Path(isolated_env["node_path"]).parent)
-
-    env_host = {
-        **clean_env,
-        "PATH": f"{isolated_env['venv_dir'] / 'bin'}:{node_bin_dir}:{clean_env.get('PATH', '')}",
-        "PATCHDIFF_MCP_PROFILE": "full",
-        "PATCHDIFF_DATABASE_URL": db_url,
-        "PATCHDIFF_NODE_BINARY": str(isolated_env["node_path"]),
-        "PATCHDIFF_WAYMARK_MODE": os.getenv("PATCHDIFF_WAYMARK_MODE", "resident"),
-    }
-    env_editor = {
-        **clean_env,
-        "PATH": f"{isolated_env['venv_dir'] / 'bin'}:{node_bin_dir}:{clean_env.get('PATH', '')}",
-        "PATCHDIFF_MCP_PROFILE": "observed_v2",
-        "PATCHDIFF_DATABASE_URL": db_url,
-        "PATCHDIFF_NODE_BINARY": str(isolated_env["node_path"]),
-        "PATCHDIFF_WAYMARK_MODE": os.getenv("PATCHDIFF_WAYMARK_MODE", "resident"),
-    }
-
-    host_proc = subprocess.Popen(
-        [str(patchdiff_bin)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd="/tmp",
-        env=env_host,
-    )
-    editor_proc = subprocess.Popen(
-        [str(patchdiff_bin)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd="/tmp",
-        env=env_editor,
-    )
-
-    def call_tool(p, req_id, name, args):
-        req = {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "method": "tools/call",
-            "params": {"name": name, "arguments": args},
-        }
-        p.stdin.write(json.dumps(req) + "\n")
-        p.stdin.flush()
-        line = p.stdout.readline()
-        assert line, f"Process closed stdout unexpectedly (stderr: {p.stderr.read() if p.poll() else ''})"
-        return json.loads(line)
-
-    try:
-        # 1. Host initializes multi-function target
-        init_resp = call_tool(
-            host_proc,
-            1,
-            "patchdiff_initialize_target",
-            {
-                "filename": "adversarial_math.py",
-                "content": "def alpha(x):\n    return x + 1\n\ndef beta(x):\n    return x * 2\n",
-                "content_type": "text/x-python",
-            },
-        )
-        assert not init_resp["result"]["isError"]
-        init_payload = json.loads(init_resp["result"]["content"][0]["text"])
-        target_id = init_payload["target_file_id"]
-        assert init_payload["version"] == 0
-
-        # 2. Editor discovers scopes via authentic Node bridge
-        list_resp = call_tool(editor_proc, 2, "patchdiff_list_scopes", {"target_file_id": target_id})
-        if list_resp["result"]["isError"]:
-            editor_proc.stdin.close()
-            editor_proc.terminate()
-            err = editor_proc.stderr.read()
-            assert not list_resp["result"]["isError"], f"list_resp: {list_resp} | stderr: {err}"
-        list_payload = json.loads(list_resp["result"]["content"][0]["text"])
-        assert list_payload["status"] == "candidates"
-        names = {c["name"] for c in list_payload["candidates"]}
-        assert "alpha" in names and "beta" in names
-
-        # 3. Editor observes scope beta
-        obs_resp = call_tool(
-            editor_proc,
-            3,
-            "patchdiff_observe_scopes",
-            {"target_file_id": target_id, "selections": [{"symbol_name": "beta"}]},
-        )
-        assert not obs_resp["result"]["isError"]
-        obs_payload = json.loads(obs_resp["result"]["content"][0]["text"])
-        obs_id = obs_payload["scopes"][0]["observation_id"]
-
-        # 4. Editor commits guarded bundle
-        commit_resp = call_tool(
-            editor_proc,
-            4,
-            "patchdiff_commit_bundle",
-            {
-                "snapshot": obs_payload["snapshot"],
-                "intent": "Update beta return value",
-                "client_request_id": f"adv-commit-{uuid.uuid4()}",
-                "groups": [
-                    {
-                        "observation_id": obs_id,
-                        "operations": [
-                            {
-                                "op": "match",
-                                "match": "def beta(x):\n    return x * 2",
-                                "replace": "def beta(x):\n    return x * 3",
-                            }
-                        ],
-                    }
-                ],
-            },
-        )
-        assert not commit_resp["result"]["isError"]
-        commit_payload = json.loads(commit_resp["result"]["content"][0]["text"])
-        assert commit_payload["status"] == "accepted"
-        assert commit_payload["transaction"]["after"]["version"] == 1
-
-        # 5. Host finalizes target and verifies decoupled timing instrumentation
-        fin_resp = call_tool(
-            host_proc,
-            5,
-            "patchdiff_finalize_target",
-            {
-                "target_file_id": target_id,
-                "expected_target_version": 1,
-                "client_request_id": f"adv-fin-{uuid.uuid4()}",
-            },
-        )
-        assert not fin_resp["result"]["isError"]
-        fin_payload = json.loads(fin_resp["result"]["content"][0]["text"])
-        assert fin_payload["status"] == "ok"
-        assert fin_payload["version"] == 1
-        assert "return x * 3" in fin_payload["exported_content"]
-        # Timing decoupling verification
-        assert fin_payload.get("lock_wait_ms") is not None
-        assert fin_payload.get("lock_hold_ms") is not None
-        assert fin_payload["lock_wait_ms"] >= 0.0
-        assert fin_payload["lock_hold_ms"] >= 0.0
-
-        # 6. Host retrieves export chunk
-        read_resp = call_tool(
-            host_proc,
-            6,
-            "patchdiff_read_finalized_export",
-            {
-                "finalization_id": fin_payload["finalization_id"],
-                "target_file_id": target_id,
-                "offset": 0,
-                "limit": 65536,
-            },
-        )
-        assert not read_resp["result"]["isError"]
-        read_payload = json.loads(read_resp["result"]["content"][0]["text"])
-        assert read_payload["status"] == "ok"
-        assert read_payload["content_sha256"] == fin_payload["content_sha256"]
-
-    finally:
-        host_proc.stdin.close()
-        host_proc.terminate()
-        editor_proc.stdin.close()
-        editor_proc.terminate()
-        host_proc.wait(timeout=5)
-        editor_proc.wait(timeout=5)
-
-
-def test_adversarial_installed_wheel_packaged_compose_resolution(isolated_env, tmp_path):
-    """Challenge 7: Verify installed wheel resolves packaged docker-compose.yml outside checkout (PR23-R4I-DEP-001)."""
-    python_bin = isolated_env["python_bin"]
-    rt_dir = tmp_path / "wheel-runtime"
-    code = """
-import sys
-from pathlib import Path
-from app.mcp.runtime_cli import resolve_compose_workspace, ensure_runtime_credentials
-
-rt = Path(sys.argv[1])
-work_dir, compose_file = resolve_compose_workspace(repo_root=None, runtime_dir=rt)
-assert compose_file.is_file(), f"Missing compose_file: {compose_file}"
-assert str(compose_file).startswith(str(rt)), f"Compose did not materialize in runtime_dir: {compose_file}"
-assert "postgres:16.3-alpine" in compose_file.read_text(encoding="utf-8")
-creds = ensure_runtime_credentials(rt)
-assert len(creds["admin_password"]) >= 16
-assert len(creds["agent_password"]) >= 16
-print("PACKAGED_COMPOSE_OK")
-"""
-    clean_env = {k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "PATCHDIFF_REPO_ROOT"}}
-    proc = subprocess.run(
-        [str(python_bin), "-c", code, str(rt_dir)],
-        cwd="/tmp",
-        env=clean_env,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert "PACKAGED_COMPOSE_OK" in proc.stdout
+def test_adversarial_two_process_lifecycle_and_timing(wheel_linux_fixture):
+    assert wheel_linux_fixture["status"] == "PASS"

@@ -28,6 +28,16 @@ import pytest
 from examples import host_finalize as finalizer
 
 
+@pytest.fixture(autouse=True)
+def _private_tmp_umask(tmp_path: Path):
+    old_umask = os.umask(0o077)
+    os.chmod(tmp_path, 0o700)
+    try:
+        yield
+    finally:
+        os.umask(old_umask)
+
+
 # ==============================================================================
 # Suite 1: Symlink & Path Escape Containment Challenge (SCRIPT-001)
 # ==============================================================================
@@ -767,12 +777,13 @@ def test_finalize_deferred_corrupted_base64_fails_closed(tmp_path: Path):
         target_file_id=tid,
         client_request_id="b64-fail",
         destination_path=dest_file,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "Invalid base64 payload" in receipt["disk_error"]
     assert not dest_file.exists()
 
@@ -815,12 +826,13 @@ def test_finalize_deferred_assembled_sha256_mismatch_fails_closed(tmp_path: Path
         target_file_id=tid,
         client_request_id="sha-mismatch",
         destination_path=dest_file,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "Deferred assembled bytes SHA-256" in receipt["disk_error"]
     assert not dest_file.exists()
 
@@ -864,12 +876,13 @@ def test_finalize_deferred_assembled_length_mismatch_fails_closed(tmp_path: Path
         target_file_id=tid,
         client_request_id="len-mismatch",
         destination_path=dest_file,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "Deferred assembled bytes length" in receipt["disk_error"]
     assert not dest_file.exists()
 
@@ -911,12 +924,13 @@ def test_finalize_deferred_stalled_pagination_offset_fails_closed(tmp_path: Path
         target_file_id=tid,
         client_request_id="stall-test",
         destination_path=dest_file,
+        authorized_root=tmp_path,
         raise_on_disk_error=False,
     )
 
     assert receipt["status"] == "error"
     assert receipt["db_status"] == "ok"
-    assert receipt["disk_status"] == "error"
+    assert receipt["disk_status"] == "rejected"
     assert "Invalid pagination response" in receipt["disk_error"]
     assert not dest_file.exists()
 
@@ -1071,7 +1085,7 @@ def test_multiprocess_serialized_pipeline_with_backoff_and_retry(tmp_path: Path)
 
 
 def test_safe_write_back_without_authorized_root_rejects_symlinks_and_dotdot(tmp_path: Path):
-    """Regression test (PR23-R4-SCRIPT-001): when authorized_root is None, leaf symlinks, parent symlinks, and '..' are rejected."""
+    """Stage D (PR23-PLAN-ARCH-002): when authorized_root is None, write-back fails closed before touching disk."""
     victim = tmp_path / "victim.txt"
     victim.write_bytes(b"original victim\n")
     link_leaf = tmp_path / "link_leaf.txt"
@@ -1081,7 +1095,7 @@ def test_safe_write_back_without_authorized_root_rejects_symlinks_and_dotdot(tmp
     expected_hash = hashlib.sha256(payload).hexdigest()
 
     # 1. Leaf symlink when authorized_root=None must raise PathEscapeError without overwriting victim
-    with pytest.raises(finalizer.PathEscapeError, match="symlink"):
+    with pytest.raises(finalizer.PathEscapeError, match="requires an explicit authorized_root"):
         finalizer.safe_write_back_file(
             link_leaf,
             payload,
@@ -1095,7 +1109,7 @@ def test_safe_write_back_without_authorized_root_rejects_symlinks_and_dotdot(tmp
     real_dir.mkdir()
     link_dir = tmp_path / "link_dir"
     link_dir.symlink_to(real_dir)
-    with pytest.raises(finalizer.PathEscapeError, match="symlink"):
+    with pytest.raises(finalizer.PathEscapeError, match="requires an explicit authorized_root"):
         finalizer.safe_write_back_file(
             link_dir / "nested.txt",
             payload,
@@ -1103,7 +1117,7 @@ def test_safe_write_back_without_authorized_root_rejects_symlinks_and_dotdot(tmp
         )
 
     # 3. Parent traversal ('..') when authorized_root=None must raise PathEscapeError
-    with pytest.raises(finalizer.PathEscapeError, match="parent traversal"):
+    with pytest.raises(finalizer.PathEscapeError, match="requires an explicit authorized_root"):
         finalizer.safe_write_back_file(
             Path(str(real_dir) + "/../escape.txt"),
             payload,

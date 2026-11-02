@@ -7,23 +7,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16.3-alpine
-        env:
-          POSTGRES_DB: patchdiff
-          POSTGRES_USER: patchdiff
-          POSTGRES_PASSWORD: patchdiff
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U patchdiff -d patchdiff"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
-      PATCHDIFF_DATABASE_URL: postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff
       PYTHONPATH: .:backend
+      PATCHDIFF_WAYMARK_MODE: resident
+      PATCHDIFF_TEST_EVIDENCE_DIR: ${{ github.workspace }}/.ci-results
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,64 +21,76 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Provision OS principals and PostgreSQL roles (Stage B)
+        run: |
+          set -euo pipefail
+          if ! id -u patchdiff-mcp-agent >/dev/null 2>&1; then
+            sudo useradd --system --no-create-home --shell /usr/sbin/nologin patchdiff-mcp-agent
+          fi
+          if ! id -u patchdiff-model >/dev/null 2>&1; then
+            sudo useradd --system --no-create-home --shell /usr/sbin/nologin patchdiff-model
+          fi
+          sudo install -d -m 0700 -o patchdiff-mcp-agent -g patchdiff-mcp-agent /var/lib/patchdiff-mcp-agent
+          echo "$USER ALL=(patchdiff-mcp-agent,patchdiff-model) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/patchdiff-ci >/dev/null
+          sudo chmod 0440 /etc/sudoers.d/patchdiff-ci
       - name: Install pinned dependencies
         run: |
           pip install -r requirements.lock
           pip install --no-deps -e .
-          npm --prefix integrations/waymark ci
-      - name: Migrate (upgrade, downgrade one step, upgrade again)
-        run: |
-          alembic -c backend/app/migrations/alembic.ini upgrade head
-          alembic -c backend/app/migrations/alembic.ini downgrade -1
-          alembic -c backend/app/migrations/alembic.ini upgrade head
-      - name: Unit tests
-        run: pytest backend/tests/unit --junitxml=.ci-results/unit.xml -ra
-      - name: Resident worker lifecycle on Linux
-        run: pytest backend/tests/unit/test_waymark_worker.py --junitxml=.ci-results/worker-linux.xml -ra
-      - name: Build wheel and install isolated test venv (PR23-R3-TEST-001)
-        run: |
           pip install build
-          mkdir -p /tmp/test-pd-wheel-dist
-          python -m build --wheel --no-isolation --outdir /tmp/test-pd-wheel-dist
-          python -m venv --without-pip /tmp/test-pd-wheel-venv
-          pip install --no-deps --force-reinstall --prefix /tmp/test-pd-wheel-venv /tmp/test-pd-wheel-dist/*.whl
-          for script_bin in /tmp/test-pd-wheel-venv/bin/patchdiff*; do
-            sed -i '1s|^.*$|#!/tmp/test-pd-wheel-venv/bin/python3|' "$script_bin"
-            chmod +x "$script_bin"
-          done
-          BASE_SITES=$(python -c 'import sys; print("\n".join(p for p in sys.path if "site-packages" in p and "Patch-DIFF" not in p))')
-          VENV_SITE=$(/tmp/test-pd-wheel-venv/bin/python3 -c 'import site; print([p for p in site.getsitepackages() if "test-pd-wheel-venv" in p][0])')
-          echo "$BASE_SITES" > "$VENV_SITE/base-deps.pth"
-          cat << 'EOF' > "$VENV_SITE/sitecustomize.py"
-          import sys
-          sys.path = [p for p in sys.path if 'Patch-DIFF' not in p and not p.endswith('/backend')]
-          EOF
-          /tmp/test-pd-wheel-venv/bin/python3 -m app.waymark_bridge.bootstrap --target-dir /tmp/test-pd-wheel-venv/waymark-bridge
-          APP_DIR=$(/tmp/test-pd-wheel-venv/bin/python3 -c 'import app; from pathlib import Path; print(Path(app.__file__).parent)')
-          cp -r /tmp/test-pd-wheel-venv/waymark-bridge/node_modules "$APP_DIR/waymark_bridge/"
-      - name: Postgres integration tests
+          npm --prefix integrations/waymark ci
+          chmod -R a+rX integrations/waymark backend/app/waymark_bridge
+      - name: Provision disposable private Docker runtime and migrate
+        run: |
+          set -euo pipefail
+          python backend/tests/ci_runtime.py setup
+          python -c '
+          from alembic import command
+          from alembic.config import Config
+          from app.core.config import resolve_database_url
+          cfg=Config("backend/app/migrations/alembic.ini")
+          cfg.attributes["database_url"]=resolve_database_url(role="patchdiff_bootstrap")
+          command.downgrade(cfg,"-1")
+          command.upgrade(cfg,"head")
+          '
+      - name: Unit tests
+        run: python backend/tests/ci_runtime.py run python -m pytest backend/tests/unit --junitxml=.ci-results/unit.xml -ra
+      - name: Resident worker lifecycle on Linux
+        run: python backend/tests/ci_runtime.py run python -m pytest backend/tests/unit/test_waymark_worker.py --junitxml=.ci-results/worker-linux.xml -ra
+      - name: Build release wheel and sdist from exact HEAD (Stage G)
+        run: |
+          set -euo pipefail
+          mkdir -p .ci-results dist
+          rm -rf dist/*
+          python -m build --wheel --sdist --outdir dist
+          sha256sum dist/*.whl dist/*.tar.gz | tee .ci-results/artifacts-sha256.txt
+      - name: Postgres integration tests (including Stage G clean wheel two-process smoke)
         env:
           PATCHDIFF_WAYMARK_MODE: resident
-        run: pytest backend/tests/integration --junitxml=.ci-results/integration-resident.xml -ra
+        run: |
+          export PATCHDIFF_TEST_WHEEL_PATH="$(realpath dist/patchdiff_mcp-*.whl)"
+          python backend/tests/ci_runtime.py run python -m pytest backend/tests/integration --junitxml=.ci-results/integration-resident.xml -ra
       - name: Offline evaluation
-        run: python backend/tests/verification/offline_eval.py | tee .ci-results/offline-eval.txt
+        run: |
+          set -euo pipefail
+          python backend/tests/verification/offline_eval.py | tee .ci-results/offline-eval.txt
       - name: Deterministic five-file verification (resident)
         env:
           PATCHDIFF_WAYMARK_MODE: resident
-        run: python backend/tests/verification/structural_batch/verify.py --output .ci-results/five-file
+        run: python backend/tests/ci_runtime.py run python backend/tests/verification/structural_batch/verify.py --output .ci-results/five-file
       - name: Four-tool delegated editor and trusted scalar finalization (five files)
         env:
           PATCHDIFF_WAYMARK_MODE: resident
           PATCHDIFF_MCP_RESPONSE_MODE: compact
-        run: python backend/tests/verification/structural_batch/verify.py --host-finalize --output .ci-results/five-file-compact-host
+        run: python backend/tests/ci_runtime.py run python backend/tests/verification/structural_batch/verify.py --host-finalize --output .ci-results/five-file-compact-host
       - name: Versioned editor interface and trusted scalar finalization (five files)
         env:
           PATCHDIFF_WAYMARK_MODE: resident
-        run: python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize --output .ci-results/five-file-v2
+        run: python backend/tests/ci_runtime.py run python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize --output .ci-results/five-file-v2
       - name: Build documentation site check
         run: |
           pip install -r docs-requirements.lock
-          zensical build
+          zensical build --clean
       - name: Executed source and environment
         if: always()
         run: |

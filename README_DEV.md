@@ -2,40 +2,31 @@
 
 ## Local Setup
 
-PatchDIFF supports two independent PostgreSQL runtime routes with distinct default ports so both can operate simultaneously:
-- **`native` (`127.0.0.1:5434`)**: User-space PostgreSQL cluster (`initdb` / `pg_ctl` in `~/.local/share/patchdiff-runtime/pgdata`).
-- **`docker` (`127.0.0.1:5433`)**: Docker Compose `patchdiff-postgres` (`postgres:16.3-alpine`) container.
+The sole managed database runtime is PostgreSQL 16.3 Alpine through Docker Compose on `127.0.0.1:5433`. Linux/WSL2 deployment requires separate operator, `patchdiff-mcp-agent` service and `patchdiff-model` shell UIDs, with private single-role database credentials. Follow [the deployment guide](docs/guides/CLAUDE_DESKTOP_SETUP.md) before running setup; missing separation fails closed.
 
-### Automated Setup & Daemon Lifecycle (Recommended)
+### Automated Setup & Daemon Lifecycle
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Or Windows: .\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 python -m pip install -r requirements.lock
 python -m pip install --no-deps -e .
 
-# Provision native (5434), docker (5433), or both; runs Alembic upgrade head,
-# bootstraps/verifies the Waymark JS bridge, and smoke-tests the MCP stdio adapter:
-patchdiff-mcp setup --route both
-
-# Identical daemon lifecycle commands for native, docker, or both:
-patchdiff-mcp daemon start   --route <native|docker|both>
-patchdiff-mcp daemon stop    --route <native|docker|both>
-patchdiff-mcp daemon restart --route <native|docker|both>
-patchdiff-mcp daemon status  --route <native|docker|both>
+# As operator after the required accounts/private paths exist:
+patchdiff-mcp-setup
+patchdiff-mcp-daemon start
+patchdiff-mcp-daemon stop
+patchdiff-mcp-daemon restart
+patchdiff-mcp-daemon status
 ```
 
-### Manual Step-by-Step Setup
+Setup applies migrations through `20261101_0008`, provisions the three PostgreSQL roles, verifies the Waymark bridge and checks both MCP connections. Change the Docker port with `--port` or `PATCHDIFF_POSTGRES_PORT`. Status is read-only; stop preserves containers and volumes.
 
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.lock
-python -m pip install --no-deps -e .
-npm --prefix integrations/waymark ci
-docker compose up -d postgres
-$env:PATCHDIFF_DATABASE_URL = "postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5433/patchdiff"
-alembic -c backend/app/migrations/alembic.ini upgrade head
+For an already-running PostgreSQL 16+ instance, privately supply `PATCHDIFF_BOOTSTRAP_DATABASE_URL`, `PATCHDIFF_HOST_DATABASE_URL` and `PATCHDIFF_AGENT_DATABASE_URL`, then run `patchdiff-mcp-setup --external-database`. That path performs no database lifecycle commands. Existing native PGDATA remains untouched; follow [the non-destructive migration guide](docs/guides/NATIVE_POSTGRES_MIGRATION.md) when needed.
+
+The FastAPI development server can run as the trusted operator with its explicitly configured host connection:
+
+```bash
 uvicorn app.main:app --app-dir backend --reload
 ```
 

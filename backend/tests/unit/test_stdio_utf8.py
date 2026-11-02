@@ -11,6 +11,7 @@ import sys
 import pytest
 
 from app.mcp import external_adapter
+from backend.tests.mcp_process import mcp_run
 
 BACKEND = Path(__file__).resolve().parents[2]
 
@@ -19,7 +20,7 @@ def _subprocess(messages: bytes) -> subprocess.CompletedProcess[bytes]:
     env = os.environ.copy()
     env.update(PYTHONPATH=str(BACKEND), PYTHONIOENCODING="cp1252:surrogateescape")
     env.pop("PYTHONUTF8", None)
-    return subprocess.run(
+    return mcp_run(
         [sys.executable, "-m", "app.mcp.external_adapter"],
         input=messages,
         capture_output=True,
@@ -53,6 +54,7 @@ def test_main_configures_existing_stream_wrappers_before_serving(monkeypatch: py
         seen.append((incoming.encoding, incoming.errors, outgoing.encoding, outgoing.errors))
 
     monkeypatch.setattr(external_adapter, "serve_stdio", serve)
+    monkeypatch.setattr(external_adapter, "resolve_mcp_profile_and_validate_startup", lambda **_: ("observed_v2", "patchdiff_agent"))
     external_adapter.main()
     assert seen == [("utf-8", "strict", "utf-8", "strict")]
 

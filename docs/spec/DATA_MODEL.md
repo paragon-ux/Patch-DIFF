@@ -14,7 +14,7 @@ Only migration `20261022_0003` adds storage (below); everything else uses existi
 
 ## Scope
 
-This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema`, `20261020_0002_typed_ledger`, `20261022_0003_source_line_endings`, `20261026_0004_target_scope_observations`, `20261027_0005_observation_bundles`, `20261031_0006_target_finalizations`, and `20261031_0007_finalization_checks`.
+This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema`, `20261020_0002_typed_ledger`, `20261022_0003_source_line_endings`, `20261026_0004_target_scope_observations`, `20261027_0005_observation_bundles`, `20261031_0006_target_finalizations`, `20261031_0007_finalization_checks`, and `20261101_0008_pr23_integrity_and_export_chunks`.
 
 The schema supports:
 - canonical target storage in Postgres (`cloud_target_files`)
@@ -351,3 +351,21 @@ Retention, recovery, and downgrade semantics:
 - For deferred exports (`content_bytes > 1,048,576`, where `exported_content` is `NULL`), `patchdiff_read_finalized_export` reconstructs the exact finalized bytes from the immutable `target_snapshots` row (`snapshot_id`) and recorded `export_format` / `source_line_endings`, verifying full byte count and `content_sha256` before returning base64 chunks.
 - Downgrading migration `20261031_0007` refuses while any row in `target_finalizations` has `materialized_state_checks IS NOT NULL`. Downgrading migration `20261031_0006` refuses while any row exists in `target_finalizations`.
 
+
+### History identity and immutable export chunks (migration `20261101_0008`)
+
+`cloud_target_files.history_revision` is a nonnull BIGINT defaulting to zero. Upgrade backfills the number of accepted logs plus linked observations. SECURITY DEFINER triggers with a pinned catalog search path increment it in the same transaction as each accepted log insertion and legal NULL-to-accepted observation link. Both service roles lack direct UPDATE permission on the column. Rollback reverses the increment.
+
+UPDATE/DELETE on logs (accepted and rejected), manifests, snapshots and export chunks is rejected by named immutability triggers. Observations permit only a one-shot `accepted_pdcp_log_id` link to an accepted log with the same target, cycle, before-version and before-hash; every other field and DELETE remain immutable.
+
+| `target_finalization_export_chunks` column | Type | Constraint |
+| --- | --- | --- |
+| `finalization_id` | UUID | FK to `target_finalizations`, part of PK |
+| `chunk_index` | BIGINT | Nonnegative, part of PK |
+| `payload` | BYTEA | Nonnull exact serialized export bytes |
+| `payload_sha256` | CHAR(64) | Nonnull SHA-256 of this payload |
+| `byte_length` | INTEGER | Greater than 0 and at most 262144 |
+
+The composite primary key is the chunk index. Empty exports have zero chunks. New finalizations commit receipt, SAVE and all chunks together. Historical receipts are backfilled once under their finalization row lock from the immutable linked snapshot after whole-export hash/length verification. A host-only SECURITY DEFINER `patchdiff_lock_finalized_export(uuid)` grants the receipt lock needed for backfill without granting raw receipt UPDATE; PUBLIC and the editor cannot execute it. Once populated, page requests load only intersecting payloads and verify each hash; the host verifies the whole export after reconstruction. No resident full-export cache exists. Downgrade refuses while chunks exist.
+
+`patchdiff_bootstrap` owns migrations and is never an MCP identity. Nonsuperuser `patchdiff_host` has explicit host lifecycle SELECT/INSERT and column UPDATE grants, with no history UPDATE/DELETE, DDL or direct history-revision changes. `patchdiff_agent` has SELECT on existing editing metadata, INSERT only on observations, attempts, manifests and current proposal rows, and UPDATE only on the documented mutable target/current-proposal columns and one-shot observation link. It has no permissions on finalizations, chunks or Alembic metadata; it cannot create targets, snapshots or editing cycles. Grants after each migration use enumerated allowlists, never future-table DML defaults. See [deployment identities and credentials](../guides/CLAUDE_DESKTOP_SETUP.md).

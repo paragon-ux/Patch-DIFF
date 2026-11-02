@@ -12,7 +12,7 @@ from app.storage.models import (
     EditingCycles,
     TargetSnapshots,
 )
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import pdcp_for, maintenance_session
 
 
 def test_mcp_save_creates_snapshot_cycle_transition_without_target_content_mutation() -> None:
@@ -73,7 +73,7 @@ def test_mcp_replay_reconstructs_hash_and_ignores_current_pdcp_and_manifest_ledg
         pdcp_content=pdcp_for(target_id, ("old", "new")),
     )
 
-    with SessionLocal() as session:
+    with maintenance_session("append_only_manifest_ledger") as session:
         target_uuid = uuid.UUID(target_id)
         current_pdcp = session.scalar(select(CurrentPdcpFiles).where(CurrentPdcpFiles.target_file_id == target_uuid))
         current_pdcp.pdcp_content = "corrupted display-only PDCP"
@@ -81,7 +81,7 @@ def test_mcp_replay_reconstructs_hash_and_ignores_current_pdcp_and_manifest_ledg
             select(AppendOnlyManifestLedger).where(AppendOnlyManifestLedger.target_file_id == target_uuid)
         )
         ledger.intent = "corrupted non-operational manifest summary"
-        session.commit()
+        session.flush()
 
     replayed = registry.call("patchdiff_replay", target_file_id=target_id)
     target = registry.call("patchdiff_get_target", target_file_id=target_id)

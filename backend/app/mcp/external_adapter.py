@@ -15,6 +15,11 @@ from dataclasses import dataclass
 from types import NoneType, UnionType
 from typing import Any, TextIO, get_args, get_origin, get_type_hints
 
+from app.core.config import (
+    active_mcp_profile_context,
+    redact_sensitive_text,
+    resolve_mcp_profile_and_validate_startup,
+)
 from app.mcp import tools as _registered_tools  # noqa: F401 - imports register tool handlers
 from app.mcp.server import registry
 from app.mcp.editor_contracts import (
@@ -232,17 +237,18 @@ class ExternalMCPAdapter:
         if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
-        if self.profile == "observed_v2":
-            return self._call_editor_tool(name, args)
-        argument_error = _argument_error(name, args)
-        if argument_error is not None:
-            return {"content": [{"type": "text", "text": _dumps(argument_error, sort_keys=True)}], "isError": True}
-        try:
-            payload = registry.call(name, **args)
-        except TypeError as exc:
-            return _tool_error(f"Invalid arguments for {name}: {exc}")
-        except Exception as exc:  # pragma: no cover - defensive transport boundary
-            return _tool_error(f"PatchDIFF MCP tool failed: {exc}")
+        with active_mcp_profile_context(self.profile):
+            if self.profile == "observed_v2":
+                return self._call_editor_tool(name, args)
+            argument_error = _argument_error(name, args)
+            if argument_error is not None:
+                return {"content": [{"type": "text", "text": _dumps(argument_error, sort_keys=True)}], "isError": True}
+            try:
+                payload = registry.call(name, **args)
+            except TypeError as exc:
+                return _tool_error(f"Invalid arguments for {name}: {redact_sensitive_text(str(exc))}")
+            except Exception as exc:  # pragma: no cover - defensive transport boundary
+                return _tool_error(f"PatchDIFF MCP tool failed: {redact_sensitive_text(str(exc))}")
         if self.response_mode == "compact":
             projected = _compact_payload(name, payload)
             if projected is not payload:
@@ -324,7 +330,6 @@ class ExternalMCPAdapter:
 
 def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
     """Serve newline-delimited JSON-RPC requests over stdio."""
-
     from app.services.waymark_worker import serving_worker_owner
     with serving_worker_owner(prewarm=True):
         adapter = ExternalMCPAdapter()
@@ -351,6 +356,8 @@ def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] in {"setup", "daemon", "-h", "--help"}:
         from app.mcp.runtime_cli import main as cli_main
         raise SystemExit(cli_main(sys.argv[1:]))
+    # Resolve identity and credentials before any engine or worker can be created.
+    resolve_mcp_profile_and_validate_startup(lock_process=True)
     sys.stdin.reconfigure(encoding="utf-8", errors="strict")
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
     serve_stdio()

@@ -8,25 +8,28 @@ intent, proposal generation and retry decisions. A batch never spans targets.
 ## Trusted startup profiles
 
 Set `PATCHDIFF_MCP_PROFILE` before starting `python -m app.mcp.external_adapter`.
-An unset variable selects `editor`; an unknown value prevents startup. Restart
+An unset variable selects `observed_v2`; an unknown value prevents startup. Restart
 the MCP session to change its profile. Trusted embeddings may construct
 `ExternalMCPAdapter(profile="observed")`. Agents cannot override it in a request.
 The same immutable profile controls both `tools/list` and `tools/call`.
 
 | Profile | Count | Advertised and callable tools |
 | --- | ---: | --- |
-| `editor` (default) | 7 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
+| `editor` (legacy) | 7 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
 | `unobserved` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save`, `patchdiff_replay` |
 | `observed` | 6 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
 | `observed_editor` (delegated role) | 4 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations` |
-| `full` (explicit compatibility) | 22 | All registered tools, including initialization, export, history and legacy submissions |
+| `observed_v2` (default) | 5 | Purpose-specific read, search, list, observe and commit tools; see [the v2 contract](MCP_EDITOR_V2.md) |
+| `full` (explicit compatibility) | 24 | All registered tools, including initialization, export, history, legacy submissions and finalization |
 
 Older integrations and trusted lifecycle operators that initialize/export targets
-must explicitly select `full`. The internal registry retains all 22 handlers.
-Delegated editors use
-`observed_editor` when the host owns SAVE/replay; these lifecycle tools are
-uncallable on that editor connection. Existing profile defaults/counts are
-unchanged; use a separate full session for trusted finalization.
+must explicitly select `full` under the operator UID with the nonsuperuser
+`patchdiff_host` SQL role. The internal registry retains all 24 handlers.
+Delegated editors use the default `observed_v2` or legacy `observed_editor`;
+these profiles deny lifecycle calls. Legacy `editor`, `unobserved` and `observed`
+retain their SAVE/replay catalog entries, but the delegated `patchdiff_agent`
+SQL role cannot perform lifecycle writes. Use a separate trusted full session
+for SAVE, replay and finalization. Legacy profiles emit advisory stderr notices.
 `PATCHDIFF_STRICT_OBSERVATION_MODE=1` independently rejects unobserved writes at
 the service layer, including writes through `full` or the internal registry.
 
@@ -222,8 +225,8 @@ def edit_example(filename, content, content_type, selections, operations):
         groups=[{"observation_id": scope["observation_id"], "operations": ops}
                 for scope, ops in zip(bundle["scopes"], operations)])
     assert result["status"] == "accepted" and result["after_version"] == 1, result
-    assert call(editor, "patchdiff_save", target_file_id=tid)["status"] == "saved"
-    assert call(editor, "patchdiff_replay", target_file_id=tid)["materialized_state_matches"]
+    assert call(operator, "patchdiff_save", target_file_id=tid)["status"] == "saved"
+    assert call(operator, "patchdiff_replay", target_file_id=tid)["materialized_state_matches"]
     return call(operator, "patchdiff_export_target", target_file_id=tid)["content"]
 
 python_output = edit_example("quotas.py",

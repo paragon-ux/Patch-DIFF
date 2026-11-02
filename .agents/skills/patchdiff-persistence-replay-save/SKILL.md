@@ -63,6 +63,10 @@ Schema migrations are managed by Alembic in `backend/app/migrations/`:
 7. `20261031_0007_finalization_checks.py`:
    - Adds nullable JSONB `materialized_state_checks` to `target_finalizations` so idempotent finalization retries return the exact persisted component-level replay verification booleans.
    - Guarded downgrade: refuses while any `target_finalizations` row has `materialized_state_checks IS NOT NULL`.
+8. `20261101_0008_pr23_integrity_and_export_chunks.py`:
+   - Adds backfilled `history_revision`, immutable 256-KiB export chunks, append-only history triggers and one-shot observation linkage guards.
+   - Restricts SQL role grants and privileged helper execution; only the host can call `patchdiff_lock_finalized_export(uuid)` to lock historical receipts without raw receipt UPDATE permission.
+   - Guarded downgrade: refuses while finalized export chunks exist.
 
 Migrations must always run cleanly on live Postgres:
 ```powershell
@@ -158,3 +162,11 @@ A successful reconstruction can report materialized_state_matches=false. CRLF/ba
 ## Structural bundle persistence and replay
 
 Migration 20261026_0004 persists observations; additive 20261027_0005 adds paired bundle ID/ordinal, unique bundle order, bundle/accepted-log indexes and partial accepted-log uniqueness for historical singles. Bundled observations can share one accepted log and are each consumed once. Downgrade refuses bundled rows, many-to-one links or accepted batch records. Keep request recovery before stale guards; fingerprint the submitted batch before attaching authoritative evidence. All links, ledger rows, target state and one version increment share the existing locked transaction. Explicitly replay patchdiff-observed-batch/1 only with patchdiff-observed-batch-r1, requiring the exact ordered scope evidence and preimage without Waymark. See `docs/spec/STRUCTURAL_BATCH_EDITING.md`.
+
+## PR23 migration 0008 and service roles
+
+Docker Compose PostgreSQL 16.3 Alpine is the sole managed runtime, on loopback port 5433. Explicit external PostgreSQL 16+ uses three supplied role DSNs without lifecycle management. Bootstrap is confined to migrations; host is a nonsuperuser; editor uses explicit table/column allowlists. Never widen grants to make a test pass.
+
+Migration `20261101_0008` adds `cloud_target_files.history_revision`, backfilled from accepted logs plus linked observations, and immutable 256-KiB `target_finalization_export_chunks`. Database triggers enforce append-only logs/manifests/snapshots/chunks and one-shot matching observation linkage, advancing history revision in the same transaction. Both service roles lack direct revision UPDATE. Finalization binds a repeatable-read read-only pre-replay to locked version/hash/revision and raw content; any mismatch/failed replay requires locked authoritative fallback. Receipt, SAVE and chunks commit together. Historical export backfill uses the saved snapshot under a receipt lock obtained through host-only SECURITY DEFINER `patchdiff_lock_finalized_export(uuid)`. Privileged revision helpers revoke PUBLIC execution, and observations cannot be inserted already linked. Never restore historical bytes from mutable target state or introduce a resident full-export cache.
+
+Run migration roundtrips/refusal in fresh disposable databases, never the configured application database. See `docs/spec/DATA_MODEL.md` and `docs/guides/CLAUDE_DESKTOP_SETUP.md`.

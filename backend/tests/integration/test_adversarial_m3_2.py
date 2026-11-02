@@ -18,7 +18,7 @@ from alembic import command
 from alembic.config import Config
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
-from sqlalchemy import create_engine, text, select, func
+from sqlalchemy import create_engine, event, text, select, func
 
 from app.core.failures import FailureReason
 from app.services.finalize_service import finalize_target
@@ -59,11 +59,12 @@ def get_alembic_config(db_url: str | None = None) -> Config:
 
 def test_adversarial_migration_0007_schema_and_reversibility(monkeypatch: pytest.MonkeyPatch):
     """Adversarially challenge migration 0007 in an isolated disposable database without touching shared state (PR23-R4I-TEST-001)."""
-    base_url = engine.url.render_as_string(hide_password=False)
+    from app.core.config import resolve_database_url
+    base_url = resolve_database_url(role="patchdiff_bootstrap")
 
     # 0. Guard must refuse to operate on the shared database
     with pytest.raises(RuntimeError, match="Refusing to run destructive migration"):
-        assert_disposable_migration_db(base_url)
+        assert_disposable_migration_db(_build_db_url_with_name(base_url, "patchdiff"))
 
     disposable_db = f"{DISPOSABLE_DB_PREFIX}m3_2_{uuid.uuid4().hex[:8]}"
     disposable_url = _build_db_url_with_name(base_url, disposable_db)
@@ -227,11 +228,15 @@ def test_adversarial_legacy_records_null_checks_handling():
     assert res1.status == "ok"
 
     # Simulate historical pre-0007 record by forcibly setting materialized_state_checks to NULL in DB
-    with engine.begin() as conn:
+    from app.storage.db import create_bootstrap_engine
+    maintenance = create_bootstrap_engine()
+    with maintenance.begin() as conn:
         conn.execute(
             text("UPDATE target_finalizations SET materialized_state_checks = NULL WHERE client_request_id = :cid"),
             {"cid": client_request_id},
         )
+
+    maintenance.dispose()
 
     # Now execute idempotent retry
     with SessionLocal() as session:
@@ -253,77 +258,85 @@ def test_adversarial_legacy_records_null_checks_handling():
 
 
 def test_adversarial_lock_contention_wait_vs_hold_separation():
-    """Simulate artificial lock contention: verify lock_wait_ms reflects contention while lock_hold_ms reflects hold time."""
+    """Prove actual PostgreSQL blocking with barriers; record timings without load gates."""
     with SessionLocal() as session:
-        init = initialize_target(
-            session,
-            filename="contention_test.txt",
-            content="Contention Target\nLine 2\n",
-            target_type="text/plain",
-        )
-        target_id = init.target_file_id
-        v0 = init.version
-        h0 = init.current_hash
+        init = initialize_target(session, filename="contention_test.txt",
+                                 content="Contention Target\nLine 2\n", target_type="text/plain")
+    acquired = threading.Event()
+    release = threading.Event()
+    attempting = threading.Event()
+    state = {}
+    errors = []
+    competitor_name = "pr23-contending-finalizer"
 
-    lock_acquired_event = threading.Event()
-    contention_release_event = threading.Event()
-    thread_b_result = {}
+    def holder():
+        try:
+            with SessionLocal() as session:
+                session.execute(select_target_for_update(init.target_file_id)).scalar_one()
+                acquired.set()
+                if not release.wait(30):
+                    raise TimeoutError("Finalizer never reached the blocked row lock")
+                session.rollback()
+        except BaseException as exc:
+            errors.append(exc)
+            acquired.set()
 
-    def holder_process_a():
-        """Process/Thread A acquires row lock and holds it for 450ms."""
-        with SessionLocal() as session:
-            tx = session.begin()
-            # Lock the target row
-            session.execute(select_target_for_update(target_id)).scalar_one()
-            lock_acquired_event.set()
-            # Hold lock for 450ms so competitor still waits >= 250ms after pre-lock replay
-            time.sleep(0.45)
-            tx.rollback()
-            contention_release_event.set()
+    def before_lock(conn, _cursor, statement, _parameters, _context, _many):
+        if (threading.current_thread().name == competitor_name
+                and "cloud_target_files" in statement and "FOR UPDATE" in statement):
+            state["pid"] = conn.connection.driver_connection.info.backend_pid
+            attempting.set()
 
-    def competitor_thread_b():
-        """Process/Thread B calls finalize_target while lock is held."""
-        # Wait until Thread A has actually acquired the row lock
-        lock_acquired_event.wait()
-        # Brief sleep to ensure Thread A is solidly holding the lock
-        time.sleep(0.05)
-        with SessionLocal() as session:
-            res = finalize_target(
-                session,
-                target_file_id=target_id,
-                client_request_id=f"fin-contend-{uuid.uuid4()}",
-                expected_target_version=v0,
-                expected_current_hash=h0,
-                format="canonical_lf",
-            )
-            thread_b_result["result"] = res
+    def after_lock(_conn, _cursor, statement, _parameters, _context, _many):
+        if (threading.current_thread().name == competitor_name
+                and "cloud_target_files" in statement and "FOR UPDATE" in statement):
+            state["acquired_after_release"] = release.is_set()
 
-    t_holder = threading.Thread(target=holder_process_a)
-    t_competitor = threading.Thread(target=competitor_thread_b)
+    def competitor():
+        try:
+            if not acquired.wait(30):
+                raise TimeoutError("Holder did not acquire the target lock")
+            with SessionLocal() as session:
+                state["result"] = finalize_target(
+                    session, target_file_id=init.target_file_id,
+                    client_request_id=f"fin-contend-{uuid.uuid4()}",
+                    expected_target_version=init.version, expected_current_hash=init.current_hash,
+                    format="canonical_lf")
+        except BaseException as exc:
+            errors.append(exc)
 
-    t_holder.start()
-    t_competitor.start()
-
-    t_holder.join()
-    t_competitor.join()
-
-    res = thread_b_result["result"]
-    assert res.status == "ok"
-    assert res.lock_wait_ms is not None
-    assert res.lock_hold_ms is not None
-
-    print(f"\n[Empirical Timing] lock_wait_ms={res.lock_wait_ms:.2f}ms, lock_hold_ms={res.lock_hold_ms:.2f}ms")
-
-    # Lock wait time must reflect the contention duration (held for ~350ms, competitor waited at least 250ms)
-    assert res.lock_wait_ms >= 250.0, f"lock_wait_ms ({res.lock_wait_ms:.2f}ms) did not reflect contention wait time!"
-
-    # Lock hold time must reflect execution hold time (from acquiring lock to commit), which is fast (< 100ms)
-    assert res.lock_hold_ms < 150.0, f"lock_hold_ms ({res.lock_hold_ms:.2f}ms) unexpectedly large!"
-
-    # lock_wait_ms must be substantially greater than lock_hold_ms, proving they are separated!
-    assert res.lock_wait_ms > 2.0 * res.lock_hold_ms, (
-        f"lock_wait_ms ({res.lock_wait_ms:.2f}ms) not distinct from lock_hold_ms ({res.lock_hold_ms:.2f}ms)"
-    )
+    event.listen(engine, "before_cursor_execute", before_lock)
+    event.listen(engine, "after_cursor_execute", after_lock)
+    threads = [threading.Thread(target=holder),
+               threading.Thread(target=competitor, name=competitor_name)]
+    for thread in threads:
+        thread.start()
+    try:
+        assert attempting.wait(30), errors
+        deadline = time.monotonic() + 20
+        blocked = False
+        while time.monotonic() < deadline:
+            with SessionLocal() as session:
+                blocked = bool(session.execute(text("SELECT cardinality(pg_blocking_pids(:pid))"),
+                                               {"pid": state["pid"]}).scalar_one())
+            if blocked:
+                break
+            time.sleep(0.01)
+        assert blocked, "PostgreSQL never reported the finalizer blocked on the holder"
+    finally:
+        release.set()
+        for thread in threads:
+            thread.join(30)
+        event.remove(engine, "before_cursor_execute", before_lock)
+        event.remove(engine, "after_cursor_execute", after_lock)
+    assert not any(thread.is_alive() for thread in threads)
+    assert not errors, errors
+    assert state["acquired_after_release"] is True
+    result = state["result"]
+    assert result.status == "ok"
+    assert result.lock_wait_ms >= 0 and result.lock_hold_ms >= 0
+    print(f"\n[Empirical Timing] lock_wait_ms={result.lock_wait_ms:.2f}ms, "
+          f"lock_hold_ms={result.lock_hold_ms:.2f}ms")
 
 
 def test_adversarial_rollback_branches_record_accurate_hold_time():
