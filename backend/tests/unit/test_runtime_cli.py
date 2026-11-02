@@ -6,7 +6,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import pwd
 import stat
+import subprocess
+import sys
 from unittest.mock import MagicMock, patch
 from urllib.parse import quote
 
@@ -119,6 +122,7 @@ def test_foreign_and_same_workdir_different_project_containers_never_removed_or_
         },
     }
 
+    real_run = subprocess.run
     for inspect_payload, expected_err in (
         (foreign_inspect, "Foreign Docker container conflict"),
         (same_workdir_diff_project_inspect, "Docker Compose project conflict"),
@@ -127,6 +131,8 @@ def test_foreign_and_same_workdir_different_project_containers_never_removed_or_
 
         def fake_run(cmd, *args, **kwargs):
             calls.append(list(cmd))
+            if cmd[0] != "docker":
+                return real_run(cmd, *args, **kwargs)
             if cmd[:2] == ["docker", "ps"]:
                 return MagicMock(returncode=0, stdout="container-1\n", stderr="")
             if cmd[:2] == ["docker", "inspect"]:
@@ -199,12 +205,24 @@ def test_separate_three_role_credential_files_and_redaction(tmp_path: Path):
     boot_file = Path(creds["bootstrap_credentials_file"])
     host_file = Path(creds["host_credentials_file"])
     agent_file = Path(creds["agent_credentials_file"])
-    for fpath in (boot_file, host_file, agent_file):
+    for fpath in (boot_file, host_file):
         assert fpath.is_file()
         assert stat.S_IMODE(fpath.stat().st_mode) == 0o600
 
+    probe = subprocess.run(
+        ["sudo", "-n", "-u", runtime_cli.OS_AGENT_USER, "--", sys.executable, "-c",
+         "import json,os,stat,sys; from pathlib import Path; p=Path(sys.argv[1]); s=p.lstat(); "
+         "print(json.dumps(dict(regular=stat.S_ISREG(s.st_mode),mode=stat.S_IMODE(s.st_mode),"
+         "owner=s.st_uid,links=s.st_nlink,raw=p.read_text(encoding='utf-8'))))", str(agent_file)],
+        check=True, capture_output=True, text=True,
+    )
+    agent_state = json.loads(probe.stdout)
+    assert agent_state["regular"] and agent_state["links"] == 1
+    assert agent_state["mode"] == 0o600
+    assert agent_state["owner"] == pwd.getpwnam(runtime_cli.OS_AGENT_USER).pw_uid
+
     # Agent secret file must NEVER contain bootstrap or host passwords
-    agent_raw = agent_file.read_text(encoding="utf-8")
+    agent_raw = agent_state["raw"]
     assert pw_boot not in agent_raw
     assert pw_host not in agent_raw
     assert "patchdiff_bootstrap" not in agent_raw
