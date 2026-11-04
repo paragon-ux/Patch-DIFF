@@ -38,6 +38,11 @@ sequenceDiagram
 
 ---
 
+With the [workspace profile](guides/WORKSPACE_PUBLICATION.md), initialization
+reads a project file into PostgreSQL. A guarded edit updates the database
+working copy. SAVE can publish the file and reports publication separately
+from its database checkpoint.
+
 ## 2. Core Validation Stages & State Transition Flowchart
 
 PatchDIFF evaluates proposals against five distinct `ValidationStage` boundaries, ensuring that invalid transactions fail closed before any state mutation can occur:

@@ -8,7 +8,7 @@ Only migration `20261022_0003` adds storage (below); everything else uses existi
 - Accepted tx/2 and tx/3 transactions write `origin = 'typed'` ledger rows whose `derived_json` adds `operation` (`"span"` or `"replace_all"`). A tx/3 transaction writes exactly one row covering the full original span.
 - Rejected rows persist `diagnostic_json.failure_context` (at most 256 code points of the failing buffer, as a prefix or a window around a known failure location) and, when applicable, `exact_candidates`, span evidence (`span_check`, `buffer_length`, `actual_text`), `original_occurrences` for consumed sequential matches, `near_miss_query` for absent matches, and `code` for request-key conflicts and invalid keys. Response-only `current_context`, `near_misses`, the near-miss scan buffer and `correlation_id` are never stored.
 - Accepted rows keep `diagnostic_json = NULL` unless the applier reported warnings; then it holds `{warnings, warning_count, warnings_truncated}` with at most 16 warning objects. Replay never reads it.
-- Migration `20261022_0003` adds nullable JSONB `cloud_target_files.source_line_endings`, written once at upload and read only by export. Existing targets keep NULL (unknown). Downgrade refuses while any target has recorded facts.
+- Migration `20261022_0003` adds nullable JSONB `cloud_target_files.source_line_endings`. Initialization records the original source facts, which export and workspace publication use to render line endings. Workspace initialization adds `workspace_tracked` and `workspace_root_identity` (the directory device and inode). A successful workspace SAVE also records `last_synced_disk_sha256` and `last_synced_version` with the checkpoint. The next publication checks that digest, or the initial raw digest for an imported file before its first publication. Existing targets can have NULL metadata. Downgrade refuses while any target has recorded facts.
 - A valid oversized fresh tx/3 replacement writes no attempt or `current_pdcp_files` row. A key-conflict attempt is audited before fresh admission, so its row stores the complete submitted record even when it exceeds the fresh limits, the same as any tx/1 or tx/2 attempt.
 - `patchdiff_read_lines` and `patchdiff_preview` only read one committed `cloud_target_files` row; they write nothing and take no locks.
 
@@ -104,7 +104,7 @@ Authoritative current canonical target state.
 | `current_content` | TEXT | NOT NULL | Canonical UTF-8 target text (LF normalized) |
 | `current_hash` | CHAR(64) | NOT NULL | SHA-256 of canonical target text |
 | `version` | BIGINT | NOT NULL | Monotonically increasing version (0 on init) |
-| `source_line_endings` | JSONB | NULLABLE | Raw upload line-ending facts `{style, lf, crlf, cr, normalized, source_code_points, source_utf8_bytes, source_sha256}` recorded before LF canonicalization; NULL for targets created before Migration `0003` |
+| `source_line_endings` | JSONB | NULLABLE | Raw upload line-ending facts `{style, lf, crlf, cr, normalized, source_code_points, source_utf8_bytes, source_sha256}` recorded before LF canonicalization; includes workspace binding and last-publication facts for managed files; NULL for targets created before Migration `0003` |
 | `active_editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Current active cycle |
 | `latest_accepted_pdcp_log_id` | UUID | FK -> `append_only_pdcp_logs.pdcp_log_id` NULLABLE | Last accepted attempt |
 | `initial_snapshot_id` | UUID | FK -> `target_snapshots.snapshot_id` NULLABLE | Initial upload snapshot |

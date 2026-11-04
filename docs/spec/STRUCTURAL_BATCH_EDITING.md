@@ -19,16 +19,18 @@ The same immutable profile controls both `tools/list` and `tools/call`.
 | `unobserved` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save`, `patchdiff_replay` |
 | `observed` | 6 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
 | `observed_editor` (delegated role) | 4 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations` |
+| `unobserved_editor` | 3 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits` |
+| `hybrid_editor` | 1 | `patchdiff_submit_edits` |
+| `observed_v2` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle` |
+| `workspace` | 5 | `patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save` |
 | `full` (explicit compatibility) | 22 | All registered tools, including initialization, export, history and legacy submissions |
 
-Older integrations and trusted lifecycle operators that initialize/export targets
-must explicitly select `full`. The internal registry retains all 22 handlers.
-Delegated editors use
-`observed_editor` when the host owns SAVE/replay; these lifecycle tools are
-uncallable on that editor connection. Existing profile defaults/counts are
-unchanged; use a separate full session for trusted finalization.
-`PATCHDIFF_STRICT_OBSERVATION_MODE=1` independently rejects unobserved writes at
-the service layer, including writes through `full` or the internal registry.
+Use [`workspace`](../guides/WORKSPACE_PUBLICATION.md) to import and publish a
+workspace file. Use `full` for export, administrative audit calls and legacy
+submissions. Delegated editors can use `observed_editor` while the trusted host
+handles SAVE/replay in a separate session. The internal registry retains all
+22 handlers. `PATCHDIFF_STRICT_OBSERVATION_MODE=1` independently rejects
+unobserved writes at the service layer and prevents `workspace` startup.
 
 ## Observation contract
 

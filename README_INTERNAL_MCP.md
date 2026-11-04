@@ -19,7 +19,7 @@ It must keep the same invariants as the external adapter:
 - Transactions are untrusted until submitted through `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), `patchdiff_submit_replacement` (`patchdiff-tx/3`) or `patchdiff_submit_pdcp` (legacy `0.2.3`). All use the shared locked commit path.
 - Target content mutation must come only from accepted transactions validated by the deterministic core runtime.
 - The registry must not bypass parser, validator, matcher, applier, or service-layer commit paths.
-- SAVE may create snapshots and advance editing cycles, but must not alter target content.
+- SAVE can create snapshots and advance editing cycles without changing canonical target text. Explicit [workspace publication](docs/guides/WORKSPACE_PUBLICATION.md) can also install the rendered file bytes. Publication requires a service-owned transaction.
 - Admitted known-target rejections append attempt rows within the owner transaction and no ledger rows. Exact recovery, reads, preview and documented pre-admission failures add no attempt; caller rollback/infrastructure failure does not promise durability.
 
 ## Prerequisites

@@ -6,14 +6,12 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 ## 0. Stdio transport and host refresh
 
-Choose the immutable server profile before starting a session with
-`PATCHDIFF_MCP_PROFILE`: `editor` (default, 7 tools), `unobserved` (5), `observed`
-(6), `observed_editor` (4), `workspace` (5), or `full` (22). Use `observed_editor` for delegated
-editing when the host owns lifecycle work; it rejects SAVE/replay as well as
-other excluded tools before dispatch. Older integrations and trusted
-initialization/export/audit
-operators must explicitly opt into `full`. Excluded tools are uncallable as well
-as unadvertised. An agent cannot override a profile per request.
+Choose the immutable `PATCHDIFF_MCP_PROFILE` before starting a session.
+Use `workspace` for the five-tool file import, edit and publication workflow.
+Use `observed_editor` for delegated structural editing when the host owns
+SAVE/replay. Use `full` for the complete lifecycle, export and audit catalog.
+The default `editor` profile exposes seven tools for working with an existing
+target. The server filters both discovery and dispatch by profile.
 [Exact profile lists and batch examples](../spec/STRUCTURAL_BATCH_EDITING.md).
 
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
@@ -366,10 +364,10 @@ For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](../spe
 
 ## Optional managed workspace publication
 
-Trusted lifecycle clients using `PATCHDIFF_MCP_PROFILE=full` can opt into
-[workspace initialization and SAVE publication](WORKSPACE_PUBLICATION.md).
-Editing profiles retain their existing tool surface and deny lifecycle calls.
-Configure a workspace once per server process; a package installation cannot
-choose a user's project root. The host can request the workflow through existing
-tools without relaying full source text through model tool arguments/results.
-Partial and lost SAVE outcomes require explicit reconciliation, not a retry loop.
+The [workspace profile](WORKSPACE_PUBLICATION.md) lets a host start with a
+filename. Initialize with `from_workspace=true`, pass the returned target ID
+to read/search and guarded edit calls, then SAVE with `sync_workspace=true`
+when the user requests file publication. `full` also exposes these calls for
+trusted lifecycle clients. The import request and normal SAVE receipt avoid a
+full source relay. For partial or lost SAVE outcomes, inspect the file and
+database state before reconciling.

@@ -23,6 +23,7 @@ nav = [
         { "Waymark Worker" = "spec/WAYMARK_WORKER.md" }
     ]},
     { "Guides" = [
+        { "Workspace Editing" = "guides/WORKSPACE_PUBLICATION.md" },
         { "Host Integration Guide" = "guides/HOST_INTEGRATION_GUIDE.md" },
         { "Claude Desktop Setup" = "guides/CLAUDE_DESKTOP_SETUP.md" },
         { "Observed Editor Workflow" = "guides/OBSERVED_EDITOR_WORKFLOW.md" }

@@ -46,6 +46,7 @@ Authoritative technical specifications and tool schemas:
 
 Practical guides for integrating PatchDIFF with agents and desktop tools:
 
+- [**Workspace editing**](guides/WORKSPACE_PUBLICATION.md) covers the installed wheel, five-tool profile, and explicit file publication.
 - [**HOST_INTEGRATION_GUIDE.md**](guides/HOST_INTEGRATION_GUIDE.md): Host-owned loop, prompt hygiene rules, reading slices, guarded submissions, handling rejections, and retry orchestration.
 - [**CLAUDE_DESKTOP_SETUP.md**](guides/CLAUDE_DESKTOP_SETUP.md): Step-by-step configuration for connecting Anthropic Claude Desktop to PatchDIFF via stdio MCP.
 - [**OBSERVED_EDITOR_WORKFLOW.md**](guides/OBSERVED_EDITOR_WORKFLOW.md): End-to-end walkthrough for agents using structural observation and atomic batch submission.

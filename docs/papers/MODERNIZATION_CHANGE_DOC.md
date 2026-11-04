@@ -1,18 +1,25 @@
 # PatchDIFF Product Change Record
 
-
-Opt-in workspace publication extends initialization and SAVE at the trusted
-service boundary. The pure runtime and PostgreSQL canonical working target are
-unchanged. File installation and checkpoint commit are explicitly non-atomic;
-partial outcomes require operator reconciliation or re-initialization, with no
-automatic recovery/retry. Publication requires a cooperatively owned, stable
-POSIX workspace and a service-owned transaction; unsupported platforms fail
-closed. This is not a new finalization subsystem or citation integration.
-See [the workspace contract](../guides/WORKSPACE_PUBLICATION.md).
-
 PatchDIFF provides four declarative transaction formats through one deterministic applier and locked PostgreSQL submission pipeline. Authoritative reads, advisory preview, durable outcome recovery and deterministic replay let hosts propose and verify changes without moving state authority into the host.
 
 Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP tools](../spec/MCP_TOOLS.md), [core runtime](../spec/PATCHDIFF_CORE_SPEC.md), [storage](../spec/DATA_MODEL.md), [transaction formats](../spec/PDCP_FORMAT.md), [host guide](../guides/HOST_INTEGRATION_GUIDE.md), and [legacy compatibility](../legacy/LEGACY_COMPATIBILITY.md).
+
+## Workspace editing and publication
+
+The five-tool `workspace` profile starts with an eager check of the project
+directory and database migration revision. Initialization can import a file
+using a relative filename and return the target ID without returning source.
+Guarded typed edits update PostgreSQL. An explicit workspace SAVE publishes
+file bytes and returns a receipt with the path, raw digest, line endings and
+durability. The file install and checkpoint commit have separate outcomes.
+The existing line-ending metadata carries the workspace binding and last
+published digest. See [setup and recovery guidance](../guides/WORKSPACE_PUBLICATION.md).
+
+Installed-wheel checks used PostgreSQL 16 and live stdio to verify the
+working copy before SAVE and exact file bytes and checkpoint afterward.
+The fresh Codex CLI session exercised the same success path with a natural
+request and the five-tool catalog. This is workflow evidence for one file,
+separate from the comparative benchmark.
 
 ## Transaction formats and compatibility
 
@@ -46,8 +53,8 @@ both advertisement and dispatch while preserving the existing profiles and all
 request shapes. Observation/submission descriptions clarify route inputs, returned
 authority and the scopes-to-groups mapping; service validation and durable
 transaction/replay formats are unchanged. Profiles filter both discovery and calls and remain immutable for a session; the internal
-registry keeps all 22 handlers. Trusted lifecycle operators and older integrations
-must opt into `full` before starting their session.
+registry keeps all 22 handlers. Trusted clients that need export, administrative
+history or legacy submissions select `full` before starting their session.
 
 | Tool | Stored protocol | Runtime for new submissions | Behavior |
 | --- | --- | --- | --- |

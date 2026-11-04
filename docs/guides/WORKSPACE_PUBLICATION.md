@@ -1,28 +1,33 @@
-# Optional workspace publication
+# Workspace editing with the installed package
 
-This mode reads and writes files in the server's workspace. PostgreSQL remains
-the canonical working target for deterministic editing. SAVE's database
-checkpoint and file installation are separate outcomes; neither can roll back
-the other. No finalization tool, automatic retry or recovery service is added.
+Use the `workspace` MCP profile when a host needs to edit an existing file in
+one project directory. PatchDIFF imports the file into a PostgreSQL working
+target, applies guarded edits there, then publishes the file on explicit SAVE.
+File publication and the database checkpoint have separate outcomes.
 
 ## Setup
 
 Use a POSIX server supporting `openat`-style directory-relative IO, `O_NOFOLLOW`
-and directory `flock` (Linux is the verified platform). Native Windows workspace
-IO rejects with `workspace_platform_unsupported` before file IO. The ordinary
-inline upload/edit/export workflow remains available there. A Linux/WSL server
+and directory `flock`. Linux is the verified platform. The `workspace` profile
+fails startup on native Windows, where inline upload, edit and export remain
+available through `full`. A Linux/WSL server
 can access a mounted project only if its filesystem supports these operations.
 
-Use PostgreSQL 16 and apply the migrations shipped with the installed wheel.
-In the same Python environment as PatchDIFF, set `PATCHDIFF_DATABASE_URL` to
-the provisioned database, then run:
+Create a Python 3.11 virtual environment and install the PatchDIFF wheel.
+Provision a PostgreSQL 16 database and set `PATCHDIFF_DATABASE_URL` to its
+connection URL before applying the migrations shipped with the wheel.
 
 ```bash
+python3.11 -m venv .venv
+. .venv/bin/activate
+python -m pip install /absolute/path/to/patchdiff_mvp-0.1.0-py3-none-any.whl
+export PATCHDIFF_DATABASE_URL='postgresql+psycopg://patchdiff@localhost:5432/patchdiff'
 alembic_ini=$(python -c 'from pathlib import Path; import app; print(Path(app.__file__).with_name("migrations") / "alembic.ini")')
 python -m alembic -c "$alembic_ini" upgrade head
 ```
 
-Configure your MCP client to start that interpreter. For example:
+Configure your MCP client to start that interpreter. Replace the paths and
+database URL with the values for your environment.
 
 ```json
 {
@@ -41,13 +46,26 @@ Configure your MCP client to start that interpreter. For example:
 }
 ```
 
-The `workspace` profile exposes `patchdiff_initialize_target`,
-`patchdiff_read_target`, `patchdiff_find_occurrences`,
-`patchdiff_submit_edits` and `patchdiff_save`. It prepares these declarations
-at startup and checks the absolute workspace directory and installed database
-migration revision before answering MCP requests. Apply migrations separately.
-This profile uses exact text edits and starts without Node or Waymark. A server
-with strict observation enabled must use an observed editing profile.
+Start or refresh the MCP connection and check that it exposes these five tools.
+
+| Tool | When to use it |
+| --- | --- |
+| `patchdiff_initialize_target` | Start here if you have a filename but no `target_file_id`. |
+| `patchdiff_read_target` | Read bounded working text and obtain its version and hash. |
+| `patchdiff_find_occurrences` | Locate known exact text or disambiguate repeated matches. |
+| `patchdiff_submit_edits` | Commit guarded replacements to the PostgreSQL working copy. |
+| `patchdiff_save` | Checkpoint the working copy and publish to the workspace when requested. |
+
+The server prepares these declarations and checks the absolute workspace
+directory, explicit database URL and installed migration revision before the
+MCP handshake. Startup errors go to stderr. Apply migrations separately.
+This profile starts without Node or Waymark. Strict observation mode is
+incompatible with this exact-text profile.
+
+Set the MCP server's workspace root to the same project directory the host
+opens, so server-relative paths and client-rendered links refer to the same
+file. If the host prompts for MCP write approval, authorize the server for
+that workspace before asking it to edit.
 
 The root must already exist. Sync defaults off; use `sync_workspace=true` on an
 individual SAVE, or deliberately set `PATCHDIFF_WORKSPACE_SYNC_ON_SAVE=1` for
@@ -60,7 +78,7 @@ requires explicit initialization of a new target.
 
 ## Ownership and paths
 
-The server owns managed file operations. All managed readers/publishers obtain
+The server owns managed file operations. Workspace imports and publications obtain
 an advisory exclusive lease on the pinned physical destination directory.
 This serializes the same destination across processes, target IDs, overlapping
 configured roots and path aliases. Different destination directories can run
@@ -85,22 +103,29 @@ publication. Creation uses an atomic no-clobber link, so a newly appeared file
 is preserved. These limits apply regardless of whether the file writer is
 native or an external managed adapter.
 
-## Flow through existing tools
+## Edit and publish a file
 
-1. Call `patchdiff_initialize_target(filename="src/app.py", from_workspace=true)`
-   with content omitted/null. The server imports valid UTF-8 bytes, records raw
-   hash/EOL/root identity and returns target metadata, without returning source.
-2. Use `patchdiff_read_target` for bounded canonical text and
-   `patchdiff_find_occurrences` to verify exact matches. Call
-   `patchdiff_submit_edits` with the observed version or hash and your ordered
-   match/replace edits. Acceptance updates the PostgreSQL working copy.
-3. Call `patchdiff_save(target_file_id=..., expected_target_version=...,
-   sync_workspace=true)`. Do not enable `export_after_save` when a receipt suffices.
-4. On `saved`, verify `workspace_sync.disk_sha256` and the file. The receipt also
-   contains `synced_path`, `bytes_written`, `content_eol`, `publication=installed`
-   and `durability=confirmed`; it contains no full target text.
-5. On external divergence, stop and inspect/reinitialize from the file. On a
-   partial/unknown outcome, inspect both disk and database before proceeding.
+A normal user request can name the file, describe the edit and ask to save it
+to the workspace. The client can discover the sequence from the tools.
+
+1. Start with `patchdiff_initialize_target` and arguments
+   `{"filename":"handbook/on-call.md","from_workspace":true}`. Omit `content`.
+   The response gives you `target_file_id`, version and hash without returning
+   the source text. Use that ID in the following calls.
+2. Read the working copy with `patchdiff_read_target`, or search with
+   `patchdiff_find_occurrences` when you know the exact text. Submit one
+   `patchdiff_submit_edits` call with the target ID, observed version and/or
+   hash, a nonblank `intent` describing the change, and ordered `edits` with
+   exact `match` and `replace` strings. Acceptance updates PostgreSQL.
+3. Call `patchdiff_save` with the target ID, the accepted version as
+   `expected_target_version`, and `sync_workspace: true`.
+4. On `saved`, use `workspace_sync.synced_path` relative to the configured root.
+   The receipt gives the raw byte digest in `disk_sha256`, plus `bytes_written`,
+   `content_eol`, `publication: "installed"` and `durability: "confirmed"`.
+   The optional `export_after_save` flag also returns the document body.
+5. If SAVE reports external drift, inspect the workspace file and initialize a
+   new working target from it. If SAVE reports partial or the response is lost,
+   inspect both disk and PostgreSQL before reconciling.
 
 SAVE publication rejects caller-owned database transactions before IO. Plain
 SAVE (`sync_workspace=false`) retains existing caller-transaction behavior.

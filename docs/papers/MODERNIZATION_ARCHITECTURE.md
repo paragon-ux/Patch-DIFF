@@ -1,18 +1,25 @@
 # PatchDIFF Modernization Architecture
 
-
-Opt-in workspace publication extends initialization and SAVE at the trusted
-service boundary. The pure runtime and PostgreSQL canonical working target are
-unchanged. File installation and checkpoint commit are explicitly non-atomic;
-partial outcomes require operator reconciliation or re-initialization, with no
-automatic recovery/retry. Publication requires a cooperatively owned, stable
-POSIX workspace and a service-owned transaction; unsupported platforms fail
-closed. This is not a new finalization subsystem or citation integration.
-See [the workspace contract](../guides/WORKSPACE_PUBLICATION.md).
-
 Current architecture and compatibility contracts for the MCP transaction service.
 
 The as-built record, compatibility details and verification scope are in [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
+
+## Workspace file boundary
+
+The opt-in `workspace` profile exposes the five existing tools for importing,
+reading, finding, editing and saving a workspace file. The stdio server checks
+the configured workspace and PostgreSQL migration revision before handshake.
+
+The service imports file bytes into a canonical LF working target in
+PostgreSQL. Guarded edits commit there through the shared deterministic
+applier. Explicit workspace SAVE stages and installs bytes under a lease on
+the physical destination directory, then commits the database checkpoint.
+Each outcome has its own evidence. A failure after installation can leave the
+file published with a partial result or an unknown checkpoint outcome. The
+operator inspects disk and database before reconciling.
+
+This boundary relies on a stable, cooperatively owned POSIX workspace and a
+service-owned database transaction. See the [workspace contract](../guides/WORKSPACE_PUBLICATION.md).
 
 ## Goal F extensions: guarded operations, replacement, preview and diagnostics
 
@@ -35,9 +42,8 @@ server-issued scopes. Its decision and contracts are in
 snapshot, per-group tx/2 evaluation through the existing applier, descending
 assembly, one locked commit, exact request recovery, all-scope replay without
 Waymark, and immutable `patchdiff-observed-batch/1` /
-`patchdiff-observed-batch-r1`. Historical profiles remain unchanged. External MCP
-defaults to seven advertised/callable tools; compatibility requires explicit
-startup `PATCHDIFF_MCP_PROFILE=full`.
+`patchdiff-observed-batch-r1`. External MCP defaults to seven advertised and callable tools.
+Select `workspace` for file editing or `full` for the complete catalog.
 
 - **Conceptual design thesis** = [PatchDIFF-Concept-Paper-6.md](PatchDIFF-Concept-Paper-6.md) (modernized conceptual whitepaper covering `patchdiff-tx/1..3`, edit-method comparisons, operational efficiency bounds, generalized transaction invariants, and research hypotheses `H1`–`H7`). It supersedes the original v0.2.3 whitepaper (`docs/legacy/PatchDIFF-Concept-Paper-5.md`, "P1"), which is preserved untouched alongside `docs/legacy/PatchDIFF-Protocol-Spec-v0.2.3.md` and `docs/legacy/PatchDIFF-Implementation-Spec-v0.2.3.md` as a historical design record.
 - **Active implementation contract** = `docs/spec/PATCHDIFF_CORE_SPEC.md`, `docs/spec/MCP_TOOLS.md`, `docs/spec/DATA_MODEL.md`, `docs/spec/PDCP_FORMAT.md`, `docs/spec/MCP_EDITOR_V2.md`, `docs/spec/STRUCTURAL_BATCH_EDITING.md`, `docs/benchmarks/TEST_MATRIX.md`, `docs/guides/HOST_INTEGRATION_GUIDE.md`, `docs/guides/CLAUDE_DESKTOP_SETUP.md`, `README.md`, `README_INTERNAL_MCP.md`. Active documents state the current modernized system coherently in their main body rather than contradicting themselves via tacked-on footers.

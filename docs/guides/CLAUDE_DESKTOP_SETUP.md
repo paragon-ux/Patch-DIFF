@@ -80,13 +80,18 @@ References:
 
 ## 4. Add PatchDIFF
 
-The default startup profile is `editor` (7 advertised and callable tools).
-Use `PATCHDIFF_MCP_PROFILE=full` in the server environment for older integrations
-or trusted upload/initialization/export workflows that need the complete 22-tool
-catalog. `unobserved` (5), `observed` (6), and `observed_editor` (4) are also
-available. The last is for delegated editors whose host owns SAVE/replay.
-Unknown profiles fail startup, and requests cannot override the session's immutable selection.
-[Exact tool lists and structural batches](../spec/STRUCTURAL_BATCH_EDITING.md).
+The native Windows example below uses `editor`, the default seven-tool
+profile for an existing target. For inline initialization and the complete
+22-tool catalog, set `PATCHDIFF_MCP_PROFILE=full`.
+
+To import a local project file and publish on SAVE, follow the
+[installed workspace setup](WORKSPACE_PUBLICATION.md) and choose `workspace`.
+The server must run on a supported POSIX filesystem. Native Windows Python
+can use inline uploads, edits and exports. A server running in Linux or WSL
+needs a workspace directory with directory locking and descriptor-relative IO.
+
+Restart the server after changing profiles. Requests cannot override the
+session profile. [Exact tool lists](../spec/STRUCTURAL_BATCH_EDITING.md).
 
 Use the venv Python directly so Claude Desktop launches the interpreter that has PatchDIFF's dependencies installed.
 
@@ -125,13 +130,10 @@ Open a new chat and check the MCP/connectors UI:
 + button near the message box, labeled "+" -> Connectors
 ```
 
-You should see `patchdiff` and the full modernized tool surface:
-
-- **Target lifecycle**: `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`
-- **Authoritative reads & exact search**: `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`
-- **Guarded edit submission**: `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (match/span, `patchdiff-tx/2`), `patchdiff_submit_replacement` (sole replace_all, `patchdiff-tx/3`), `patchdiff_submit_pdcp` (legacy `.pdcp`)
-- **Checkpoints, replay & audit**: `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, `patchdiff_get_manifest_ledger`
-- **Advisory preview & legacy wrappers**: `patchdiff_preview` (bounded keyless/no-audit evaluation), `patchdiff_build_prompt_context` (bounded prefix convenience), and deprecated `patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`
+Check that the tool list matches the selected profile. The default example
+shows seven tools including read, search, submit, SAVE and replay. The
+`workspace` profile shows initialize, read, find, submit edits and SAVE.
+The `full` profile shows all 22 registered tools.
 
 For guidance on how the host/model interacts with these tools (reading before proposing, supplying guards, handling rejections with retry lineage, and client request idempotency), see [HOST_INTEGRATION_GUIDE.md](HOST_INTEGRATION_GUIDE.md).
 

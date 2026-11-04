@@ -29,7 +29,7 @@ xychart-beta
 
 ### How Validated Hypotheses and Operational Mechanisms Drive Faster Time Elapsed
 
-When agent throughput is constrained, every redundant turn, prefill token, and verification step compounds into severe wall-clock delays. PatchDIFF completes tasks in **3 minutes flat (1.66× faster Time Elapsed in Git environments)** by validating core research hypotheses and eliminating operational friction:
+In this five-file benchmark, the Git arm averaged **3m 03s with `observed_v2` versus 5m 04s for the control**. The measurements below apply to that workflow. The single-file `workspace` profile has separate functional verification.
 
 1. **Decoding & Context Reduction (`H1`)**: Emitting targeted patches instead of full-file rewrites cuts total context tokens by **-64.8%** (876K vs. 2.49M, saving 1.61M tokens/task, Welch $t=10.292, \text{df}=7.17, p < 0.00002$), drastically reducing model prefill and generation overhead.
 2. **Reliability & Turnaround Predictability (`H7`)**: The model reliably generated valid declarative transactions, achieving **100.0% full-byte accuracy** against the oracle reference (0 byte diffs across all 12 runs × 5 canary files = 60 targets evaluated; 240/240 test assertions passed) with zero rejections, collapsing Time Elapsed standard deviation from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** ($\pm 14\text{s}$ in Git).
@@ -116,8 +116,10 @@ PatchDIFF exposes a stdio JSON-RPC MCP adapter. For Claude Desktop (`claude_desk
 
 See [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) for full host integration details.
 
-For the installed package workflow that imports an existing workspace file and
-publishes the edited bytes on SAVE, use the [workspace profile](docs/guides/WORKSPACE_PUBLICATION.md).
+To edit an existing file using the installed wheel, follow the
+[workspace quickstart](docs/guides/WORKSPACE_PUBLICATION.md). It covers Python
+and PostgreSQL setup, the five-tool MCP profile, and publishing the file on SAVE.
+The `editor` configuration above is for a host that already has a target ID.
 
 ---
 
@@ -129,6 +131,8 @@ Configure the profile via `PATCHDIFF_MCP_PROFILE`:
 - **`editor`** (default, 7 tools): Recommended for interactive agent workflows.
 - **`observed_v2`** (5 tools): Streamlined editing with explicit AST snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte hard ceiling). See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
 - **`hybrid_editor`** (1 tool): Minimal single-tool editing (`patchdiff_submit_edits`).
+- **`unobserved_editor`** (3 tools): Read, exact search and typed edits.
+- **`observed`** (6 tools): Structural observation, guarded observed edits, bounded reads, exact search, SAVE and replay.
 - **`observed_editor`** (4 tools): Pure editing and reading tools for delegated subagents.
 - **`unobserved`** (5 tools): Direct text reads and submissions without structural AST observation.
 - **`workspace`** (5 tools): Import, bounded read, exact search, guarded edit, and SAVE with optional file publication. Checks workspace and database readiness at startup.
@@ -142,7 +146,7 @@ Full documentation is available on the **[Zensical Documentation Site](https://p
 
 - **Visual Architecture**: [Visual Architecture & Transaction Lifecycle](docs/architecture.md)
 - **Specifications**: [Core Runtime](docs/spec/PATCHDIFF_CORE_SPEC.md) | [MCP Tools](docs/spec/MCP_TOOLS.md) | [Data Model](docs/spec/DATA_MODEL.md) | [PDCP Formats](docs/spec/PDCP_FORMAT.md) | [Editor v2](docs/spec/MCP_EDITOR_V2.md) | [Batch Editing](docs/spec/STRUCTURAL_BATCH_EDITING.md)
-- **Guides**: [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) | [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) | [Observed Workflow](docs/guides/OBSERVED_EDITOR_WORKFLOW.md)
+- **Guides**: [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) | [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) | [Workspace Editing](docs/guides/WORKSPACE_PUBLICATION.md) | [Observed Workflow](docs/guides/OBSERVED_EDITOR_WORKFLOW.md)
 - **Whitepapers**: [Concept Paper v6](docs/papers/PatchDIFF-Concept-Paper-6.md) | [Modernization Architecture](docs/papers/MODERNIZATION_ARCHITECTURE.md)
 - **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized_benchmark_report.md) | [Test Matrix](docs/benchmarks/TEST_MATRIX.md)
 - **Standards & Legacy**: [PR Review Standard](docs/standards/PR_REVIEW_STANDARD.md) | [Release Readiness](docs/standards/RELEASE_READINESS.md) | [Legacy Compatibility](docs/legacy/LEGACY_COMPATIBILITY.md) | [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md)

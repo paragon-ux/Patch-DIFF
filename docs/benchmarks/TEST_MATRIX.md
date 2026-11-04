@@ -9,6 +9,13 @@ As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](../pape
 
 ## Global Test Invariants
 
+Workspace checks in `test_mcp_profiles.py` and
+`test_workspace_sync_service.py` cover the five-tool catalog, startup rejection,
+safe path resolution, drift, directory lease contention, line endings and
+partial SAVE receipts. Installed-wheel verification uses live MCP and
+PostgreSQL to check the working copy before SAVE and exact file bytes and
+checkpoint afterward. These checks are separate from the comparative benchmark.
+
 Compact presentation is covered by `test_mcp_response_modes.py`,
 `test_host_finalize.py` and `test_compact_host_workflow.py`: immutable mode/default
 compatibility, preserved schemas/profiles/guards/warnings/source/paging, rich

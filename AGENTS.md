@@ -147,9 +147,14 @@ the four observed editing/read tools; that profile rejects SAVE/replay. Opt-in
 services with explicit snapshots and bounded typed receipts; see
 [the v2 contract](docs/spec/MCP_EDITOR_V2.md). It also denies lifecycle calls; all legacy
 profiles and the internal 22 handlers retain their contracts.
-Trusted lifecycle/legacy clients opt into `full`;
-the internal registry retains all handlers. Strict observed service admission
-remains independent. The frozen comparative Gate 2 stays closed.
+Trusted clients use `full` for the complete lifecycle, audit and legacy catalog.
+The opt-in `workspace` profile exposes initialize, read, exact search, typed
+edits and SAVE. The stdio process checks workspace and database readiness
+before the handshake. File publication is explicit under the default SAVE
+configuration and has a separate outcome from the PostgreSQL checkpoint.
+See the [workspace contract](docs/guides/WORKSPACE_PUBLICATION.md). Strict
+observed service admission remains independent and prevents this profile from
+starting. The frozen comparative Gate 2 stays closed.
 
 PatchDIFF must always preserve:
 
@@ -199,15 +204,6 @@ All PR reviews must follow [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_
 
 Trace architecture and contracts before recommending runtime changes. Keep source inspection, local execution, and CI evidence separate. Passing tests or a prior approval cannot replace category review. Do not recommend approval with unreviewed material categories or unresolved blocking findings.
 
-Store review reports in `docs/reviews/`. Close findings only with a fix commit, relevant evidence, and reviewer recheck. The concise implementation completion report in the testing skill does not replace the required PR review.
+Store review reports in `docs/reviews/`. Close findings only with a fix commit, relevant evidence, and reviewer recheck.
 
 Changes to the review format require a versioned change to `docs/standards/PR_REVIEW_STANDARD.md`; reviewers must not silently omit categories or weaken evidence requirements.
-
-## Skills
-
-Use the workspace skills in `.agents/skills/`:
-
-- `.agents/skills/patchdiff-core-runtime/SKILL.md`: Deterministic core runtime (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`, and `.pdcp` v0.2.3 parsing, protocol validation, overlapping match enumeration, disambiguation, sequential application, `ValidationStage`, and `change_facts`).
-- `.agents/skills/patchdiff-mcp-orchestration/SKILL.md`: MCP tool surface, stdio JSON-RPC adapter, `TYPED_EDIT_JSON_SCHEMA`, authoritative reads/search, host-owned retry, and deprecated wrapper maintenance.
-- `.agents/skills/patchdiff-persistence-replay-save/SKILL.md`: Postgres persistence, migrations `0001` through `0005`, row locking, `client_request_id` idempotency, SAVE cycles, and profile-dispatched deterministic replay.
-- `.agents/skills/patchdiff-testing-review/SKILL.md`: Unit, live Postgres integration, stdio subprocess E2E testing, and documentation consistency review.
