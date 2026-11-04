@@ -110,11 +110,7 @@ def waymark_span_to_code_point_offsets(
     end_line_text = lines[end.line - 1]
 
     start_col_cp = utf16_column_to_code_point_offset(start_line_text, start.column)
-    if start.column == 0 and end.column == 0 and len(end_line_text) > 0:
-        # Line-only outline fallback (e.g. codedb): inclusive of end_line content.
-        end_col_cp = len(end_line_text)
-    else:
-        end_col_cp = utf16_column_to_code_point_offset(end_line_text, end.column)
+    end_col_cp = utf16_column_to_code_point_offset(end_line_text, end.column)
 
     scope_start = line_starts[start.line - 1] + start_col_cp
     scope_end = line_starts[end.line - 1] + end_col_cp

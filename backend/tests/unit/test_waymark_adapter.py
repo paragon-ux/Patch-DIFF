@@ -210,3 +210,28 @@ def test_utf16_column_to_code_point_offset_handles_ascii_bmp_and_astral_surrogat
     sym = next(s for s in res.symbols if s.name == "PREFIX")
     start, end = waymark_span_to_code_point_offsets(content, sym.start, sym.end)
     assert content[start:end] == line
+
+def test_toml_multiline_blocks_preserve_disjoint_half_open_spans() -> None:
+    content = '[package]\nname = "demo"\nversion = "0.1.0"\n[dependencies]\nserde = "1.0"\n'
+    res = discover_symbols_from_content(filename="Cargo.toml", content=content)
+    assert res.ok is True
+    by_name = {s.name: s for s in res.symbols}
+    pkg_start, pkg_end = waymark_span_to_code_point_offsets(
+        content, by_name["[package]"].start, by_name["[package]"].end
+    )
+    dep_start, dep_end = waymark_span_to_code_point_offsets(
+        content, by_name["[dependencies]"].start, by_name["[dependencies]"].end
+    )
+    assert content[pkg_start:pkg_end] == '[package]\nname = "demo"\nversion = "0.1.0"\n'
+    assert content[dep_start:dep_end] == '[dependencies]\nserde = "1.0"\n'
+    assert pkg_end <= dep_start
+
+
+def test_zero_width_span_at_column_zero_stays_zero_width() -> None:
+    from app.services.waymark_adapter import WaymarkPosition
+
+    content = "line1\nline2\nline3\n"
+    start, end = waymark_span_to_code_point_offsets(
+        content, WaymarkPosition(line=2, column=0), WaymarkPosition(line=2, column=0)
+    )
+    assert (start, end) == (6, 6)
