@@ -40,7 +40,8 @@ from app.services.read_service import (
 )
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
-from app.services.target_service import initialize_target
+from app.services.target_service import initialize_target, initialize_target_from_workspace
+from app.services.workspace_sync_service import WorkspaceSyncError
 from app.storage.db import SessionLocal
 from app.storage.models import (
     AppendOnlyManifestLedger,
@@ -75,10 +76,16 @@ def patchdiff_handle_upload(
 def patchdiff_initialize_target(
     *,
     filename: str,
-    content: str,
-    content_type: str,
+    content: str | None = None,
+    content_type: str = "text/plain",
     project_id: str | None = None,
+    from_workspace: bool = False,
 ) -> dict[str, Any]:
+    if not isinstance(from_workspace, bool):
+        return {
+            "status": "invalid_argument",
+            "failure_detail": "from_workspace must be a boolean.",
+        }
     project_uuid: uuid.UUID | None = None
     if project_id is not None:
         project_uuid = _try_coerce_uuid(project_id)
@@ -88,14 +95,41 @@ def patchdiff_initialize_target(
                 "project_id": str(project_id),
                 "failure_detail": "project_id is not a valid UUID.",
             }
-    with SessionLocal() as session:
-        result = initialize_target(
-            session,
-            filename=filename,
-            content=content,
-            target_type=content_type,
-            project_id=project_uuid,
-        )
+    if from_workspace:
+        if content is not None:
+            return {
+                "status": "invalid_argument",
+                "failure_detail": "Omit content when from_workspace is true.",
+            }
+        try:
+            with SessionLocal() as session:
+                result = initialize_target_from_workspace(
+                    session,
+                    filename=filename,
+                    target_type=content_type,
+                    project_id=project_uuid,
+                )
+        except WorkspaceSyncError as err:
+            return {
+                "status": "rejected",
+                "code": err.code,
+                "failure_reason": err.reason.value,
+                "failure_detail": err.detail,
+            }
+    else:
+        if content is None or not isinstance(content, str):
+            return {
+                "status": "invalid_argument",
+                "failure_detail": "content is required when from_workspace is false.",
+            }
+        with SessionLocal() as session:
+            result = initialize_target(
+                session,
+                filename=filename,
+                content=content,
+                target_type=content_type,
+                project_id=project_uuid,
+            )
     return {
         "status": "ok",
         "target_file_id": str(result.target_file_id),
@@ -362,6 +396,8 @@ def patchdiff_save(
     expected_current_hash: str | None = None,
     expected_target_version: int | None = None,
     export_after_save: bool = False,
+    sync_workspace: bool | None = None,
+    workspace_eol_format: str = "original_eol",
 ) -> dict[str, Any]:
     with SessionLocal() as session:
         result = save_target(
@@ -369,6 +405,8 @@ def patchdiff_save(
             target_file_id=target_file_id,
             expected_current_hash=expected_current_hash,
             expected_target_version=expected_target_version,
+            sync_workspace=sync_workspace,
+            workspace_eol_format=workspace_eol_format,
         )
     payload = {
         "status": result.status,
@@ -381,6 +419,10 @@ def patchdiff_save(
         "failure_reason": result.failure_reason.value if result.failure_reason else None,
         "failure_detail": result.failure_detail,
     }
+    if result.code is not None:
+        payload["code"] = result.code
+    if result.workspace_sync is not None:
+        payload["workspace_sync"] = result.workspace_sync
     if export_after_save and result.status == "saved":
         payload["export"] = patchdiff_export_target(target_file_id=target_file_id)
     return payload

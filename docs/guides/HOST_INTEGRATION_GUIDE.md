@@ -362,3 +362,14 @@ outside the editing model's context and under a private ignored capture director
 ## Purpose-specific observed interface
 
 For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](../spec/MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
+
+
+## Optional managed workspace publication
+
+Trusted lifecycle clients using `PATCHDIFF_MCP_PROFILE=full` can opt into
+[workspace initialization and SAVE publication](WORKSPACE_PUBLICATION.md).
+Editing profiles retain their existing tool surface and deny lifecycle calls.
+Configure a workspace once per server process; a package installation cannot
+choose a user's project root. The host can request the workflow through existing
+tools without relaying full source text through model tool arguments/results.
+Partial and lost SAVE outcomes require explicit reconciliation, not a retry loop.

@@ -199,8 +199,9 @@ Tool results are JSON text in `content[0].text` with literal characters (not `\u
 ### `patchdiff_initialize_target` / `patchdiff_handle_upload`
 - **Arguments**:
   - `filename` (`string`, required): document filename.
-  - `content` (`string`, required): initial document text; line endings are normalized to LF and recorded.
-  - `content_type` (`string`, required): MIME type or language identifier (e.g. `"text/markdown"`).
+  - `content` (`string`): required for inline initialization; line endings are normalized to LF and recorded. For `patchdiff_initialize_target(from_workspace=true)`, omit content or pass null.
+  - `from_workspace` (`boolean`, default false, initialize only): read `filename` directly under the configured POSIX workspace and bind the target to that root identity. Conflicting non-null content rejects.
+  - `content_type` (`string`): MIME type or language identifier (e.g. `"text/markdown"`); defaults to `text/plain` for initialize. The upload wrapper keeps its existing required arguments.
   - `project_id` (`string | null`, optional): project UUID.
 - **Returns** (live output for a one-line CRLF upload; hashes shortened):
   ```json
@@ -432,8 +433,11 @@ Retained for backward compatibility with frozen `.pdcp` v0.2.3 text transactions
 
 ### `patchdiff_save`
 Creates a `TargetSnapshots` row (`snapshot_reason = "save_checkpoint"`), closes the active cycle, and opens a new cycle. Does not mutate target text.
-- **Arguments**: `target_file_id`, optional `expected_target_version` (non-negative integer), optional `expected_current_hash`, optional `export_after_save` (`boolean`). Both guards are checked when supplied; prefer the version guard, which detects ABA changes that a hash cannot.
+Opt-in workspace publication is a separate filesystem side effect, not an atomic PostgreSQL/filesystem transaction. See [workspace publication](../guides/WORKSPACE_PUBLICATION.md).
+- **Arguments**: `target_file_id`, optional `expected_target_version` (non-negative integer), optional `expected_current_hash`, optional `export_after_save` (`boolean`). Optional `sync_workspace` (`boolean | null`) selects managed file publication: true enables, false disables, omitted/null follows `PATCHDIFF_WORKSPACE_SYNC_ON_SAVE` (default false). `workspace_eol_format` is `original_eol` (default), `canonical_lf`, or `crlf`. Both guards are checked when supplied; prefer the version guard, which detects ABA changes that a hash cannot.
 - **Returns**: `status: "saved"`, `target_file_id`, `snapshot_id`, `closed_editing_cycle_id`, `new_editing_cycle_id`, `current_hash`, `version`. A stale version returns `status: "rejected"` with `failure_reason: "target_version_mismatch"`, a stale hash `target_hash_mismatch`, and an invalid version `context_invalid`; none writes a snapshot. `export_after_save` adds a default-format `export`.
+
+Workspace SAVE requires a service-owned transaction; an already active caller transaction rejects with `workspace_requires_owned_transaction` before file IO. Success adds `workspace_sync` with `synced_path`, `disk_sha256`, `bytes_written`, `content_eol`, `publication: "installed"`, and `durability: "confirmed"`. Pre-publication failures reject without changing the destination or checkpoint (parent directories may have been created for a new path). If installation precedes a durability or checkpoint failure, the result is `status: "partial"`, an installed-file `workspace_sync` receipt, and no asserted checkpoint/cycle IDs. `workspace_durability_uncertain` reports uncertain directory durability; `workspace_checkpoint_uncertain` reports an uncertain database outcome. Never blindly retry SAVE after partial/unknown outcomes; inspect disk/database and explicitly reconcile or initialize a new target. There is no automatic rollback or retry. Process termination or a lost response can also leave the outcome unknown, as with existing non-idempotent SAVE.
 
 ### `patchdiff_replay`
 Replays accepted logs against the initial snapshot, dispatching on `(protocol_version, runtime_version)`. A successful reconstruction may still report materialized_state_matches=false. content_matches compares raw stored content with the canonical reconstructed buffer; canonical hash checks retain their existing meaning. Replay reports divergence and never repairs storage. Replay never evaluates warnings, diagnostics or line-ending metadata.

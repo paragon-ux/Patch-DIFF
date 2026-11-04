@@ -1,5 +1,15 @@
 # PatchDIFF Product Change Record
 
+
+Opt-in workspace publication extends initialization and SAVE at the trusted
+service boundary. The pure runtime and PostgreSQL canonical working target are
+unchanged. File installation and checkpoint commit are explicitly non-atomic;
+partial outcomes require operator reconciliation or re-initialization, with no
+automatic recovery/retry. Publication requires a cooperatively owned, stable
+POSIX workspace and a service-owned transaction; unsupported platforms fail
+closed. This is not a new finalization subsystem or citation integration.
+See [the workspace contract](../guides/WORKSPACE_PUBLICATION.md).
+
 PatchDIFF provides four declarative transaction formats through one deterministic applier and locked PostgreSQL submission pipeline. Authoritative reads, advisory preview, durable outcome recovery and deterministic replay let hosts propose and verify changes without moving state authority into the host.
 
 Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP tools](../spec/MCP_TOOLS.md), [core runtime](../spec/PATCHDIFF_CORE_SPEC.md), [storage](../spec/DATA_MODEL.md), [transaction formats](../spec/PDCP_FORMAT.md), [host guide](../guides/HOST_INTEGRATION_GUIDE.md), and [legacy compatibility](../legacy/LEGACY_COMPATIBILITY.md).

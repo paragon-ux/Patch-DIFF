@@ -25,6 +25,7 @@ from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
 from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
 from app.core.line_endings import EXPORT_FORMATS
+from app.services.workspace_sync_service import WORKSPACE_EOL_FORMATS
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, SPAN_CONTEXT_RUNTIME_VERSION
 from app.pdcp.observed_batch import (SELECTION_JSON_SCHEMA, GROUP_JSON_SCHEMA, MAX_BATCH_SCOPES,
                                      MAX_BATCH_OPERATIONS, BATCH_ERROR_CODES, BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION)
@@ -384,6 +385,9 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "max_results": "Maximum occurrences to return (cap 200).",
     "format": "Explicit transaction format of the proposal.",
     "export_after_save": "Also return a default export after a successful SAVE.",
+    "sync_workspace": "Publish target text to the cooperatively owned POSIX PATCHDIFF_WORKSPACE_ROOT during SAVE. File publication and checkpointing are separate; partial outcomes require explicit reconciliation.",
+    "workspace_eol_format": "Line-ending format for workspace write-back: original_eol (default), canonical_lf, or crlf.",
+    "from_workspace": "Read initial bytes directly from filename inside PATCHDIFF_WORKSPACE_ROOT without passing content.",
     "include_previous_cycles": "Include ledger entries from editing cycles closed by SAVE (default: active cycle only).",
     "status": "Filter attempts by status.",
     "content_hash": "Filter attempts by pdcp_content_hash.",
@@ -475,8 +479,15 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     if name == "patchdiff_export_target":
         properties["format"].update({"enum": list(EXPORT_FORMATS), "default": "original_text",
                                      "description": "original_text (legacy alias of canonical_lf), canonical_lf, crlf, or original_eol."})
+    if name == "patchdiff_initialize_target":
+        properties["from_workspace"]["default"] = False
+        properties["content_type"]["default"] = "text/plain"
     if name == "patchdiff_save":
         properties["export_after_save"]["default"] = False
+        properties["workspace_eol_format"].update({
+            "enum": list(WORKSPACE_EOL_FORMATS),
+            "default": "original_eol",
+        })
     if name == "patchdiff_preview":
         properties["format"]["enum"] = ["0.2.3", "patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
     if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_observed_operations", "patchdiff_submit_replacement"}:
@@ -568,6 +579,12 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             "not": {"anyOf": [{"required": [key]} for key in ("symbol_name", "query", "observation_id", "kind")]},
             "properties": {"offset": {"const": 0}},
         }}]
+    if name == "patchdiff_initialize_target":
+        schema["allOf"] = [{
+            "if": {"required": ["from_workspace"], "properties": {"from_workspace": {"const": True}}},
+            "then": {"properties": {"content": {"type": "null"}}},
+            "else": {"required": ["content"], "properties": {"content": {"type": "string"}}},
+        }]
     if name == "patchdiff_submit_replacement":
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": REPLACEMENT_PROTOCOL_VERSION, "runtime_version": REPLACEMENT_RUNTIME_VERSION,

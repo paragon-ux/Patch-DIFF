@@ -1,5 +1,15 @@
 # PatchDIFF Modernization Architecture
 
+
+Opt-in workspace publication extends initialization and SAVE at the trusted
+service boundary. The pure runtime and PostgreSQL canonical working target are
+unchanged. File installation and checkpoint commit are explicitly non-atomic;
+partial outcomes require operator reconciliation or re-initialization, with no
+automatic recovery/retry. Publication requires a cooperatively owned, stable
+POSIX workspace and a service-owned transaction; unsupported platforms fail
+closed. This is not a new finalization subsystem or citation integration.
+See [the workspace contract](../guides/WORKSPACE_PUBLICATION.md).
+
 Current architecture and compatibility contracts for the MCP transaction service.
 
 The as-built record, compatibility details and verification scope are in [MODERNIZATION_CHANGE_DOC.md](MODERNIZATION_CHANGE_DOC.md).
