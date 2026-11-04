@@ -8,7 +8,7 @@ Why this document exists: the server is a transaction service; the host owns pla
 
 Choose the immutable server profile before starting a session with
 `PATCHDIFF_MCP_PROFILE`: `editor` (default, 7 tools), `unobserved` (5), `observed`
-(6), `observed_editor` (4), or `full` (22). Use `observed_editor` for delegated
+(6), `observed_editor` (4), `workspace` (5), or `full` (22). Use `observed_editor` for delegated
 editing when the host owns lifecycle work; it rejects SAVE/replay as well as
 other excluded tools before dispatch. Older integrations and trusted
 initialization/export/audit

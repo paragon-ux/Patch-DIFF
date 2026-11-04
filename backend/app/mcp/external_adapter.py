@@ -11,10 +11,14 @@ import inspect
 import json
 import os
 import sys
+from contextlib import nullcontext
 from dataclasses import dataclass
 from types import NoneType, UnionType
 from typing import Any, TextIO, get_args, get_origin, get_type_hints
 
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.config import get_workspace_root, is_strict_observation_mode_enabled
 from app.mcp import tools as _registered_tools  # noqa: F401 - imports register tool handlers
 from app.mcp.server import registry
 from app.mcp.editor_contracts import (
@@ -25,7 +29,8 @@ from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
 from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
 from app.core.line_endings import EXPORT_FORMATS
-from app.services.workspace_sync_service import WORKSPACE_EOL_FORMATS
+from app.services.workspace_sync_service import WORKSPACE_EOL_FORMATS, WorkspaceSyncError, validate_workspace_root
+from app.storage.db import database_schema_is_current
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, SPAN_CONTEXT_RUNTIME_VERSION
 from app.pdcp.observed_batch import (SELECTION_JSON_SCHEMA, GROUP_JSON_SCHEMA, MAX_BATCH_SCOPES,
                                      MAX_BATCH_OPERATIONS, BATCH_ERROR_CODES, BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION)
@@ -43,7 +48,11 @@ _CODE_POINTS = " Offsets are Unicode code points of canonical LF text; UTF-16 ho
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_handle_upload": "Initialize a canonical PatchDIFF target from uploaded document content.",
-    "patchdiff_initialize_target": "Initialize a canonical PatchDIFF target.",
+    "patchdiff_initialize_target": (
+        "Initialize a working target in PostgreSQL. To import an existing file, pass its path relative to the "
+        "configured workspace root with from_workspace=true and omit content. For inline upload, supply content. "
+        "Returns the target ID, version and hash."
+    ),
     "patchdiff_build_prompt_context": "Convenience: build prompt context (bounded target PREFIX, not retrieval; see context_truncated). Prefer patchdiff_read_target / patchdiff_find_occurrences.",
     "patchdiff_submit_pdcp": "Submit untrusted legacy .pdcp (v0.2.3) content through deterministic validation and commit services.",
     "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. "
@@ -63,7 +72,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_get_regeneration_context": "DEPRECATED: host-owned retry replaces this. Return regeneration context for a rejected attempt.",
     "patchdiff_build_regeneration_prompt": "DEPRECATED: host-owned retry replaces this. Build a regeneration prompt from a rejected attempt.",
     "patchdiff_request_regeneration": "DEPRECATED: use patchdiff_submit_edits with parent_pdcp_log_id. Submit regenerated .pdcp content as a new attempt (guards pass through when supplied).",
-    "patchdiff_save": "Create a SAVE snapshot and advance the editing cycle without mutating target content. Optional expected_target_version and expected_current_hash guards; prefer the version guard.",
+    "patchdiff_save": (
+        "Checkpoint the current target and advance its editing cycle. Set sync_workspace=true to also publish "
+        "the edited bytes to the workspace file. With workspace sync disabled, SAVE only checkpoints PostgreSQL. "
+        "Use the version returned by the edit as a guard. If SAVE reports partial, inspect the file and database "
+        "before reconciling either outcome."
+    ),
     "patchdiff_replay": "Replay accepted logs (dispatching on protocol_version and runtime_version), verify hash/version chain, and report component-level materialized_state_checks.",
     "patchdiff_export_target": "Export the current target content and metadata. format: original_text (default, legacy alias of canonical LF), canonical_lf, crlf, or original_eol (restore the uniform line endings recorded at upload).",
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
@@ -152,6 +166,10 @@ MCP_PROFILES = {
     "observed_editor": frozenset({"patchdiff_read_target", "patchdiff_find_occurrences",
                                   "patchdiff_observe_scope", "patchdiff_submit_observed_operations"}),
     "observed_v2": EDITOR_V2_TOOLS,
+    "workspace": frozenset({
+        "patchdiff_initialize_target", "patchdiff_read_target", "patchdiff_find_occurrences",
+        "patchdiff_submit_edits", "patchdiff_save",
+    }),
     "full": frozenset(EXPECTED_TOOL_NAMES),
 }
 
@@ -164,12 +182,14 @@ class ExternalMCPAdapter:
     response_mode: str
     _tool_names: tuple[str, ...]
     _protocol_version: str
+    _workspace_declarations: list[dict[str, Any]] | None
     _initialized: bool
 
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
         selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
         if selected not in MCP_PROFILES:
-            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, unobserved_editor, hybrid_editor, observed, observed_editor, observed_v2 or full.")
+            expected = ", ".join(sorted(MCP_PROFILES))
+            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected one of {expected}.")
         object.__setattr__(self, "profile", selected)
         object.__setattr__(self, "_protocol_version", PROTOCOL_VERSION)
         object.__setattr__(self, "_initialized", False)
@@ -178,6 +198,8 @@ class ExternalMCPAdapter:
             raise ValueError(f"Unknown PATCHDIFF_MCP_RESPONSE_MODE: {mode!r}; expected detailed or compact.")
         object.__setattr__(self, "response_mode", mode)
         object.__setattr__(self, "_tool_names", tuple(sorted(MCP_PROFILES[selected])))
+        declarations = self._legacy_tool_declarations() if selected == "workspace" else None
+        object.__setattr__(self, "_workspace_declarations", declarations)
 
     def list_tools(self) -> list[dict[str, Any]]:
         if self.profile == "observed_v2":
@@ -189,6 +211,11 @@ class ExternalMCPAdapter:
                         declaration.pop(key, None)
                 declarations.append(declaration)
             return declarations
+        if self._workspace_declarations is not None:
+            return copy.deepcopy(self._workspace_declarations)
+        return self._legacy_tool_declarations()
+
+    def _legacy_tool_declarations(self) -> list[dict[str, Any]]:
         return [
             {
                 "name": name,
@@ -295,12 +322,32 @@ class ExternalMCPAdapter:
         return _rpc_error(request_id, -32601, f"Unsupported MCP method: {method}")
 
 
+def _check_workspace_startup() -> None:
+    try:
+        validate_workspace_root(get_workspace_root())
+    except WorkspaceSyncError as exc:
+        raise SystemExit(f"PatchDIFF workspace startup: {exc}") from None
+    if is_strict_observation_mode_enabled():
+        raise SystemExit("PatchDIFF workspace startup: strict observation requires an observed profile.")
+    if not os.getenv("PATCHDIFF_DATABASE_URL", "").strip():
+        raise SystemExit("PatchDIFF workspace startup: set PATCHDIFF_DATABASE_URL explicitly.")
+    try:
+        current = database_schema_is_current()
+    except SQLAlchemyError:
+        raise SystemExit("PatchDIFF workspace startup: could not verify PostgreSQL. Check PATCHDIFF_DATABASE_URL.") from None
+    if not current:
+        raise SystemExit("PatchDIFF workspace startup: apply the installed Alembic migrations before connecting.")
+
+
 def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
     """Serve newline-delimited JSON-RPC requests over stdio."""
 
     from app.services.waymark_worker import serving_worker_owner
-    with serving_worker_owner(prewarm=True):
-        adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter()
+    if adapter.profile == "workspace":
+        _check_workspace_startup()
+    worker_owner = nullcontext() if adapter.profile == "workspace" else serving_worker_owner(prewarm=True)
+    with worker_owner:
         for line in input_stream:
             if not line.strip():
                 continue
@@ -385,9 +432,16 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "max_results": "Maximum occurrences to return (cap 200).",
     "format": "Explicit transaction format of the proposal.",
     "export_after_save": "Also return a default export after a successful SAVE.",
-    "sync_workspace": "Publish target text to the cooperatively owned POSIX PATCHDIFF_WORKSPACE_ROOT during SAVE. File publication and checkpointing are separate; partial outcomes require explicit reconciliation.",
+    "sync_workspace": (
+        "True publishes the target to its workspace file during SAVE. False only checkpoints PostgreSQL. "
+        "Omit to use the server default (off unless PATCHDIFF_WORKSPACE_SYNC_ON_SAVE is enabled). "
+        "Inspect both outcomes if SAVE reports partial."
+    ),
     "workspace_eol_format": "Line-ending format for workspace write-back: original_eol (default), canonical_lf, or crlf.",
-    "from_workspace": "Read initial bytes directly from filename inside PATCHDIFF_WORKSPACE_ROOT without passing content.",
+    "from_workspace": (
+        "True reads the UTF-8 file at filename relative to PATCHDIFF_WORKSPACE_ROOT. Omit content. "
+        "False initializes from inline content."
+    ),
     "include_previous_cycles": "Include ledger entries from editing cycles closed by SAVE (default: active cycle only).",
     "status": "Filter attempts by status.",
     "content_hash": "Filter attempts by pdcp_content_hash.",

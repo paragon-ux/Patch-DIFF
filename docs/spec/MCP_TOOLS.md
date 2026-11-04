@@ -18,7 +18,10 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DO
 
 The 22 internal tools are organized into the groups below. External stdio MCP
 defaults to the **7-tool `editor` profile**; `unobserved` exposes 5, `observed` 6,
-`observed_editor` 4, and explicitly selected `full` exposes all 22. The opt-in
+`observed_editor` 4, `workspace` 5, and explicitly selected `full` exposes all 22.
+The [workspace profile](../guides/WORKSPACE_PUBLICATION.md) exposes only
+initialization, bounded reads, exact search, typed edits and SAVE. It checks
+its configured workspace directory and installed migration revision at startup. The opt-in
 `observed_editor` profile contains only read_target, find_occurrences,
 observe_scope and submit_observed_operations (all with the `patchdiff_` prefix);
 SAVE/replay belong to the separate trusted host session in that role. Both

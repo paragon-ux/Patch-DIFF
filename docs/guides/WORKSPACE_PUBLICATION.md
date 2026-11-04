@@ -13,13 +13,41 @@ IO rejects with `workspace_platform_unsupported` before file IO. The ordinary
 inline upload/edit/export workflow remains available there. A Linux/WSL server
 can access a mounted project only if its filesystem supports these operations.
 
-Set these environment variables for the MCP server process:
+Use PostgreSQL 16 and apply the migrations shipped with the installed wheel.
+In the same Python environment as PatchDIFF, set `PATCHDIFF_DATABASE_URL` to
+the provisioned database, then run:
 
-```text
-PATCHDIFF_MCP_PROFILE=full
-PATCHDIFF_WORKSPACE_ROOT=/absolute/project/root
-PATCHDIFF_WORKSPACE_SYNC_ON_SAVE=0
+```bash
+alembic_ini=$(python -c 'from pathlib import Path; import app; print(Path(app.__file__).with_name("migrations") / "alembic.ini")')
+python -m alembic -c "$alembic_ini" upgrade head
 ```
+
+Configure your MCP client to start that interpreter. For example:
+
+```json
+{
+  "mcpServers": {
+    "patchdiff-workspace": {
+      "command": "/absolute/path/to/venv/bin/python",
+      "args": ["-m", "app.mcp.external_adapter"],
+      "env": {
+        "PATCHDIFF_MCP_PROFILE": "workspace",
+        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff@localhost:5432/patchdiff",
+        "PATCHDIFF_WORKSPACE_ROOT": "/absolute/project/root",
+        "PATCHDIFF_WORKSPACE_SYNC_ON_SAVE": "0"
+      }
+    }
+  }
+}
+```
+
+The `workspace` profile exposes `patchdiff_initialize_target`,
+`patchdiff_read_target`, `patchdiff_find_occurrences`,
+`patchdiff_submit_edits` and `patchdiff_save`. It prepares these declarations
+at startup and checks the absolute workspace directory and installed database
+migration revision before answering MCP requests. Apply migrations separately.
+This profile uses exact text edits and starts without Node or Waymark. A server
+with strict observation enabled must use an observed editing profile.
 
 The root must already exist. Sync defaults off; use `sync_workspace=true` on an
 individual SAVE, or deliberately set `PATCHDIFF_WORKSPACE_SYNC_ON_SAVE=1` for
@@ -62,8 +90,10 @@ native or an external managed adapter.
 1. Call `patchdiff_initialize_target(filename="src/app.py", from_workspace=true)`
    with content omitted/null. The server imports valid UTF-8 bytes, records raw
    hash/EOL/root identity and returns target metadata, without returning source.
-2. Observe/read and submit guarded edits through the existing tools. Their
-   deterministic transaction semantics are unchanged.
+2. Use `patchdiff_read_target` for bounded canonical text and
+   `patchdiff_find_occurrences` to verify exact matches. Call
+   `patchdiff_submit_edits` with the observed version or hash and your ordered
+   match/replace edits. Acceptance updates the PostgreSQL working copy.
 3. Call `patchdiff_save(target_file_id=..., expected_target_version=...,
    sync_workspace=true)`. Do not enable `export_after_save` when a receipt suffices.
 4. On `saved`, verify `workspace_sync.disk_sha256` and the file. The receipt also

@@ -62,10 +62,7 @@ def _is_reparse_or_symlink(path: Path) -> bool:
     return bool(getattr(st, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
-def resolve_workspace_file(
-    workspace_root: str | os.PathLike[str] | None,
-    filename: str,
-) -> tuple[Path, Path, str]:
+def _resolve_workspace_root(workspace_root: str | os.PathLike[str] | None) -> Path:
     if workspace_root is None or (isinstance(workspace_root, str) and not workspace_root.strip()):
         raise WorkspaceSyncError(
             FailureReason.CONTEXT_MISSING,
@@ -79,7 +76,14 @@ def resolve_workspace_file(
             "workspace_root_invalid",
             "Configured PATCHDIFF_WORKSPACE_ROOT does not exist or is not a directory.",
         )
-    root_real = root_candidate.resolve(strict=True)
+    return root_candidate.resolve(strict=True)
+
+
+def resolve_workspace_file(
+    workspace_root: str | os.PathLike[str] | None,
+    filename: str,
+) -> tuple[Path, Path, str]:
+    root_real = _resolve_workspace_root(workspace_root)
 
     if not isinstance(filename, str) or not filename:
         raise WorkspaceSyncError(
@@ -148,6 +152,26 @@ def resolve_workspace_file(
 
 
 
+def _require_workspace_io() -> None:
+    if os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_platform_unsupported",
+                                 "Workspace IO requires POSIX descriptor-relative IO and directory flock.")
+
+
+def validate_workspace_root(workspace_root: str | None) -> None:
+    """Check startup prerequisites without reading or modifying a target file."""
+    _require_workspace_io()
+    if workspace_root is not None and not Path(workspace_root).is_absolute():
+        raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_root_invalid",
+                                 "PATCHDIFF_WORKSPACE_ROOT must be an absolute directory path.")
+    try:
+        root = _resolve_workspace_root(workspace_root)
+        os.close(os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
+    except OSError as exc:
+        raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_root_invalid",
+                                 "Cannot open the configured PATCHDIFF_WORKSPACE_ROOT directory.") from exc
+
+
 @contextmanager
 def _workspace_file(workspace_root, filename: str, *, create_parents: bool = False):
     """Pin directory handles and lease the physical destination directory for IO.
@@ -155,9 +179,7 @@ def _workspace_file(workspace_root, filename: str, *, create_parents: bool = Fal
     The lease is advisory. Other writers must cooperate, and the configured root
     and opened directories must not be moved out of the workspace during IO.
     """
-    if os.name != "posix" or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
-        raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_platform_unsupported",
-                                 "Workspace IO requires POSIX descriptor-relative IO and directory flock.")
+    _require_workspace_io()
     import fcntl
 
     root, _, relative = resolve_workspace_file(workspace_root, filename)

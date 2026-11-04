@@ -2,15 +2,17 @@ import copy
 import json
 import uuid
 from dataclasses import FrozenInstanceError
+from io import StringIO
 
 import pytest
 from jsonschema import Draft202012Validator
 
+from app.mcp import external_adapter
 from app.mcp.external_adapter import ExternalMCPAdapter, MCP_PROFILES
 from app.mcp.server import registry
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("full", 22)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("workspace", 5), ("full", 22)])
 def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch):
     adapter = ExternalMCPAdapter(profile=profile)
     assert len(adapter.list_tools()) == count
@@ -38,6 +40,19 @@ def test_default_startup_environment_and_session_immutability(monkeypatch):
     monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "bad")
     with pytest.raises(ValueError): ExternalMCPAdapter()
     assert ExternalMCPAdapter(profile="observed").profile == "observed"
+
+
+def test_workspace_preflight_runs_before_mcp_replies(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "workspace")
+    monkeypatch.setenv("PATCHDIFF_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("PATCHDIFF_DATABASE_URL", "postgresql+psycopg://unused")
+    monkeypatch.setenv("PATCHDIFF_STRICT_OBSERVATION_MODE", "0")
+    monkeypatch.setattr(external_adapter, "database_schema_is_current", lambda: False)
+    request = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n'
+    stdout = StringIO()
+    with pytest.raises(SystemExit, match="apply the installed Alembic migrations"):
+        external_adapter.serve_stdio(StringIO(request), stdout)
+    assert stdout.getvalue() == ""
 
 
 def test_batch_schemas_are_typed_bounded_and_mutually_exclusive():

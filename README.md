@@ -116,6 +116,9 @@ PatchDIFF exposes a stdio JSON-RPC MCP adapter. For Claude Desktop (`claude_desk
 
 See [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) for full host integration details.
 
+For the installed package workflow that imports an existing workspace file and
+publishes the edited bytes on SAVE, use the [workspace profile](docs/guides/WORKSPACE_PUBLICATION.md).
+
 ---
 
 ## MCP Profiles & Tool Surface
@@ -128,6 +131,7 @@ Configure the profile via `PATCHDIFF_MCP_PROFILE`:
 - **`hybrid_editor`** (1 tool): Minimal single-tool editing (`patchdiff_submit_edits`).
 - **`observed_editor`** (4 tools): Pure editing and reading tools for delegated subagents.
 - **`unobserved`** (5 tools): Direct text reads and submissions without structural AST observation.
+- **`workspace`** (5 tools): Import, bounded read, exact search, guarded edit, and SAVE with optional file publication. Checks workspace and database readiness at startup.
 - **`full`** (22 tools): Complete tool suite including administrative document lifecycle and legacy wrappers.
 
 ---
