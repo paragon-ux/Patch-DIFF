@@ -65,18 +65,18 @@ alembic -c backend/app/migrations/alembic.ini upgrade head
 Do not claim completion or submit a PR unless all relevant tests pass against live PostgreSQL:
 
 ```bash
-# 1. Pure runtime unit tests (1,020 tests)
+# 1. Pure runtime unit tests
 pytest backend/tests/unit -q
 
-# 2. Live PostgreSQL integration tests (561 tests)
+# 2. Live PostgreSQL integration tests
 export PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
-pytest backend/tests/integration -q
+PATCHDIFF_WAYMARK_MODE=resident pytest backend/tests/integration -q
 
 # 3. Offline evaluation (wire payload bytes and verdict equivalence)
-python backend/tests/verification/offline_eval.py
+PATCHDIFF_WAYMARK_MODE=resident python backend/tests/verification/offline_eval.py
 
 # 4. Five-file resident and versioned editor verification
-python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize
+PATCHDIFF_WAYMARK_MODE=resident python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize
 ```
 
 ---

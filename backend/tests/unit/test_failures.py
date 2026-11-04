@@ -22,7 +22,6 @@ def test_all_pdcp_rejection_labels_are_present() -> None:
         "target_hash_mismatch",
         "target_version_mismatch",
         "target_diverged",
-        "executable_logic_detected",
         "sequential_match_invalid",
         "transaction_internal_error",
     }

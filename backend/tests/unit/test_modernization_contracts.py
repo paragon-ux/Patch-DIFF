@@ -44,7 +44,6 @@ def test_accepted_reports_protocol_and_transaction_valid_but_never_task_or_seman
         (FailureReason.MANIFEST_INVALID, False, None),
         (FailureReason.BLOCK_MALFORMED, False, None),
         (FailureReason.CONTEXT_MISSING, False, None),
-        (FailureReason.EXECUTABLE_LOGIC_DETECTED, False, None),
         (FailureReason.MATCH_ABSENT, True, False),
         (FailureReason.MATCH_AMBIGUOUS, True, False),
         (FailureReason.SEQUENTIAL_MATCH_INVALID, True, False),
@@ -76,7 +75,7 @@ def test_stage_aware_validity_distinguishes_precondition_vs_applicability_and_co
         "semantic": NOT_EVALUATED,
     }
 
-    # PDCP header target_hash mismatch after parsing/protocol validation -> TRANSACTION_APPLICABILITY
+    # Observed scope hash mismatch after protocol validation -> TRANSACTION_APPLICABILITY
     in_core_hash = validity_levels(
         "rejected",
         FailureReason.TARGET_HASH_MISMATCH,

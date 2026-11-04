@@ -1,13 +1,10 @@
 """Typed PatchDIFF transaction input (`patchdiff-tx/1`).
 
-A typed transaction carries exact payload strings as fields instead of inside a
-delimited text envelope. It is decoded into the same ``ParsedPDCP`` structure the
-PDCP parser produces, so exactly one applier validates and applies both inputs.
+Each exact edit carries its payload strings as JSON fields. The decoder lowers
+validated transactions to the shared ``ParsedPDCP`` structure for the applier.
 
-This module is pure: no SQL, FastAPI, MCP, or model dependencies. It never builds
-textual PDCP, so delimiter collisions cannot be reintroduced by interpolation.
-It also defines the authoritative JSON Schema for typed edit items so MCP tool
-discovery and runtime validation stay in lockstep.
+The JSON Schema and runtime validation share this module. It has no SQL,
+FastAPI, MCP, or model dependencies.
 """
 
 from __future__ import annotations
@@ -265,8 +262,7 @@ def to_parsed_transaction(transaction: TypedTransaction, *, target_type: str) ->
 
     Only fields the applier reads are populated on the manifest: ``change_id`` and
     disambiguation. Advisory text stays on ``TypedTransaction`` and never reaches
-    matching. The header ``target_hash`` is left unset: guards are enforced by the
-    service guard path, not by the PDCP header precondition.
+    matching. The service checks target guards before calling the applier.
     """
 
     changes: list[PDCPChange] = []

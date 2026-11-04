@@ -7,10 +7,10 @@ and audit tables. Migration `20261022_0003` adds the source line-ending
 metadata used by export and workspace publication. See the
 [MCP tool contracts](mcp-tools.md#guarded-editing-reads-preview-and-diagnostics).
 
-- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`, or `patchdiff-mvp-0.5.0` when a span operation contains `expected_before`/`expected_after`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
+- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`, or `patchdiff-mvp-0.5.0` when a span operation contains `expected_before`/`expected_after`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. Observed batches use the internal pair `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`. `pdcp_content` stores the canonical JSON transaction record.
 - Accepted tx/2 and tx/3 transactions write `origin = 'typed'` ledger rows whose `derived_json` adds `operation` (`"span"` or `"replace_all"`). A tx/3 transaction writes exactly one row covering the full original span.
 - Rejected rows persist `diagnostic_json.failure_context` (at most 256 code points of the failing buffer, as a prefix or a window around a known failure location) and, when applicable, `exact_candidates`, span evidence (`span_check`, `buffer_length`, `actual_text`), `original_occurrences` for consumed sequential matches, `near_miss_query` for absent matches, and `code` for request-key conflicts and invalid keys. Response-only `current_context`, `near_misses`, the near-miss scan buffer and `correlation_id` are never stored.
-- Accepted rows keep `diagnostic_json = NULL` unless the applier reported warnings; then it holds `{warnings, warning_count, warnings_truncated}` with at most 16 warning objects. Replay never reads it.
+- Accepted rows can store observation evidence and at most 16 advisory warnings. Replay verifies observed history using its recorded evidence and ignores advisory warnings.
 - Migration `20261022_0003` adds nullable JSONB `cloud_target_files.source_line_endings`. Initialization records the original source facts, which export and workspace publication use to render line endings. Workspace initialization adds `workspace_tracked` and `workspace_root_identity` (the directory device and inode). A successful workspace SAVE also records `last_synced_disk_sha256` and `last_synced_version` with the checkpoint. The next publication checks that digest, or the initial raw digest for an imported file before its first publication. Existing targets can have NULL metadata. Downgrade refuses while any target has recorded facts.
 - A valid oversized fresh tx/3 replacement writes no attempt or `current_pdcp_files` row. A key-conflict attempt is audited before fresh admission, so its row stores the complete submitted record even when it exceeds the fresh limits, the same as any tx/1 or tx/2 attempt.
 - `patchdiff_read_lines` and `patchdiff_preview` only read one committed `cloud_target_files` row; they write nothing and take no locks.
@@ -124,11 +124,11 @@ Mutable record of the most recent submission for a target (display/session state
 | `pdcp_file_id` | UUID | PK | Row identifier |
 | `target_file_id` | UUID | FK -> `cloud_target_files.target_file_id` UNIQUE NOT NULL | One row per target |
 | `editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Submission cycle |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` |
-| `pdcp_content` | TEXT | NOT NULL | Raw text or canonical JSON |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or internal `patchdiff-observed-batch/1` |
+| `pdcp_content` | TEXT | NOT NULL | Canonical JSON transaction or invalid-input evidence |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `pending_validation`, `accepted`, `rejected`, `superseded` |
-| `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
+| `submission_source` | TEXT | NOT NULL | Advisory source label. The MCP default is `model_response`. |
 | `parent_pdcp_log_id` | UUID | FK -> `append_only_pdcp_logs.pdcp_log_id` NULLABLE | Retry lineage |
 | `regeneration_attempt` | INTEGER | NULLABLE | 1-based attempt number |
 | `regeneration_source` | TEXT | NULLABLE | Host identifier |
@@ -148,10 +148,10 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `parent_pdcp_log_id` | UUID | FK -> `append_only_pdcp_logs.pdcp_log_id` NULLABLE | Prior rejected attempt prompting this retry |
 | `regeneration_attempt` | INTEGER | NULLABLE | 1-based retry attempt |
 | `regeneration_source` | TEXT | NULLABLE | Host or policy label |
-| `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` |
+| `submission_source` | TEXT | NOT NULL | Advisory source label. The MCP default is `model_response`. |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or internal `patchdiff-observed-batch/1` |
 | `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.2`) |
-| `pdcp_content` | TEXT | NOT NULL | Canonical JSON or raw PDCP for ordinary input; reversible ASCII JSON evidence for rejected invalid text |
+| `pdcp_content` | TEXT | NOT NULL | Canonical JSON transaction or reversible ASCII JSON evidence for rejected invalid text |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `accepted` or `rejected` |
 | `failure_reason` | TEXT | NULLABLE | Canonical failure label on rejection |
@@ -184,11 +184,9 @@ New rejected attempts store `failure_context` within existing `diagnostic_json`;
 
 For ordinary inputs, request_fingerprint hashes a canonical JSON envelope containing protocol_version, canonical target_file_id, pdcp_content_hash, expected_target_version, expected_current_hash and parent_pdcp_log_id. The client_request_id selects the per-target keyed row; it is not itself part of this envelope. Submission source and attempt metadata are not part of ordinary request identity. The separate invalid-input evidence domain described below covers its evidence envelope instead.
 
-For typed input, pdcp_content is canonical JSON of the complete submitted record: format, canonical target UUID, both guard fields, intent and the ordered raw edits array. Object keys are sorted and JSON separators are compact; decoded string values and supplied edit fields are preserved. JSON wire whitespace, object-key order and equivalent Unicode escape spelling do not affect identity. This is not a hash of the original JSON-RPC wire bytes, nor a fingerprint of only the resulting edit operation.
+For typed input, pdcp_content is canonical JSON of the complete submitted record: format, canonical target UUID, both guard fields, intent and the submitted edit, operation or replacement payload. Object keys are sorted and JSON separators are compact; decoded string values and supplied edit fields are preserved. JSON wire whitespace, object-key order and equivalent Unicode escape spelling do not affect identity. This is not a hash of the original JSON-RPC wire bytes, nor a fingerprint of only the resulting edit operation.
 
 Changing intent, rationale, risk, selectors, edit order or a guard changes the record and therefore request identity. LF versus CRLF inside a typed string is represented by different JSON escapes and also changes identity, even when the applier would normalize both to the same matching text. No Unicode normalization is performed. An omitted optional edit field differs from an explicitly null field; an omitted change_id differs from an explicitly supplied runtime-default ID. Top-level omitted/null guards both become null in build_record. Runtime parsing defaults do not rewrite the persisted raw edit array before fingerprinting.
-
-Legacy PDCP uses canonical_sha256 over its complete text, so LF/CRLF/bare-CR line endings normalize for that content hash. Do not extend that legacy equivalence to escaped line endings inside typed JSON values. Valid hashing and all stored fingerprints remain unchanged.
 
 #### Parent identity
 

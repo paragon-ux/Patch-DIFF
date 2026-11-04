@@ -108,7 +108,7 @@ Required hash fields:
 - `current_hash`
 - `before_hash`
 - `after_hash`
-- optional `target_hash` (precondition in PDCP header)
+- optional internal `target_hash` for verification of an observed scope
 - optional `expected_current_hash` (precondition in submit requests)
 
 Rejected attempts use:
@@ -129,10 +129,9 @@ A conflicting reuse of an existing request key is a separately audited context_i
 - `change_id` defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate `change_id`s within a transaction reject with `FailureReason.MANIFEST_INVALID`.
 
 
-### Executable Logic Rejection
-Reject obvious executable code outside payloads: imports, functions, classes, loops, conditionals, shell commands, dynamic evaluation, filesystem calls, network calls, tool calls (`FailureReason.EXECUTABLE_LOGIC_DETECTED`).
+### Payload text
 
-Payloads may contain code-like text because target documents may contain code. The runtime must never execute payload text.
+The decoder validates the JSON schema. Exact match and replacement strings can contain code because the target can be source text. The runtime treats every payload string as data.
 
 ## Matching Semantics & Overlap Enumeration
 
@@ -216,7 +215,6 @@ disambiguation_invalid
 target_hash_mismatch
 target_version_mismatch
 target_diverged
-executable_logic_detected
 sequential_match_invalid
 transaction_internal_error
 ```

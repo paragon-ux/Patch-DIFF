@@ -54,10 +54,10 @@ alembic -c backend/app/migrations/alembic.ini upgrade head
 
 ### Running Tests
 ```bash
-# Pure runtime unit tests (1,020 tests)
+# Pure runtime unit tests
 pytest backend/tests/unit -q
 
-# Live Postgres integration tests (561 tests)
+# Live Postgres integration tests
 export PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
 pytest backend/tests/integration -q
 

@@ -48,7 +48,6 @@ PROTOCOL_FAILURE_REASONS: frozenset[str] = frozenset(
         FailureReason.CONTEXT_MISSING.value,
         FailureReason.CONTEXT_INVALID.value,
         FailureReason.DISAMBIGUATION_INVALID.value,
-        FailureReason.EXECUTABLE_LOGIC_DETECTED.value,
     }
 )
 

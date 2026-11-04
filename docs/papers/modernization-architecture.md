@@ -184,8 +184,8 @@ Rejection context: newly recorded rejections persist immutable `diagnostic.failu
 
 - **Validation Stages (`ValidationStage`)**:
   1. `PRECONDITION_GUARD`: Target lookup (`TARGET_NOT_FOUND`), malformed target UUID (`CONTEXT_INVALID`), `client_request_id` conflict (`CONTEXT_INVALID`), or pre-parse `expected_target_version` / `expected_current_hash` mismatch against database (`TARGET_VERSION_MISMATCH`, `TARGET_HASH_MISMATCH`). Reports `protocol_valid: null, transaction_valid: null`.
-  2. `PROTOCOL_VALIDATION`: Structural/schema validation of the submitted format (`MANIFEST_MISSING`, `MANIFEST_INVALID`, `BLOCK_MALFORMED`, `CONTEXT_MISSING`, `CONTEXT_INVALID`, `DISAMBIGUATION_INVALID`, `EXECUTABLE_LOGIC_DETECTED`, and internal PDCP header vs manifest `TARGET_HASH_MISMATCH`). Reports `protocol_valid: false, transaction_valid: null`.
-  3. `TRANSACTION_APPLICABILITY`: Core applicability simulation (`MATCH_ABSENT`, `MATCH_AMBIGUOUS`, `DISAMBIGUATION_INVALID`, `SEQUENTIAL_MATCH_INVALID`, `SPAN_OUT_OF_BOUNDS`, `SPAN_EXPECTED_TEXT_MISMATCH`, and post-validation PDCP header `target_hash` vs current database target hash `TARGET_HASH_MISMATCH`). Reports `protocol_valid: true, transaction_valid: false`.
+  2. `PROTOCOL_VALIDATION`: Structural/schema validation of the submitted format (`MANIFEST_MISSING`, `MANIFEST_INVALID`, `BLOCK_MALFORMED`, `CONTEXT_MISSING`, `CONTEXT_INVALID` and `DISAMBIGUATION_INVALID`). Reports `protocol_valid: false, transaction_valid: null`.
+  3. `TRANSACTION_APPLICABILITY`: Core applicability simulation (`MATCH_ABSENT`, `MATCH_AMBIGUOUS`, `DISAMBIGUATION_INVALID`, `SEQUENTIAL_MATCH_INVALID`, `SPAN_OUT_OF_BOUNDS`, `SPAN_EXPECTED_TEXT_MISMATCH`, and observed scope hash mismatch (`TARGET_HASH_MISMATCH`)). Reports `protocol_valid: true, transaction_valid: false`.
   4. `COMMIT_GUARD`: Post-simulation re-check of `target.version` and `target.current_hash` (`TARGET_DIVERGED`). Reports `protocol_valid: true, transaction_valid: true`.
   5. `ACCEPTED`: Transaction committed. Reports `protocol_valid: true, transaction_valid: true`.
 - **Format-Specific Diagnostics**:

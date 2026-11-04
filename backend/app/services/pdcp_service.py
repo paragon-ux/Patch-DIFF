@@ -174,7 +174,7 @@ def submit_edits(
 
     Use one row lock, the shared applier and one atomic commit.
     At least one state guard is required. The durable record is the canonical JSON of
-    the submitted transaction; no textual PDCP is synthesized.
+    the submitted transaction.
     """
 
     target_uuid = _try_coerce_uuid(target_file_id)

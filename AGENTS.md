@@ -181,7 +181,7 @@ Keep runtime layers separate:
 
 1. MCP transport & tool layer (`backend/app/mcp/`)
 2. Service layer (`backend/app/services/`)
-3. Typed & PDCP parsers/validators (`backend/app/pdcp/`)
+3. Typed transaction decoders and validators (`backend/app/pdcp/`)
 4. Deterministic matcher, disambiguator, and applier (`backend/app/pdcp/`, `backend/app/core/`)
 5. Postgres persistence layer (`backend/app/storage/`, `backend/app/migrations/`)
 
