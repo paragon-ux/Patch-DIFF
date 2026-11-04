@@ -18,9 +18,13 @@ nav = [
         { "MCP Tools" = "spec/MCP_TOOLS.md" },
         { "Data Model" = "spec/DATA_MODEL.md" },
         { "PDCP Format" = "spec/PDCP_FORMAT.md" },
-        { "Editor v2 Contract" = "spec/MCP_EDITOR_V2.md" },
         { "Structural Batch Editing" = "spec/STRUCTURAL_BATCH_EDITING.md" },
         { "Waymark Worker" = "spec/WAYMARK_WORKER.md" }
+    ]},
+    { "MCP Profiles" = [
+        { "Profile Catalog" = "spec/profiles/index.md" },
+        { "Workspace" = "spec/profiles/WORKSPACE.md" },
+        { "Observed Editor v2" = "spec/profiles/MCP_EDITOR_V2.md" }
     ]},
     { "Guides" = [
         { "Workspace Editing" = "guides/WORKSPACE_PUBLICATION.md" },

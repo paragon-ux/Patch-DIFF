@@ -91,7 +91,7 @@ can use inline uploads, edits and exports. A server running in Linux or WSL
 needs a workspace directory with directory locking and descriptor-relative IO.
 
 Restart the server after changing profiles. Requests cannot override the
-session profile. [Exact tool lists](../spec/STRUCTURAL_BATCH_EDITING.md).
+session profile. [Exact tool lists](../spec/profiles/index.md).
 
 Use the venv Python directly so Claude Desktop launches the interpreter that has PatchDIFF's dependencies installed.
 

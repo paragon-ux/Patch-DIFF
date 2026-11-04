@@ -12,7 +12,7 @@ Use `observed_editor` for delegated structural editing when the host owns
 SAVE/replay. Use `full` for the complete lifecycle, export and audit catalog.
 The default `editor` profile exposes seven tools for working with an existing
 target. The server filters both discovery and dispatch by profile.
-[Exact profile lists and batch examples](../spec/STRUCTURAL_BATCH_EDITING.md).
+[Profile catalog](../spec/profiles/index.md) · [Structural batch examples](../spec/STRUCTURAL_BATCH_EDITING.md).
 
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
 
@@ -359,7 +359,7 @@ outside the editing model's context and under a private ignored capture director
 
 ## Purpose-specific observed interface
 
-For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](../spec/MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
+For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](../spec/profiles/MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
 
 
 ## Optional managed workspace publication

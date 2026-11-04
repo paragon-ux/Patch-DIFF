@@ -111,7 +111,7 @@ Historical source and verification records remain preserved in Git and internal 
 
 Decision: add `observed_v2` with eight external purposes, six common bundle paths and two single-scope compatibility paths. The latter preserve scopes above the batch issuance cap. Reusable explicit snapshots remove result-to-argument field renaming; bounded receipts preserve immutable transaction evidence separately from current state. Modern MCP revisions are negotiated with text fallback and optional structured results/output schemas. Existing profiles,22 internal handlers, services, transaction formats, migrations and replay runtimes retain their contracts.
 
-[The full contract](../spec/MCP_EDITOR_V2.md) records compatibility, audited admission/recovery ordering, response limits, host-loading uncertainty and actual verification paths. This is a tool/schema/data change; the rejected prompt-only proposal is not implemented. Static bytes and backend correctness do not establish model-time savings.
+[The full contract](../spec/profiles/MCP_EDITOR_V2.md) records compatibility, audited admission/recovery ordering, response limits, host-loading uncertainty and actual verification paths. This is a tool/schema/data change; the rejected prompt-only proposal is not implemented. Static bytes and backend correctness do not establish model-time savings.
 
 ## PR21: streamlined five-tool observed editor surface & receipt compaction
 

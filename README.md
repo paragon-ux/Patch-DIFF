@@ -125,18 +125,12 @@ The `editor` configuration above is for a host that already has a target ID.
 
 ## MCP Profiles & Tool Surface
 
-External MCP defaults to the **7-tool `editor` profile**: `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, and `patchdiff_replay`.
-
-Configure the profile via `PATCHDIFF_MCP_PROFILE`:
-- **`editor`** (default, 7 tools): Recommended for interactive agent workflows.
-- **`observed_v2`** (5 tools): Streamlined editing with explicit AST snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte hard ceiling). See [MCP Editor v2](docs/spec/MCP_EDITOR_V2.md).
-- **`hybrid_editor`** (1 tool): Minimal single-tool editing (`patchdiff_submit_edits`).
-- **`unobserved_editor`** (3 tools): Read, exact search and typed edits.
-- **`observed`** (6 tools): Structural observation, guarded observed edits, bounded reads, exact search, SAVE and replay.
-- **`observed_editor`** (4 tools): Pure editing and reading tools for delegated subagents.
-- **`unobserved`** (5 tools): Direct text reads and submissions without structural AST observation.
-- **`workspace`** (5 tools): Import, bounded read, exact search, guarded edit, and SAVE with optional file publication. Checks workspace and database readiness at startup.
-- **`full`** (22 tools): Complete tool suite including administrative document lifecycle and legacy wrappers.
+Set `PATCHDIFF_MCP_PROFILE` before starting the server. The default
+`editor` profile exposes seven tools for an existing target. Choose
+[`workspace`](docs/spec/profiles/WORKSPACE.md) for file import and publication,
+[`observed_v2`](docs/spec/profiles/MCP_EDITOR_V2.md) for structural editing
+with explicit snapshots, or `full` for all 22 tools. The
+[profile catalog](docs/spec/profiles/index.md) lists every tool set.
 
 ---
 
@@ -145,7 +139,8 @@ Configure the profile via `PATCHDIFF_MCP_PROFILE`:
 Full documentation is available on the **[Zensical Documentation Site](https://paragon-ux.github.io/Patch-DIFF/)**:
 
 - **Visual Architecture**: [Visual Architecture & Transaction Lifecycle](docs/architecture.md)
-- **Specifications**: [Core Runtime](docs/spec/PATCHDIFF_CORE_SPEC.md) | [MCP Tools](docs/spec/MCP_TOOLS.md) | [Data Model](docs/spec/DATA_MODEL.md) | [PDCP Formats](docs/spec/PDCP_FORMAT.md) | [Editor v2](docs/spec/MCP_EDITOR_V2.md) | [Batch Editing](docs/spec/STRUCTURAL_BATCH_EDITING.md)
+- **Specifications**: [Core Runtime](docs/spec/PATCHDIFF_CORE_SPEC.md) | [MCP Tools](docs/spec/MCP_TOOLS.md) | [Data Model](docs/spec/DATA_MODEL.md) | [PDCP Formats](docs/spec/PDCP_FORMAT.md) | [Batch Editing](docs/spec/STRUCTURAL_BATCH_EDITING.md)
+- **MCP Profiles**: [Profile Catalog](docs/spec/profiles/index.md) | [Workspace](docs/spec/profiles/WORKSPACE.md) | [Observed Editor v2](docs/spec/profiles/MCP_EDITOR_V2.md)
 - **Guides**: [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) | [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) | [Workspace Editing](docs/guides/WORKSPACE_PUBLICATION.md) | [Observed Workflow](docs/guides/OBSERVED_EDITOR_WORKFLOW.md)
 - **Whitepapers**: [Concept Paper v6](docs/papers/PatchDIFF-Concept-Paper-6.md) | [Modernization Architecture](docs/papers/MODERNIZATION_ARCHITECTURE.md)
 - **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized_benchmark_report.md) | [Test Matrix](docs/benchmarks/TEST_MATRIX.md)

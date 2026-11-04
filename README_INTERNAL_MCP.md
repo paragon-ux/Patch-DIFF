@@ -10,7 +10,7 @@ All 22 internal registry handlers remain available to trusted code. External MCP
 profiles independently restrict both advertised and callable tools (7 by default).
 The internal observed batch form still verifies every server-issued scope under
 the target lock and uses the shared applier, atomic commit and replay path.
-[Batch and profile contracts](docs/spec/STRUCTURAL_BATCH_EDITING.md).
+[MCP profile catalog](docs/spec/profiles/index.md) · [Batch contract](docs/spec/STRUCTURAL_BATCH_EDITING.md).
 
 The internal registry is not a separate product path.
 

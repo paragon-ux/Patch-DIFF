@@ -30,7 +30,7 @@ Read project artifacts in this order:
 5. `docs/spec/PATCHDIFF_CORE_SPEC.md` (deterministic runtime, validation stages, replay profiles)
 6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `0001` through `0005`)
 7. `docs/spec/PDCP_FORMAT.md` (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement, and pointer to `docs/legacy/LEGACY_COMPATIBILITY.md`)
-8. `docs/spec/MCP_EDITOR_V2.md` (streamlined 5-tool `observed_v2` profile and compact receipts)
+8. `docs/spec/profiles/index.md` and its linked profile contracts (startup selection, tool sets, workspace and observed editor v2)
 9. `docs/guides/HOST_INTEGRATION_GUIDE.md` (host-owned loop, prompt hygiene rules, and usage guide)
 10. `docs/legacy/LEGACY_COMPATIBILITY.md` (frozen `.pdcp` v0.2.3 syntax, `patchdiff_submit_pdcp`, deprecated regeneration wrappers, and historical replay profiles)
 11. `docs/papers/PatchDIFF-Concept-Paper-6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, design rationale, tradeoffs, and empirical research hypotheses)
@@ -145,14 +145,14 @@ compatibility `full` all 22. Opt-in `observed_editor` advertises and permits onl
 the four observed editing/read tools; that profile rejects SAVE/replay. Opt-in
 `observed_v2` exposes five purpose-specific external tools through the same
 services with explicit snapshots and bounded typed receipts; see
-[the v2 contract](docs/spec/MCP_EDITOR_V2.md). It also denies lifecycle calls; all legacy
+[the v2 contract](docs/spec/profiles/MCP_EDITOR_V2.md). It also denies lifecycle calls; all legacy
 profiles and the internal 22 handlers retain their contracts.
 Trusted clients use `full` for the complete lifecycle, audit and legacy catalog.
 The opt-in `workspace` profile exposes initialize, read, exact search, typed
 edits and SAVE. The stdio process checks workspace and database readiness
 before the handshake. File publication is explicit under the default SAVE
 configuration and has a separate outcome from the PostgreSQL checkpoint.
-See the [workspace contract](docs/guides/WORKSPACE_PUBLICATION.md). Strict
+See the [workspace profile](docs/spec/profiles/WORKSPACE.md). Strict
 observed service admission remains independent and prevents this profile from
 starting. The frozen comparative Gate 2 stays closed.
 

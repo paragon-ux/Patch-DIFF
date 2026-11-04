@@ -16,20 +16,10 @@ As-built record: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DO
 
 ## MCP Tool Surface Overview
 
-The 22 internal tools are organized into the groups below. External stdio MCP
-defaults to the **7-tool `editor` profile**. The immutable startup
-`PATCHDIFF_MCP_PROFILE` filters discovery and dispatch.
-
-- [`workspace`](../guides/WORKSPACE_PUBLICATION.md) exposes initialization,
-  bounded read, exact search, typed edits and SAVE. It checks the workspace
-  directory, explicit database URL and installed migration revision before
-  the stdio handshake.
-- `observed_editor` exposes four structural read/edit tools. Its host handles
-  SAVE/replay in a separate session.
-- `full` exposes all 22 registered tools, including upload, export, legacy
-  submissions and administrative history.
-
-See [exact profile lists and batch contracts](STRUCTURAL_BATCH_EDITING.md).
+The 22 internal tools are organized into the groups below. The
+[MCP profile catalog](profiles/index.md) defines which tools each external
+connection advertises and accepts. See [structural batch editing](STRUCTURAL_BATCH_EDITING.md)
+for multi-scope observation and submission.
 
 | Group | Tool Name | Role & Modernized Status |
 | --- | --- | --- |
@@ -443,6 +433,35 @@ Opt-in workspace publication is a separate filesystem side effect, not an atomic
 
 Workspace SAVE requires a service-owned transaction; an already active caller transaction rejects with `workspace_requires_owned_transaction` before file IO. Success adds `workspace_sync` with `synced_path` (relative to `PATCHDIFF_WORKSPACE_ROOT`), `disk_sha256` (published raw bytes), `bytes_written`, `content_eol`, `publication: "installed"`, and `durability: "confirmed"`. Pre-publication failures reject without changing the destination or checkpoint (parent directories may have been created for a new path). If installation precedes a durability or checkpoint failure, the result is `status: "partial"`, an installed-file `workspace_sync` receipt, and no asserted checkpoint/cycle IDs. `workspace_durability_uncertain` reports uncertain directory durability; `workspace_checkpoint_uncertain` reports an uncertain database outcome. `workspace_post_install_error` retains an installed receipt if directory-handle teardown fails after publication. Never blindly retry SAVE after partial/unknown outcomes; inspect disk/database and explicitly reconcile or initialize a new target. There is no automatic rollback or retry. Process termination or a lost response can also leave the outcome unknown, as with existing non-idempotent SAVE.
 
+#### Workspace filesystem contract
+
+The server owns managed file operations. Workspace imports and publications obtain
+an advisory exclusive lease on the pinned physical destination directory.
+This serializes the same destination across processes, target IDs, overlapping
+configured roots and path aliases. Different destination directories can run
+independently. A conflicting operation rejects with `workspace_busy`.
+When a target's baseline diverges, reinitialize from the file before
+publishing again.
+
+Workspace imports bind the working target to the root's device and inode.
+Moving the same directory preserves that identity. A different directory
+requires a new target even if the relative path and file bytes match.
+
+Path validation rejects escapes, reserved/ambiguous path components and static
+symlinks. IO walks directories using non-following handles, then reads/replaces
+relative to the opened parent. Replacing an ancestor pathname with a symlink
+cannot redirect that opened handle to another tree. The configured root and opened directories must stay under the workspace
+owner's control during IO. A process with equivalent filesystem privileges can
+move an opened directory out of the workspace.
+
+The source byte hash is checked under the lease and checked again after staging.
+Unmanaged edits found at either check reject as `external_disk_drift` and remain
+intact. Non-cooperating writers can still race after the final check. Quiesce
+those writers during publication. Creation uses an atomic no-clobber link
+so a newly appeared file is preserved. Existing files keep their POSIX mode.
+New files use mode 0600. Newly created parent directories can remain after
+publication is rejected.
+
 ### `patchdiff_replay`
 Replays accepted logs against the initial snapshot, dispatching on `(protocol_version, runtime_version)`. A successful reconstruction may still report materialized_state_matches=false. content_matches compares raw stored content with the canonical reconstructed buffer; canonical hash checks retain their existing meaning. Replay reports divergence and never repairs storage. Replay never evaluates warnings, diagnostics or line-ending metadata.
 - **Arguments**: `target_file_id`.
@@ -656,6 +675,9 @@ a separate trusted detailed/full operator. Compact mode does not guarantee that
 arbitrary source-rich responses fit a host's spill limit. Use existing query/kind,
 direct selection and observation pagination; never silently truncate source.
 
-## Versioned editor profile
+## Profile-specific contracts
 
-The opt-in `observed_v2` external profile exposes five purpose-specific tools through the existing services (`patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, and `patchdiff_commit_bundle`). Its exact tool list, snapshot envelope, bounded receipts, negotiated MCP revisions and error semantics are specified in [MCP_EDITOR_V2.md](MCP_EDITOR_V2.md). All legacy profiles and internal 22 handlers retain their contracts.
+See [observed editor v2](profiles/MCP_EDITOR_V2.md) for its tool aliases,
+snapshot envelope, bounded receipts and negotiated MCP revisions. See
+the [workspace profile](profiles/WORKSPACE.md) for its five-tool surface
+and startup requirements.

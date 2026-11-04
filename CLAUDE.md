@@ -15,7 +15,7 @@ When working in this repository, always consult documentation in the following o
 5. `docs/spec/PATCHDIFF_CORE_SPEC.md` (deterministic core runtime specification)
 6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `20260510_0001` through `20261027_0005`)
 7. `docs/spec/PDCP_FORMAT.md` (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`)
-8. `docs/spec/MCP_EDITOR_V2.md` (streamlined 5-tool `observed_v2` profile)
+8. `docs/spec/profiles/index.md` (startup selection and profile contracts)
 9. `docs/spec/STRUCTURAL_BATCH_EDITING.md` (structural observation and batch transactions)
 10. `docs/guides/HOST_INTEGRATION_GUIDE.md` (host loop, reads, retries, and failure handling)
 11. `docs/standards/PR_REVIEW_STANDARD.md` (PR review standard v1.1.0)
@@ -72,11 +72,6 @@ python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-
 
 ## 4. MCP Server Profiles
 
-External MCP supports startup profile configuration via `PATCHDIFF_MCP_PROFILE`:
-- `editor` (default, 7 tools): `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay`.
-- `observed_v2` (5 tools): `patchdiff_list_scopes`, `patchdiff_find_occurrences`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_read_target`.
-- `hybrid_editor` (1 tool): `patchdiff_submit_edits`.
-- `observed_editor` (4 tools): delegated editing without lifecycle calls.
-- `unobserved` (5 tools)
-- `observed` (6 tools)
-- `full` (22 tools): explicit compatibility profile.
+Choose the external MCP tool catalog with `PATCHDIFF_MCP_PROFILE`. See the
+[profile reference](docs/spec/profiles/index.md) for exact tool lists and
+[workspace startup](docs/spec/profiles/WORKSPACE.md) for file editing.

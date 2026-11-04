@@ -18,7 +18,8 @@ For complete visual flowcharts and interactive sequence diagrams:
 
 ```text
 docs/
-├── spec/          Normative specifications and protocol contracts
+├── spec/          Shared specifications and tool contracts
+│   └── profiles/  MCP startup profiles and profile-specific contracts
 ├── guides/        Host integration, client setup, and workflow recipes
 ├── benchmarks/    Empirical evaluation reports and test matrix
 ├── papers/        Conceptual whitepapers and architecture records
@@ -36,9 +37,14 @@ Authoritative technical specifications and tool schemas:
 - [**MCP_TOOLS.md**](spec/MCP_TOOLS.md): Complete Model Context Protocol tool contracts, schemas, byte budgets, and request/response representations.
 - [**DATA_MODEL.md**](spec/DATA_MODEL.md): PostgreSQL relational substrate, row-locking concurrency model (`SELECT ... FOR UPDATE`), and Alembic migrations `20260510_0001` through `20261027_0005`.
 - [**PDCP_FORMAT.md**](spec/PDCP_FORMAT.md): Declarative transaction input formats: typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), and guarded sole replacement (`patchdiff-tx/3`).
-- [**MCP_EDITOR_V2.md**](spec/MCP_EDITOR_V2.md): Streamlined 5-tool `observed_v2` editor profile with explicit reusable snapshots and compact receipts (representative ~800 B–2 KB; 8,192 byte logical ceiling).
 - [**STRUCTURAL_BATCH_EDITING.md**](spec/STRUCTURAL_BATCH_EDITING.md): Multi-scope AST observation and atomic batch execution contracts.
 - [**WAYMARK_WORKER.md**](spec/WAYMARK_WORKER.md): Resident worker process architecture and IPC lifecycle for external AST engines.
+
+### MCP profiles (`docs/spec/profiles/`)
+
+- [Profile catalog](spec/profiles/index.md) lists the startup choices and exact tool sets.
+- [Workspace](spec/profiles/WORKSPACE.md) defines the five-tool file editing profile and startup checks.
+- [Observed editor v2](spec/profiles/MCP_EDITOR_V2.md) defines the explicit snapshots and bounded receipts for structural editing.
 
 ---
 
