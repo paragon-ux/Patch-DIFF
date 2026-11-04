@@ -49,9 +49,9 @@ _CODE_POINTS = " Offsets are Unicode code points of canonical LF text; UTF-16 ho
 TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_handle_upload": "Initialize a canonical PatchDIFF target from uploaded document content.",
     "patchdiff_initialize_target": (
-        "Initialize a working target in PostgreSQL. To import an existing file, pass its path relative to the "
-        "configured workspace root with from_workspace=true and omit content. For inline upload, supply content. "
-        "Returns the target ID, version and hash."
+        "Start here to edit a document if you don't already have its target_file_id. For a workspace file, "
+        "pass its path relative to the workspace root as filename, set from_workspace=true, and omit content. "
+        "Use the returned target_file_id to read, search, submit edits, and save. For inline text, supply content instead."
     ),
     "patchdiff_build_prompt_context": "Convenience: build prompt context (bounded target PREFIX, not retrieval; see context_truncated). Prefer patchdiff_read_target / patchdiff_find_occurrences.",
     "patchdiff_submit_pdcp": "Submit untrusted legacy .pdcp (v0.2.3) content through deterministic validation and commit services.",
