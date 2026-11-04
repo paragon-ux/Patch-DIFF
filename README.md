@@ -11,6 +11,19 @@
 
 PatchDIFF turns model-generated document edits into **explicitly preconditioned, atomic, auditable, and deterministically replayable PostgreSQL transactions** over the Model Context Protocol (MCP).
 
+## Quickstart
+
+Follow the [workspace quickstart](docs/guides/workspace-quickstart.md) to
+install the wheel, connect to PostgreSQL 16 and configure your MCP host.
+Open your project and ask the host to edit a file and save it to disk. The
+workspace profile imports the file, reads or searches the working copy,
+submits guarded edits and publishes with explicit SAVE.
+
+[Claude Desktop setup](docs/guides/claude-desktop-setup.md) ·
+[Workspace requests and receipts](docs/spec/profiles/workspace-profile.md)
+
+## Structural editing benchmark
+
 | ⚡ Time Elapsed (Git) | ⏱️ Turnaround Predictability | 📉 Context Window Burn | 🎯 Byte Accuracy |
 | :---: | :---: | :---: | :---: |
 | **1.66× Faster** | **4.7× Tighter** | **-64.8%** | **100.0%** |
@@ -84,17 +97,6 @@ PatchDIFF supports three structured transaction input formats (pure declarative 
 All formats require `expected_target_version` and/or `expected_current_hash` and are processed by the same deterministic core engine. See [PDCP Format](docs/spec/transaction-formats.md) and [Host Integration Guide](docs/guides/host-integration-guide.md) for full request schemas and examples.
 
 ---
-
-## Quickstart
-
-Follow the [workspace quickstart](docs/guides/workspace-quickstart.md) to
-install the wheel, connect to PostgreSQL 16 and configure your MCP host.
-Open your project and ask the host to edit a file and save it to disk. The
-workspace profile imports the file, reads or searches the working copy,
-submits guarded edits and publishes with explicit SAVE.
-
-[Claude Desktop setup](docs/guides/claude-desktop-setup.md) ·
-[Workspace requests and receipts](docs/spec/profiles/workspace-profile.md)
 
 ## MCP Profiles & Tool Surface
 

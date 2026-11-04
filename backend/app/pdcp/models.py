@@ -29,17 +29,9 @@ class PDCPHeader:
 class PDCPManifest:
     fields: Mapping[str, str]
 
-    @classmethod
-    def from_fields(cls, fields: dict[str, str]) -> "PDCPManifest":
-        return cls(fields=MappingProxyType(dict(fields)))
-
     @property
     def change_id(self) -> str:
         return self.fields["change_id"]
-
-    @property
-    def risk(self) -> str:
-        return self.fields["risk"]
 
     @property
     def disambiguation(self) -> Mapping[str, str]:

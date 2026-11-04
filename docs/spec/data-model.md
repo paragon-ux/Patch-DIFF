@@ -38,7 +38,7 @@ As-built record and verification evidence: [product change record](../papers/pro
 - `append_only_pdcp_logs`, `append_only_manifest_ledger`, and `target_snapshots` are strictly append-only.
 - `editing_cycles` is history-preserving; the only mutation is a one-time terminal `closed_at` and `save_snapshot_id` stamp when SAVE advances the cycle.
 - `current_pdcp_files` is mutable display/session state for the most recent submission and is not authoritative history.
-- Target mutation occurs exclusively through accepted commits executed by `submit_edits` or `submit_pdcp`.
+- Accepted typed or observed submissions update the working copy under the target row lock.
 
 ## Tables
 
@@ -232,7 +232,6 @@ Append-only ledger of accepted changes only. Rejections never write to this tabl
 
 Constraints:
 - `CHECK (risk IS NULL OR risk IN ('low', 'medium', 'high'))`
-- `CHECK (origin IN ('pdcp_manifest', 'typed'))`
 - `UNIQUE (pdcp_log_id, change_index)`
 - `INDEX (target_file_id, editing_cycle_id, ledger_sequence)`
 

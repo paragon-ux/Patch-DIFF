@@ -18,7 +18,7 @@ After acceptance, checkpoint or replay on the same connection as needed.
 
 If strict observation is enabled, use the observed path for writes. The
 catalog still shows typed submission, and service admission rejects its
-unobserved writes. See the [host's guarded edit loop](../../guides/host-integration-guide.md#2-the-standard-loop)
+unobserved writes. See the [host's guarded edit loop](../../guides/host-integration-guide.md#the-standard-loop)
 and the [structural observation contract](../structural-batch-editing.md).
 
 ## Unobserved
