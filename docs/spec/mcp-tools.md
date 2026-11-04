@@ -28,7 +28,7 @@ the submitted key. Each repeated conflict appends an immutable attempt.
 
 ## MCP Tool Surface Overview
 
-The 22 internal tools are organized into the groups below. The
+The 17 registered tools are organized into the groups below. The
 [MCP profile catalog](profiles/index.md) defines which tools each external
 connection advertises and accepts. See [structural batch editing](structural-batch-editing.md)
 for multi-scope observation and submission.
@@ -46,15 +46,12 @@ for multi-scope observation and submission.
 | | `patchdiff_submit_operations` | Guarded `patchdiff-tx/2` ordered match/span operations with required exact expected text on spans; profile 0.3.0, or 0.5.0 when span context is used. |
 | | `patchdiff_submit_replacement` | Guarded sole whole-target replacement (`patchdiff-tx/3`), immutable profile 0.4.0. |
 | | `patchdiff_preview` | Read-only advisory evaluation of an explicit transaction format with bounded evidence; submission rechecks. |
-| | `patchdiff_submit_pdcp` | **Frozen legacy input** (`0.2.3`). Raw `.pdcp` text with 7 required manifest fields. |
 | **4. Checkpoint, Replay & Audit** | `patchdiff_save` | Snapshot current target and rotate editing cycle without target mutation; optional version and hash guards. |
 | | `patchdiff_replay` | Deterministically reconstruct target from initial snapshot + accepted logs, reporting component checks. |
 | | `patchdiff_get_pdcp_log` | Bounded newest-first page of append-only attempts (accepted/rejected), filtering by status, hash, or request ID. |
 | | `patchdiff_get_manifest_ledger` | Retrieve accepted-only manifest ledger entries with `origin`, `derived` facts and their attempt identity. |
-| **5. Convenience & Deprecated** | `patchdiff_build_prompt_context` | Convenience bounded target prefix (`context_truncated`). See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
-| | `patchdiff_get_regeneration_context` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
-| | `patchdiff_build_regeneration_prompt` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
-| | `patchdiff_request_regeneration` | **Deprecated** compatibility wrapper. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
+| **5. Structural Editing** | `patchdiff_observe_scope` | Discover and issue scopes tied to an exact target version and hash. |
+| | `patchdiff_submit_observed_operations` | Commit a guarded edit against one or more server-issued scopes. |
 
 ### Bounded Wire & Context Budgets & Measured Service Latency
 
@@ -89,7 +86,7 @@ Each operation is one of:
 
 Mixed match/span transactions are atomic. Span applicability failures are `span_out_of_bounds` and `span_expected_text_mismatch` (including context mismatches); either rejects the whole transaction with no partial facts or ledger rows. Their diagnostics add `span_check` (`bounds`, `expected_text`, `expected_before` or `expected_after`) and `buffer_length`. Text checks also add `actual_text`, at most 64 code points of what is actually there in failing-buffer coordinates (the end nearest the span for `expected_before`), plus `actual_text_truncated`, `expected_chars` and `actual_chars`. `failure_detail` strings for the existing checks are unchanged.
 
-Runtime profiles are immutable. A tx/2 record without `expected_before`/`expected_after` keys uses runtime `patchdiff-mvp-0.3.0` with an unchanged record, fingerprint and profile; `0.3.0` still rejects those keys. A tx/2 record whose span operations contain either key, even with a null value, is recorded under `patchdiff-mvp-0.5.0`, which adds only span context. Typed-match and legacy records keep `patchdiff-mvp-0.2.2`. Replay dispatches on the recorded runtime and refuses unsupported profile/operation pairs. Span facts add `operation: "span"` to the existing runtime-derived spans, counts and hashes, and the ledger `origin` stays `typed`. No migration is required for tx/2.
+Runtime profiles are immutable. A tx/2 record without `expected_before`/`expected_after` keys uses runtime `patchdiff-mvp-0.3.0` with an unchanged record, fingerprint and profile; `0.3.0` still rejects those keys. A tx/2 record whose span operations contain either key, even with a null value, is recorded under `patchdiff-mvp-0.5.0`, which adds only span context. Typed-match records keep `patchdiff-mvp-0.2.2`. Replay dispatches on the recorded runtime and refuses unsupported profile/operation pairs. Span facts add `operation: "span"` to the existing runtime-derived spans, counts and hashes, and the ledger `origin` stays `typed`. No migration is required for tx/2.
 
 ### `patchdiff_submit_replacement` (`patchdiff-tx/3`)
 
@@ -114,7 +111,7 @@ Ordering: invalid text is classified first, through the audited Unicode path. An
 
 ### `patchdiff_preview`
 
-`patchdiff_preview(target_file_id, format, expected_target_version?, expected_current_hash?, <proposal>)` evaluates a fresh proposal with the same read-only guard/decode/apply evaluator as submission, from one coherent observation. Format `0.2.3` uses only `pdcp_content`; `patchdiff-tx/1` uses `intent` and `edits`; `patchdiff-tx/2` uses `intent` and `operations` (span context selects `0.5.0` exactly as submission does); `patchdiff-tx/3` uses `intent` and `replacement`. Fields that belong to another format reject even when explicitly null. Typed formats require a guard. There is no request key, lineage, audit or correlation option; passing one over MCP returns the structured unknown-argument error below.
+`patchdiff_preview(target_file_id, format, expected_target_version?, expected_current_hash?, <proposal>)` evaluates a fresh proposal with the same read-only guard/decode/apply evaluator as submission, from one coherent observation. Format `patchdiff-tx/1` uses `intent` and `edits`; `patchdiff-tx/2` uses `intent` and `operations` (span context selects `0.5.0` exactly as submission does); `patchdiff-tx/3` uses `intent` and `replacement`. Fields that belong to another format reject even when explicitly null. Every preview requires a version or hash guard. There is no request key, lineage, audit or correlation option; passing one over MCP returns the structured unknown-argument error below.
 
 Preview writes no row, takes no lock, and never commits or rolls back. It returns `preview: true`, `advisory: true`, status, stage and validity, plus `current_version`/`current_hash` and `before_version`/`before_hash` from the same observation. Accepted previews include `after_hash`, `change_facts` and the same warnings a submission would return. Rejected previews include bounded original diagnostics and never partial facts. For `match_absent`, preview computes `near_misses` inline with the same function and budget as submission; it holds no lock, so the caller-transaction omission does not apply. Pending local ORM changes to the target return unavailable context without flushing. A valid oversized replacement receives the same no-attempt `replacement_too_large` classification as submission. Preview never reflects a historical keyed outcome. Its own `invalid_argument` responses carry `code` with both `detail` and `failure_detail`. Submission always re-locks and rechecks guards; prefer a version guard, because a hash alone cannot detect intervening no-op or ABA changes.
 
@@ -130,7 +127,7 @@ Verdict, stage, validity, a valid target UUID, observed version/hash and accepte
 
 ### Response option: `include_correlation_id`
 
-Every submission tool except the deprecated `patchdiff_request_regeneration` accepts `include_correlation_id` (boolean, default `false`). When `true`, each invocation, including exact recovery, returns a fresh UUIDv4 `correlation_id`. It is never stored and never enters request keys or fingerprints. A non-boolean value returns `invalid_argument` with `code: "invalid_include_correlation_id"` before admission, with no attempt row.
+Every submission tool accepts `include_correlation_id` (boolean, default `false`). When `true`, each invocation, including exact recovery, returns a fresh UUIDv4 `correlation_id`. It is never stored and never enters request keys or fingerprints. A non-boolean value returns `invalid_argument` with `code: "invalid_include_correlation_id"` before admission, with no attempt row.
 
 ### Accepted responses, current state and warnings
 
@@ -314,7 +311,7 @@ Submits a structured edit proposal (`protocol_version = "patchdiff-tx/1"`). Vali
     - `rationale` (`string | null`, optional): per-edit explanation.
     - `risk` (`"low" | "medium" | "high" | null`, optional).
     - `occurrence_index` (`integer >= 1 | null`, optional): 1-based selector over exact occurrences in the buffer this edit sees, that is, after earlier edits in the same transaction. Indexes from `patchdiff_find_occurrences` or `exact_candidates` are valid only for the first edit, or for one edit per transaction. For several same-string edits, use tx/2 spans in descending order. Enforced even when only one match exists.
-    - All supplied selectors must hold together. Excluding singleton selectors reject with disambiguation_invalid; anchors retain anywhere-before/after semantics. This applies to new typed and legacy submissions under runtime 0.2.2; older logs replay under their recorded behavior.
+    - All supplied selectors must hold together. Excluding singleton selectors reject with disambiguation_invalid; anchors retain anywhere-before/after semantics. This applies to new typed-match submissions under runtime 0.2.2; older logs replay under their recorded behavior.
     - `anchor_before` (`string | null`, optional): substring that must occur anywhere before the match.
     - `anchor_after` (`string | null`, optional): substring that must occur anywhere after the match.
   - `expected_target_version` (`integer | null`, optional): target version guard.
@@ -430,8 +427,6 @@ Live output for an unselected `alpha` on the same target; hashes and the repeate
 }
 ```
 
-### `patchdiff_submit_pdcp` (Frozen Legacy Input)
-Retained for backward compatibility with frozen `.pdcp` v0.2.3 text transactions. New integrations should use `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), or `patchdiff_submit_replacement` (`patchdiff-tx/3`). See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#2-legacy-mcp-submission-tool-patchdiff_submit_pdcp) for arguments and legacy format details.
 
 ---
 
@@ -530,7 +525,7 @@ Returns a bounded, newest-first page of append-only attempts (accepted and rejec
   - `content_hash` (`string | null`, optional): filter by `pdcp_content_hash`.
   - `client_request_id` (`string | null`, optional): exact safe-string lookup, including already-persisted legacy IDs; this filter does not impose new-submission key syntax.
   - `include_content` (`boolean`, default `false`).
-- **Returns**: `entries[]` containing sequence, hashes, versions, failure reason/detail, lineage (`parent_pdcp_log_id`, `regeneration_attempt` and its alias `attempt`), `client_request_id`, `request_fingerprint`, `diagnostic` (warnings on accepted rows that have them), `intent` (the typed record's transaction intent, at most 256 code points, with `intent_truncated`; null for legacy PDCP) and timestamps. Also returns has_more and next_sequence. Fetch limit+1 after all filters; next_sequence is the smallest returned log_sequence when another page exists, otherwise null. Empty/not-found/invalid responses have entries=[], has_more=false, next_sequence=null. Unknown targets return not_found; invalid argument types return invalid_argument.
+- **Returns**: `entries[]` containing sequence, hashes, versions, failure reason/detail, lineage (`parent_pdcp_log_id`, `regeneration_attempt` and its alias `attempt`), `client_request_id`, `request_fingerprint`, `diagnostic` (warnings on accepted rows that have them), `intent` (the typed record's transaction intent, at most 256 code points, with `intent_truncated`; null when no intent is available) and timestamps. Also returns has_more and next_sequence. Fetch limit+1 after all filters; next_sequence is the smallest returned log_sequence when another page exists, otherwise null. Empty/not-found/invalid responses have entries=[], has_more=false, next_sequence=null. Unknown targets return not_found; invalid argument types return invalid_argument.
 - **Content budget**: with `include_content: true`, returned `pdcp_content` is limited to 1,048,576 UTF-8 bytes per page. The first entry with content is always returned whole, so `limit: 1` fetches any row. Later entries over budget return `pdcp_content: null` with `pdcp_content_omitted: "page_byte_budget"`; fetch them with `limit: 1` and `before_sequence` set to one above their `log_sequence`.
 
 ### `patchdiff_get_manifest_ledger`
@@ -579,16 +574,9 @@ Returns bounded, oldest-first accepted manifest ledger entries within the newest
     "next_sequence": null
   }
   ```
-- **Joining**: `pdcp_log_id` and `log_sequence` join a ledger row to its attempt. For typed rows, `intent` keeps its stored meaning (the edit's rationale when present, otherwise the transaction intent), while `transaction_intent` and `rationale` are extracted in PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` SQL from the stored `patchdiff-tx/1` or `patchdiff-tx/2` record without transferring or decoding full `pdcp_content` payloads in Python (for `patchdiff-tx/3` whole-document replacements, `transaction_intent` comes directly from `intent` and `rationale` is null without touching `pdcp_content`; `patchdiff_get_pdcp_log` similarly extracts bounded `intent` via guarded 4 KB head/tail slice fast paths on `> 64 KB` records with `? 'intent'` fallback). Legacy PDCP rows and `patchdiff-invalid-input/1` evidence envelopes return null for both. `log_sequence` and `ledger_sequence` are global across targets, so one target's sequences have gaps.
+- **Joining**: `pdcp_log_id` and `log_sequence` join a ledger row to its attempt. For typed rows, `intent` keeps its stored meaning (the edit's rationale when present, otherwise the transaction intent), while `transaction_intent` and `rationale` are extracted in PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` SQL from the stored `patchdiff-tx/1` or `patchdiff-tx/2` record without transferring or decoding full `pdcp_content` payloads in Python (for `patchdiff-tx/3` whole-document replacements, `transaction_intent` comes directly from `intent` and `rationale` is null without touching `pdcp_content`; `patchdiff_get_pdcp_log` similarly extracts bounded `intent` via guarded 4 KB head/tail slice fast paths on `> 64 KB` records with `? 'intent'` fallback). `patchdiff-invalid-input/1` evidence envelopes return null for both. `log_sequence` and `ledger_sequence` are global across targets, so one target's sequences have gaps.
 - **Ordering and cursor example**: For sequences 1..10 with limit 3, attempts return [10,9,8], ledger [8,9,10], both next_sequence=8. A ledger call with before_sequence=8 returns [5,6,7]. Both cursors are exclusive; ledger reverses only the selected newest page for display. Newer inserted rows are excluded from continuation below a previous cursor. Both history tools return the same empty continuation fields; include flags must be boolean.
 - **Caller Note**: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal. Callers migrating from the legacy unbounded behavior must page via `before_sequence`.
-
----
-
-## 5. Convenience & Deprecated Compatibility Wrappers
-
-`patchdiff_build_prompt_context` and the deprecated server-mediated regeneration wrappers (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are retained solely for backward compatibility. Modern hosts use `patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`, and host-owned retries via `patchdiff_submit_edits(..., parent_pdcp_log_id=...)`. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#3-deprecated-regeneration-prompt-prefix-wrappers) for legacy wrapper specifications.
-
 
 ---
 
@@ -678,7 +666,7 @@ scope hash, bundle and ordered group mapping without invoking Waymark. Migration
   - Zero-width insertions (`start == end`, `expected_text: ""`) require `scope_start < start < scope_end`. Both boundaries reject, including with otherwise matching guards. Both nonempty `expected_before` and `expected_after` are mandatory, must match immediately adjacent text, and must lie entirely within the current sequential scope. Missing guards reject with `span_expected_text_mismatch` / `OBSERVED_INSERTION_GUARDS_REQUIRED`; mismatching guards reject with `span_expected_text_mismatch`. Out-of-scope spans, boundary insertions and guards crossing the scope reject with `span_out_of_bounds` / `OPERATION_OUTSIDE_OBSERVED_SCOPE`. Every rejection is atomic and audited. Unobserved historical insertion behavior is unchanged.
   - Observation pagination rejects a closed cycle after SAVE with `OBSERVATION_CYCLE_MISMATCH`, even when content, hash and version are unchanged.
   - Replay of an accepted log carrying `observation_id` requires exactly one matching authoritative observation row. Identity, accepted-log linkage, target, editing cycle, preimage version/hash, recorded scope bounds and scope hash must match the replay buffer; missing or altered evidence fails with `replay_protocol_invalid`. Diagnostic offsets never replace a missing row. Genuinely unobserved history retains its existing path.
-  - When `PATCHDIFF_STRICT_OBSERVATION_MODE=1` is enabled, all unobserved write tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`, `patchdiff_submit_pdcp`, `patchdiff_request_regeneration`) are rejected and logged with `code: "OBSERVATION_REQUIRED"`.
+  - When `PATCHDIFF_STRICT_OBSERVATION_MODE=1` is enabled, all unobserved write tools (`patchdiff_submit_edits`, `patchdiff_submit_operations`, `patchdiff_submit_replacement`) are rejected and logged with `code: "OBSERVATION_REQUIRED"`.
 ## External response representations
 
 `PATCHDIFF_MCP_RESPONSE_MODE` is frozen at external-adapter startup. Unset or

@@ -21,7 +21,7 @@ from app.core.validity import ValidationStage
 from app.services import pdcp_service
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target
 
 
 def arguments(target_id, status="accepted"):
@@ -38,32 +38,21 @@ def terminal(result):
     return result
 
 
-@pytest.mark.parametrize("format_", ["typed", "legacy"])
 @pytest.mark.parametrize("first_status", ["accepted", "rejected"])
 @pytest.mark.parametrize("replacement", ["gamma", "\ud800"])
-def test_repeated_conflicts_append_null_key_attempts_preserving_original(format_, first_status, replacement):
+def test_repeated_conflicts_append_null_key_attempts_preserving_original(first_status, replacement):
     target_id = create_target("alpha")
     args = arguments(target_id, first_status)
-    if format_ == "legacy":
-        args = dict(target_file_id=target_id, expected_target_version=0,
-                    pdcp_content=pdcp_for(target_id, (
-                        "alpha" if first_status == "accepted" else "absent", "beta")),
-                    client_request_id="stable-key")
-    submit = pdcp_service.submit_edits if format_ == "typed" else pdcp_service.submit_pdcp
     with SessionLocal() as session:
-        original = submit(session, **args)
+        original = pdcp_service.submit_edits(session, **args)
         assert original.status == first_status
     with SessionLocal() as session:
         log = session.get(AppendOnlyPdcpLogs, original.pdcp_log_id)
         original_bytes = (log.pdcp_content, log.pdcp_content_hash, log.request_fingerprint)
         conflict_args = {**args}
-        if format_ == "typed":
-            conflict_args.update(intent="Different proposal", edits=[{
-                "match": "alpha" if first_status == "accepted" else "absent", "replace": replacement}])
-        else:
-            conflict_args["pdcp_content"] = pdcp_for(target_id, (
-                "alpha" if first_status == "accepted" else "absent", replacement))
-        conflicts = [submit(session, **conflict_args) for _ in range(3)]
+        conflict_args.update(intent="Different proposal", edits=[{
+            "match": "alpha" if first_status == "accepted" else "absent", "replace": replacement}])
+        conflicts = [pdcp_service.submit_edits(session, **conflict_args) for _ in range(3)]
         assert len({attempt.pdcp_log_id for attempt in conflicts}) == 3
         assert all(attempt.status == "rejected" and not attempt.deduplicated for attempt in conflicts)
         for attempt in conflicts:
@@ -72,7 +61,7 @@ def test_repeated_conflicts_append_null_key_attempts_preserving_original(format_
             assert attempt.validation_stage is ValidationStage.PRECONDITION_GUARD
             assert attempt.diagnostic["existing_pdcp_log_id"] == str(original.pdcp_log_id)
             assert attempt.diagnostic["submitted_client_request_id"] == "stable-key"
-        recovered = submit(session, **args)
+        recovered = pdcp_service.submit_edits(session, **args)
         assert recovered.deduplicated and terminal(recovered) == terminal(original)
         session.commit()
     with SessionLocal() as observer:

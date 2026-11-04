@@ -49,7 +49,7 @@ The existing target lock, both explicit guards, current-cycle observation checks
 scope boundaries, ordered simulation, all-or-nothing commit, append-only audit,
 request fingerprints and deterministic replay remain authoritative. Exact keyed
 recovery precedes fresh guard and consumed-observation checks. The same normalized
-legacy request can recover across facades; changing its raw values changes its
+request sent through the underlying observed tool can recover across facades; changing its raw values changes its
 identity under the existing fingerprint rules.
 
 ## Commit receipts
@@ -87,7 +87,7 @@ Definitive tool failures set `isError: true`, retaining their domain/audit data.
 Accepted transactions with advisory warnings remain successful. Infrastructure
 exceptions return `status: outcome_unknown`; they do not certify rejection or
 absence of a commit. Exact keyed retries use the original arguments and key.
-Legacy profiles keep their previous error-envelope behavior.
+Other profiles keep their previous error-envelope behavior.
 
 ## MCP negotiation and startup
 
@@ -117,7 +117,7 @@ PATCHDIFF_WAYMARK_MODE=resident
 
 Use the same executable/database/Node configuration as the tested deployment.
 Trusted initialization, SAVE, replay and export use a separate full-profile
-connection. The five-tool editor catalog excludes lifecycle calls and the legacy mixed
+connection. The five-tool editor catalog excludes lifecycle calls and the mixed
 and unobserved mutation routes. The host must keep its operator connection, oracle
 and privileged data outside the editing agent's tool/context access.
 

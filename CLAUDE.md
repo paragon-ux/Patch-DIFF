@@ -28,7 +28,7 @@ When working in this repository, always consult documentation in the following o
 PatchDIFF is a deterministic transaction monitor, not an agent or editor UI. Always preserve:
 - Pure deterministic core runtime (`backend/app/core/`, `backend/app/pdcp/`).
 - Canonical UTF-8 target text (LF normalized).
-- Declarative non-executable transactions (`patchdiff-tx/1`, `tx/2`, `tx/3`, legacy `.pdcp` v0.2.3).
+- Declarative non-executable transactions (`patchdiff-tx/1`, `tx/2`, `tx/3`).
 - Exact deterministic MATCH (enumerating all occurrences).
 - Sequential in-memory REPLACE simulation.
 - Per-target atomic commit under PostgreSQL `SELECT ... FOR UPDATE`.

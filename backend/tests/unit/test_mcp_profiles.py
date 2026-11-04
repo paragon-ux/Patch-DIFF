@@ -12,19 +12,19 @@ from app.mcp.external_adapter import ExternalMCPAdapter, MCP_PROFILES
 from app.mcp.server import registry
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("workspace", 5), ("full", 22)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("workspace", 5), ("full", 17)])
 def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch):
     adapter = ExternalMCPAdapter(profile=profile)
     assert len(adapter.list_tools()) == count
     assert {tool["name"] for tool in adapter.list_tools()} == MCP_PROFILES[profile]
-    assert len(registry.names()) == 22
+    assert len(registry.names()) == 17
     invoked = []
     monkeypatch.setattr(type(registry), "call", lambda self, name, **kw: invoked.append(name) or {"status": "ok"})
     for name in registry.names():
         result = adapter.call_tool(name, {})
         if name not in MCP_PROFILES[profile]:
             assert result["isError"] and name not in invoked
-    # Explicit legacy and administrative calls succeed under full through the actual dispatch path.
+    # Administrative calls succeed under full through the actual dispatch path.
     result = adapter.call_tool("patchdiff_get_target", {"target_file_id": str(uuid.uuid4())})
     assert bool(result.get("isError")) == (profile != "full")
 

@@ -65,14 +65,20 @@ Give the host a request with the file path, the desired edit and whether
 to write the result to disk. For example, ask it to move the maintenance
 window in `ops/schedule.txt` to 10:00 and save the file.
 
-The host imports the file with `patchdiff_initialize_target` and
-`from_workspace: true`. It reads or searches the returned target ID,
-submits a guarded edit with a nonblank `intent`, then calls
-`patchdiff_save` with the accepted version and `sync_workspace: true`.
-The [worked example](../spec/profiles/workspace-profile.md#import-edit-and-publish)
-shows each call and the corresponding receipt.
+| Step | Tool | Arguments to supply |
+| --- | --- | --- |
+| Start with the file | `patchdiff_initialize_target` | Workspace-relative `filename` and `from_workspace: true`. Keep the returned `target_file_id`. |
+| Read the working copy | `patchdiff_read_target` | `target_file_id`. Use `start` and `length` to read more. Keep the version or hash for the submission guard. |
+| Disambiguate if needed | `patchdiff_find_occurrences` | `target_file_id` and exact `text`. Use the occurrence index or anchors for repeated matches. |
+| Apply the edit | `patchdiff_submit_edits` | `target_file_id`, nonblank `intent`, `edits` with exact `match` and desired `replace`, and `expected_target_version` or `expected_current_hash`. Keep the accepted version. |
+| Publish and checkpoint | `patchdiff_save` | `target_file_id`, `expected_target_version` set to the accepted version, and `sync_workspace: true`. |
 
-A successful publication reports `status: "saved"` with a `workspace_sync`
-receipt. Resolve its `synced_path` relative to the configured server root.
+The [worked example](../spec/profiles/workspace-profile.md#import-edit-and-publish)
+shows the calls and receipts. After SAVE, check for `status: "saved"`, a
+`snapshot_id` and a `workspace_sync` receipt. Resolve its `synced_path`
+relative to the configured server root. Open that file to confirm the
+requested edit, or compare the SHA-256 of its raw bytes with the receipt's
+`disk_sha256`.
+
 For a rejection, partial result or missing response, follow the
 [workspace recovery steps](../spec/profiles/workspace-profile.md#decide-what-to-do-after-a-failure).

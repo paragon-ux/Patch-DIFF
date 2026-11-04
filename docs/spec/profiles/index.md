@@ -40,4 +40,4 @@ The same immutable profile controls both `tools/list` and `tools/call`.
 | `hybrid_editor` | 1 | `patchdiff_submit_edits` |
 | `observed_v2` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle` |
 | `workspace` | 5 | `patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save` |
-| `full` (explicit compatibility) | 22 | All registered tools, including initialization, export, history and legacy submissions |
+| `full` (trusted lifecycle) | 17 | Complete registry, including initialization, SAVE, export, audit and replay |

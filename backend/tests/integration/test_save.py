@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.core.failures import FailureReason
-from app.services.pdcp_service import submit_pdcp
+from app.services.pdcp_service import submit_edits
 from app.services.save_service import save_target
 from app.storage.db import SessionLocal
 from app.storage.models import (
@@ -12,7 +12,7 @@ from app.storage.models import (
     EditingCycles,
     TargetSnapshots,
 )
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target, edit_pairs
 
 
 def test_save_creates_snapshot_closes_old_cycle_and_opens_one_active_cycle() -> None:
@@ -62,7 +62,7 @@ def test_save_does_not_mutate_target_content_hash_or_version() -> None:
 def test_save_preserves_logs_and_ledger_history_and_shifts_active_manifest_context() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")))
 
     with SessionLocal() as session:
         target = session.get(CloudTargetFiles, target_id)

@@ -1,163 +1,61 @@
-# Claude Desktop MCP Setup
+# Claude Desktop setup
 
-Claude Desktop launches PatchDIFF's local MCP adapter as a Python
-process and exchanges JSON-RPC messages over stdin and stdout.
+Claude Desktop connects to PatchDIFF over stdio. Use the five-tool
+`workspace` profile to edit a project file through a Linux server. First
+install the wheel and migrate your PostgreSQL 16 database as shown in the
+[workspace quickstart](workspace-quickstart.md).
 
-```text
-Claude Desktop
-  -> launches
-backend/app/mcp/external_adapter.py
-  -> uses
-Postgres Docker container on localhost:5432
-```
+## Configure the connection
 
-Do not connect Claude Desktop to `http://127.0.0.1:8000` for this setup. The FastAPI server is useful for health checks and future HTTP API work, but the current Claude Desktop MCP path is the stdio adapter.
-
-### UTF-8 transport
-
-The adapter entry point configures stdin/stdout as strict UTF-8, including Windows pipes and environments with a different PYTHONIOENCODING value. Hosts must send UTF-8 JSON-RPC bytes. ASCII Unicode escapes remain supported; malformed UTF-8 wire bytes are not silently repaired. Escaped invalid edit strings still follow the audited domain-validation contract.
-
-When running an older revision without the UTF-8 transport fix, add `"PYTHONIOENCODING": "utf-8"` to the MCP server environment. Without it, literal Unicode requests can be accepted with incorrectly decoded text; this was reproduced as input corruption rather than a stdout crash. The workaround remains compatible with fixed revisions.
-
-Restart or refresh the server through the host after command/environment changes, then verify the connection. Claude Desktop restart steps appear below; other hosts have their own refresh lifecycle.
-
-## 1. Start Postgres And Run Migrations
-
-From the Patch-DIFF repo root:
-
-```powershell
-docker compose up -d postgres
-$env:PYTHONPATH = "backend"
-.\.venv\Scripts\python.exe -m alembic -c backend/app/migrations/alembic.ini upgrade head
-```
-
-You do not need to run `uvicorn` for the Claude Desktop MCP tools. Claude Desktop launches `app.mcp.external_adapter` directly.
-
-Apply migrations through `20261027_0005` so the typed ledger, request idempotency, source line endings and bundled scope evidence are available.
-
-## 2. Smoke Test The Adapter
-
-From the repo root:
-
-```powershell
-$env:PYTHONPATH = "backend"
-'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | .\.venv\Scripts\python.exe -m app.mcp.external_adapter
-```
-
-Expected response includes:
-
-```json
-{
-  "serverInfo": {
-    "name": "patchdiff-mvp"
-  }
-}
-```
-
-If this works, Claude Desktop should be able to launch the adapter with the same Python executable and environment.
-
-## 3. Open Claude Desktop Config
-
-In Claude Desktop:
-
-```text
-Settings -> Developer -> Edit Config
-```
-
-On Windows, the config is usually:
-
-```text
-%APPDATA%\Claude\claude_desktop_config.json
-```
-
-Anthropic documents local Claude Desktop MCP servers separately from remote connectors. Local servers run on your machine, while remote connectors are configured through the Claude connector flow and must be reachable from Anthropic's infrastructure.
-
-References:
-
-- [Getting Started with Local MCP Servers on Claude Desktop](https://support.anthropic.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
-- [Get started with custom connectors using remote MCP](https://support.anthropic.com/en/articles/11175166-getting-started-with-custom-integrations-using-remote-mcp)
-
-## 4. Add PatchDIFF
-
-The native Windows example below uses `editor`, the default seven-tool
-profile for an existing target. For inline initialization and the complete
-22-tool catalog, set `PATCHDIFF_MCP_PROFILE=full`.
-
-To import a local project file and publish on SAVE, follow the
-[installed workspace setup](workspace-quickstart.md) and choose `workspace`.
-The server must run on a supported POSIX filesystem. Native Windows Python
-can use inline uploads, edits and exports. A server running in Linux or WSL
-needs a workspace directory with directory locking and descriptor-relative IO.
-
-Restart the server after changing profiles. Requests cannot override the
-session profile. [Exact tool lists](../spec/profiles/index.md).
-
-Use the venv Python directly so Claude Desktop launches the interpreter that has PatchDIFF's dependencies installed.
-
-Replace paths if your repo lives somewhere else:
+Open Claude Desktop settings and choose **Developer → Edit Config**.
+Add an entry under `mcpServers`, preserving any existing entries.
+Use the absolute path to the installed environment's Python interpreter,
+the PostgreSQL connection URL and the server's project root.
 
 ```json
 {
   "mcpServers": {
-    "patchdiff": {
-      "type": "stdio",
-      "command": "C:\\path\\to\\Patch-DIFF\\.venv\\Scripts\\python.exe",
-      "args": [
-        "-m",
-        "app.mcp.external_adapter"
-      ],
+    "patchdiff-workspace": {
+      "command": "/absolute/path/to/venv/bin/python",
+      "args": ["-m", "app.mcp.external_adapter"],
       "env": {
-        "PYTHONPATH": "C:\\path\\to\\Patch-DIFF\\backend",
-        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff"
+        "PATCHDIFF_MCP_PROFILE": "workspace",
+        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff@localhost:5432/patchdiff",
+        "PATCHDIFF_WORKSPACE_ROOT": "/absolute/project/root",
+        "PATCHDIFF_WORKSPACE_SYNC_ON_SAVE": "0"
       }
     }
   }
 }
 ```
 
-The `"type": "stdio"` field makes the transport explicit. If an older Claude Desktop build rejects that field, remove only `"type": "stdio"` and keep `command`, `args`, and `env`.
+The example assumes the command starts on Linux. On Windows the server can
+run in WSL if Claude Desktop launches it through `wsl.exe` and the project
+filesystem supports the [workspace profile requirements](../spec/profiles/workspace-profile.md).
+Use Linux paths and a database URL reachable from WSL in that case.
+For a native Windows server, use `full` for inline initialization, editing
+and export.
 
-## 5. Restart Claude Desktop
+Fully quit and reopen Claude Desktop after saving the configuration.
+Check the connection lists the [five workspace tools](../spec/profiles/workspace-profile.md).
+Startup diagnostics go to stderr. The interpreter must resolve the installed
+package and the database must be at the packaged Alembic head.
 
-Fully quit Claude Desktop, then reopen it. On Windows, make sure Claude Desktop is not just minimized to the tray. Quit it completely before reopening.
+## Edit and verify
 
-## 6. Verify Tools In Claude Desktop
+Ask Claude to edit a specific path relative to the configured project root
+and save it to disk. For example, ask it to move the maintenance window in
+`ops/schedule.txt` to 10:00 and save the file. If Claude Desktop asks for
+permission, approve the calls for that project.
 
-Open a new chat and check the MCP/connectors UI:
+The host starts with workspace initialization, reads or searches the returned
+target ID, and submits guarded edits. On SAVE, check for a snapshot ID and the
+`workspace_sync` receipt. Open the receipt's path relative to the server root
+and confirm the edit. See the [quickstart](workspace-quickstart.md#edit-and-publish-a-file)
+for the exact arguments and receipt checks.
 
-```text
-+ button near the message box, labeled "+" -> Connectors
-```
+## Other workflows
 
-Check that the tool list matches the selected profile. The default example
-shows seven tools including read, search, submit, SAVE and replay. The
-`workspace` profile shows initialize, read, find, submit edits and SAVE.
-The `full` profile shows all 22 registered tools.
-
-For guidance on how the host/model interacts with these tools (reading before proposing, supplying guards, handling rejections with retry lineage, and client request idempotency), see [host integration guide](host-integration-guide.md).
-
-## Important Gotcha
-
-This can work:
-
-```json
-"command": "py",
-"args": ["-3", "-m", "app.mcp.external_adapter"]
-```
-
-But only if the Python launched by `py -3` has all PatchDIFF dependencies installed.
-
-For this repo, dependencies are normally installed into:
-
-```text
-.\.venv\Scripts\python.exe
-```
-
-The safer Claude Desktop config is:
-
-```json
-"command": "C:\\path\\to\\Patch-DIFF\\.venv\\Scripts\\python.exe",
-"args": ["-m", "app.mcp.external_adapter"]
-```
-
-That avoids the common failure where Claude Desktop launches global Python but PatchDIFF dependencies only exist in the virtual environment.
+Use a separate [structural editing profile](observed-editor-workflow.md) for
+scope-based editing. Use the [trusted lifecycle profile](../spec/profiles/delegation-and-lifecycle.md#full)
+for export, audit or replay.

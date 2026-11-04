@@ -17,7 +17,7 @@ nav = [
         { "Core Runtime Spec" = "spec/core-runtime.md" },
         { "MCP Tools" = "spec/mcp-tools.md" },
         { "Data Model" = "spec/data-model.md" },
-        { "PDCP Format" = "spec/transaction-formats.md" },
+        { "Transaction Formats" = "spec/transaction-formats.md" },
         { "Structural Batch Editing" = "spec/structural-batch-editing.md" },
         { "Waymark Worker" = "spec/waymark-worker.md" }
     ]},
@@ -46,15 +46,6 @@ nav = [
     { "Standards" = [
         { "PR Review Standard" = "standards/pr-review-standard.md" },
         { "Release Readiness" = "standards/release-readiness.md" }
-    ]},
-    { "Legacy" = [
-        { "Legacy Compatibility" = "legacy/LEGACY_COMPATIBILITY.md" },
-        { "Historical Archive Index" = "legacy/ARCHIVE_INDEX.md" },
-        { "Legacy Benchmark Report" = "legacy/git_benchmark_report.md" },
-        { "Concept Paper v5" = "legacy/PatchDIFF-Concept-Paper-5.md" },
-        { "Protocol Spec v0.2.3" = "legacy/PatchDIFF-Protocol-Spec-v0.2.3.md" },
-        { "Implementation Spec v0.2.3" = "legacy/PatchDIFF-Implementation-Spec-v0.2.3.md" },
-        { "Snapshot v0.2.3" = "legacy/PatchDIFF-Snapshot.md" }
     ]}
 ]
 

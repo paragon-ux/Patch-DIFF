@@ -42,7 +42,7 @@ can use. These pages explain who should use each profile and how to start.
   commit and replay.
 - [Modernization architecture](papers/modernization-architecture.md) records
   design decisions A1–A8, contracts C1–C6 and evidence E1–E8.
-- [Product change record](papers/product-change-record.md) tracks compatibility
+- [Product change record](papers/product-change-record.md) tracks product behavior
   and verification scope.
 - [Concept paper v6](papers/concept-paper-v6.md) explains the transaction model,
   tradeoffs and research hypotheses.
@@ -59,14 +59,6 @@ can use. These pages explain who should use each profile and how to start.
 - [Release readiness](standards/release-readiness.md) covers versioning,
   verification and dependency audits.
 
-## Legacy reference
+## Earlier benchmark
 
-- [Legacy compatibility](legacy/LEGACY_COMPATIBILITY.md) documents frozen
-  `.pdcp` v0.2.3, deprecated wrappers and historical replay profiles.
-- [Archive index](legacy/ARCHIVE_INDEX.md) links to the commit-pinned scratch records.
-- [Legacy benchmark](legacy/git_benchmark_report.md) records the baseline experiment.
-- [Concept paper v5](legacy/PatchDIFF-Concept-Paper-5.md) records the historical model.
-- [Protocol spec v0.2.3](legacy/PatchDIFF-Protocol-Spec-v0.2.3.md) and
-  [implementation spec v0.2.3](legacy/PatchDIFF-Implementation-Spec-v0.2.3.md)
-  document the original protocol and implementation.
-- [Snapshot v0.2.3](legacy/PatchDIFF-Snapshot.md) records the historical state.
+- [Earlier baseline benchmark](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/git_benchmark_report.md) records the original experiment.

@@ -8,42 +8,53 @@ which tools the host can call.
 
 ## 1. End-to-End Transaction Sequence
 
-The sequence diagram below illustrates the complete lifecycle of a document edit proposal, from authoritative read through optimistic locking, sequential simulation, and atomic commit or bounded rejection:
+The workspace file supplies the starting bytes and receives an explicit
+publication. PostgreSQL holds the canonical LF working copy, version and
+audit history. The host owns edit intent, context selection and retries.
 
 ```mermaid
 sequenceDiagram
-    participant Host as MCP Host / Agent
-    participant PD as PatchDIFF MCP Server
-    participant PG as PostgreSQL 16 (Authoritative State)
+    participant H as MCP host
+    participant S as PatchDIFF workspace profile
+    participant F as Workspace file
+    participant D as PostgreSQL working copy
 
-    Note over Host,PG: 1. Authoritative Reading & Exact Discovery
-    Host->>PD: patchdiff_read_target / patchdiff_read_lines / patchdiff_find_occurrences
-    PD->>PG: Read committed canonical LF slice
-    PG-->>PD: content slice + version + current_hash
-    PD-->>Host: Bounded slice / exact spans + version=3
+    H->>S: Initialize filename with from_workspace=true
+    S->>F: Read source bytes and record their digest
+    S->>D: Store canonical LF text and workspace binding
+    S-->>H: Target ID, version and canonical hash
+    H->>S: Read or find occurrences
+    S->>D: Read the canonical working copy
+    S-->>H: Bounded text or matches, version and hash
+    H->>S: Submit edits with intent and version or hash guard
+    S->>D: Lock target and validate guards
+    alt Proposal accepted
+        S->>D: Commit new working version, attempt and ledger
+        S-->>H: Accepted version and hash
+    else Proposal rejected
+        S->>D: Record rejected attempt
+        S-->>H: Return diagnostics for host review
+    end
 
-    Note over Host,PG: 2. Guarded Atomic Submission
-    Host->>PD: patchdiff_submit_edits (expected_target_version=3, client_request_id="req-01", edits=[...])
-    PD->>PG: SELECT ... FOR UPDATE (row lock acquired)
-
-    alt All edits match & guards hold
-        Note over PD,PG: In-memory simulation succeeds
-        PD->>PG: Atomic commit (target v4 + append_only_pdcp_logs + append_only_manifest_ledger)
-        PD-->>Host: status="accepted", version=4, evidence.changes[], warnings[], validity
-    else Stale guard, missing match, or ambiguity
-        Note over PD,PG: In-memory simulation rejects (target untouched)
-        PD->>PG: Log rejected attempt in append_only_pdcp_logs (zero target mutation)
-        PD-->>Host: status="rejected", failure_reason, diagnostic.failure_context, exact_candidates / near_misses
-        Host->>PD: 3. Inspect diagnostics & resubmit with parent_pdcp_log_id
+    H->>S: SAVE accepted version with sync_workspace=true
+    S->>D: Verify the working version
+    S->>F: Check binding and expected disk digest
+    alt External disk drift
+        S-->>H: Reject publication and checkpoint
+    else Publication succeeds
+        S->>F: Install the rendered file bytes
+        alt Checkpoint and publication durability confirmed
+            S->>D: Checkpoint and rotate editing cycle
+            S-->>H: Saved, with snapshot ID and publication receipt
+        else Post-install failure
+            S-->>H: Partial, with publication receipt and no confirmed checkpoint ID
+        end
     end
 ```
 
----
-
-With the [workspace profile](guides/workspace-quickstart.md), initialization
-reads a project file into PostgreSQL. A guarded edit updates the database
-working copy. SAVE can publish the file and reports publication separately
-from its database checkpoint.
+With `sync_workspace: false`, SAVE checkpoints the database without
+publishing a file. When SAVE returns `partial`, inspect the file and
+checkpoint separately. See the [workspace contract](spec/profiles/workspace-profile.md).
 
 ## 2. Core Validation Stages & State Transition Flowchart
 
@@ -87,7 +98,7 @@ PatchDIFF enforces a strict separation of concerns across four distinct operatio
 ┌──────────────────────────────▼──────────────────────────────┐
 │                  Tier 2: MCP Transport Layer                │
 │     (backend/app/mcp/external_adapter.py, tools.py)         │
-│  - Exposes immutable profiles (editor, observed_v2, full)   │
+│  - Exposes immutable workspace, editing and lifecycle profiles   │
 │  - Enforces strict input schema validation & request limits │
 │  - Formats bounded machine-readable responses & receipts    │
 └──────────────────────────────┬──────────────────────────────┘
@@ -98,7 +109,7 @@ PatchDIFF enforces a strict separation of concerns across four distinct operatio
 │  - Owns SQLAlchemy session, per-target row lock & retry key │
 │  - Invokes Pure Core Runtime for in-memory simulation       │
 │  - Atomically commits accepted mutations or logs rejections │
-│  - Manages SAVE checkpoints, replay, and target exports     │
+│  - Manages file import, SAVE publication, checkpoints and replay     │
 └──────────────┬───────────────────────────────▲──────────────┘
                │                               │ Pure in-memory
                │ SELECT ... FOR UPDATE         │ evaluation (no I/O)

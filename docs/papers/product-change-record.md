@@ -1,11 +1,11 @@
 # PatchDIFF Product Change Record
 
-PatchDIFF runs four declarative transaction formats through one applier
+PatchDIFF runs three declarative transaction formats through one applier
 and locked PostgreSQL submission path. Hosts can read a target, preview
 a proposal, recover a recorded outcome and verify history through replay.
 PostgreSQL owns the working target.
 
-Architecture and contracts: [architecture](modernization-architecture.md), [MCP tools](../spec/mcp-tools.md), [core runtime](../spec/core-runtime.md), [storage](../spec/data-model.md), [transaction formats](../spec/transaction-formats.md), [host guide](../guides/host-integration-guide.md), and [legacy compatibility](../legacy/LEGACY_COMPATIBILITY.md).
+Architecture and contracts: [architecture](modernization-architecture.md), [MCP tools](../spec/mcp-tools.md), [core runtime](../spec/core-runtime.md), [storage](../spec/data-model.md), [transaction formats](../spec/transaction-formats.md) and [host guide](../guides/host-integration-guide.md).
 
 ## Workspace editing and publication
 
@@ -24,7 +24,7 @@ The fresh Codex CLI session exercised the same success path with a natural
 request and the five-tool catalog. This is workflow evidence for one file,
 separate from the comparative benchmark.
 
-## Transaction formats and compatibility
+## Transaction formats
 
 External `PATCHDIFF_MCP_RESPONSE_MODE` now selects immutable detailed (default) or
 compact presentation. Only observed acceptance, candidate discovery and bundled
@@ -51,20 +51,19 @@ single uniqueness; replay verifies every recorded scope without Waymark.
 
 External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
 `unobserved` has 5, `observed` 6, opt-in `observed_editor` 4, and explicit
-compatibility `full` 22. The four-tool delegated role excludes SAVE/replay at
+trusted lifecycle `full` 17. The four-tool delegated role excludes SAVE/replay at
 both advertisement and dispatch while preserving the existing profiles and all
 request shapes. Observation/submission descriptions clarify route inputs, returned
 authority and the scopes-to-groups mapping; service validation and durable
 transaction/replay formats are unchanged. Profiles filter both discovery and calls and remain immutable for a session; the internal
-registry keeps all 22 handlers. Trusted clients that need export, administrative
-history or legacy submissions select `full` before starting their session.
+registry keeps all 17 handlers. Trusted clients that need export, administrative
+history or replay select `full` before starting their session.
 
 | Tool | Stored protocol | Runtime for new submissions | Behavior |
 | --- | --- | --- | --- |
 | `patchdiff_submit_edits` | `patchdiff-tx/1` | `patchdiff-mvp-0.2.2` | Typed exact matches with intent and required version/hash guard. |
 | `patchdiff_submit_operations` | `patchdiff-tx/2` | `patchdiff-mvp-0.3.0`; `patchdiff-mvp-0.5.0` when a span carries `expected_before`/`expected_after` | Ordered exact match/span operations; spans require exact expected text, can check the exact adjacent text, and use sequential code-point coordinates. Empty-span insertion is explicit. |
 | `patchdiff_submit_replacement` | `patchdiff-tx/3` | `patchdiff-mvp-0.4.0` | Exactly one guarded `replace_all`; empty replacement is valid. One typed ledger fact covers the full original span. |
-| `patchdiff_submit_pdcp` | `0.2.3` | `patchdiff-mvp-0.2.2` | Frozen legacy text format; see [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md). |
 
 Fresh replacement raw text and canonical result each have inclusive limits of 1,000,000 code points and 1,048,576 UTF-8 bytes. Invalid Unicode follows the audited encoding-rejection path. Existing-key recovery/conflict precedes fresh admission. Oversized valid fresh replacements return `invalid_argument/replacement_too_large` without writes; replay does not reapply fresh admission limits. Runtime 0.3.0 continues to reject `replace_all`.
 

@@ -294,7 +294,6 @@ def to_parsed_transaction(transaction: TypedTransaction, *, target_type: str) ->
             target_hash=None,
         ),
         changes=tuple(changes),
-        structural_lines=(),
     )
 
 

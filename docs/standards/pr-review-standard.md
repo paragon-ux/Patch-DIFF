@@ -142,7 +142,7 @@ Re-review each fix in its primary category and all affected categories. A fix co
 6. Verification record and remaining gaps.
 7. Overall disposition and finding closure table.
 
-Reports are stored under docs/reviews/. Preserve reports at their reviewed revisions; a later review gets a new revision or dated document with a link to its predecessor.
+Keep local review reports under `docs/reviews/`. Cite the reviewed base and head, category coverage, findings, evidence and verdict in the PR. Identify the previous review when recording a follow-up.
 
 ## Change history
 

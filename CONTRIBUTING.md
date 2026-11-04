@@ -12,7 +12,7 @@ Every change to PatchDIFF must preserve the core transactional boundary:
 
 ```text
 canonical UTF-8 target text (LF normalized)
-+ declarative non-executable transactions (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3, and legacy PDCP 0.2.3)
++ declarative non-executable transactions (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3)
 + exact deterministic MATCH (all exact occurrences counted)
 + immediate sequential in-memory REPLACE simulation
 + per-target atomic Postgres commit under SELECT ... FOR UPDATE
@@ -105,7 +105,7 @@ All pull requests must undergo a formal category review following [PR Review Sta
    - **P1 (Blocker):** State corruption, silent mutation, concurrency bug, broken replay.
    - **P2 (Major):** Contract violation, missing validation, inaccurate diagnostic.
    - **P3 (Minor):** Typo, doc drift, code formatting.
-4. **Permanent Review Records:** Completed review reports are committed to `docs/reviews/` and preserved at their reviewed revisions.
+4. **Review records.** Keep local reports under `docs/reviews/` and cite findings and evidence against the exact head in the PR.
 
 ---
 

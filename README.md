@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml/badge.svg)](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml)
 [![Docs](https://img.shields.io/badge/docs-Zensical-purple.svg)](https://paragon-ux.github.io/Patch-DIFF/)
-[![tests](https://img.shields.io/badge/tests-1583%20passed%2C%201%20skipped-success)](https://github.com/paragon-ux/Patch-DIFF/actions/workflows/ci.yml)
 [![python](https://img.shields.io/badge/python-%3E%3D3.11%20(CI%3A%203.11)-blue)](https://www.python.org/)
 [![postgres](https://img.shields.io/badge/postgres-16.3--alpine-336791.svg?logo=postgresql&logoColor=white)](https://hub.docker.com/_/postgres)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-8A2BE2.svg)](https://modelcontextprotocol.io/)
@@ -25,7 +24,7 @@ xychart-beta
     bar [206, 207, 304, 183]
 ```
 
-> **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime ($n=3$ per arm across 4 experimental conditions, Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized-benchmark-report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
+> **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime ($n=3$ per arm across 4 experimental conditions, Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized-benchmark-report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
 
 ### How Validated Hypotheses and Operational Mechanisms Drive Faster Time Elapsed
 
@@ -51,7 +50,8 @@ In this five-file benchmark, the Git arm averaged **3m 03s with `observed_v2` ve
 PatchDIFF server = deterministic transaction runtime + authoritative read and edit service
 MCP              = transport/interface (stdio JSON-RPC / internal registry)
 Host / Model     = planning, context selection, proposal generator, retry owner
-PostgreSQL 16+   = authoritative document store (SELECT ... FOR UPDATE)
+PostgreSQL 16+   = canonical working copy and audit history
+Workspace file   = source bytes and explicit SAVE publication destination
 ```
 
 > For interactive visual flowcharts of the host transaction lifecycle and 5-stage validation pipeline, see the **[Visual Architecture & Flow](https://paragon-ux.github.io/Patch-DIFF/architecture/)** guide.
@@ -87,41 +87,14 @@ All formats require `expected_target_version` and/or `expected_current_hash` and
 
 ## Quickstart
 
-### 1. Start PostgreSQL & Apply Migrations
+Follow the [workspace quickstart](docs/guides/workspace-quickstart.md) to
+install the wheel, connect to PostgreSQL 16 and configure your MCP host.
+Open your project and ask the host to edit a file and save it to disk. The
+workspace profile imports the file, reads or searches the working copy,
+submits guarded edits and publishes with explicit SAVE.
 
-```bash
-docker compose up -d postgres
-python -m alembic -c backend/app/migrations/alembic.ini upgrade head
-```
-
-### 2. Connect via MCP Stdio Adapter
-
-PatchDIFF exposes a stdio JSON-RPC MCP adapter. For Claude Desktop (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "patchdiff": {
-      "command": "python",
-      "args": ["-m", "app.mcp.external_adapter"],
-      "env": {
-        "PYTHONPATH": "/path/to/Patch-DIFF/backend",
-        "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff:patchdiff@localhost:5432/patchdiff",
-        "PATCHDIFF_MCP_PROFILE": "editor"
-      }
-    }
-  }
-}
-```
-
-See [Claude Desktop Setup](docs/guides/claude-desktop-setup.md) for full host integration details.
-
-To edit an existing file using the installed wheel, follow the
-[workspace quickstart](docs/guides/workspace-quickstart.md). It covers Python
-and PostgreSQL setup, the five-tool MCP profile, and publishing the file on SAVE.
-The `editor` configuration above is for a host that already has a target ID.
-
----
+[Claude Desktop setup](docs/guides/claude-desktop-setup.md) ·
+[Workspace requests and receipts](docs/spec/profiles/workspace-profile.md)
 
 ## MCP Profiles & Tool Surface
 
@@ -129,7 +102,7 @@ Set `PATCHDIFF_MCP_PROFILE` before starting the server. The default
 `editor` profile exposes seven tools for an existing target. Choose
 [`workspace`](docs/spec/profiles/workspace-profile.md) for file import and publication,
 [`observed_v2`](docs/spec/profiles/observed-editor-v2.md) for structural editing
-with explicit snapshots, or `full` for all 22 tools. The
+with explicit snapshots, or `full` for the 17-tool trusted lifecycle catalog. The
 [profile catalog](docs/spec/profiles/index.md) lists every tool set.
 
 ---
@@ -144,7 +117,7 @@ Full documentation is available on the **[Zensical Documentation Site](https://p
 - **Guides**: [Host Integration Guide](docs/guides/host-integration-guide.md) | [Claude Desktop Setup](docs/guides/claude-desktop-setup.md) | [Workspace Editing](docs/guides/workspace-quickstart.md) | [Observed Workflow](docs/guides/observed-editor-workflow.md)
 - **Whitepapers**: [Concept Paper v6](docs/papers/concept-paper-v6.md) | [Modernization Architecture](docs/papers/modernization-architecture.md)
 - **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized-benchmark-report.md) | [Test Matrix](docs/benchmarks/test-matrix.md)
-- **Standards & Legacy**: [PR Review Standard](docs/standards/pr-review-standard.md) | [Release Readiness](docs/standards/release-readiness.md) | [Legacy Compatibility](docs/legacy/LEGACY_COMPATIBILITY.md) | [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md)
+- **Standards**: [PR Review Standard](docs/standards/pr-review-standard.md) | [Release Readiness](docs/standards/release-readiness.md)
 
 ---
 

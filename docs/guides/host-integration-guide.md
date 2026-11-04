@@ -7,7 +7,15 @@ See the [architecture](../papers/modernization-architecture.md) for the
 role boundary and the [MCP tool contracts](../spec/mcp-tools.md) for exact
 requests and responses.
 
-## 0. Stdio transport and host refresh
+## Start with a workspace file
+
+Follow the [installed workspace quickstart](workspace-quickstart.md). Set
+`PATCHDIFF_MCP_PROFILE=workspace` and the server workspace root before
+connecting. For file editing, initialize from the workspace, read or search
+the returned target ID, submit guarded edits and explicitly SAVE with
+`sync_workspace: true`. Check publication and checkpoint results separately.
+
+## Stdio transport and host refresh
 
 Choose the immutable `PATCHDIFF_MCP_PROFILE` before starting a session.
 Use `workspace` for the five-tool file import, edit and publication workflow.
@@ -23,7 +31,7 @@ For older adapter revisions, set PYTHONIOENCODING=utf-8 in the server environmen
 
 After changing a server command or environment, use the host-supported server refresh or application restart and verify its active tool connection. Refresh behavior depends on the host; do not assume an existing process adopted new configuration. Process-management behavior varies by host and is not certified across every host by these checks.
 
-## 1. What PatchDIFF does and does not do for you
+## What PatchDIFF does and does not do for you
 
 | PatchDIFF guarantees | PatchDIFF does not do |
 | --- | --- |
@@ -35,7 +43,7 @@ After changing a server command or environment, use the host-supported server re
 
 Accepted means *protocol-valid and transaction-valid*. `validity.task_correct` and `validity.semantic` are always `"not_evaluated"`. Run tests, linters and review in the host. Read `warnings` on every acceptance: each reports a fact about a well-formed edit (an unchanged replacement, a shifted index basis, a split grapheme cluster) to compare with what you meant.
 
-## 2. The standard loop
+## The standard loop
 
 ```mermaid
 sequenceDiagram
@@ -68,14 +76,13 @@ sequenceDiagram
 | `match_ambiguous` | More than one exact span; `diagnostic.occurrence_count` says how many | Lengthen `match`, or add `anchor_before` / `anchor_after`, or `occurrence_index` counted in the buffer that edit sees (see §3) |
 | `disambiguation_invalid` | Selector did not isolate one span | Recount: indexes after earlier edits are renumbered. For several same-string edits, use descending tx/2 spans |
 | `span_out_of_bounds`, `span_expected_text_mismatch` | A span does not fit, or its `expected_text` or context differs from the text in the sequential buffer; `diagnostic.span_check` says which check and `actual_text` shows what is there | Re-read, recompute offsets against the text after earlier operations, copy `expected_text` exactly |
-| `context_invalid` with `diagnostic.code: "request_key_conflict"` | The `client_request_id` was already used for a different proposal; `differing_fields` names what changed | Resend the original proposal unchanged to recover it, or use a new key for the new proposal (§7) |
+| `context_invalid` with `diagnostic.code: "request_key_conflict"` | The `client_request_id` was already used for a different proposal; `differing_fields` names what changed | Resend the original proposal unchanged to recover it, or use a new key for the new proposal (see [lost responses](#lost-responses-and-request-idempotency)) |
 | `context_invalid` with `diagnostic.code: "invalid_client_request_id"` | The key is not 1–128 printable ASCII characters without whitespace | Fix the key |
 | `manifest_*`, `block_malformed`, other `context_*` | Malformed typed input | Fix the request shape |
 
 4. **Link retries.** Set `parent_pdcp_log_id` to the rejected attempt and `attempt` to your own counter. The rejected row stays in the log. Retry limits are your policy; the server enforces none.
-5. **Do not ask the server for a regeneration prompt.** Those tools are deprecated.
 
-## 3. Typed submission
+## Typed submission
 
 ```json
 {
@@ -111,13 +118,13 @@ To edit several occurrences of the same text, prefer one of:
 
 ### Selector constraints on a single occurrence
 
-Typed-match (`patchdiff-tx/1`) and legacy PDCP submissions use runtime `patchdiff-mvp-0.2.2`. Guarded match/span operations (`patchdiff-tx/2`) use immutable `patchdiff-mvp-0.3.0`, or immutable `patchdiff-mvp-0.5.0` when a span uses context guards; sole whole-target replacement (`patchdiff-tx/3`) uses immutable `patchdiff-mvp-0.4.0`. Every supplied selector must hold, even if the match occurs only once. Anchors mean anywhere before or after the match, not necessarily adjacent. For target text hello, this typed request rejects with disambiguation_invalid and leaves the target unchanged:
+Typed-match submissions (`patchdiff-tx/1`) use runtime `patchdiff-mvp-0.2.2`. Guarded match/span operations (`patchdiff-tx/2`) use immutable `patchdiff-mvp-0.3.0`, or immutable `patchdiff-mvp-0.5.0` when a span uses context guards; sole whole-target replacement (`patchdiff-tx/3`) uses immutable `patchdiff-mvp-0.4.0`. Every supplied selector must hold, even if the match occurs only once. Anchors mean anywhere before or after the match, not necessarily adjacent. For target text hello, this typed request rejects with disambiguation_invalid and leaves the target unchanged:
 
 ```json
 {"target_file_id":"11111111-1111-4111-8111-111111111111","expected_target_version":0,"intent":"Replace greeting","edits":[{"match":"hello","replace":"goodbye","occurrence_index":2}]}
 ```
 
-Use `occurrence_index` 1, omit selectors for a unique match, or supply anchors that actually hold. An index and anchors are combined constraints. (For legacy `.pdcp` v0.2.3 singleton-selector behavior and historical `0.1.0`–`0.2.1` replay profiles, see [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md).)
+Use `occurrence_index` 1, omit selectors for a unique match, or supply anchors that actually hold. An index and anchors are combined constraints.
 
 ### Invalid text and safe rejected evidence
 
@@ -156,7 +163,7 @@ Expect four accepted facts and five attempts, and keep the original rejection di
 
 Then execute each history tool's first example, bind its returned `next_sequence` into the continuation example, and repeat until `has_more=false`. Attempts display descending sequences; ledger displays ascending sequences within each newest page. A cursor is exclusive in both tools. The discovery examples are covered by real stdio tests with schema validation, nonvacuous paging and independent SQL assertions. This is executable API coverage, not a model success-rate measurement.
 
-## 4. Literal replacement requests
+## Literal replacement requests
 
 Moved from the old server prompt:
 
@@ -164,11 +171,7 @@ Moved from the old server prompt:
 - Prefer one edit per intended occurrence. If one edit's `match` covers several occurrences, say so in `rationale`.
 - After an accepted replacement, verify the result with `patchdiff_find_occurrences` for the old literal, report the number of occurrences actually changed, and do not report the manifest/edit count as the occurrence count.
 
-## 5. Legacy Compatibility (`.pdcp` v0.2.3 & Deprecated Wrappers)
-
-Frozen `.pdcp` v0.2.3 (`patchdiff_submit_pdcp`), `patchdiff_build_prompt_context`, and the deprecated regeneration wrappers remain supported for backward compatibility and historical replay. All legacy format rules, wrapper contracts, and historical replay profiles (`0.1.0`–`0.2.1`) are documented in [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md).
-
-## 6. Checkpoints, history and context
+## Checkpoints, history and context
 
 - `patchdiff_save` snapshots the document and starts a new editing cycle. It does not change content, version or hash, and it **does not compact your conversation**. Compact your own context whenever your host needs to; it never touches the document. Pass `expected_target_version` (and optionally `expected_current_hash`) so the snapshot is of the state you reviewed.
 - `patchdiff_get_pdcp_log` returns a bounded, newest-first page (page with `before_sequence`; filter with `status`). Each entry carries its transaction `intent` (bounded) and `attempt`. Use `include_content=true` only when you need the raw record: a page returns at most about 1 MB of content, and later rows say `pdcp_content_omitted: "page_byte_budget"`; fetch one of those with `limit: 1`.
@@ -179,7 +182,7 @@ Both history tools default to 50 rows (omitted/null), cap at 200, and return has
 
 Search context_chars must be a non-bool integer >= 0 (default 40, cap 400). Zero requests no surrounding text; invalid types return invalid_argument.
 
-## 7. Lost responses & request idempotency
+## Lost responses and request idempotency
 
 PatchDIFF distinguishes request identity from state guards (C4 / D5):
 - `client_request_id` identifies a proposal and recovers its recorded terminal outcome.
@@ -213,7 +216,7 @@ Database integrations must preserve transaction ownership: an outcome inside an 
 
 ### Unkeyed recovery
 
-Typed submission requires a version and/or hash guard. Legacy `patchdiff_submit_pdcp` keeps guards optional for compatibility; an unguarded retry has no state-guard protection. Prefer a request ID for both formats.
+Submission requires a version or hash guard. Use a request ID to recover the recorded outcome after a lost response.
 
 After an unkeyed timeout:
 
@@ -221,7 +224,7 @@ After an unkeyed timeout:
 2. Absence from one page does not mean the request never arrived. Even after traversal, a still-running original call may commit later; identical unkeyed proposals may be indistinguishable. Treat an ambiguous outcome as unknown. Read current state authoritatively and reconcile the requested effect before generating another proposal; do not infer permission to reapply from missing history alone.
 3. When a replacement proposal is warranted, derive it from a fresh read, assign a new request ID, and link `parent_pdcp_log_id` only to a known rejected attempt. If the earlier attempt is known accepted, continue from its result.
 
-## 8. Round-tripping to files
+## Round-tripping to files
 
 PatchDIFF stores canonical LF text and hashes it that way. Line endings in the uploaded file are recorded, not kept, so writing an export back to a Windows or CRLF repository needs one decision from the host:
 
@@ -232,13 +235,13 @@ PatchDIFF stores canonical LF text and hashes it that way. Line endings in the u
 
 With `core.autocrlf=true`, git converts line endings on checkout and on commit, so writing LF back to a file stored with LF in the repository still shows only the edited lines in `git diff`. A file stored with CRLF in the repository (for example under a `-text` attribute) and any tool that compares working-tree bytes see every line change. Exporting with `original_eol` keeps the original style, so only the edited lines differ in every case.
 
-## 9. What is outside the guarantee
+## What is outside the guarantee
 
 PatchDIFF's guarantees cover the managed target in Postgres. An exported file edited elsewhere, a shell, another database writer, or another editor can change content PatchDIFF never sees. A skill or instruction asking the model to "use PatchDIFF" is guidance, not enforcement. Re-importing an edited export is a **new upload and a new target**; nothing is merged or synchronized.
 
 In environments with an active version control system (e.g. Git repository), the workspace files on disk are NOT updated by PatchDIFF transactions until the host exports or syncs them. State-dependent Git commands that inspect the working tree (such as `git diff` or `git status`) inspect disk files, not the canonical Postgres substrate, and will not show in-flight or accepted PatchDIFF transactions. Repository inspection commands that read history (`git log`, `git show <commit>`) operate on committed history.
 
-## 10. Host integration checklist
+## Host integration checklist
 
 For observed operations, keep nonempty edits within the observed scope. Insert only strictly inside the current sequential scope; never insert at either boundary. Supply both nonempty `expected_before` and `expected_after`, matching immediately adjacent text entirely inside that scope. Earlier operations can move the scope end and change those neighbors, so derive later guards from the intermediate buffer. On `OBSERVED_INSERTION_GUARDS_REQUIRED`, mismatching adjacency, or `OPERATION_OUTSIDE_OBSERVED_SCOPE`, re-read and correct the proposal; do not bypass strict admission. SAVE closes the observation's editing cycle, so obtain a fresh observation before paging or submitting again.
 
@@ -255,7 +258,7 @@ Empirical $2\times2$ factorial evaluation ($n=3$ per arm across Non-Git and Git 
 3. **Harmonize Prompts Across Git and Non-Git Environments**: Do not inject cautionary warnings into editor prompts regarding `git diff` or `git status` vs. PostgreSQL substrate state. Adding negative warnings about version control inadvertently primes the model with Git terminology and cognitive load. An identical, harmonized prompt achieves complete cross-environment performance parity ($21.7 \pm 1.2$ steps in Git vs. $26.7 \pm 2.5$ steps in Non-Git, $p=0.06$).
 
 
-## 11. Waymark structural observation workflow (`waymark-engine@4.1.0`)
+## Waymark structural observation workflow (`waymark-engine@4.1.0`)
 
 For multiple independent structures, prefer one `patchdiff_observe_scope` call
 with exact `selections`, followed by one `patchdiff_submit_observed_operations`
@@ -363,14 +366,3 @@ outside the editing model's context and under a private ignored capture director
 ## Purpose-specific observed interface
 
 For the opt-in five-tool `observed_v2` connection, use [observed editor v2](../spec/profiles/observed-editor-v2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
-
-
-## Optional managed workspace publication
-
-The [workspace profile](workspace-quickstart.md) lets a host start with a
-filename. Initialize with `from_workspace=true`, pass the returned target ID
-to read/search and guarded edit calls, then SAVE with `sync_workspace=true`
-when the user requests file publication. `full` also exposes these calls for
-trusted lifecycle clients. The import request and normal SAVE receipt avoid a
-full source relay. For partial or lost SAVE outcomes, inspect the file and
-database state before reconciling.

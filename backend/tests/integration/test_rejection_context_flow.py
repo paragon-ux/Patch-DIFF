@@ -13,10 +13,10 @@ from sqlalchemy import func, select, update
 from app.core.config import settings
 from app.core.hashing import canonical_sha256
 from app.mcp.tools import _submit_result_to_payload
-from app.services.pdcp_service import submit_edits, submit_pdcp
+from app.services.pdcp_service import submit_edits
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target
 
 
 def _counts(session, target_id):
@@ -99,19 +99,13 @@ def test_locked_context_empty_unicode_and_cap_boundaries(content):
     assert len(json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("ascii")) <= 8192
 
 
-@pytest.mark.parametrize("legacy", [False, True])
 @pytest.mark.parametrize("historical", [False, True])
-def test_recovered_rejection_keeps_exact_original_diagnostic_and_fresh_locked_context(legacy, historical):
+def test_recovered_rejection_keeps_exact_original_diagnostic_and_fresh_locked_context(historical):
     target_id = create_target("alpha beta")
     args = {"target_file_id": target_id, "expected_target_version": 0, "client_request_id": "f01-original"}
-    if legacy:
-        args["pdcp_content"] = pdcp_for(target_id, ("missing", "x"))
-        submit = submit_pdcp
-    else:
-        args.update(intent="F01 recovery", edits=[{"match": "missing", "replace": "x"}])
-        submit = submit_edits
+    args.update(intent="F01 recovery", edits=[{"match": "missing", "replace": "x"}])
     with SessionLocal() as session:
-        first = submit(session, **args)
+        first = submit_edits(session, **args)
     if historical:
         # Fixture a pre-F01 row; this is not a product retrofit or an API mutation.
         with SessionLocal.begin() as session:
@@ -124,7 +118,7 @@ def test_recovered_rejection_keeps_exact_original_diagnostic_and_fresh_locked_co
         assert accepted.status == "accepted"
         assert "current_context" not in _submit_result_to_payload(accepted)
     with SessionLocal() as session:
-        recovered = submit(session, **args)
+        recovered = submit_edits(session, **args)
     assert recovered.deduplicated is True and recovered.pdcp_log_id == first.pdcp_log_id
     assert json.dumps(recovered.diagnostic, sort_keys=True) == original
     assert ("failure_context" in recovered.diagnostic) is not historical
@@ -259,37 +253,3 @@ def test_real_stdio_rejection_context_and_recovery_with_independent_sql():
         if proc.poll() is None:
             proc.kill()
         assert proc.returncode == 0, proc.stderr.read().decode("utf-8")
-
-
-@pytest.mark.parametrize("case,reason", [
-    ("stale", "target_version_mismatch"), ("protocol", "block_malformed"),
-    ("encoding", "target_encoding_invalid"), ("lineage", "context_invalid"),
-    ("header", "target_hash_mismatch"), ("absent", "match_absent"),
-    ("ambiguous", "match_ambiguous"), ("selector", "disambiguation_invalid"),
-    ("sequential", "sequential_match_invalid"),
-])
-def test_legacy_uses_same_bounded_locked_rejection_path(case, reason):
-    content = "alpha alpha" if case == "ambiguous" else "alpha beta"
-    target_id = create_target(content)
-    changes = [("absent", "x")] if case == "absent" else [("alpha", "ALPHA")]
-    if case == "sequential":
-        changes += [("alpha", "x")]
-    pdcp = pdcp_for(target_id, *changes, header_hash="0" * 64 if case == "header" else None)
-    if case == "protocol":
-        pdcp = pdcp.replace("=======", "BAD")
-    if case == "encoding":
-        pdcp += "\ud800"
-    if case == "selector":
-        pdcp = pdcp.replace("# risk: low", "# risk: low\n# occurrence_index: 2")
-    with SessionLocal() as session:
-        result = submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp,
-                             expected_target_version=1 if case == "stale" else 0,
-                             parent_pdcp_log_id=uuid.uuid4() if case == "lineage" else None)
-    assert result.failure_reason.value == reason
-    _assert_context(result.diagnostic["failure_context"], "ALPHA beta" if case == "sequential" else content,
-                    prior=int(case == "sequential"), target_content=content)
-    _assert_context(result.current_context, content)
-    assert result.diagnostic["format"] == "0.2.3" and result.diagnostic["requires_new_pdcp"] is True
-    with SessionLocal() as session:
-        assert _counts(session, target_id) == (1, 0)
-        assert session.get(CloudTargetFiles, target_id).current_content == content

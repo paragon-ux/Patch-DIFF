@@ -69,7 +69,34 @@ def test_subprocess_initialize_and_list_new_tools_with_complete_schema() -> None
     log_props = tools["patchdiff_get_pdcp_log"]["inputSchema"]["properties"]
     assert {"before_sequence", "status", "content_hash", "client_request_id"} <= set(log_props)
 
-    assert "DEPRECATED" in tools["patchdiff_request_regeneration"]["description"]
+    retired = {
+        "patchdiff_submit_pdcp", "patchdiff_build_prompt_context", "patchdiff_get_regeneration_context",
+        "patchdiff_build_regeneration_prompt", "patchdiff_request_regeneration",
+    }
+    assert len(tools) == 17
+    assert retired.isdisjoint(tools)
+    preview = tools["patchdiff_preview"]["inputSchema"]["properties"]
+    assert preview["format"]["enum"] == ["patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
+    assert "pdcp_content" not in preview
+
+
+def test_full_rejects_retired_preview_inputs_over_stdio() -> None:
+    valid = {
+        "target_file_id": "11111111-1111-4111-8111-111111111111",
+        "format": "patchdiff-tx/1",
+        "intent": "Update text",
+        "edits": [{"match": "before", "replace": "after"}],
+        "expected_target_version": 0,
+    }
+    proposals = [{**valid, "format": "0.2.3"}, {**valid, "pdcp_content": "retired input"}]
+    results = _rpc(*(json.dumps({
+        "jsonrpc": "2.0", "id": index, "method": "tools/call",
+        "params": {"name": "patchdiff_preview", "arguments": arguments},
+    }) for index, arguments in enumerate(proposals, start=1)))
+    first, second = (response["result"] for response in results)
+    assert json.loads(first["content"][0]["text"])["code"] == "invalid_format"
+    assert second["isError"]
+    assert json.loads(second["content"][0]["text"])["code"] == "unknown_argument"
 
 
 def test_subprocess_survives_malformed_params_of_every_json_type() -> None:

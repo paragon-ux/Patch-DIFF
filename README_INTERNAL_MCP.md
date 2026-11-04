@@ -6,7 +6,7 @@ Most users should connect through the external MCP adapter documented in [README
 
 ## Boundary
 
-All 22 internal registry handlers remain available to trusted code. External MCP
+All 17 internal registry handlers remain available to trusted code. External MCP
 profiles independently restrict both advertised and callable tools (7 by default).
 The internal observed batch form still verifies every server-issued scope under
 the target lock and uses the shared applier, atomic commit and replay path.
@@ -16,7 +16,7 @@ The internal registry is not a separate product path.
 
 It must keep the same invariants as the external adapter:
 
-- Transactions are untrusted until submitted through `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), `patchdiff_submit_replacement` (`patchdiff-tx/3`) or `patchdiff_submit_pdcp` (legacy `0.2.3`). All use the shared locked commit path.
+- Transactions are untrusted until submitted through `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), and `patchdiff_submit_replacement` (`patchdiff-tx/3`). All use the shared locked commit path.
 - Target content mutation must come only from accepted transactions validated by the deterministic core runtime.
 - The registry must not bypass parser, validator, matcher, applier, or service-layer commit paths.
 - SAVE can create snapshots and advance editing cycles without changing canonical target text. Explicit [workspace publication](docs/guides/workspace-quickstart.md) can also install the rendered file bytes. Publication requires a service-owned transaction.
@@ -51,26 +51,19 @@ Export the current target after a successful submit:
 .\.venv\Scripts\python.exe -c "import json; from app.mcp import tools; from app.mcp.server import registry; print(json.dumps(registry.call('patchdiff_export_target', target_file_id='aae935dd-1427-4801-ad60-b8ec95040234'), indent=2))"
 ```
 
-## Legacy `.pdcp` Compatibility
-
-Frozen `.pdcp` v0.2.3 submission (`patchdiff_submit_pdcp`) and the deprecated regeneration wrappers are documented in [docs/legacy/LEGACY_COMPATIBILITY.md](docs/legacy/LEGACY_COMPATIBILITY.md).
-
 ## List Internal Tools
 
 ```powershell
 .\.venv\Scripts\python.exe -c "from app.mcp import tools; from app.mcp.server import registry; print('\n'.join(registry.names()))"
 ```
 
-Expected internal tool surface (22 registered handlers):
+Expected internal tool surface (17 registered handlers):
 
 ```text
-patchdiff_build_prompt_context
-patchdiff_build_regeneration_prompt
 patchdiff_export_target
 patchdiff_find_occurrences
 patchdiff_get_manifest_ledger
 patchdiff_get_pdcp_log
-patchdiff_get_regeneration_context
 patchdiff_get_target
 patchdiff_handle_upload
 patchdiff_initialize_target
@@ -79,15 +72,11 @@ patchdiff_preview
 patchdiff_read_lines
 patchdiff_read_target
 patchdiff_replay
-patchdiff_request_regeneration
 patchdiff_save
 patchdiff_submit_edits
 patchdiff_submit_observed_operations
 patchdiff_submit_operations
-patchdiff_submit_pdcp
 patchdiff_submit_replacement
 ```
 
 *(Note: The five tools exposed under the external `observed_v2` profile—`patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_read_target`, and `patchdiff_find_occurrences`—are external purpose-specific aliases mapped to these underlying registry handlers by `backend/app/mcp/external_adapter.py`; they do not add separate handlers to the internal registry).*
-
-The three regeneration tools (`patchdiff_get_regeneration_context`, `patchdiff_build_regeneration_prompt`, `patchdiff_request_regeneration`) are deprecated compatibility wrappers. Modern host workflows use `patchdiff_read_target` / `patchdiff_find_occurrences` and host-owned retries.

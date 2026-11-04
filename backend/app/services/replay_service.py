@@ -25,9 +25,8 @@ from app.pdcp.typed import canonical_record_json
 from app.services.scope_observation_service import batch_scope_evidence
 from app.pdcp.operations import OPERATIONS_PROTOCOL_VERSION, decode_operations_record, to_parsed_operations
 from app.pdcp.replacement import REPLACEMENT_PROTOCOL_VERSION, decode_replacement_record, to_parsed_replacement
-from app.pdcp.models import SUPPORTED_PROTOCOL_VERSION, ParsedPDCP
-from app.pdcp.parser import PDCPParseError, parse_pdcp
-from app.pdcp.protocol_validator import ProtocolValidationError, validate_pdcp
+from app.pdcp.models import ParsedPDCP
+from app.pdcp.protocol_validator import ProtocolValidationError
 from app.pdcp.typed import TYPED_PROTOCOL_VERSION, decode_record, to_parsed_transaction
 from app.storage.models import AppendOnlyPdcpLogs, CloudTargetFiles, TargetScopeObservations, TargetSnapshots
 from app.storage.repositories import select_target_for_update
@@ -186,7 +185,7 @@ def replay_target(
 
             try:
                 parsed = None if log.protocol_version == BATCH_PROTOCOL_VERSION else _decode_logged_transaction(log, target)
-            except (PDCPParseError, ProtocolValidationError, _UnsupportedLoggedProtocol) as exc:
+            except (ProtocolValidationError, _UnsupportedLoggedProtocol) as exc:
                 return _failed(
                     target,
                     FailureReason.REPLAY_PROTOCOL_INVALID,
@@ -379,15 +378,6 @@ class _UnsupportedLoggedProtocol(Exception):
 def _decode_logged_transaction(log: AppendOnlyPdcpLogs, target: CloudTargetFiles) -> ParsedPDCP:
     """Dispatch on the recorded protocol version. Old rows are never reinterpreted."""
 
-    if log.protocol_version == SUPPORTED_PROTOCOL_VERSION:
-        parsed = parse_pdcp(log.pdcp_content)
-        validate_pdcp(parsed)
-        if parsed.header.target_file_id != str(target.target_file_id):
-            raise ProtocolValidationError(
-                FailureReason.CONTEXT_INVALID,
-                "Logged PDCP target_file_id does not match the replayed target.",
-            )
-        return parsed
     if log.protocol_version == REPLACEMENT_PROTOCOL_VERSION:
         typed = decode_replacement_record(log.pdcp_content, runtime_version=log.runtime_version)
         if typed.target_file_id != str(target.target_file_id):

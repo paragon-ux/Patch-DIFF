@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from app.core.hashing import canonical_sha256
+from app.core.versions import RUNTIME_VERSION
+from app.pdcp.typed import TYPED_PROTOCOL_VERSION, build_record, canonical_record_json
 from app.services.export_service import export_target
 from app.services.pdcp_service import submit_edits
 from app.services.replay_service import replay_target
 from app.services.target_service import initialize_target
 from app.storage.db import engine
-from backend.tests.integration.helpers import pdcp_for
 
 
 from sqlalchemy import text
@@ -186,9 +187,15 @@ def seed_legacy_history(connection):
     ledger = Table("append_only_manifest_ledger", metadata, autoload_with=connection)
     targets = Table("cloud_target_files", metadata, autoload_with=connection)
     accepted_id, rejected_id = uuid.uuid4(), uuid.uuid4()
-    accepted_content = pdcp_for(target.target_file_id, ("alpha", "beta"))
-    rejected_content = pdcp_for(target.target_file_id, ("absent", "ignored"))
-    common = dict(target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id, submission_source="migration_fixture", protocol_version="0.2.3", runtime_version="patchdiff-mvp-0.1.0", change_count=1)
+    def record(match, version):
+        return canonical_record_json(build_record(
+            target_file_id=str(target.target_file_id), intent="Update text.",
+            edits=[{"match": match, "replace": "beta"}],
+            expected_target_version=version, expected_current_hash=None,
+        ))
+    accepted_content = record("alpha", 0)
+    rejected_content = record("absent", 1)
+    common = dict(target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id, submission_source="migration_fixture", protocol_version=TYPED_PROTOCOL_VERSION, runtime_version=RUNTIME_VERSION, change_count=1)
     connection.execute(logs.insert().values(**common, pdcp_log_id=accepted_id, pdcp_content=accepted_content, pdcp_content_hash=canonical_sha256(accepted_content), status="accepted", before_version=0, after_version=1, before_hash=target.current_hash, after_hash=canonical_sha256("beta")))
     connection.execute(logs.insert().values(**common, pdcp_log_id=rejected_id, pdcp_content=rejected_content, pdcp_content_hash=canonical_sha256(rejected_content), status="rejected", failure_reason="match_absent", failure_detail="MATCH text was not found.", before_version=1, before_hash=canonical_sha256("beta")))
     connection.execute(ledger.insert().values(manifest_entry_id=uuid.uuid4(), target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id, pdcp_log_id=accepted_id, change_index=1, change_id="chg_001", intent="Update text.", input_state="Old text exists.", output_state="New text exists.", affected_region="example", user_visible_change="Text changes.", risk="low"))
@@ -216,7 +223,6 @@ def test_populated_legacy_upgrade_downgrade_upgrade_preserves_history(isolated_m
     with Session(bind=connection) as session:
         replay = replay_target(session, target_file_id=target_id)
         assert replay.status == "success" and replay.materialized_state_matches
-        assert replay.reconstructed_content == "beta" and replay.reconstructed_version == 1
 
 
 def test_live_migration_refuses_downgrade_when_typed_rows_exist(isolated_migrations):

@@ -38,7 +38,7 @@ with the host's existing target ID. For a database-only checkpoint, pass
 ## Observed
 
 Use `observed` when structural authority should precede edits and the same
-connection should also SAVE or replay. Use the legacy observation tool to
+connection should also SAVE or replay. Use the scope observation tool to
 select the relevant scope or batch. Submit guarded observed operations using
 the returned IDs and required guards, then checkpoint the accepted version.
 This profile omits typed submission.

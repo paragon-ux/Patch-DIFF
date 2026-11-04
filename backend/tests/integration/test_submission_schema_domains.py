@@ -10,7 +10,6 @@ from sqlalchemy import select
 from app.mcp.external_adapter import ExternalMCPAdapter
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles, CurrentPdcpFiles
-from backend.tests.integration.helpers import pdcp_for
 
 
 def call(adapter, name, args):
@@ -79,14 +78,13 @@ def test_discovery_domains_match_live_rejection_and_audit(name, overrides, valid
         assert call(adapter, "patchdiff_submit_edits", {"target_file_id": target["target_file_id"], "intent": "Follow-up", "edits": [{"match": "alpha", "replace": "beta"}], "expected_target_version": 0})["status"] == "accepted"
 
 
-@pytest.mark.parametrize("tool", ["patchdiff_submit_edits", "patchdiff_submit_pdcp"])
-def test_newline_hash_guard_is_durably_rejected_with_raw_evidence(tool):
+def test_newline_hash_guard_is_durably_rejected_with_raw_evidence():
     adapter = ExternalMCPAdapter(profile="full")
     target = call(adapter, "patchdiff_initialize_target", {"filename": "newline-guard.txt", "content": "alpha", "content_type": "text/plain"})
     target_id = uuid.UUID(target["target_file_id"])
-    proposal = {"intent": "Update", "edits": [{"match": "alpha", "replace": "beta"}]} if tool.endswith("edits") else {"pdcp_content": pdcp_for(target_id, ("alpha", "beta"))}
+    proposal = {"intent": "Update", "edits": [{"match": "alpha", "replace": "beta"}]}
     args = {"target_file_id": str(target_id), "expected_current_hash": "a" * 64 + "\n", **proposal}
-    rejected = call(adapter, tool, args)
+    rejected = call(adapter, "patchdiff_submit_edits", args)
     assert rejected["failure_reason"] == "context_invalid"
     with SessionLocal() as session:
         log = session.get(AppendOnlyPdcpLogs, uuid.UUID(rejected["pdcp_log_id"]))
@@ -98,7 +96,7 @@ def test_newline_hash_guard_is_durably_rejected_with_raw_evidence(tool):
         assert stored.current_content == "alpha" and stored.version == 0
         assert not session.scalars(select(AppendOnlyManifestLedger).where(AppendOnlyManifestLedger.target_file_id == target_id)).all()
     args["expected_current_hash"] = target["current_hash"]
-    assert call(adapter, tool, args)["status"] == "accepted"
+    assert call(adapter, "patchdiff_submit_edits", args)["status"] == "accepted"
 
 
 def test_schema_numeric_domain_does_not_replace_business_guards():

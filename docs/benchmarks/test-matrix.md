@@ -33,14 +33,14 @@ Structural batch coverage additionally lives in `test_observed_batch_core.py`,
 snapshot, selection limits/geometry/paging, scope-local sequential operations,
 atomic rejection and rollback, concurrent writers, request recovery/conflicts,
 corrupted replay authority, populated 0004/0005 preservation/refusal, enforced
-7/5/6/22 catalogs, real response-loss recovery, Python/JSON/Markdown examples and
+all nine MCP catalogs, including the 17-tool full profile, real response-loss recovery, Python/JSON/Markdown examples and
 the frozen five-file full-byte/20-check oracle. [Capability evidence](../spec/structural-batch-editing.md#deterministic-capability-evidence).
 
 - Postgres (`postgres:16.3-alpine`) is the required working substrate. SQLite must never be used to claim persistence, locking, migration, SAVE, or replay correctness.
 - The deterministic core runtime is pure and language-neutral; it must never import DB/ORM drivers, call MCP tools, or execute transaction payloads.
 - Atomicity is strictly per target: multi-edit transactions commit completely or leave target state untouched.
 - All transaction attempts (accepted and rejected) are logged append-only with lineage (`parent_pdcp_log_id`) and idempotency (`client_request_id`).
-- Manifest ledger entries are accepted-only and carry `origin` (`'typed'` or `'pdcp_manifest'`) and `derived_json` facts.
+- Manifest ledger entries are accepted-only and carry `origin` (`'typed'`) and `derived_json` facts.
 - Replay verifies history from initial snapshots independently of current materialized targets, dispatching explicitly on `(protocol_version, runtime_version)`.
 
 ---
@@ -57,15 +57,13 @@ Run with: `pytest backend/tests/unit -q`
 | `test_hashing.py` | Canonical SHA-256 computation over UTF-8 bytes. |
 | `test_failures.py` | Enum definitions and frozen failure reason sets. |
 | `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.2`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
-| `test_parser.py` | Protocol header parsing; manifest line format; delimiter enforcement (`<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`); delimiter collision rejection (`FailureReason.BLOCK_MALFORMED`). |
-| `test_protocol_validator.py` | 7 required manifest fields (v0.2.3); risk value validation; structural purity (rejection of executable logic outside payloads). |
 | `test_mcp_arguments_paging.py` | service context type/bounds, discovery/routing, filtered limit+1 continuation, defaults/caps, error shapes and invalid argument types. |
 | `test_conflict_audit.py` | bounded submitted-key diagnostic, NULL persisted key versus response echo, submitted fingerprint policy. |
 | `test_invalid_input_unicode.py` | all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
-| `test_selector_profiles.py` | singleton/multiple/overlapping/absent selectors across typed, legacy and sequential buffers; historical profile compatibility. |
-| `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, `anchor_after`, and `region_hint`. |
+| `test_selector_profiles.py` | singleton/multiple/overlapping/absent selectors across typed and sequential buffers across recorded runtime profiles. |
+| `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, `anchor_after`, and `anchor_after`. |
 | `test_applier.py` | Sequential in-memory simulation; immediate buffer replacement; deletion (`replace=""`); sequential match invalidation; calculation of runtime-derived `change_facts`. |
-| `test_typed_transaction.py` | **C1, C4**: `patchdiff-tx/1` parsing; `build_record` and `canonical_record_json` determinism; default `change_id` generation; `validate_client_request_id` (ASCII printable, no whitespace, 1..128 chars); `TYPED_EDIT_JSON_SCHEMA` conformance; delimiter collision immunity; verdict equivalence with PDCP across test corpus. |
+| `test_typed_transaction.py` | **C1, C4**: `patchdiff-tx/1` parsing; `build_record` and `canonical_record_json` determinism; default `change_id` generation; `validate_client_request_id` (ASCII printable, no whitespace, 1..128 chars); `TYPED_EDIT_JSON_SCHEMA` conformance; delimiter collision immunity; accepted verdicts and resulting hashes against an independent oracle. |
 | `test_modernization_contracts.py` | **C2, C3, C6**: Stage-aware `validity_levels` (`ValidationStage`); explicit runtime profile dispatch (`SUPPORTED_RUNTIME_PROFILES`); `slice_content` (`next_start`); `occurrence_report` (`start_occurrence`, `max_results`, `next_occurrence_index`, `returned_count`); host-loop inspect/revise simulation without server regeneration prompts. |
 | `test_stdio_adapter_subprocess.py` | **C1**: MCP `initialize` and `tools/list`; full `edits` item schema advertised in `patchdiff_submit_edits`; JSON-RPC `-32602` error response on non-object `params` of every JSON type; process survival. |
 | `test_friction_followup.py` | FR-1..FR-20 pure behavior: `occurrence_index` basis-shift warnings and selector details, grapheme boundary cases, span context guards and 0.3.0/0.5.0 profile selection, line-ending facts and export mapping, the shared retryable set, span evidence, near-miss scope and pruned-versus-unpruned equivalence over buffers beyond 256 code points, exact abandoning and pigeonhole/Landau-Vishkin work bounds on 65,536-code-point repetitive buffers, consumed sequential matches, failure windows and context elision, no-op warnings, candidate cursors and replacement numbers, `line_starts`, UTF-8 serialization fallback, structured argument errors and parameter descriptions. |
@@ -81,13 +79,13 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 | Module | Requirements / Capabilities Tested |
 | --- | --- |
 | `test_conflict_audit_live.py` | distinct repeated conflict attempts; controlled real lock waits at READ COMMITTED; commit/rollback visibility; original full terminal recovery after later edits; actual stdio. |
-| `test_invalid_input_unicode_live.py` | actual PostgreSQL persistence/recovery, old accepted/rejected fingerprint compatibility, outer commit/rollback and deprecated wrapper ownership, real stdio readable evidence. |
-| `test_selector_profiles_live.py` | durable rejection without materialization, all supported historical selector profiles in typed/legacy mixed history, actual stdio rejection and replay. |
+| `test_invalid_input_unicode_live.py` | actual PostgreSQL persistence/recovery, old accepted/rejected fingerprint compatibility, outer commit/rollback and caller transaction ownership, real stdio readable evidence. |
+| `test_selector_profiles_live.py` | durable rejection without materialization, all supported historical selector profiles in typed history, actual stdio rejection and replay. |
 | `test_friction_followup_live.py` | FR-1..FR-20 against live PostgreSQL: persisted and recovered warnings (SQL NULL when there are none), 0.5.0 rows replaying beside 0.3.0 history, recorded line endings and every export format, persisted retryable/span evidence and failure windows, near misses beyond 256 code points, consumed-match evidence, context elision, current state on recovery, key-conflict fields, ledger/attempt joins after SAVE (including pdcp_content-free SQL cursor verification over large tx/3 records), content page budget, line continuation, invalid-argument codes, replacement numbers, preview near misses and SAVE version guards. |
 | `test_friction_followup_stdio.py` | Real stdio subprocess: literal tool text inside pure-ASCII JSON-RPC lines (including U+2028/U+2029/U+0085), described schemas and new domains, CRLF upload and `original_eol` export, `line_starts`, span context rejection and 0.5.0 acceptance, warnings, preview near misses, structured unknown-argument errors, ledger joins, SAVE version guard and replay. |
 | `test_migrations_reachable.py` | **C5, C5b**: Alembic config presence; schema verification for migrations `0001`, `0002` and `0003`; populated `0002 -> 0003 -> 0002 -> 0003` preservation; 0003 downgrade refusal with recorded line endings; live Postgres column nullability and partial unique index `uq_pdcp_logs_target_client_request_id` verification. |
-| `test_typed_submit_flow.py` | **C1–C6**: Typed accept writes `append_only_pdcp_logs` (`protocol_version="patchdiff-tx/1"`) and `append_only_manifest_ledger` (`origin="typed"`, `derived_json`); format-specific diagnostics (no PDCP manifest leakage on typed rejections); stage-based validity across all 5 stages; safe UUID and parent-lineage error handling; `client_request_id` idempotency, lost-response outcome recovery, ABA sequence recovery, no-op edit recovery, and conflicting reuse rejection; mixed PDCP/typed replay; component-level `materialized_state_checks`; unknown profile rejection; read/search pagination. |
-| `test_pdcp_submit_flow.py` | Legacy `.pdcp` submission; atomic rollback on applicability failure; optimistic concurrency guards (`expected_target_version`, `expected_current_hash`); row locking independence across targets. |
+| `test_typed_submit_flow.py` | **C1–C6**: Typed accept writes `append_only_pdcp_logs` (`protocol_version="patchdiff-tx/1"`) and `append_only_manifest_ledger` (`origin="typed"`, `derived_json`); format-specific diagnostics (no PDCP manifest leakage on typed rejections); stage-based validity across all 5 stages; safe UUID and parent-lineage error handling; `client_request_id` idempotency, lost-response outcome recovery, ABA sequence recovery, no-op edit recovery, and conflicting reuse rejection; typed replay; component-level `materialized_state_checks`; unknown profile rejection; read/search pagination. |
+| `test_pdcp_submit_flow.py` | Typed edit submission; atomic rollback on applicability failure; optimistic concurrency guards (`expected_target_version`, `expected_current_hash`); row locking independence across targets. |
 | `test_save.py` | `patchdiff_save` creates snapshots and cycle rotation without mutating target content; ledger reads filter to active cycle. |
 | `test_mcp_history_paging_live.py` | actual PostgreSQL multi-page attempt/ledger traversal, filters/gaps, inserted newer rows, empty/not-found targets and real stdio history. |
 | `test_replay.py` | Reconstructs state from initial upload snapshot + accepted logs; detects tampered logs and broken version chains. |
@@ -103,18 +101,11 @@ Run with: `$env:PATCHDIFF_DATABASE_URL="..."; pytest backend/tests/integration -
 
 Run with: `$env:PYTHONPATH="backend"; python backend/tests/verification/offline_eval.py`
 
-The original comparison evaluates 5 scenarios across 3 proposal variants:
-1. `pdcp`: PDCP v0.2.3 with 7 mandatory manifest fields per edit.
-2. `typed_match`: typed `patchdiff-tx/1` with matched advisory prose (`intent` + per-edit `change_id`, `rationale`, `risk`).
-3. `typed_min`: minimal typed `patchdiff-tx/1` (`intent` + `{match, replace}`).
+The evaluator checks both minimal and metadata-bearing `patchdiff-tx/1`
+proposals against accepted verdicts and expected hashes. It measures UTF-8
+bytes for the canonical stored record and the MCP argument JSON.
 
-Checks:
-- Exact verdict and `after_hash` equivalence across representations through the shared applier (except where PDCP fails on delimiter lines).
-- Persisted record UTF-8 byte accounting (`append_only_pdcp_logs.pdcp_content`).
-- MCP tool request JSON wire byte accounting (`tools/call` arguments).
-- Strict separation of serialization framing overhead from reduced-manifest prose savings.
-
-Five additional guarded `patchdiff-tx/3` scenarios measure canonical record bytes and complete UTF-8 JSON-RPC request lines (fixed id=1 and one LF): whole-target rewrite, empty target, empty replacement, Unicode/quotes/CRLF and 2 KB rewrite. Accepted content/hash oracles use immutable 0.4.0; no cross-format replacement equivalence, live transport, persistence, timing or representative workload is measured. Only the named `payload has a delimiter line` scenario permits the legacy `block_malformed` versus typed acceptance exception.
+Five additional guarded `patchdiff-tx/3` scenarios measure canonical record bytes and complete UTF-8 JSON-RPC request lines (fixed id=1 and one LF): whole-target rewrite, empty target, empty replacement, Unicode/quotes/CRLF and 2 KB rewrite. Accepted content/hash oracles use immutable 0.4.0; no cross-format replacement equivalence, live transport, persistence, timing or representative workload is measured.
 
 ## Guarded replacement and advisory tool coverage
 
@@ -122,4 +113,4 @@ Unit and live PostgreSQL/stdio coverage includes inclusive raw/result byte/code-
 
 ## Schema and migration regression coverage
 
-The submission schema domain tests validate actual tools/list schemas against live service results and durable audit rows, including null guards, whitespace prose, integer boundaries and newline-suffixed IDs/hashes. The migration tests independently create owned schemas for populated legacy preservation and typed-history downgrade refusal, including unchanged rows/revision and replay after refusal.
+The submission schema domain tests validate actual tools/list schemas against live service results and durable audit rows, including null guards, whitespace prose, integer boundaries and newline-suffixed IDs/hashes. The migration tests independently create owned schemas for populated audit-record preservation and typed-history downgrade refusal, including unchanged rows/revision and replay after refusal.

@@ -457,18 +457,18 @@ Multiple MCP hosts, background workers, or subagents may connect to the same Pat
 
 PatchDIFF exposes transaction and inspection tools through startup profiles, with
 identical advertisement and dispatch permissions: editor (default, seven tools),
-unobserved (five), observed (six), and explicit full compatibility (all 22).
+unobserved (five), observed (six), workspace (five) and trusted lifecycle full (17).
 Trusted initialization/export/history uses full; strict observed service admission
 is independently configured. Structural batching extends two existing tools,
 patchdiff_observe_scope and patchdiff_submit_observed_operations.
 
 1. **Target Initialization & Export (`4` tools):** `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`.
-2. **Authoritative Bounded Reads & Search (`4` tools):** `patchdiff_read_target` (code-point slices, `4,000` default / `8,000` max, returning `next_start`), `patchdiff_read_lines` (1-based inclusive `start_line` / `end_line` ranges with `offset`, `max_chars`, and `include_line_starts`, capped at `4,000` default / `8,000` max Unicode code points per page and returning range-relative `next_offset` and absolute `next_start`), `patchdiff_find_occurrences` (exact substring search with `40` default / `400` max side context, up to `200` results), and `patchdiff_build_prompt_context` (labelled convenience prefix wrapper).
+2. **Authoritative Bounded Reads & Search (`3` tools):** `patchdiff_read_target` (code-point slices, `4,000` default / `8,000` max, returning `next_start`), `patchdiff_read_lines` (1-based inclusive `start_line` / `end_line` ranges with `offset`, `max_chars`, and `include_line_starts`, capped at `4,000` default / `8,000` max Unicode code points per page and returning range-relative `next_offset` and absolute `next_start`), `patchdiff_find_occurrences` (exact substring search with `40` default / `400` max side context, up to `200` results).
 3. **Guarded Transaction Submission (`3` tools):** `patchdiff_submit_edits` (`tx/1`), `patchdiff_submit_operations` (`tx/2`), and `patchdiff_submit_replacement` (`tx/3`).
 4. **Advisory Dry-Run Preview (`1` tool):** `patchdiff_preview` (`<= 32,768 B` response budget).
 5. **Checkpointing, Replay & Bounded History (`4` tools):** `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, and `patchdiff_get_manifest_ledger`.
 
-These functional examples do not enumerate the compatibility catalog. Immutable
+These functional examples do not enumerate the trusted lifecycle catalog. Immutable
 `PATCHDIFF_MCP_RESPONSE_MODE=detailed|compact` selects external presentation
 independently of profile; detailed remains the default. Compact observed successes
 omit supplementary change evidence or duplicate discovery metadata, preserving
@@ -509,7 +509,7 @@ All quantitative and comparative claims in this paper follow a four-tier classif
 1. **`Enforced Contract / Hard Cap`**: Deterministic byte, code-point, or row-count bounds enforced in software.
 2. **`Measured (PatchDIFF-only)`**: Deterministic byte counts from `backend/tests/verification/offline_eval.py` and local reference workload medians.
 3. **`Analytical Comparison`**: Structural complexity and round-trip comparisons under stated workflow assumptions.
-4. **`Empirically Validated / Open Hypotheses`**: Live-model 2×2 factorial evaluation ($N=12$ independent runs in the Modernized evaluation; see [modernized benchmark](../benchmarks/modernized-benchmark-report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)) evaluating `H1`, `H7`, and Git environment interaction; remaining multi-agent contention (`H3`), long-horizon session compaction (`H4`), and human review (`H6`) studies remain open empirical investigations.
+4. **`Empirically Validated / Open Hypotheses`**: Live-model 2×2 factorial evaluation ($N=12$ independent runs in the Modernized evaluation; see [modernized benchmark](../benchmarks/modernized-benchmark-report.md); legacy confounded baseline at [earlier baseline report](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/git_benchmark_report.md)) evaluating `H1`, `H7`, and Git environment interaction; remaining multi-agent contention (`H3`), long-horizon session compaction (`H4`), and human review (`H6`) studies remain open empirical investigations.
 
 ### 23.1 Deterministic Payload Byte Scaling & Reference Runtime Characteristics (`Measured`)
 
@@ -635,7 +635,7 @@ PatchDIFF deliberately trades heuristic permissiveness for deterministic safety.
 5. **No semantic or task-level correctness guarantee:**
    - An accepted PatchDIFF transaction guarantees that precondition guards held and exact text/span operations succeeded (`protocol_valid: true`, `transaction_valid: true`). It never guarantees that the resulting code compiles, passes tests, or satisfies the user's intent (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
 6. **Empirically measured efficiency and remaining open questions (`Decision A8`):**
-   - Live-model token savings, step reductions, and transaction validity were confirmed on the 5-file canary workload across $N=12$ independent runs in the Modernized evaluation ([modernized benchmark](../benchmarks/modernized-benchmark-report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)). Multi-agent concurrent contention (`H3`), long-horizon multi-hour sessions (`H4`), and human reviewer error-identification studies (`H6`) remain open empirical investigations.
+   - Live-model token savings, step reductions, and transaction validity were confirmed on the 5-file canary workload across $N=12$ independent runs in the Modernized evaluation ([modernized benchmark](../benchmarks/modernized-benchmark-report.md); legacy confounded baseline at [earlier baseline report](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/git_benchmark_report.md)). Multi-agent concurrent contention (`H3`), long-horizon multi-hour sessions (`H4`), and human reviewer error-identification studies (`H6`) remain open empirical investigations.
 
 ---
 

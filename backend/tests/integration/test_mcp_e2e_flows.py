@@ -6,7 +6,7 @@ from app.mcp import tools  # noqa: F401
 from app.mcp.server import registry
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyPdcpLogs, CloudTargetFiles
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import edit_pairs
 
 
 def test_mcp_happy_path_upload_context_submit_log_ledger_export() -> None:
@@ -18,21 +18,15 @@ def test_mcp_happy_path_upload_context_submit_log_ledger_export() -> None:
     )
     target_id = upload["target_file_id"]
 
-    context = registry.call(
-        "patchdiff_build_prompt_context",
-        target_file_id=target_id,
-        user_request="Replace the old sentence.",
-    )
-    assert context["target_file_id"] == target_id
-    assert context["current_hash"] == upload["current_hash"]
-    assert context["version"] == 0
-    assert context["target_context"] == "Title\n\nOld sentence.\n"
-    assert "MATCH/REPLACE" in context["pdcp_rules"]
+    observed = registry.call("patchdiff_read_target", target_file_id=target_id)
+    assert observed["current_hash"] == upload["current_hash"]
+    assert observed["version"] == 0
+    assert observed["text"] == "Title\n\nOld sentence.\n"
 
     accepted = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("Old sentence.", "New sentence.")),
+        intent="Update text", edits=edit_pairs(("Old sentence.", "New sentence.")),
         expected_target_version=0,
     )
     assert accepted["status"] == "accepted"
@@ -67,9 +61,9 @@ def test_mcp_rejection_path_logs_rejection_without_target_or_ledger_mutation() -
     before = registry.call("patchdiff_get_target", target_file_id=target_id)
 
     rejected = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("Missing text.", "New text.")),
+        intent="Update text", edits=edit_pairs(("Missing text.", "New text.")),
         expected_target_version=0,
     )
 
@@ -90,7 +84,7 @@ def test_mcp_rejection_path_logs_rejection_without_target_or_ledger_mutation() -
     assert ledger_payload["entries"] == []
 
 
-def test_mcp_regeneration_flow_preserves_parent_logs_and_mutates_target_once() -> None:
+def test_mcp_host_revision_preserves_parent_logs_and_mutates_target_once() -> None:
     upload = registry.call(
         "patchdiff_handle_upload",
         filename="regen.txt",
@@ -100,32 +94,25 @@ def test_mcp_regeneration_flow_preserves_parent_logs_and_mutates_target_once() -
     target_id = upload["target_file_id"]
 
     rejected = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("Missing sentence.", "Beta sentence.")),
+        intent="Update text", edits=edit_pairs(("Missing sentence.", "Beta sentence.")),
         expected_target_version=0,
     )
     assert rejected["status"] == "rejected"
 
-    regen_context = registry.call(
-        "patchdiff_get_regeneration_context",
-        pdcp_log_id=rejected["pdcp_log_id"],
-        user_request="Replace Alpha with Beta.",
+    observed = registry.call("patchdiff_read_target", target_file_id=target_id)
+    revised = registry.call(
+        "patchdiff_submit_edits",
+        target_file_id=target_id,
+        expected_target_version=observed["version"],
+        parent_pdcp_log_id=rejected["pdcp_log_id"],
+        attempt=1,
+        intent="Replace Alpha with Beta",
+        edits=edit_pairs(("Alpha sentence.", "Beta sentence.")),
     )
-    assert regen_context["status"] == "ready"
-    assert regen_context["failure_reason"] == "match_absent"
-
-    regenerated = registry.call(
-        "patchdiff_request_regeneration",
-        pdcp_log_id=rejected["pdcp_log_id"],
-        user_request="Replace Alpha with Beta.",
-        regenerated_pdcp_content=pdcp_for(target_id, ("Alpha sentence.", "Beta sentence."), change_id_prefix="regen"),
-        regeneration_attempt=1,
-        regeneration_source="mcp_e2e_test",
-    )
-    assert regenerated["status"] == "accepted"
-    assert regenerated["parent_pdcp_log_id"] == rejected["pdcp_log_id"]
-    assert regenerated["new_pdcp_log_id"] != rejected["pdcp_log_id"]
+    assert revised["status"] == "accepted"
+    assert revised["pdcp_log_id"] != rejected["pdcp_log_id"]
 
     target = registry.call("patchdiff_get_target", target_file_id=target_id)
     assert target["current_content"] == "Beta sentence."
@@ -141,7 +128,7 @@ def test_mcp_regeneration_flow_preserves_parent_logs_and_mutates_target_once() -
         assert [row.status for row in logs] == ["rejected", "accepted"]
         assert str(logs[1].parent_pdcp_log_id) == rejected["pdcp_log_id"]
         assert logs[1].regeneration_attempt == 1
-        assert logs[1].regeneration_source == "mcp_e2e_test"
+        assert logs[1].regeneration_source == "host"
 
         db_target = session.get(CloudTargetFiles, target_uuid)
         assert db_target.version == 1

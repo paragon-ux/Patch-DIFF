@@ -37,8 +37,7 @@ Tool fields and byte budgets are in [MCP tool contracts](mcp-tools.md#guarded-ed
 This document defines the deterministic PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`).
 
 The runtime accepts canonical target text and a declarative transaction
-in `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or frozen legacy
-`.pdcp` v0.2.3. It checks structure and applicability, simulates the
+in `patchdiff-tx/1`, `patchdiff-tx/2` or `patchdiff-tx/3`. It checks structure and applicability, simulates the
 operations in memory and computes change facts. Replay runs the recorded
 transaction under its original execution profile.
 
@@ -53,7 +52,7 @@ As-built record and verification evidence: [product change record](../papers/pro
 
 ```text
 canonical UTF-8 target text
-+ declarative non-executable transaction (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3 or .pdcp 0.2.3)
++ declarative non-executable transaction (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3)
 -> lowering into ParsedPDCP representation
 -> exact deterministic MATCH (all exact spans counted)
 -> immediate sequential REPLACE simulation in memory
@@ -65,11 +64,10 @@ canonical UTF-8 target text
 -> deterministic replay dispatching on (protocol_version, runtime_version)
 ```
 
-All four input formats lower into the same internal `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
+All three input formats lower into the same internal `ParsedPDCP` representation and execute through the same `apply_pdcp_transaction` applier:
 - **`patchdiff-tx/1` (primary typed)**: Structured JSON with required `intent`, required state guard (`expected_target_version` and/or `expected_current_hash`), ordered `edits[]` (`match`, `replace`, optional `change_id`, `rationale`, `risk`, `occurrence_index`, `anchor_before`, `anchor_after`), optional `client_request_id`, `parent_pdcp_log_id`, and `attempt`. Persisted in `append_only_pdcp_logs.pdcp_content` as deterministic canonical JSON.
 - **`patchdiff-tx/2` (guarded operations)**: Ordered explicit match/span operations, required intent and state guard, sequential canonical code-point spans with exact expected text and optional adjacent-text guards; immutable profile 0.3.0, or 0.5.0 when the guards are used.
 - **`patchdiff-tx/3` (sole replacement)**: Exactly one guarded `replace_all`, immutable profile 0.4.0; fresh size admission is a service boundary, not a replay grammar constraint.
-- **Legacy `.pdcp` v0.2.3 & historical profiles (`0.1.0`–`0.2.1`)**: Frozen legacy text format and historical replay profiles are specified in [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md).
 
 None of these formats is executable code.
 
@@ -130,8 +128,6 @@ A conflicting reuse of an existing request key is a separately audited context_i
 - Valid `risk` values: `"low"`, `"medium"`, `"high"`.
 - `change_id` defaults to `chg_001`, `chg_002`, ... by 1-based index if omitted or `null`. Duplicate `change_id`s within a transaction reject with `FailureReason.MANIFEST_INVALID`.
 
-### Legacy PDCP (v0.2.3) Rules
-Frozen `.pdcp` v0.2.3 header, 7-field `# MANIFEST` grammar, and delimiter-collision (`FailureReason.BLOCK_MALFORMED`) rules are documented in [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#1-frozen-pdcp-v023-wire-format).
 
 ### Executable Logic Rejection
 Reject obvious executable code outside payloads: imports, functions, classes, loops, conditionals, shell commands, dynamic evaluation, filesystem calls, network calls, tool calls (`FailureReason.EXECUTABLE_LOGIC_DETECTED`).
@@ -151,7 +147,7 @@ Matching is:
 All exact occurrences of `MATCH` across the buffer are enumerated, including overlapping occurrences (advancing the search index by 1 code point rather than `len(match)`). For example, matching `"aa"` in `"aaa"` yields 2 occurrences (spans `0..2` and `1..3`) and rejects with `FailureReason.MATCH_AMBIGUOUS` unless explicitly disambiguated.
 
 ### Historical Replay Profiles (`patchdiff-mvp-0.1.0` through `0.2.1`)
-Historical logs accepted under `patchdiff-mvp-0.1.0`, `0.2.0`, or `0.2.1` are replayed using their recorded profile settings so that accepted history remains deterministically replayable. See [LEGACY_COMPATIBILITY.md](../legacy/LEGACY_COMPATIBILITY.md#4-historical-runtime-replay-profiles).
+Historical logs accepted under `patchdiff-mvp-0.1.0`, `0.2.0`, or `0.2.1` are replayed using their recorded profile settings so that accepted history remains deterministically replayable..
 
 ## Disambiguation
 
@@ -159,7 +155,6 @@ In match-capable runtime profiles 0.2.2 and later, supplied selecting fields are
 1. `occurrence_index`: 1-based index over the global list of exact occurrences in left-to-right order.
 2. `anchor_before`: exact substring that must appear before the candidate span.
 3. `anchor_after`: exact substring that must appear after the candidate span.
-4. `region_hint`: legacy advisory field supported on `.pdcp` v0.2.3 only (does not select by itself; rejected on typed path).
 
 If 0 occurrences match: reject with `FailureReason.MATCH_ABSENT`.
 If multiple occurrences exist with an empty disambiguation mapping: reject with FailureReason.MATCH_AMBIGUOUS. A nonempty advisory-only mapping (for example region_hint alone) rejects with FailureReason.DISAMBIGUATION_INVALID; advisory metadata cannot select an occurrence. A singleton with no selecting fields succeeds.
@@ -185,7 +180,7 @@ For each accepted edit, the runtime computes authoritative facts against the pro
 - `matched_sha256`: SHA-256 of matched text.
 - `replacement_sha256`: SHA-256 of replacement text.
 
-These facts are persisted in `append_only_manifest_ledger.derived_json` for both typed (`origin='typed'`) and legacy PDCP (`origin='pdcp_manifest'`) transactions.
+These facts are persisted in `append_only_manifest_ledger.derived_json` for accepted typed transactions (`origin='typed'`).
 
 ## Validation Stages & Validity Reporting
 
@@ -275,7 +270,7 @@ Replay reconstructs canonical target state from the `initial_upload` snapshot pl
 1. Verify initial snapshot content against `initial_snapshot.content_hash`.
 2. For each accepted log row in sequence:
    - Verify `log.target_file_id == target.target_file_id`.
-   - Dispatch parser on `log.protocol_version` (`"0.2.3"`, `"patchdiff-tx/1"`, span-capable `"patchdiff-tx/2"` or sole replacement `"patchdiff-tx/3"`). tx/3 requires replacement-capable profile 0.4.0; replay bypasses fresh service admission size limits.
+   - Dispatch parser on `log.protocol_version` (`"patchdiff-tx/1"`, span-capable `"patchdiff-tx/2"` or sole replacement `"patchdiff-tx/3"`). tx/3 requires replacement-capable profile 0.4.0; replay bypasses fresh service admission size limits.
    - Resolve matcher profile via `SUPPORTED_RUNTIME_PROFILES[log.runtime_version]`.
    - Verify contiguous version chain (`before_version == expected_version`, `after_version == expected_version + 1`).
    - Verify `before_hash == canonical_sha256(replay_buffer)`.

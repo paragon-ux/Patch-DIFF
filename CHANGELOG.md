@@ -1,5 +1,14 @@
 # Release notes
 
+## Unreleased — workspace editing
+
+- The `workspace` MCP profile imports a project file, applies guarded edits
+  to the PostgreSQL working copy and publishes it on explicit SAVE.
+- Submission and preview accept `patchdiff-tx/1`, `patchdiff-tx/2` and
+  `patchdiff-tx/3`. Retired `patchdiff_submit_pdcp`,
+  `patchdiff_build_prompt_context`, `patchdiff_get_regeneration_context`,
+  `patchdiff_build_regeneration_prompt` and `patchdiff_request_regeneration`.
+
 ## Unreleased — PR #11 friction follow-up
 
 Fixes for the 20 findings of the PR #11 agentic friction review. Decisions: [friction follow-up](docs/usability/friction-followup-decision.md).

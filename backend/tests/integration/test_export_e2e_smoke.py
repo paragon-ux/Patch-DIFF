@@ -3,7 +3,7 @@ from sqlalchemy import select
 from app.mcp.server import registry
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import edit_pairs
 
 
 def test_export_does_not_mutate_target_state() -> None:
@@ -23,7 +23,7 @@ def test_export_does_not_mutate_target_state() -> None:
     assert before == after
 
 
-def test_upload_prompt_reject_regenerate_accept_save_replay_export_smoke() -> None:
+def test_upload_read_reject_revise_save_replay_export_smoke() -> None:
     upload = registry.call(
         "patchdiff_handle_upload",
         filename="story.txt",
@@ -32,55 +32,30 @@ def test_upload_prompt_reject_regenerate_accept_save_replay_export_smoke() -> No
     )
     target_id = upload["target_file_id"]
 
-    prompt_context = registry.call(
-        "patchdiff_build_prompt_context",
-        target_file_id=target_id,
-        user_request="Replace the old sentence.",
-    )
-    assert prompt_context["target_file_id"] == target_id
-    assert prompt_context["target_context"] == "Title\n\nOld sentence.\n"
-    assert "MATCH/REPLACE" in prompt_context["pdcp_rules"]
+    observed = registry.call("patchdiff_read_target", target_file_id=target_id)
+    assert observed["text"] == "Title\n\nOld sentence.\n"
 
     rejected = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("Missing sentence.", "New sentence.")),
+        intent="Update text", edits=edit_pairs(("Missing sentence.", "New sentence.")),
         expected_target_version=0,
     )
     assert rejected["status"] == "rejected"
     assert rejected["failure_reason"] == "match_absent"
     assert rejected["after_hash"] is None
-    assert rejected["diagnostic"]["requires_new_pdcp"] is True
+    assert rejected["diagnostic"]["requires_new_submission"] is True
 
-    regen_context = registry.call(
-        "patchdiff_get_regeneration_context",
-        pdcp_log_id=rejected["pdcp_log_id"],
-        user_request="Replace the old sentence.",
+    observed = registry.call("patchdiff_read_target", target_file_id=target_id)
+    accepted_result = registry.call(
+        "patchdiff_submit_edits",
+        target_file_id=target_id,
+        expected_target_version=observed["version"],
+        parent_pdcp_log_id=rejected["pdcp_log_id"],
+        attempt=1,
+        intent="Replace the old sentence",
+        edits=edit_pairs(("Old sentence.", "New sentence."), change_id_prefix="retry"),
     )
-    assert regen_context["failure_reason"] == "match_absent"
-    assert regen_context["current_hash"] == rejected["current_hash"]
-
-    regen_prompt = registry.call(
-        "patchdiff_build_regeneration_prompt",
-        pdcp_log_id=rejected["pdcp_log_id"],
-        user_request="Replace the old sentence.",
-    )
-    assert "Generate a fresh declarative .pdcp transaction" in regen_prompt["prompt"]
-
-    regenerated = registry.call(
-        "patchdiff_request_regeneration",
-        pdcp_log_id=rejected["pdcp_log_id"],
-        user_request="Replace the old sentence.",
-        regenerated_pdcp_content=pdcp_for(
-            target_id,
-            ("Old sentence.", "New sentence."),
-            change_id_prefix="regen",
-        ),
-        regeneration_attempt=1,
-        regeneration_source="smoke_test",
-    )
-    assert regenerated["status"] == "accepted"
-    accepted_result = regenerated["result"]
     assert accepted_result["status"] == "accepted"
     assert accepted_result["version"] == 1
     assert accepted_result["manifest_entries_added"] == 1
@@ -100,7 +75,7 @@ def test_upload_prompt_reject_regenerate_accept_save_replay_export_smoke() -> No
         assert [row.status for row in logs] == ["rejected", "accepted"]
         assert str(logs[1].parent_pdcp_log_id) == rejected["pdcp_log_id"]
         assert len(ledger_rows) == 1
-        assert ledger_rows[0].change_id == "regen_001"
+        assert ledger_rows[0].change_id == "retry_001"
 
     saved = registry.call("patchdiff_save", target_file_id=target_id)
     assert saved["status"] == "saved"

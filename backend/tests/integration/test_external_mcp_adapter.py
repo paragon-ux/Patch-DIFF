@@ -6,7 +6,7 @@ from app.mcp import external_adapter
 from app.mcp.external_adapter import ExternalMCPAdapter
 from app.storage.db import SessionLocal
 from app.storage.models import CloudTargetFiles
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import edit_pairs
 
 
 def _tool_payload(result: dict) -> dict:
@@ -23,9 +23,10 @@ def test_external_mcp_tool_discovery_exposes_expected_patchdiff_tools() -> None:
     assert names == set(external_adapter.EXPECTED_TOOL_NAMES)
     assert {
         "patchdiff_handle_upload",
-        "patchdiff_build_prompt_context",
-        "patchdiff_submit_pdcp",
-        "patchdiff_get_regeneration_context",
+        "patchdiff_submit_edits",
+
+
+
         "patchdiff_save",
         "patchdiff_replay",
         "patchdiff_export_target",
@@ -89,10 +90,10 @@ def test_external_upload_and_submit_use_existing_behavior_without_direct_mutatio
 
     accepted = _tool_payload(
         adapter.call_tool(
-            "patchdiff_submit_pdcp",
+            "patchdiff_submit_edits",
             {
                 "target_file_id": target_id,
-                "pdcp_content": pdcp_for(target_id, ("old", "new")),
+                "intent": "Update text", "edits": edit_pairs(("old", "new")),
                 "expected_target_version": 0,
             },
         )
@@ -112,7 +113,7 @@ def test_external_mcp_adapter_does_not_mutate_storage_or_call_runtime_directly()
     assert ".current_content =" not in source
     assert "CloudTargetFiles" not in source
     assert "SessionLocal" not in source
-    assert "submit_pdcp(" not in source
+    assert "submit_edits(" not in source
     assert "save_target(" not in source
     assert "replay_target(" not in source
     assert "export_target(" not in source

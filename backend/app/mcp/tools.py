@@ -18,18 +18,11 @@ from app.services.pdcp_service import (
     submit_edits,
     submit_observed_operations,
     submit_operations,
-    submit_pdcp,
     submit_replacement,
 )
 from app.services.scope_observation_service import observe_scope
 from app.pdcp.observed_batch import BATCH_UNSET
 from app.services.rejection_context import response_current_context
-from app.services.prompt_context_service import build_prompt_context
-from app.services.regeneration_service import (
-    build_regeneration_context,
-    build_regeneration_prompt,
-    request_regeneration,
-)
 from app.services.read_service import (
     DEFAULT_HISTORY_LIMIT,
     MAX_HISTORY_LIMIT,
@@ -140,37 +133,6 @@ def patchdiff_initialize_target(
         "active_editing_cycle_id": str(result.active_editing_cycle_id),
         "source_line_endings": result.source_line_endings,
     }
-
-
-@registry.register("patchdiff_submit_pdcp")
-def patchdiff_submit_pdcp(
-    *,
-    target_file_id: str,
-    pdcp_content: str,
-    expected_target_version: int | None = None,
-    expected_current_hash: str | None = None,
-    source: str = "model_response",
-    parent_pdcp_log_id: str | None = None,
-    regeneration_attempt: int | None = None,
-    regeneration_source: str | None = None,
-    client_request_id: str | None = None,
-    include_correlation_id: bool = False,
-) -> dict[str, Any]:
-    with SessionLocal() as session:
-        result = submit_pdcp(
-            session,
-            target_file_id=target_file_id,
-            pdcp_content=pdcp_content,
-            expected_target_version=expected_target_version,
-            expected_current_hash=expected_current_hash,
-            submission_source=source,
-            parent_pdcp_log_id=parent_pdcp_log_id,
-            regeneration_attempt=regeneration_attempt,
-            regeneration_source=regeneration_source,
-            client_request_id=client_request_id,
-            include_correlation_id=include_correlation_id,
-        )
-    return _submit_result_to_payload(result)
 
 
 @registry.register("patchdiff_submit_edits")
@@ -347,11 +309,11 @@ def patchdiff_read_lines(*, target_file_id: str, start_line: int = 1, end_line: 
 @registry.register("patchdiff_preview")
 def patchdiff_preview(
     *, target_file_id: str, format: str, intent: str | None = _UNSET, edits: list[dict] | None = _UNSET,
-    operations: list[dict] | None = _UNSET, replacement: str | None = _UNSET, pdcp_content: str | None = _UNSET,
+    operations: list[dict] | None = _UNSET, replacement: str | None = _UNSET,
     expected_target_version: int | None = None, expected_current_hash: str | None = None,
 ) -> dict[str, Any]:
     proposal = {key: value for key, value in {"intent": intent, "edits": edits, "operations": operations,
-                "replacement": replacement, "pdcp_content": pdcp_content}.items() if value is not _UNSET}
+                "replacement": replacement}.items() if value is not _UNSET}
     with SessionLocal() as session:
         return preview(session, target_file_id=target_file_id, format=format, **proposal,
                        expected_target_version=expected_target_version, expected_current_hash=expected_current_hash)
@@ -739,70 +701,6 @@ def patchdiff_get_manifest_ledger(
         "has_more": has_more,
         "next_sequence": next_sequence,
     }
-
-
-@registry.register("patchdiff_build_prompt_context")
-def patchdiff_build_prompt_context(
-    *,
-    target_file_id: str,
-    user_request: str,
-    context_policy: str = "relevant_spans",
-) -> dict[str, Any]:
-    with SessionLocal() as session:
-        return build_prompt_context(
-            session,
-            target_file_id=target_file_id,
-            user_request=user_request,
-            context_policy=context_policy,
-        )
-
-
-@registry.register("patchdiff_get_regeneration_context")
-def patchdiff_get_regeneration_context(
-    *,
-    pdcp_log_id: str,
-    user_request: str | None = None,
-) -> dict[str, Any]:
-    with SessionLocal() as session:
-        return build_regeneration_context(session, pdcp_log_id=pdcp_log_id, user_request=user_request)
-
-
-@registry.register("patchdiff_build_regeneration_prompt")
-def patchdiff_build_regeneration_prompt(
-    *,
-    pdcp_log_id: str,
-    user_request: str | None = None,
-) -> dict[str, Any]:
-    with SessionLocal() as session:
-        context = build_regeneration_context(session, pdcp_log_id=pdcp_log_id, user_request=user_request)
-        return build_regeneration_prompt(context)
-
-
-@registry.register("patchdiff_request_regeneration")
-def patchdiff_request_regeneration(
-    *,
-    pdcp_log_id: str,
-    user_request: str | None = None,
-    regenerated_pdcp_content: str | None = None,
-    regeneration_attempt: int = 1,
-    regeneration_source: str = "mcp_host",
-    expected_target_version: int | None = None,
-    expected_current_hash: str | None = None,
-) -> dict[str, Any]:
-    with SessionLocal() as session:
-        result = request_regeneration(
-            session,
-            pdcp_log_id=pdcp_log_id,
-            user_request=user_request,
-            regenerated_pdcp_content=regenerated_pdcp_content,
-            regeneration_attempt=regeneration_attempt,
-            regeneration_source=regeneration_source,
-            expected_target_version=expected_target_version,
-            expected_current_hash=expected_current_hash,
-        )
-    if "result" in result and isinstance(result["result"], SubmitPDCPResult):
-        result["result"] = _submit_result_to_payload(result["result"])
-    return result
 
 
 def _submit_result_to_payload(result: SubmitPDCPResult) -> dict[str, Any]:

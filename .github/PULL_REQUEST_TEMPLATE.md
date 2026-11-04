@@ -29,4 +29,4 @@ List commands, results, environment, database, and tested SHA. Distinguish local
 
 ## Review record
 
-Link the category-separated report under docs/reviews/. Every category needs its own coverage, separate P1/P2/P3 finding lists (explicitly empty or unassessed where applicable), verification gaps, and verdict. Include stable finding IDs and closure evidence. The author impact table is not a completed independent review.
+Record the category-separated review and evidence in the PR with the reviewed base and head. Keep any local report under `docs/reviews/`. Every category needs its own coverage, separate P1/P2/P3 finding lists (explicitly empty or unassessed where applicable), verification gaps, and verdict. Include stable finding IDs and closure evidence. The author impact table is not a completed independent review.

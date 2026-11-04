@@ -53,25 +53,20 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "pass its path relative to the workspace root as filename, set from_workspace=true, and omit content. "
         "Use the returned target_file_id to read, search, submit edits, and save. For inline text, supply content instead."
     ),
-    "patchdiff_build_prompt_context": "Convenience: build prompt context (bounded target PREFIX, not retrieval; see context_truncated). Prefer patchdiff_read_target / patchdiff_find_occurrences.",
-    "patchdiff_submit_pdcp": "Submit untrusted legacy .pdcp (v0.2.3) content through deterministic validation and commit services.",
     "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. "
                                    "Spans refer to the text after earlier operations; for several edits, use descending offsets. "
                                    f"Uses immutable runtime {OPERATIONS_RUNTIME_VERSION}; no replace_all. Optional span expected_before/expected_after "
                                    f"check the exact adjacent text and record runtime {SPAN_CONTEXT_RUNTIME_VERSION}." + _GUARD_RULE + _CODE_POINTS,
     "patchdiff_submit_edits": "Submit a typed edit transaction (exact match/replace strings as fields). Edits apply sequentially: occurrence_index counts the text after earlier edits, so find_occurrences indexes are only valid for the first edit."
-                              + _GUARD_RULE + " Supports optional client_request_id idempotency. Same validation, atomic commit and logging as .pdcp.",
+                              + _GUARD_RULE + " Supports optional client_request_id idempotency. Commits atomically and records the attempt.",
     "patchdiff_read_target": "Authoritative bounded read of canonical target text by code-point offset, with version, hash, and next_start continuation." + _CODE_POINTS,
     "patchdiff_submit_replacement": f"Submit a sole guarded replace_all as {REPLACEMENT_PROTOCOL_VERSION}, immutable runtime "
                                     f"{REPLACEMENT_RUNTIME_VERSION}. Fresh raw and canonical replacement limits: "
                                     f"{MAX_REPLACEMENT_CHARS:,} code points and {MAX_REPLACEMENT_BYTES:,} UTF-8 bytes, inclusive. "
                                     "Empty text allowed. Existing-key recovery precedes admission." + _GUARD_RULE,
     "patchdiff_read_lines": "Read an inclusive one-based LF line range from one observed version/hash. Trailing LF creates a final empty line. offset/next_offset are code points within the selected range and next_start is the absolute continuation; include_line_starts lists absolute line offsets. Text defaults to 4000 and caps at 8000. Each page is a new observation." + _CODE_POINTS,
-    "patchdiff_preview": "Advisory fresh-proposal evaluation without audit, request keys, writes or row locks. Explicit format 0.2.3, patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3; submit must recheck guards. Prefer version guards to detect ABA changes.",
+    "patchdiff_preview": "Advisory fresh-proposal evaluation without audit, request keys, writes or row locks. Explicit format patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3; submit must recheck guards. Prefer version guards to detect ABA changes.",
     "patchdiff_find_occurrences": "List exact occurrences of a string (overlapping counted) with offsets, bounded context, 1-based occurrence_index, and start_occurrence/max_results pagination. Indexes describe the current target, which a transaction's first edit sees." + _CODE_POINTS,
-    "patchdiff_get_regeneration_context": "DEPRECATED: host-owned retry replaces this. Return regeneration context for a rejected attempt.",
-    "patchdiff_build_regeneration_prompt": "DEPRECATED: host-owned retry replaces this. Build a regeneration prompt from a rejected attempt.",
-    "patchdiff_request_regeneration": "DEPRECATED: use patchdiff_submit_edits with parent_pdcp_log_id. Submit regenerated .pdcp content as a new attempt (guards pass through when supplied).",
     "patchdiff_save": (
         "Checkpoint the current target and advance its editing cycle. Set sync_workspace=true to also publish "
         "the edited bytes to the workspace file. With workspace sync disabled, SAVE only checkpoints PostgreSQL. "
@@ -413,10 +408,7 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "source": "Advisory submission source label recorded on the attempt.",
     "parent_pdcp_log_id": "UUID of the rejected attempt this proposal retries (same target).",
     "attempt": "Your own 1-based retry counter, recorded as lineage.",
-    "regeneration_attempt": "Legacy retry counter, recorded as lineage.",
-    "regeneration_source": "Legacy retry source label.",
     "client_request_id": "Idempotency key: 1-128 printable ASCII characters without whitespace. Resend the identical proposal with it to recover a lost response.",
-    "pdcp_content": "Raw legacy PDCP 0.2.3 text.",
     "edits": "Ordered exact match/replace edits; each sees the text after earlier edits.",
     "operations": "Ordered match/span operations; span offsets refer to the text after earlier operations.",
     "replacement": "Complete replacement text for the whole target.",
@@ -447,13 +439,10 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "content_hash": "Filter attempts by pdcp_content_hash.",
     "include_content": "Return stored pdcp_content (bounded per page; the first entry is always whole).",
     "pdcp_log_id": "Attempt UUID.",
-    "user_request": "Original user request text.",
     "filename": "Document filename.",
     "content": "Initial document text; line endings are normalized to LF and recorded.",
     "content_type": "MIME type or language identifier.",
     "project_id": "Optional project UUID.",
-    "context_policy": "Context policy name.",
-    "regenerated_pdcp_content": "Regenerated legacy PDCP 0.2.3 text.",
     "query": "Optional case-insensitive substring filter over Waymark symbol names for candidate discovery, which issues no observation receipt.",
     "symbol_name": "Exact returned Waymark symbol name (or parent.name), including Markdown punctuation, to select uniquely and issue an observation_id. Ambiguity rejects.",
     "kind": "Optional Waymark symbol kind filter (e.g. function, class, method, variable, property, object, section, table_row, code_block).",
@@ -485,7 +474,6 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         "expected_target_version": {"minimum": 0, "maximum": 2**63 - 1},
         "expected_current_hash": {"pattern": r"^[0-9a-f]{64}(?![\s\S])"},
         "attempt": {"minimum": 1, "maximum": 2**31 - 1},
-        "regeneration_attempt": {"minimum": 1, "maximum": 2**31 - 1},
         "client_request_id": {"pattern": r"^[\x21-\x7e]{1,128}(?![\s\S])"},
     }.items():
         if field in properties:
@@ -543,7 +531,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             "default": "original_eol",
         })
     if name == "patchdiff_preview":
-        properties["format"]["enum"] = ["0.2.3", "patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
+        properties["format"]["enum"] = ["patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
     if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_observed_operations", "patchdiff_submit_replacement"}:
         properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {
@@ -570,7 +558,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         if field in _PARAMETER_DESCRIPTIONS and "description" not in schema_:
             schema_["description"] = _PARAMETER_DESCRIPTIONS[field]
     if name == "patchdiff_preview" and "format" in properties:
-        properties["format"]["description"] = "Explicit format: 0.2.3, patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3."
+        properties["format"]["description"] = "Explicit format: patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3."
     if name == "patchdiff_submit_operations":
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
@@ -646,19 +634,20 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         }
     if name == "patchdiff_preview":
         schema["allOf"] = []
-        for format_, field in (("0.2.3", "pdcp_content"), ("patchdiff-tx/1", "edits"),
-                               ("patchdiff-tx/2", "operations"), ("patchdiff-tx/3", "replacement")):
-            branch = {"required": [field], "properties": {field: {"type": "array" if field in {"edits", "operations"} else "string"}}}
-            if format_ != "0.2.3":
-                branch["required"].append("intent")
-                branch["properties"]["intent"] = {"type": "string", "minLength": 1, "pattern": r"\S"}
-                branch["anyOf"] = [
+        for format_, field in (("patchdiff-tx/1", "edits"), ("patchdiff-tx/2", "operations"),
+                               ("patchdiff-tx/3", "replacement")):
+            branch = {
+                "required": [field, "intent"],
+                "properties": {
+                    field: {"type": "string" if field == "replacement" else "array"},
+                    "intent": {"type": "string", "minLength": 1, "pattern": r"\S"},
+                },
+                "anyOf": [
                     {"required": ["expected_target_version"], "properties": {"expected_target_version": {"type": "integer"}}},
                     {"required": ["expected_current_hash"], "properties": {"expected_current_hash": {"type": "string"}}},
-                ]
-            irrelevant = {"intent", "edits", "operations", "replacement", "pdcp_content"} - {field}
-            if format_ != "0.2.3":
-                irrelevant.remove("intent")
+                ],
+            }
+            irrelevant = {"edits", "operations", "replacement"} - {field}
             branch["not"] = {"anyOf": [{"required": [other]} for other in sorted(irrelevant)]}
             schema["allOf"].append({"if": {"properties": {"format": {"const": format_}}}, "then": branch})
     if name in TOOL_EXAMPLES:

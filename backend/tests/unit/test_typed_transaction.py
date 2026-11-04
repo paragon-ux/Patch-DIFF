@@ -1,8 +1,4 @@
-"""Typed `patchdiff-tx/1` transactions: validation, determinism, and equivalence with PDCP.
-
-All pure-core: no database. The equivalence tests prove the typed path and the
-legacy PDCP path reach the same verdict through the one shared applier.
-"""
+"""Validation, canonical encoding and deterministic application of typed edits."""
 
 from __future__ import annotations
 
@@ -15,8 +11,7 @@ from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
 from app.core.result import AcceptedCoreResult, RejectedCoreResult
 from app.pdcp.applier import apply_pdcp_transaction
-from app.pdcp.parser import PDCPParseError, parse_pdcp
-from app.pdcp.protocol_validator import ProtocolValidationError, validate_pdcp
+from app.pdcp.protocol_validator import ProtocolValidationError
 from app.pdcp.typed import (
     ALLOWED_TYPED_EDIT_FIELDS,
     REQUIRED_TYPED_EDIT_FIELDS,
@@ -43,24 +38,6 @@ def record(edits, *, intent="Update text.", version=0, hash_=None):
     )
 
 
-def pdcp_text(*changes: tuple[str, str, dict[str, str] | None]) -> str:
-    sections = [f"PDCP 0.2.3\ntarget_file_id: {TARGET_ID}\ntarget_type: text/plain"]
-    for index, (match, replace, extra) in enumerate(changes, start=1):
-        fields = {
-            "change_id": f"chg_{index:03d}",
-            "intent": "Update text.",
-            "input_state": "Old text exists.",
-            "output_state": "New text exists.",
-            "affected_region": "example",
-            "user_visible_change": "Text changes.",
-            "risk": "low",
-        }
-        fields.update(extra or {})
-        manifest = "\n".join(f"# {key}: {value}" for key, value in fields.items())
-        sections.append(f"# MANIFEST\n{manifest}\n\n<<<<<<< MATCH\n{match}\n=======\n{replace}\n>>>>>>> REPLACE")
-    return "\n\n".join(sections)
-
-
 def run_typed(target: str, edits):
     try:
         typed = parse_typed_record(record(edits))
@@ -68,15 +45,6 @@ def run_typed(target: str, edits):
         return exc.failure_reason, None
     result = apply_pdcp_transaction(target, to_parsed_transaction(typed, target_type="text/plain"))
     return _verdict(result)
-
-
-def run_pdcp(target: str, *changes):
-    try:
-        parsed = parse_pdcp(pdcp_text(*changes))
-        validate_pdcp(parsed)
-    except (PDCPParseError, ProtocolValidationError) as exc:
-        return exc.failure_reason, None
-    return _verdict(apply_pdcp_transaction(target, parsed))
 
 
 def _verdict(result):
@@ -180,7 +148,7 @@ def test_decode_record_rejects_garbage_and_other_versions() -> None:
         decode_record(json.dumps({**record([{"match": "a", "replace": "b"}]), "format": "patchdiff-tx/9"}))
 
 
-# --- equivalence with legacy PDCP through the shared applier ----------------------
+# --- typed application oracle ---------------------------------------------------
 
 CORPUS = [
     # (name, target, [(match, replace, disambiguation-or-None)])
@@ -200,7 +168,7 @@ CORPUS = [
 
 
 @pytest.mark.parametrize(("name", "target", "changes"), CORPUS, ids=[c[0] for c in CORPUS])
-def test_typed_and_pdcp_reach_identical_verdicts(name, target, changes) -> None:
+def test_typed_edits_match_expected_verdicts(name, target, changes) -> None:
     typed_edits = []
     for match, replace, extra in changes:
         edit = {"match": match, "replace": replace}
@@ -208,7 +176,25 @@ def test_typed_and_pdcp_reach_identical_verdicts(name, target, changes) -> None:
             edit[key] = int(value) if key == "occurrence_index" else value
         typed_edits.append(edit)
 
-    assert run_typed(target, typed_edits) == run_pdcp(target, *changes), name
+    expected_content = {
+        "single": "new",
+        "two_sequential": "y c",
+        "deletion": "keep keep2",
+        "multiline": "m\nl3",
+        "index_ok": "one two",
+        "anchor_ok": "x1 y x2 z",
+    }
+    expected_failure = {
+        "absent": FailureReason.MATCH_ABSENT,
+        "ambiguous": FailureReason.MATCH_AMBIGUOUS,
+        "ambiguous_overlap": FailureReason.MATCH_AMBIGUOUS,
+        "index_bad": FailureReason.DISAMBIGUATION_INVALID,
+        "sequential_invalid": FailureReason.SEQUENTIAL_MATCH_INVALID,
+        "second_absent": FailureReason.MATCH_ABSENT,
+    }
+    expected = ((None, canonical_sha256(expected_content[name])) if name in expected_content
+                else (expected_failure[name], None))
+    assert run_typed(target, typed_edits) == expected
 
 
 def test_ambiguity_diagnostic_reports_occurrence_count_including_overlaps() -> None:
@@ -231,30 +217,24 @@ def test_payload_containing_a_delimiter_line_is_accepted_when_typed() -> None:
     assert result.target_content == "intro\n>>>>>>> REPLACE\nbody\n"
 
 
-def test_same_edit_cannot_be_expressed_as_pdcp_v023() -> None:
-    with pytest.raises(PDCPParseError) as info:
-        parse_pdcp(pdcp_text(("intro\n=======\nbody", "intro\nbody", None)))
-    assert info.value.failure_reason is FailureReason.BLOCK_MALFORMED
-
-
 # --- overlap fix + derived facts --------------------------------------------------
 
 
 def test_overlap_probe_aa_in_aaa_without_selector_is_now_rejected_as_ambiguous() -> None:
     # Regression for matcher.py skipping overlapping candidates: this used to be
     # accepted and silently produced "ba".
-    assert run_pdcp("aaa", ("aa", "b", None)) == (FailureReason.MATCH_AMBIGUOUS, None)
+    assert run_typed("aaa", [{"match": "aa", "replace": "b"}]) == (FailureReason.MATCH_AMBIGUOUS, None)
 
 
 def test_overlap_probe_with_selector_picks_the_requested_span() -> None:
-    parsed = parse_pdcp(pdcp_text(("aa", "b", {"occurrence_index": "2"})))
+    parsed = to_parsed_transaction(parse_typed_record(record([{"match": "aa", "replace": "b", "occurrence_index": 2}])), target_type="text/plain")
     result = apply_pdcp_transaction("aaa", parsed)
     assert isinstance(result, AcceptedCoreResult)
     assert result.target_content == "ab"
 
 
 def test_legacy_runtime_mode_reproduces_old_accepted_history() -> None:
-    parsed = parse_pdcp(pdcp_text(("aa", "b", None)))
+    parsed = to_parsed_transaction(parse_typed_record(record([{"match": "aa", "replace": "b"}])), target_type="text/plain")
     result = apply_pdcp_transaction("aaa", parsed, overlapping_matches=False)
     assert isinstance(result, AcceptedCoreResult)
     assert result.target_content == "ba"
@@ -284,13 +264,7 @@ def test_null_change_id_defaults_to_indexed_chg_id() -> None:
     assert tx.edits[0].change_id == "chg_001"
 
 
-def test_region_hint_accepted_in_pdcp_v023_but_rejected_in_typed() -> None:
-    # PDCP v0.2.3 supports region_hint as an optional manifest field
-    assert run_pdcp("hello world", ("hello", "hi", {"region_hint": "greeting"})) == (
-        None,
-        canonical_sha256("hi world"),
-    )
-    # Typed patchdiff-tx/1 explicitly rejects region_hint as an unknown edit field
+def test_region_hint_is_rejected_in_typed_edits() -> None:
     assert run_typed("hello world", [{"match": "hello", "replace": "hi", "region_hint": "greeting"}]) == (
         FailureReason.MANIFEST_INVALID,
         None,

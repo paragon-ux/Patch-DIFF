@@ -7,7 +7,7 @@ and audit tables. Migration `20261022_0003` adds the source line-ending
 metadata used by export and workspace publication. See the
 [MCP tool contracts](mcp-tools.md#guarded-editing-reads-preview-and-diagnostics).
 
-- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` and `0.2.3` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`, or `patchdiff-mvp-0.5.0` when a span operation contains `expected_before`/`expected_after`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
+- New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`, or `patchdiff-mvp-0.5.0` when a span operation contains `expected_before`/`expected_after`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
 - Accepted tx/2 and tx/3 transactions write `origin = 'typed'` ledger rows whose `derived_json` adds `operation` (`"span"` or `"replace_all"`). A tx/3 transaction writes exactly one row covering the full original span.
 - Rejected rows persist `diagnostic_json.failure_context` (at most 256 code points of the failing buffer, as a prefix or a window around a known failure location) and, when applicable, `exact_candidates`, span evidence (`span_check`, `buffer_length`, `actual_text`), `original_occurrences` for consumed sequential matches, `near_miss_query` for absent matches, and `code` for request-key conflicts and invalid keys. Response-only `current_context`, `near_misses`, the near-miss scan buffer and `correlation_id` are never stored.
 - Accepted rows keep `diagnostic_json = NULL` unless the applier reported warnings; then it holds `{warnings, warning_count, warnings_truncated}` with at most 16 warning objects. Replay never reads it.
@@ -24,7 +24,7 @@ The schema supports:
 - canonical target storage in Postgres (`cloud_target_files`)
 - row-locked per-target atomic transactions under `SELECT ... FOR UPDATE`
 - append-only attempt logs (`append_only_pdcp_logs`) recording both accepted and rejected submissions, retry lineage (`parent_pdcp_log_id`), and request deduplication (`client_request_id`)
-- accepted-only manifest ledger (`append_only_manifest_ledger`) tracking origin (`origin = 'typed'` vs `'pdcp_manifest'`) and runtime-derived span/hash facts (`derived_json`)
+- accepted-only manifest ledger (`append_only_manifest_ledger`) recording typed edit origin (`origin = 'typed'`) and runtime-derived span/hash facts (`derived_json`)
 - SAVE checkpoints and editing cycle advancement (`editing_cycles`, `target_snapshots`)
 - deterministic replay across recorded `(protocol_version, runtime_version)` profiles
 
@@ -124,7 +124,7 @@ Mutable record of the most recent submission for a target (display/session state
 | `pdcp_file_id` | UUID | PK | Row identifier |
 | `target_file_id` | UUID | FK -> `cloud_target_files.target_file_id` UNIQUE NOT NULL | One row per target |
 | `editing_cycle_id` | UUID | FK -> `editing_cycles.editing_cycle_id` NOT NULL | Submission cycle |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` |
 | `pdcp_content` | TEXT | NOT NULL | Raw text or canonical JSON |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
 | `status` | TEXT | NOT NULL | `pending_validation`, `accepted`, `rejected`, `superseded` |
@@ -149,7 +149,7 @@ Authoritative append-only log of accepted and rejected transaction attempts.
 | `regeneration_attempt` | INTEGER | NULLABLE | 1-based retry attempt |
 | `regeneration_source` | TEXT | NULLABLE | Host or policy label |
 | `submission_source` | TEXT | NOT NULL | `model_response`, `regeneration`, `manual` |
-| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or `0.2.3` |
+| `protocol_version` | TEXT | NOT NULL | `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` |
 | `runtime_version` | TEXT | NOT NULL | Runtime profile (e.g. `patchdiff-mvp-0.2.2`) |
 | `pdcp_content` | TEXT | NOT NULL | Canonical JSON or raw PDCP for ordinary input; reversible ASCII JSON evidence for rejected invalid text |
 | `pdcp_content_hash` | CHAR(64) | NOT NULL | SHA-256 of `pdcp_content` |
@@ -254,7 +254,7 @@ Append-only snapshots for initial uploads and SAVE checkpoints.
 
 ## Atomic Commit Workflow (`SELECT ... FOR UPDATE`)
 
-For both `patchdiff_submit_edits` and `patchdiff_submit_pdcp`, execution proceeds inside a single database transaction:
+For typed submissions, execution proceeds inside a single database transaction:
 1. `SELECT * FROM cloud_target_files WHERE target_file_id = :id FOR UPDATE;`
 2. Check `client_request_id`: if already recorded for this target with the identical `request_fingerprint`, return the reconstructed terminal result (`deduplicated: true`) without re-applying. If recorded with a different fingerprint, reject with CONTEXT_INVALID and append a separate NULL-key rejected attempt under the same target lock. Retain the submitted fingerprint on that attempt, with existing_pdcp_log_id and bounded submitted-key diagnostic evidence. The original keyed row/fingerprint is never overwritten; repeated conflicts create distinct rows.
 3. Verify optimistic guards (`expected_target_version`, `expected_current_hash`).

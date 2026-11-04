@@ -14,8 +14,7 @@ $env:PATCHDIFF_MCP_RESPONSE_MODE = 'compact'
 python backend/tests/verification/structural_batch/verify.py --host-finalize --output <another-new-directory>
 ```
 
-The offline check verifies serialization byte accounting and deterministic verdict /
-replacement equivalence without a model, database or network. The five-file check
+The offline check verifies serialization byte accounting and deterministic typed verdicts and expected content hashes without a model, database or network. The five-file check
 requires live PostgreSQL, the pinned Waymark npm installation and real stdio MCP.
 It verifies five atomic batches, SAVE and replay, exact full-file bytes and 20
 behavioral assertions. It makes no live-model or comparative performance claim.

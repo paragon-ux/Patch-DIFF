@@ -42,9 +42,9 @@ for itself. Hybrid editing also depends on admission of unobserved writes.
 
 ## Full
 
-Use `full` for a trusted operator who needs the complete 22-tool catalog.
+Use `full` for a trusted operator who needs the complete 17-tool catalog.
 It can initialize targets, read and edit them, SAVE, replay, export, inspect
-audit history and call retained legacy tools. A typical trusted sequence
+audit history and support host-owned finalization. A typical trusted sequence
 initializes a target and hands its ID to a restricted editor, then checks
 the accepted version, checkpoints it, replays the target or exports it as
 needed. See the [host lifecycle recipe](../../guides/host-integration-guide.md#trusted-scalar-finalization).
