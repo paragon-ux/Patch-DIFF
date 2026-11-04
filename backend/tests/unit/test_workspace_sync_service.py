@@ -392,6 +392,62 @@ def test_two_targets_cannot_publish_concurrently_to_one_workspace(tmp_path):
     assert source.read_bytes() == b"VALUE = 2\n"
 
 
+def test_overlapping_roots_share_the_physical_destination_lease(tmp_path):
+    subroot = tmp_path / "sub"
+    subroot.mkdir()
+    source, first = _publication_fixture(subroot)
+    first.filename = "sub/target.py"
+    second = copy.deepcopy(first)
+    second.target_file_id = uuid.uuid4()
+    second.filename = "target.py"
+    second.current_content = "VALUE = 3\n"
+    for target, root in ((first, tmp_path), (second, subroot)):
+        st = root.stat()
+        target.source_line_endings.update(workspace_tracked=True, workspace_root_identity=f"{st.st_dev}:{st.st_ino}")
+    entered, release = threading.Event(), threading.Event()
+    fsync = os.fsync
+    def pause_staging(fd):
+        entered.set()
+        assert release.wait(5)
+        return fsync(fd)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with patch.object(workspace_io.os, "fsync", side_effect=pause_staging):
+            pending = executor.submit(sync_target_file_to_workspace, first, workspace_root=tmp_path)
+            assert entered.wait(5)
+            try:
+                with pytest.raises(WorkspaceSyncError) as error:
+                    sync_target_file_to_workspace(second, workspace_root=subroot)
+                assert error.value.code == "workspace_busy"
+            finally:
+                release.set()
+            pending.result(timeout=5)
+    assert source.read_bytes() == b"VALUE = 2\n"
+    with pytest.raises(WorkspaceSyncError) as stale:
+        sync_target_file_to_workspace(second, workspace_root=subroot)
+    assert stale.value.code == "external_disk_drift"
+
+
+def test_post_install_directory_close_failure_retains_published_receipt(tmp_path):
+    source, target = _publication_fixture(tmp_path)
+    session, _, added = _mock_save_session(target)
+    real_close = os.close
+    failed = False
+    def fail_after_close(fd):
+        nonlocal failed
+        real_close(fd)
+        if not failed:
+            failed = True
+            raise OSError("directory close reported an error")
+    with patch.object(workspace_io.os, "close", side_effect=fail_after_close):
+        result = save_target(session, target_file_id=target.target_file_id, workspace_root=tmp_path)
+    assert result.status == "partial"
+    assert result.code == "workspace_post_install_error"
+    assert result.workspace_sync["publication"] == "installed"
+    assert result.workspace_sync["durability"] == "confirmed"
+    assert source.read_bytes() == b"VALUE = 2\n"
+    assert added == []
+
+
 def test_unmanaged_drift_during_staging_preserves_external_bytes(tmp_path):
     source, target = _publication_fixture(tmp_path)
     fsync = os.fsync

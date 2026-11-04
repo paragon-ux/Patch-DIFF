@@ -33,8 +33,10 @@ requires explicit initialization of a new target.
 ## Ownership and paths
 
 The server owns managed file operations. All managed readers/publishers obtain
-an advisory exclusive lease on the workspace directory, including across
-processes and different target IDs. A conflicting operation rejects
+an advisory exclusive lease on the pinned physical destination directory.
+This serializes the same destination across processes, target IDs, overlapping
+configured roots and path aliases. Different destination directories can run
+independently. A conflicting operation rejects
 `workspace_busy` without publication. Reinitialize duplicate targets when their
 baseline diverges; do not publish both from a stale shared baseline.
 
@@ -85,6 +87,8 @@ failure returns `partial` with `workspace_durability_uncertain` and
 `workspace_sync.durability=uncertain`. A later database flush/commit error returns
 `partial` with `workspace_checkpoint_uncertain` and the installed-file digest;
 a commit acknowledgement error may mean the database actually committed.
+A directory-handle teardown error after installation returns `partial` with
+`workspace_post_install_error`; its receipt retains the observed durability.
 Checkpoint/cycle IDs are not asserted on a partial result. No filesystem
 rollback is attempted and no automatic retry is safe. A killed process/lost
 response can also leave an unknown outcome. Inspect the file, target, cycles

@@ -150,7 +150,7 @@ def resolve_workspace_file(
 
 @contextmanager
 def _workspace_file(workspace_root, filename: str, *, create_parents: bool = False):
-    """Pin directory handles and exclusively lease this workspace to managed IO.
+    """Pin directory handles and lease the physical destination directory for IO.
 
     The lease is advisory. Other writers must cooperate, and the configured root
     and opened directories must not be moved out of the workspace during IO.
@@ -165,11 +165,6 @@ def _workspace_file(workspace_root, filename: str, *, create_parents: bool = Fal
         with ExitStack() as stack:
             root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             stack.callback(os.close, root_fd)
-            try:
-                fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_busy",
-                                         "Another managed operation owns this workspace; no file was published.") from exc
             st = os.fstat(root_fd)
             identity = f"{st.st_dev}:{st.st_ino}"
             parent_fd = root_fd
@@ -185,6 +180,11 @@ def _workspace_file(workspace_root, filename: str, *, create_parents: bool = Fal
                     child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
                 stack.callback(os.close, child)
                 parent_fd = child
+            try:
+                fcntl.flock(parent_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_busy",
+                                         "Another managed operation owns the destination directory; no file was published.") from exc
             yield parent_fd, parts[-1], relative, identity
     except WorkspaceSyncError:
         raise
@@ -231,7 +231,7 @@ def read_workspace_source(workspace_root, filename: str) -> tuple[bytes, str]:
 
 
 def sync_target_file_to_workspace(target: Any, *, workspace_root, eol_format: str = "original_eol") -> WorkspaceSyncReceipt:
-    """Publish under a cooperative workspace lease; never claim a PG/file transaction.
+    """Publish under a cooperative destination-directory lease; never claim a PG/file transaction.
 
     On failure after installation, the exception carries the installed receipt.
     The caller must report a partial outcome and require explicit reconciliation.
@@ -248,64 +248,78 @@ def sync_target_file_to_workspace(target: Any, *, workspace_root, eol_format: st
     recorded = dict(target.source_line_endings) if isinstance(target.source_line_endings, dict) else {}
     expected = recorded.get("last_synced_disk_sha256") or recorded.get("source_sha256")
     tracked = bool(recorded.get("workspace_tracked") or "last_synced_disk_sha256" in recorded)
-    with _workspace_file(workspace_root, target.filename, create_parents=not tracked) as (parent, name, relative, identity):
-        if recorded.get("workspace_root_identity") not in (None, identity):
-            raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
-                                     "Target belongs to a different workspace; initialize a new target explicitly.")
-        try:
-            before, mode = _read_regular(parent, name)
-        except FileNotFoundError:
-            before, mode = None, None
-        if (before is None and tracked) or (before is not None and hashlib.sha256(before).hexdigest() != expected):
-            raise WorkspaceSyncError(FailureReason.TARGET_DIVERGED, "external_disk_drift",
-                                     "Workspace baseline differs; re-read and initialize a new target explicitly.")
-        receipt = WorkspaceSyncReceipt(relative, digest, len(rendered), eol_name(eol))
-        tmp = f".patchdiff-{uuid.uuid4().hex}.tmp"
-        created = installed = False
-        try:
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=parent)
-            created = True
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(rendered)
-                stream.flush()
-                if mode is not None:
-                    os.fchmod(stream.fileno(), mode)
-                os.fsync(stream.fileno())
-            # Catch unmanaged drift while staging. Non-cooperating writers after
-            # this check are outside the advisory ownership contract.
+    installed = durable = False
+    receipt = None
+    try:
+        with _workspace_file(workspace_root, target.filename, create_parents=not tracked) as (parent, name, relative, identity):
+            if recorded.get("workspace_root_identity") not in (None, identity):
+                raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
+                                         "Target belongs to a different workspace; initialize a new target explicitly.")
             try:
-                current, _ = _read_regular(parent, name)
+                before, mode = _read_regular(parent, name)
             except FileNotFoundError:
-                current = None
-            if current != before:
+                before, mode = None, None
+            if (before is None and tracked) or (before is not None and hashlib.sha256(before).hexdigest() != expected):
                 raise WorkspaceSyncError(FailureReason.TARGET_DIVERGED, "external_disk_drift",
-                                         "Workspace changed while staging; nothing was published.")
-            if before is None:
+                                         "Workspace baseline differs; re-read and initialize a new target explicitly.")
+            receipt = WorkspaceSyncReceipt(relative, digest, len(rendered), eol_name(eol))
+            tmp = f".patchdiff-{uuid.uuid4().hex}.tmp"
+            created = installed = False
+            try:
+                fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=parent)
+                created = True
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(rendered)
+                    stream.flush()
+                    if mode is not None:
+                        os.fchmod(stream.fileno(), mode)
+                    os.fsync(stream.fileno())
+                # Catch unmanaged drift while staging. Non-cooperating writers after
+                # this check are outside the advisory ownership contract.
                 try:
-                    os.link(tmp, name, src_dir_fd=parent, dst_dir_fd=parent, follow_symlinks=False)
-                except FileExistsError as exc:
+                    current, _ = _read_regular(parent, name)
+                except FileNotFoundError:
+                    current = None
+                if current != before:
                     raise WorkspaceSyncError(FailureReason.TARGET_DIVERGED, "external_disk_drift",
-                                             "A new file appeared during publication; it was preserved.") from exc
-                installed = True
-                os.unlink(tmp, dir_fd=parent)
-            else:
-                os.replace(tmp, name, src_dir_fd=parent, dst_dir_fd=parent)
-                installed = True
-            created = False
-            os.fsync(parent)
-        except OSError as exc:
-            partial = WorkspaceSyncReceipt(relative, digest, len(rendered), eol_name(eol), "uncertain").as_dict() if installed else None
-            raise WorkspaceSyncError(FailureReason.TRANSACTION_INTERNAL_ERROR,
-                                     "workspace_durability_uncertain" if installed else "workspace_io_error",
-                                     "File installed; durability is uncertain." if installed else "Workspace staging failed; no file was published.",
-                                     receipt=partial) from exc
-        finally:
-            if created:
-                try:
+                                             "Workspace changed while staging; nothing was published.")
+                if before is None:
+                    try:
+                        os.link(tmp, name, src_dir_fd=parent, dst_dir_fd=parent, follow_symlinks=False)
+                    except FileExistsError as exc:
+                        raise WorkspaceSyncError(FailureReason.TARGET_DIVERGED, "external_disk_drift",
+                                                 "A new file appeared during publication; it was preserved.") from exc
+                    installed = True
                     os.unlink(tmp, dir_fd=parent)
-                except OSError:
-                    pass
-        target.source_line_endings = {**recorded, "workspace_tracked": True,
-                                     "workspace_root_identity": identity,
-                                     "last_synced_disk_sha256": digest, "last_synced_version": target.version}
-        return receipt
+                else:
+                    os.replace(tmp, name, src_dir_fd=parent, dst_dir_fd=parent)
+                    installed = True
+                created = False
+                os.fsync(parent)
+                durable = True
+            except OSError as exc:
+                partial = WorkspaceSyncReceipt(relative, digest, len(rendered), eol_name(eol), "uncertain").as_dict() if installed else None
+                raise WorkspaceSyncError(FailureReason.TRANSACTION_INTERNAL_ERROR,
+                                         "workspace_durability_uncertain" if installed else "workspace_io_error",
+                                         "File installed; durability is uncertain." if installed else "Workspace staging failed; no file was published.",
+                                         receipt=partial) from exc
+            finally:
+                if created:
+                    try:
+                        os.unlink(tmp, dir_fd=parent)
+                    except OSError:
+                        pass
+            target.source_line_endings = {**recorded, "workspace_tracked": True,
+                                         "workspace_root_identity": identity,
+                                         "last_synced_disk_sha256": digest, "last_synced_version": target.version}
+            return receipt
+
+    except Exception as exc:
+        # Directory-handle teardown runs after the yielded body. Its errors must
+        # preserve installation facts just like errors during directory fsync.
+        if installed and not (isinstance(exc, WorkspaceSyncError) and exc.receipt is not None):
+            partial = WorkspaceSyncReceipt(receipt.synced_path, digest, len(rendered), eol_name(eol),
+                                           "confirmed" if durable else "uncertain").as_dict()
+            raise WorkspaceSyncError(FailureReason.TRANSACTION_INTERNAL_ERROR, "workspace_post_install_error",
+                                     "File installed; managed IO teardown failed.", receipt=partial) from exc
+        raise
