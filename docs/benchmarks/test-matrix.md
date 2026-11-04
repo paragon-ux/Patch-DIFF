@@ -61,7 +61,7 @@ Run with: `pytest backend/tests/unit -q`
 | `test_conflict_audit.py` | bounded submitted-key diagnostic, NULL persisted key versus response echo, submitted fingerprint policy. |
 | `test_invalid_input_unicode.py` | all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
 | `test_selector_profiles.py` | singleton/multiple/overlapping/absent selectors across typed and sequential buffers across recorded runtime profiles. |
-| `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, `anchor_after`, and `anchor_after`. |
+| `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, and `anchor_after`. |
 | `test_applier.py` | Sequential in-memory simulation; immediate buffer replacement; deletion (`replace=""`); sequential match invalidation; calculation of runtime-derived `change_facts`. |
 | `test_typed_transaction.py` | **C1, C4**: `patchdiff-tx/1` parsing; `build_record` and `canonical_record_json` determinism; default `change_id` generation; `validate_client_request_id` (ASCII printable, no whitespace, 1..128 chars); `TYPED_EDIT_JSON_SCHEMA` conformance; delimiter collision immunity; accepted verdicts and resulting hashes against an independent oracle. |
 | `test_modernization_contracts.py` | **C2, C3, C6**: Stage-aware `validity_levels` (`ValidationStage`); explicit runtime profile dispatch (`SUPPORTED_RUNTIME_PROFILES`); `slice_content` (`next_start`); `occurrence_report` (`start_occurrence`, `max_results`, `next_occurrence_index`, `returned_count`); host-loop inspect/revise simulation without server regeneration prompts. |

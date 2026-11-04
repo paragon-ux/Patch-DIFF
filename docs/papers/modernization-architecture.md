@@ -178,7 +178,7 @@ flowchart LR
     - `region_hint` is **not** part of `patchdiff-tx/1` and is rejected as an unknown edit field (`FailureReason.MANIFEST_INVALID`).
 - **Canonical Persisted Record (ordinary input; invalid-text evidence exception below)**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over the submitted record with raw decoded string values preserved. Canonical JSON normalizes object-key order and serialization, not newlines inside string values; runtime matching separately canonicalizes text. This follows the request identity contract and existing build_record/canonical_record_json behavior; it does not introduce a new normalized-identity alternative.
 
-Rejection context: newly recorded rejections persist immutable `diagnostic.failure_context`; rejected submission responses also return separate response-only `current_context` from the refreshed locked canonical target. The full representation and numeric budgets are specified in MCP_TOOLS. Applicability failures capture only a bounded prefix of the actual failing buffer, labeled `canonical_target` or `intermediate_buffer` with `prior_changes`. Observed version/hash always identify transaction-start canonical state, never an uncommitted intermediate hash. Unknown/malformed targets and pending caller-local dirty state return explicit unavailable contexts. Acceptance, exact matching, request identity and replay profiles are unchanged.
+Rejection context: newly recorded rejections persist immutable `diagnostic.failure_context`; rejected submission responses also return separate response-only `current_context` from the refreshed locked canonical target. The full representation and numeric budgets are specified in [MCP tool contracts](../spec/mcp-tools.md). Applicability failures capture only a bounded prefix of the actual failing buffer, labeled `canonical_target` or `intermediate_buffer` with `prior_changes`. Observed version/hash always identify transaction-start canonical state, never an uncommitted intermediate hash. Unknown/malformed targets and pending caller-local dirty state return explicit unavailable contexts. Acceptance, exact matching, request identity and replay profiles are unchanged.
 
 #### C2. Validation Stage Model, Failure Mapping, and Format-Specific Diagnostics
 
@@ -256,14 +256,14 @@ The lock-then-read outcome-recovery guarantee is supported and verified at Postg
   - If `(target_file_id, client_request_id)` exists with a **different** `request_fingerprint`, the service rejects with `FailureReason.CONTEXT_INVALID` (`deduplicated: false`, `diagnostic.existing_pdcp_log_id`) without mutating target state or overwriting the original log row. The same locked rejection path appends a separate rejected attempt with client_request_id=NULL and request_fingerprint equal to this submitted attempt's fingerprint. It returns the new pdcp_log_id; diagnostics link existing_pdcp_log_id and submitted_client_request_id (preview capped at 256 characters with an explicit truncation flag). The original keyed row remains unchanged and recovers its original outcome. Every separately admitted conflict, including repeated identical conflicts, creates a distinct immutable row; no collapse, cap, counter update or deletion.
 - `patchdiff_get_pdcp_log` supports filtering by `client_request_id` and `content_hash`.
 
-Parent identity: retain existing parent identity. Only a same-target rejected parent that passes lineage resolves to canonical UUID spelling; other supplied parent strings remain raw identity on rejection. Broader syntactic UUID normalization is not adopted; it would need separate historical-fingerprint compatibility. Request identity details are in DATA_MODEL and HOST_INTEGRATION_GUIDE.
+Parent identity: retain existing parent identity. Only a same-target rejected parent that passes lineage resolves to canonical UUID spelling; other supplied parent strings remain raw identity on rejection. Broader syntactic UUID normalization is not adopted; it would need separate historical-fingerprint compatibility. Request identity details are in [data model](../spec/data-model.md) and [host integration guide](../guides/host-integration-guide.md).
 
 For rejected exact recovery, the complete stored diagnostic (including original `failure_context`, when present) remains unchanged. Only top-level `current_context` and existing current identity fields reflect the newly locked target. Older rows without failure context are returned without retrofitting evidence. Context is cheap bounded capture inside the existing transaction; caller-owned locks and commit/rollback ownership are preserved.
 
 #### C5. Ledger and Schema Contract (Migration `20261020_0002`)
 
 - `append_only_manifest_ledger`:
-  - `origin`: `TEXT NOT NULL DEFAULT 'pdcp_manifest'` (`'pdcp_manifest'` or `'typed'`).
+  - `origin`: `TEXT NOT NULL DEFAULT 'typed'` with `CHECK (origin = 'typed')`.
   - `derived_json`: `JSONB NULL` (`span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`), populated on accepted typed rows.
   - `change_id`, `intent`: `TEXT NOT NULL` (for `'typed'`, `intent = edit.rationale or tx.intent`).
   - `input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`: nullable `TEXT`. New rows may set `risk` when the proposal supplies it.
@@ -271,7 +271,7 @@ For rejected exact recovery, the complete stored diagnostic (including original 
   - `client_request_id`: `TEXT NULL`.
   - `request_fingerprint`: `VARCHAR(64) NULL`.
   - Partial unique index `uq_pdcp_logs_target_client_request_id`.
-- Downgrade `20261020_0002 -> 20260510_0001` checks `IF EXISTS (SELECT 1 FROM append_only_manifest_ledger WHERE origin <> 'pdcp_manifest')` and raises an exception rather than silently corrupting typed ledger rows.
+- Downgrade refuses when it would discard typed audit facts or request identity, or when restored column constraints would reject stored rows.
 
 #### C5b. Source Line-Ending Metadata (Migration `20261022_0003`)
 

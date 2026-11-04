@@ -212,7 +212,7 @@ def test_populated_legacy_upgrade_downgrade_upgrade_preserves_history(isolated_m
     connection.commit()
     command.upgrade(config, "head")
     assert_legacy_preserved(connection, baseline)
-    assert connection.scalar(text("SELECT origin FROM append_only_manifest_ledger")) == "pdcp_manifest"
+    assert connection.scalar(text("SELECT origin FROM append_only_manifest_ledger")) == "typed"
     assert connection.scalar(text("SELECT client_request_id FROM append_only_pdcp_logs LIMIT 1")) is None
     connection.commit()
     command.downgrade(config, "20260510_0001")
@@ -225,15 +225,21 @@ def test_populated_legacy_upgrade_downgrade_upgrade_preserves_history(isolated_m
         assert replay.status == "success" and replay.materialized_state_matches
 
 
-def test_live_migration_refuses_downgrade_when_typed_rows_exist(isolated_migrations):
+@pytest.mark.parametrize("status", ["accepted", "rejected"])
+def test_live_migration_refuses_downgrade_when_typed_evidence_exists(isolated_migrations, status):
     config, connection = isolated_migrations
     command.upgrade(config, "head")
     assert connection.scalar(text("SELECT count(*) FROM append_only_manifest_ledger")) == 0
     connection.commit()
     with Session(bind=connection) as session:
         target = initialize_target(session, filename="typed.txt", content="alpha", target_type="text/plain")
-        accepted = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=0, intent="Create typed history", edits=[{"match": "alpha", "replace": "beta"}])
-        assert accepted.status == "accepted"
+        result = submit_edits(
+            session, target_file_id=target.target_file_id, expected_target_version=0,
+            intent="Create typed history",
+            edits=[{"match": "alpha" if status == "accepted" else "absent", "replace": "beta"}],
+            client_request_id="migration-rejection" if status == "rejected" else None,
+        )
+        assert result.status == status
     # Simulate a typed target created before 0003 so only the 0002 refusal is exercised.
     connection.execute(text("UPDATE cloud_target_files SET source_line_endings = NULL"))
     connection.commit()
@@ -242,9 +248,10 @@ def test_live_migration_refuses_downgrade_when_typed_rows_exist(isolated_migrati
     baseline = snapshot(connection)
     revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == "20261020_0002"
-    assert connection.scalar(text("SELECT origin FROM append_only_manifest_ledger")) == "typed"
+    origin = connection.scalar(text("SELECT origin FROM append_only_manifest_ledger"))
+    assert origin == ("typed" if status == "accepted" else None)
     connection.commit()
-    with pytest.raises(Exception, match="Cannot downgrade 20261020_0002: typed ledger rows exist"):
+    with pytest.raises(Exception, match="Cannot downgrade 20261020_0002: typed audit evidence exists"):
         command.downgrade(config, "20260510_0001")
     connection.rollback()
     assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision

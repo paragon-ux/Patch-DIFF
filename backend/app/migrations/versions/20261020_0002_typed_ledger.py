@@ -1,15 +1,14 @@
 """typed transaction ledger and request deduplication support
 
 Adds `origin` and `derived_json` to `append_only_manifest_ledger`, relaxes the
-NOT NULL constraint on the five legacy manifest columns (`input_state`,
+NOT NULL constraint on the five optional audit columns (`input_state`,
 `output_state`, `affected_region`, `user_visible_change`, `risk`), and adds
 `client_request_id`, `request_fingerprint`, and the partial unique index
 `uq_pdcp_logs_target_client_request_id` on `append_only_pdcp_logs` so callers can
 safely deduplicate transport retries and recover terminal outcomes after a lost
 response.
 
-Existing rows are unchanged (`origin = 'pdcp_manifest'`, `client_request_id = NULL`).
-No history is deleted or rewritten.
+Existing audit facts are retained.
 
 Revision ID: 20261020_0002
 Revises: 20260510_0001
@@ -33,8 +32,9 @@ _RELAXED_COLUMNS = ("input_state", "output_state", "affected_region", "user_visi
 def upgrade() -> None:
     op.add_column(
         "append_only_manifest_ledger",
-        sa.Column("origin", sa.Text(), server_default=sa.text("'pdcp_manifest'"), nullable=False),
+        sa.Column("origin", sa.Text(), server_default=sa.text("'typed'"), nullable=False),
     )
+    op.create_check_constraint("ck_append_only_manifest_ledger_origin", "append_only_manifest_ledger", "origin = 'typed'")
     op.add_column(
         "append_only_manifest_ledger",
         sa.Column("derived_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
@@ -60,14 +60,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Restoring NOT NULL is only possible when no typed rows exist. History is never
-    # deleted to make a downgrade succeed.
+    # Refuse any downgrade that would discard audit evidence or violate NOT NULL.
     op.execute(
         """
         DO $$
         BEGIN
-            IF EXISTS (SELECT 1 FROM append_only_manifest_ledger WHERE origin <> 'pdcp_manifest') THEN
-                RAISE EXCEPTION 'Cannot downgrade 20261020_0002: typed ledger rows exist';
+            IF EXISTS (
+                SELECT 1 FROM append_only_manifest_ledger
+                WHERE derived_json IS NOT NULL OR input_state IS NULL OR output_state IS NULL
+                   OR affected_region IS NULL OR user_visible_change IS NULL OR risk IS NULL
+            ) OR EXISTS (
+                SELECT 1 FROM append_only_pdcp_logs
+                WHERE client_request_id IS NOT NULL OR request_fingerprint IS NOT NULL
+            ) THEN
+                RAISE EXCEPTION 'Cannot downgrade 20261020_0002: typed audit evidence exists';
             END IF;
         END $$;
         """
@@ -79,4 +85,5 @@ def downgrade() -> None:
     for column in reversed(_RELAXED_COLUMNS):
         op.alter_column("append_only_manifest_ledger", column, existing_type=sa.Text(), nullable=False)
     op.drop_column("append_only_manifest_ledger", "derived_json")
+    op.drop_constraint("ck_append_only_manifest_ledger_origin", "append_only_manifest_ledger", type_="check")
     op.drop_column("append_only_manifest_ledger", "origin")

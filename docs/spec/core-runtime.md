@@ -146,7 +146,7 @@ Matching is:
 All exact occurrences of `MATCH` across the buffer are enumerated, including overlapping occurrences (advancing the search index by 1 code point rather than `len(match)`). For example, matching `"aa"` in `"aaa"` yields 2 occurrences (spans `0..2` and `1..3`) and rejects with `FailureReason.MATCH_AMBIGUOUS` unless explicitly disambiguated.
 
 ### Historical Replay Profiles (`patchdiff-mvp-0.1.0` through `0.2.1`)
-Historical logs accepted under `patchdiff-mvp-0.1.0`, `0.2.0`, or `0.2.1` are replayed using their recorded profile settings so that accepted history remains deterministically replayable..
+Historical logs accepted under `patchdiff-mvp-0.1.0`, `0.2.0`, or `0.2.1` are replayed using their recorded profile settings so that accepted history remains deterministically replayable.
 
 ## Disambiguation
 

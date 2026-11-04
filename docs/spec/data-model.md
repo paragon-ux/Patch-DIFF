@@ -178,7 +178,7 @@ Indexes:
 
 #### Bounded rejected-buffer evidence
 
-New rejected attempts store `failure_context` within existing `diagnostic_json`; no column or migration is added. It contains only the bounded original failure prefix or failure window, code-point counts, canonical/intermediate stage, prior simulated-change count and transaction-start observed target identity, using the representation and JSON-byte limits in MCP_TOOLS. This evidence is immutable. Exact recovery returns the stored diagnostic unchanged; pre-feature rows remain without failure context. Top-level fresh `current_context` is response-only and is never written into the recovered row. Unknown targets and pending local state have no target-linked durable attempt; their contexts explicitly report unavailable. Qualified audit and caller commit/rollback ownership are unchanged.
+New rejected attempts store `failure_context` within existing `diagnostic_json`; no column or migration is added. It contains only the bounded original failure prefix or failure window, code-point counts, canonical/intermediate stage, prior simulated-change count and transaction-start observed target identity, using the representation and JSON-byte limits in [MCP tool contracts](mcp-tools.md). This evidence is immutable. Exact recovery returns the stored diagnostic unchanged; pre-feature rows remain without failure context. Top-level fresh `current_context` is response-only and is never written into the recovered row. Unknown targets and pending local state have no target-linked durable attempt; their contexts explicitly report unavailable. Qualified audit and caller commit/rollback ownership are unchanged.
 
 #### Request identity
 
@@ -218,7 +218,7 @@ Append-only ledger of accepted changes only. Rejections never write to this tabl
 | `pdcp_log_id` | UUID | FK -> `append_only_pdcp_logs.pdcp_log_id` NOT NULL | Accepted attempt that created this entry |
 | `change_index` | INTEGER | NOT NULL | 1-based index within the transaction |
 | `change_id` | TEXT | NOT NULL | Change identifier (e.g. `chg_001`) |
-| `origin` | TEXT | NOT NULL DEFAULT `'pdcp_manifest'` | `'typed'` or `'pdcp_manifest'` (Migration `0002`) |
+| `origin` | TEXT | NOT NULL DEFAULT `'typed'` | Typed transaction origin |
 | `intent` | TEXT | NOT NULL | Change intent (or `rationale` on typed path) |
 | `input_state` | TEXT | NULLABLE | Prose description (nullable after Migration `0002`) |
 | `output_state` | TEXT | NULLABLE | Prose description (nullable after Migration `0002`) |
@@ -229,6 +229,7 @@ Append-only ledger of accepted changes only. Rejections never write to this tabl
 | `created_at` | TIMESTAMPTZ | NOT NULL | Insert timestamp |
 
 Constraints:
+- `CHECK (origin = 'typed')`
 - `CHECK (risk IS NULL OR risk IN ('low', 'medium', 'high'))`
 - `UNIQUE (pdcp_log_id, change_index)`
 - `INDEX (target_file_id, editing_cycle_id, ledger_sequence)`

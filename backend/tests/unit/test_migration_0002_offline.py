@@ -38,7 +38,8 @@ def test_upgrade_sql_renders_typed_ledger_and_request_idempotency_columns() -> N
     with redirect_stdout(buffer):
         command.upgrade(_config(), "20260510_0001:20261020_0002", sql=True)
     sql = buffer.getvalue()
-    assert "ADD COLUMN origin TEXT DEFAULT 'pdcp_manifest' NOT NULL" in sql
+    assert "ADD COLUMN origin TEXT DEFAULT 'typed' NOT NULL" in sql
+    assert "CHECK (origin = 'typed')" in sql
     assert "ADD COLUMN derived_json JSONB" in sql
     assert "ADD COLUMN client_request_id TEXT" in sql
     assert "ADD COLUMN request_fingerprint VARCHAR(64)" in sql
@@ -52,7 +53,7 @@ def test_downgrade_refuses_to_destroy_typed_rows() -> None:
     with redirect_stdout(buffer):
         command.downgrade(_config(), "20261020_0002:20260510_0001", sql=True)
     sql = buffer.getvalue()
-    assert "typed ledger rows exist" in sql
+    assert "typed audit evidence exists" in sql
     assert sql.index("RAISE EXCEPTION") < sql.index("SET NOT NULL")
     assert "DROP INDEX uq_pdcp_logs_target_client_request_id" in sql
     assert "DROP COLUMN client_request_id" in sql

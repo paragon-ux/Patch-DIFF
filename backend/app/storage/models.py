@@ -200,6 +200,7 @@ class AppendOnlyManifestLedger(TimestampMixin, Base):
     __tablename__ = "append_only_manifest_ledger"
     __table_args__ = (
         CheckConstraint("risk IN ('low', 'medium', 'high')", name="ck_append_only_manifest_ledger_risk"),
+        CheckConstraint("origin = 'typed'", name="ck_append_only_manifest_ledger_origin"),
         UniqueConstraint("pdcp_log_id", "change_index", name="uq_manifest_ledger_log_change_index"),
         UniqueConstraint("pdcp_log_id", "change_id", name="uq_manifest_ledger_log_change_id"),
         Index(
@@ -224,9 +225,7 @@ class AppendOnlyManifestLedger(TimestampMixin, Base):
     affected_region: Mapped[str | None] = mapped_column(Text)
     user_visible_change: Mapped[str | None] = mapped_column(Text)
     risk: Mapped[str | None] = mapped_column(Text)
-    # 'pdcp_manifest' = model-asserted manifest fields; 'typed' = advisory intent plus
-    # runtime-derived facts in derived_json.
-    origin: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pdcp_manifest'"))
+    origin: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'typed'"))
     derived_json: Mapped[dict | None] = mapped_column(JSONB)
 
 
