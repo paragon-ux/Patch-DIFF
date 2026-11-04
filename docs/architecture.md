@@ -1,6 +1,8 @@
 # Visual Architecture & Transaction Lifecycle
 
-This document provides visual diagrams and state transition flowcharts for PatchDIFF's deterministic document transaction service.
+Follow an edit from the host's initial read through validation, commit
+and replay. See the [profile catalog](spec/profiles/index.md) to choose
+which tools the host can call.
 
 ---
 
@@ -38,7 +40,7 @@ sequenceDiagram
 
 ---
 
-With the [workspace profile](guides/WORKSPACE_PUBLICATION.md), initialization
+With the [workspace profile](guides/workspace-quickstart.md), initialization
 reads a project file into PostgreSQL. A guarded edit updates the database
 working copy. SAVE can publish the file and reports publication separately
 from its database checkpoint.

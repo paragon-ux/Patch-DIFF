@@ -1,8 +1,7 @@
 # Claude Desktop MCP Setup
 
-PatchDIFF's Claude Desktop adapter is a local stdio MCP server, not a localhost HTTP MCP server.
-
-Claude Desktop launches the Python process directly and talks to it over stdin/stdout:
+Claude Desktop launches PatchDIFF's local MCP adapter as a Python
+process and exchanges JSON-RPC messages over stdin and stdout.
 
 ```text
 Claude Desktop
@@ -85,7 +84,7 @@ profile for an existing target. For inline initialization and the complete
 22-tool catalog, set `PATCHDIFF_MCP_PROFILE=full`.
 
 To import a local project file and publish on SAVE, follow the
-[installed workspace setup](WORKSPACE_PUBLICATION.md) and choose `workspace`.
+[installed workspace setup](workspace-quickstart.md) and choose `workspace`.
 The server must run on a supported POSIX filesystem. Native Windows Python
 can use inline uploads, edits and exports. A server running in Linux or WSL
 needs a workspace directory with directory locking and descriptor-relative IO.
@@ -135,7 +134,7 @@ shows seven tools including read, search, submit, SAVE and replay. The
 `workspace` profile shows initialize, read, find, submit edits and SAVE.
 The `full` profile shows all 22 registered tools.
 
-For guidance on how the host/model interacts with these tools (reading before proposing, supplying guards, handling rejections with retry lineage, and client request idempotency), see [HOST_INTEGRATION_GUIDE.md](HOST_INTEGRATION_GUIDE.md).
+For guidance on how the host/model interacts with these tools (reading before proposing, supplying guards, handling rejections with retry lineage, and client request idempotency), see [host integration guide](host-integration-guide.md).
 
 ## Important Gotcha
 

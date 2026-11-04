@@ -54,4 +54,4 @@ This update extends the local MCP document transaction service. It has not been 
 - Advisory-matched dependency pins updated: AnyIO 4.14.2, certifi 2026.10.19, Mako 1.4.2, pytest 9.0.3 and Starlette 1.3.1. The test extra now requires patched pytest 9.x. See the [security policy](SECURITY.md) for scope and reporting limitations.
 - Verification includes live PostgreSQL, actual stdio subprocesses, separate manual public-tool workflows, migration regression, historical replay and deterministic byte accounting. Previous failed verification runs and their corrections remain traceable in PR evidence; a historical green check does not certify a later revision.
 
-No model success-rate, token reduction, representative production performance or universal host/platform certification is claimed. See the [release checklist](docs/RELEASE_READINESS.md) before tagging or publishing.
+No model success-rate, token reduction, representative production performance or universal host/platform certification is claimed. See the [release checklist](docs/standards/release-readiness.md) before tagging or publishing.

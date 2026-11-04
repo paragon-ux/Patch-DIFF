@@ -10,16 +10,20 @@ these tools.
 
 ## Observation contract
 
-The public `tools/list` schemas include task-independent examples for filtered
-candidate discovery, direct single selection, batch selection, observation paging,
-and separate single/batch submissions. Bind illustrative IDs, both guards and
-returned cursors to actual receipts. Candidate discovery issues no observation;
-known exact identities can be selected directly. Preserve returned Markdown names
-including punctuation; ambiguous identities reject. Exact match strings can
-include literal newlines. `find_occurrences` indexes the whole current target;
-batch groups instead count overlapping matches from one inside their own
-scope-local sequential buffer after earlier operations. A preceding catalog is
-not mandatory, and single/batch fields cannot be mixed.
+Use the `tools/list` examples for request shapes. Replace illustrative IDs,
+guards and cursors with values from actual receipts.
+
+1. List candidates if you need to find a structural identity. A candidate
+   list carries no observation ID. You can select a known identity directly.
+2. Select one scope or a batch. Keep the exact names returned by discovery,
+   including Markdown punctuation. Ambiguous identities are rejected.
+3. Page the observed text if needed. Submit against the observed scope or
+   batch and keep their argument sets separate.
+
+Exact match strings can include literal newlines. `find_occurrences` counts
+matches across the current target. A batch group counts overlapping matches
+from one within its own scope-local buffer after earlier operations in that
+group.
 
 
 External response presentation is independently selected at startup with
@@ -33,8 +37,8 @@ unchanged. Accepted observed submissions omit evidence/groups; counts, identitie
 all guards/version aliases, validity, request key, deduplication and all existing
 warning fields remain. A presentation object lists actual omissions. Detailed
 sessions and durable logs/ledger retain full evidence. See
-[the response contract](MCP_TOOLS.md#external-response-representations) and
-[editor workflow v1](../guides/OBSERVED_EDITOR_WORKFLOW.md).
+[the response contract](mcp-tools.md#external-response-representations) and
+[editor workflow v1](../guides/observed-editor-workflow.md).
 
 Extend `patchdiff_observe_scope` with `selections`: 1–32 objects containing required
 nonempty `symbol_name` and optional nonempty `kind`. Exact names and existing
@@ -226,7 +230,7 @@ assert markdown_output.count("state: ready") == 3
 
 ## Deterministic capability evidence
 
-Discovery can use the internal [resident Waymark worker](WAYMARK_WORKER.md) through trusted startup configuration. It retains fresh locked verification and the existing transaction schemas, catalogs and replay profiles.
+Discovery can use the internal [resident Waymark worker](waymark-worker.md) through trusted startup configuration. It retains fresh locked verification and the existing transaction schemas, catalogs and replay profiles.
 
 Run `python backend/tests/verification/structural_batch/verify.py --output <new-directory>` with
 live Postgres and pinned Waymark dependencies. The runner issues real stdio MCP
@@ -248,4 +252,4 @@ direct three-arm run still requires owner authorization.
 
 ## Versioned external view
 
-Opt-in `observed_v2` separates candidate listing, selection, paging and bundle commit into five external purpose-specific tools. It lowers unchanged values into the structural batch services described here. See [the v2 contract](profiles/MCP_EDITOR_V2.md); existing profile catalogs and durable formats remain unchanged.
+Opt-in `observed_v2` separates candidate listing, selection, paging and bundle commit into five external purpose-specific tools. It lowers unchanged values into the structural batch services described here. See [the v2 contract](profiles/observed-editor-v2.md); existing profile catalogs and durable formats remain unchanged.

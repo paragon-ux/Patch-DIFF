@@ -97,9 +97,9 @@ python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-
 
 ## 5. PR Review Standard v1.1.0
 
-All pull requests must undergo a formal category review following [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_STANDARD.md):
+All pull requests must undergo a formal category review following [PR Review Standard v1.1.0](docs/standards/pr-review-standard.md):
 
-1. **Category Mapping:** Every changed file must map to one of the ten primary review categories defined in [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_STANDARD.md): `ARCH`, `DOC`, `SKILL`, `MCP`, `RUN`, `SVC`, `DB`, `SCRIPT`, `TEST`, `DEP`.
+1. **Category Mapping:** Every changed file must map to one of the ten primary review categories defined in [PR Review Standard v1.1.0](docs/standards/pr-review-standard.md): `ARCH`, `DOC`, `SKILL`, `MCP`, `RUN`, `SVC`, `DB`, `SCRIPT`, `TEST`, `DEP`.
 2. **Category Coverage Statements:** Each category must have an explicit coverage statement detailing the scope of changes reviewed.
 3. **P1/P2/P3 Findings:** Any defect must be categorized by severity:
    - **P1 (Blocker):** State corruption, silent mutation, concurrency bug, broken replay.
@@ -114,4 +114,4 @@ All pull requests must undergo a formal category review following [PR Review Sta
 - Follow PEP 8 guidelines.
 - Use explicit type annotations for all function and method signatures.
 - Preserve all existing comments and docstrings unless explicitly changing behavior.
-- Use clickable file links (`file://...`) in documentation and commit messages where applicable.
+- Use repository-relative links for docs that readers can open from GitHub or the documentation site.

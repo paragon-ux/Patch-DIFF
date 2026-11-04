@@ -1,4 +1,4 @@
-# Workspace editing with the installed package
+# Workspace editing quickstart
 
 Use the `workspace` MCP profile when a host needs to edit an existing file in
 one project directory. PatchDIFF imports the file into a PostgreSQL working
@@ -47,7 +47,7 @@ database URL with the values for your environment.
 ```
 
 Start or refresh the MCP connection and verify that it exposes the
-[five workspace tools](../spec/profiles/WORKSPACE.md). Startup errors appear
+[five workspace tools](../spec/profiles/workspace-profile.md). Startup errors appear
 on stderr.
 
 Set the MCP server's workspace root to the same project directory the host
@@ -56,34 +56,23 @@ file. If the host prompts for MCP write approval, authorize the server for
 that workspace before asking it to edit.
 
 Use `sync_workspace=true` when you want SAVE to write the file. The
-[workspace profile contract](../spec/profiles/WORKSPACE.md) describes
+[workspace profile contract](../spec/profiles/workspace-profile.md) describes
 startup requirements and the server-wide sync default.
 
 ## Edit and publish a file
 
-A normal user request can name the file, describe the edit and ask to save it
-to the workspace. The client can discover the sequence from the tools.
+Give the host a request with the file path, the desired edit and whether
+to write the result to disk. For example, ask it to move the maintenance
+window in `ops/schedule.txt` to 10:00 and save the file.
 
-1. Start with `patchdiff_initialize_target` and arguments
-   `{"filename":"handbook/on-call.md","from_workspace":true}`. Omit `content`.
-   The response gives you `target_file_id`, version and hash without returning
-   the source text. Use that ID in the following calls.
-2. Read the working copy with `patchdiff_read_target`, or search with
-   `patchdiff_find_occurrences` when you know the exact text. Submit one
-   `patchdiff_submit_edits` call with the target ID, observed version and/or
-   hash, a nonblank `intent` describing the change, and ordered `edits` with
-   exact `match` and `replace` strings. Acceptance updates PostgreSQL.
-3. Call `patchdiff_save` with the target ID, the accepted version as
-   `expected_target_version`, and `sync_workspace: true`.
-4. On `saved`, use `workspace_sync.synced_path` relative to the configured root.
-   The receipt gives the raw byte digest in `disk_sha256`, plus `bytes_written`,
-   `content_eol`, `publication: "installed"` and `durability: "confirmed"`.
-   The optional `export_after_save` flag also returns the document body.
-5. If SAVE reports external drift, inspect the workspace file and initialize a
-   new working target from it. If SAVE reports partial or the response is lost,
-   inspect both disk and PostgreSQL before reconciling.
+The host imports the file with `patchdiff_initialize_target` and
+`from_workspace: true`. It reads or searches the returned target ID,
+submits a guarded edit with a nonblank `intent`, then calls
+`patchdiff_save` with the accepted version and `sync_workspace: true`.
+The [worked example](../spec/profiles/workspace-profile.md#import-edit-and-publish)
+shows each call and the corresponding receipt.
 
-`original_eol` is the default. For a file with mixed original line endings,
-set `workspace_eol_format` to `canonical_lf` or `crlf`. See the
-[shared SAVE contract](../spec/MCP_TOOLS.md#patchdiff_save) for publication
-errors, partial receipts and filesystem requirements.
+A successful publication reports `status: "saved"` with a `workspace_sync`
+receipt. Resolve its `synced_path` relative to the configured server root.
+For a rejection, partial result or missing response, follow the
+[workspace recovery steps](../spec/profiles/workspace-profile.md#decide-what-to-do-after-a-failure).

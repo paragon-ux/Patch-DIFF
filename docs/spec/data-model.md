@@ -1,8 +1,11 @@
-# DATA_MODEL.md
+# PostgreSQL data model
 
 ## Storage effects of guarded operations, replacement and diagnostics
 
-Only migration `20261022_0003` adds storage (below); everything else uses existing columns. The normative tool contract is [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics).
+Guarded edits, replacement and diagnostics use the existing transaction
+and audit tables. Migration `20261022_0003` adds the source line-ending
+metadata used by export and workspace publication. See the
+[MCP tool contracts](mcp-tools.md#guarded-editing-reads-preview-and-diagnostics).
 
 - New submissions record these `append_only_pdcp_logs.protocol_version` / `runtime_version` pairs: `patchdiff-tx/1` and `0.2.3` with `patchdiff-mvp-0.2.2`; `patchdiff-tx/2` with `patchdiff-mvp-0.3.0`, or `patchdiff-mvp-0.5.0` when a span operation contains `expected_before`/`expected_after`; `patchdiff-tx/3` with `patchdiff-mvp-0.4.0`. `pdcp_content` stores the canonical JSON record for every typed format.
 - Accepted tx/2 and tx/3 transactions write `origin = 'typed'` ledger rows whose `derived_json` adds `operation` (`"span"` or `"replace_all"`). A tx/3 transaction writes exactly one row covering the full original span.
@@ -14,7 +17,8 @@ Only migration `20261022_0003` adds storage (below); everything else uses existi
 
 ## Scope
 
-This document defines the authoritative Postgres data model for PatchDIFF, incorporating Alembic migrations `20260510_0001_initial_schema`, `20261020_0002_typed_ledger` and `20261022_0003_source_line_endings`.
+This document covers the PostgreSQL schema from the initial migration
+`20260510_0001` through structural batch migration `20261027_0005`.
 
 The schema supports:
 - canonical target storage in Postgres (`cloud_target_files`)
@@ -24,8 +28,8 @@ The schema supports:
 - SAVE checkpoints and editing cycle advancement (`editing_cycles`, `target_snapshots`)
 - deterministic replay across recorded `(protocol_version, runtime_version)` profiles
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
-As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [modernization architecture](../papers/modernization-architecture.md).
+As-built record and verification evidence: [product change record](../papers/product-change-record.md).
 
 ## Design Rules
 
@@ -310,4 +314,4 @@ fingerprint identifies the submitted envelope before server evidence is attached
 Replay independently verifies canonical record/hash, exact links, bundle, group
 order, target/cycle/version/preimage and all original scope hashes. Ledger facts
 carry group/operation ordinals, observation IDs, original scope bounds and local
-sequential operation coordinates. [Full durable contract](STRUCTURAL_BATCH_EDITING.md#durable-evidence-and-replay).
+sequential operation coordinates. [Full durable contract](structural-batch-editing.md#durable-evidence-and-replay).

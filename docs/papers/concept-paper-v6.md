@@ -1,6 +1,12 @@
 # PatchDIFF: Transactional Document Editing for AI Agents
 
-> **Scope & Authority Note:** This paper presents the conceptual foundation, formal transaction model, architectural tradeoffs, and research hypotheses of PatchDIFF. For executable API schemas, persistence contracts, and exact runtime limits, refer to the normative specifications ([AGENTS.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/AGENTS.md), [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md), [MCP_TOOLS.md](../spec/MCP_TOOLS.md), [PATCHDIFF_CORE_SPEC.md](../spec/PATCHDIFF_CORE_SPEC.md), [DATA_MODEL.md](../spec/DATA_MODEL.md), and [PDCP_FORMAT.md](../spec/PDCP_FORMAT.md)).
+This paper explains PatchDIFF's transaction model, tradeoffs and research
+hypotheses. For implementation details, start with the
+[architecture](modernization-architecture.md),
+[MCP tools](../spec/mcp-tools.md), [core runtime](../spec/core-runtime.md),
+[data model](../spec/data-model.md), and [transaction formats](../spec/transaction-formats.md).
+[Repository invariants](https://github.com/paragon-ux/Patch-DIFF/blob/main/AGENTS.md)
+govern the implementation.
 
 ---
 
@@ -399,7 +405,7 @@ guarded per-target commit. This is not AST rewriting or cross-target atomicity.
 Strict observed admission rechecks issued identity, cycle, version/hash, original
 bounds/hash and unused state under the target lock. Accepted durable batches use
 `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`; replay validates every
-recorded scope without Waymark. See [the batch contract](../spec/STRUCTURAL_BATCH_EDITING.md).
+recorded scope without Waymark. See [the batch contract](../spec/structural-batch-editing.md).
 
 To prevent unintended wide-area rewrites while still supporting legitimate whole-file updates, it is important to distinguish **controls enforced directly by the PatchDIFF runtime** from **optional policies that an MCP host or enterprise harness may layer on top**:
 
@@ -469,7 +475,7 @@ omit supplementary change evidence or duplicate discovery metadata, preserving
 all warnings, guards, identities, exact source and continuations. Persistence,
 recovery, deterministic verdicts and replay are unchanged. This reduces payload
 overhead but does not prove reduced model latency or eliminate arbitrary host
-spills. [Workflow v1](../guides/OBSERVED_EDITOR_WORKFLOW.md) separates model editing from
+spills. [Workflow v1](../guides/observed-editor-workflow.md) separates model editing from
 trusted host finalization and independent task verification.
 
 ---
@@ -492,7 +498,7 @@ ends. This does not require multi-target transactions or model-managed lifecycle
 turns. Unchanged guards do not make SAVE idempotent: lost or unrecordable receipts
 are explicitly uncertain and must not be blindly retried. Replay reconstructs
 history and checks materialized integrity; an independent evaluator owns task
-correctness. The [operator recipe](../guides/HOST_INTEGRATION_GUIDE.md#trusted-scalar-finalization)
+correctness. The [operator recipe](../guides/host-integration-guide.md#trusted-scalar-finalization)
 records per-target outcomes without claiming cross-target atomicity.
 
 ---
@@ -503,7 +509,7 @@ All quantitative and comparative claims in this paper follow a four-tier classif
 1. **`Enforced Contract / Hard Cap`**: Deterministic byte, code-point, or row-count bounds enforced in software.
 2. **`Measured (PatchDIFF-only)`**: Deterministic byte counts from `backend/tests/verification/offline_eval.py` and local reference workload medians.
 3. **`Analytical Comparison`**: Structural complexity and round-trip comparisons under stated workflow assumptions.
-4. **`Empirically Validated / Open Hypotheses`**: Live-model 2×2 factorial evaluation ($N=12$ independent runs in the Modernized evaluation; see [modernized_benchmark_report.md](../benchmarks/modernized_benchmark_report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)) evaluating `H1`, `H7`, and Git environment interaction; remaining multi-agent contention (`H3`), long-horizon session compaction (`H4`), and human review (`H6`) studies remain open empirical investigations.
+4. **`Empirically Validated / Open Hypotheses`**: Live-model 2×2 factorial evaluation ($N=12$ independent runs in the Modernized evaluation; see [modernized benchmark](../benchmarks/modernized-benchmark-report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)) evaluating `H1`, `H7`, and Git environment interaction; remaining multi-agent contention (`H3`), long-horizon session compaction (`H4`), and human review (`H6`) studies remain open empirical investigations.
 
 ### 23.1 Deterministic Payload Byte Scaling & Reference Runtime Characteristics (`Measured`)
 
@@ -536,13 +542,13 @@ The table below states each of PatchDIFF's seven core research hypotheses (`H1`�
 
 | Research Hypothesis | Established Today (Deterministic Runtime & Offline Measurements) | Empirical Status & Evaluation Protocol |
 | :--- | :--- | :--- |
-| **H1: PatchDIFF reduces full-document decoding cost** | **Deterministic payload byte accounting (`backend/tests/verification/offline_eval.py`):** Localized `patchdiff-tx/1` payloads scale with $O(|\Delta|)$ rather than document size $|T|$ (`151 B` MCP `arguments` for 1 minimal edit, `259 B` for 5 edits, `+28 B` per additional 1-byte edit). | **Empirically validated on live models ($n=3$ per arm across 4 conditions, $N=12$ runs; `docs/benchmarks/modernized_benchmark_report.md`):** Modernized PatchDIFF demonstrated a **-55.8% reduction in interaction steps** ($24.2 \pm 3.3$ vs. $54.8 \pm 4.9$, $t=12.75, p < 0.00001$), **-57.8% reduction in tool invocations** ($22.7 \pm 3.5$ vs. $53.8 \pm 4.9$, $t=12.65, p < 0.00001$), and **-64.8% reduction in context window tokens** ($875,635 \pm 165,749$ vs. $2,490,762 \pm 346,842$, Welch $t=10.292, \text{df}=7.17, p < 0.00002$, $p \approx 1.5 \times 10^{-5}$), with **-23.6% turnaround time reduction** and 4.7× variance collapse. In Git repositories, PatchDIFF operated without exploratory Git command loops ($0.0$ `git diff`/`git status` calls vs. $10.0$ calls in Control). |
+| **H1: PatchDIFF reduces full-document decoding cost** | **Deterministic payload byte accounting (`backend/tests/verification/offline_eval.py`):** Localized `patchdiff-tx/1` payloads scale with $O(|\Delta|)$ rather than document size $|T|$ (`151 B` MCP `arguments` for 1 minimal edit, `259 B` for 5 edits, `+28 B` per additional 1-byte edit). | **Empirically validated on live models ($n=3$ per arm across 4 conditions, $N=12$ runs; `docs/benchmarks/modernized-benchmark-report.md`):** Modernized PatchDIFF demonstrated a **-55.8% reduction in interaction steps** ($24.2 \pm 3.3$ vs. $54.8 \pm 4.9$, $t=12.75, p < 0.00001$), **-57.8% reduction in tool invocations** ($22.7 \pm 3.5$ vs. $53.8 \pm 4.9$, $t=12.65, p < 0.00001$), and **-64.8% reduction in context window tokens** ($875,635 \pm 165,749$ vs. $2,490,762 \pm 346,842$, Welch $t=10.292, \text{df}=7.17, p < 0.00002$, $p \approx 1.5 \times 10^{-5}$), with **-23.6% turnaround time reduction** and 4.7× variance collapse. In Git repositories, PatchDIFF operated without exploratory Git command loops ($0.0$ `git diff`/`git status` calls vs. $10.0$ calls in Control). |
 | **H2: PatchDIFF reduces unintended mutation** | **Deterministic locality for localized operations (Invariant 1):** For every accepted `tx/1` and `tx/2` transaction, code points outside the resolved $[s_i, e_i)$ spans are provably invariant (`T_i[0:s_i] == T_{i-1}[0:s_i]` and `T_i[s_i+|r_i|:] == T_{i-1}[e_i:]`). Unintended whole-file rewrites cannot occur via `tx/1` or `tx/2`. | **End-to-end agent edit-fidelity study (`NOT RUN`):** Measure how often live models select an unintended span or over-broad `match` string compared to silent drift in full-file rewrites or misapplied fuzzy diffs. |
 | **H3: PatchDIFF improves stale-context detection** | **Enforced optimistic concurrency guards:** Every submission requires `expected_target_version` and/or `expected_current_hash` evaluated under `SELECT ... FOR UPDATE`. Any version or hash divergence deterministically rejects (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation. | **Multi-agent contention & recovery study (`NOT RUN`):** Measure conflict recovery success rates and wasted turns when multiple live agents concurrently edit shared documents under optimistic locking. |
 | **H4: PatchDIFF supports multi-edit cached-document workflows** | **Multi-edit batching, `SAVE` cycles, and bounded SQL history:** `tx/1` and `tx/2` execute ordered multi-edit batches atomically in memory; `patchdiff_save` rotates active editing cycles (`include_previous_cycles=False` returns an empty active-cycle ledger `entries: []`); SQL `LATERAL` projection bounds 50-row history reads over `20 MB` logs to `14.68–221.59 ms`. | **Long-horizon session study (`NOT RUN`):** Measure cumulative prompt token growth and task completion over 20–100 sequential edits with periodic `patchdiff_save` compaction vs. uncompacted agent loops. |
 | **H5: PatchDIFF preserves deterministic replay** | **Verified by implementation tests across supported execution profiles:** `patchdiff_replay` reconstructs canonical state from `initial_upload` + ordered accepted logs and verifies all four `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`), including detection of out-of-band raw CRLF injection. | **Supported replay behavior verified in the reference implementation test suite.** *(Cross-implementation conformance and multi-million-row longitudinal archive benchmarks remain future work.)* |
 | **H6: PatchDIFF improves reviewability** | **Separation of asserted intent from derived facts:** `append_only_manifest_ledger` stores model-claimed `intent` / `rationale` alongside runtime-computed `derived_json` (`span_start`, `span_end`, char counts, SHA-256 hashes), and `patchdiff_preview` exposes those exact facts prior to commit. | **Human reviewer & auditing study (`NOT RUN`):** Measure human review time and defect-detection accuracy when inspecting PatchDIFF manifest ledgers + derived span facts vs. raw unified diffs or full-file rewrites. |
-| **H7: LLMs can reliably generate valid PatchDIFF transactions** | **JSON-native schema & delimiter-collision elimination:** `patchdiff-tx/1..3` use standard JSON tool arguments (`TYPED_EDIT_JSON_SCHEMA`, `TYPED_OPERATIONS_JSON_SCHEMA`, `TYPED_REPLACEMENT_JSON_SCHEMA`) advertised with 13 executable discovery examples (`<= 8,192 B`), eliminating line-delimiter collisions (`"a\n=======\nb"` is accepted at `162 B`). | **Empirically validated on live models ($n=3$ per arm across 4 conditions, $N=12$ runs; `docs/benchmarks/modernized_benchmark_report.md`):** In the standardized 5-file canary workload, Modernized PatchDIFF (`observed_v2` batch bundles) achieved **100.0% full-byte match** against the oracle reference (0 byte diffs across all 12 runs × 5 target files = 60 targets evaluated) and **100.0% behavioral test pass rate** (240/240 assertions), with **zero transaction rejections and zero retries** on bundle submission. |
+| **H7: LLMs can reliably generate valid PatchDIFF transactions** | **JSON-native schema & delimiter-collision elimination:** `patchdiff-tx/1..3` use standard JSON tool arguments (`TYPED_EDIT_JSON_SCHEMA`, `TYPED_OPERATIONS_JSON_SCHEMA`, `TYPED_REPLACEMENT_JSON_SCHEMA`) advertised with 13 executable discovery examples (`<= 8,192 B`), eliminating line-delimiter collisions (`"a\n=======\nb"` is accepted at `162 B`). | **Empirically validated on live models ($n=3$ per arm across 4 conditions, $N=12$ runs; `docs/benchmarks/modernized-benchmark-report.md`):** In the standardized 5-file canary workload, Modernized PatchDIFF (`observed_v2` batch bundles) achieved **100.0% full-byte match** against the oracle reference (0 byte diffs across all 12 runs × 5 target files = 60 targets evaluated) and **100.0% behavioral test pass rate** (240/240 assertions), with **zero transaction rejections and zero retries** on bundle submission. |
 
 ### 23.3 Experimental Design for Live-Model & Human Benchmarks (`H1`–`H4`, `H6`, `H7`)
 
@@ -629,7 +635,7 @@ PatchDIFF deliberately trades heuristic permissiveness for deterministic safety.
 5. **No semantic or task-level correctness guarantee:**
    - An accepted PatchDIFF transaction guarantees that precondition guards held and exact text/span operations succeeded (`protocol_valid: true`, `transaction_valid: true`). It never guarantees that the resulting code compiles, passes tests, or satisfies the user's intent (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
 6. **Empirically measured efficiency and remaining open questions (`Decision A8`):**
-   - Live-model token savings, step reductions, and transaction validity were confirmed on the 5-file canary workload across $N=12$ independent runs in the Modernized evaluation ([modernized_benchmark_report.md](../benchmarks/modernized_benchmark_report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)). Multi-agent concurrent contention (`H3`), long-horizon multi-hour sessions (`H4`), and human reviewer error-identification studies (`H6`) remain open empirical investigations.
+   - Live-model token savings, step reductions, and transaction validity were confirmed on the 5-file canary workload across $N=12$ independent runs in the Modernized evaluation ([modernized benchmark](../benchmarks/modernized-benchmark-report.md); legacy confounded baseline at [git_benchmark_report.md](../legacy/git_benchmark_report.md)). Multi-agent concurrent contention (`H3`), long-horizon multi-hour sessions (`H4`), and human reviewer error-identification studies (`H6`) remain open empirical investigations.
 
 ---
 
@@ -672,9 +678,9 @@ PatchDIFF demonstrates that agent document editing is naturally modeled as a **d
    - OpenAI, *Apply Patch Tool (`apply_patch` V4A Diff Format)*, OpenAI Platform Documentation & Cookbook, `https://platform.openai.com/docs/guides/tools`.
 7. **PatchDIFF Normative Specifications:**
    - [AGENTS.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/AGENTS.md) — Locked architectural invariants and runtime boundaries.
-   - [MODERNIZATION_ARCHITECTURE.md](MODERNIZATION_ARCHITECTURE.md) — Architecture decisions (`A1`–`A8`), contracts (`C1`–`C6`), and historical design reconciliation.
-   - [MCP_TOOLS.md](../spec/MCP_TOOLS.md) — Normative MCP tool contracts, schemas, and byte budgets.
-   - [PATCHDIFF_CORE_SPEC.md](../spec/PATCHDIFF_CORE_SPEC.md) — Deterministic core runtime specification and validation stages.
-   - [DATA_MODEL.md](../spec/DATA_MODEL.md) — PostgreSQL schema and constraints.
-   - [PDCP_FORMAT.md](../spec/PDCP_FORMAT.md) — Transaction formats (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`).
+   - [modernization architecture](modernization-architecture.md) — Architecture decisions (`A1`–`A8`), contracts (`C1`–`C6`), and historical design reconciliation.
+   - [MCP tool contracts](../spec/mcp-tools.md) — Normative MCP tool contracts, schemas, and byte budgets.
+   - [core runtime](../spec/core-runtime.md) — Deterministic core runtime specification and validation stages.
+   - [PostgreSQL data model](../spec/data-model.md) — PostgreSQL schema and constraints.
+   - [transaction formats](../spec/transaction-formats.md) — Transaction formats (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`).
    - [backend/tests/verification/README.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/backend/tests/verification/README.md) — Offline payload byte accounting and evaluation methodology.

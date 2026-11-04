@@ -1,6 +1,8 @@
 # Release preparation
 
-This checklist distinguishes reviewed code from a published release. Neither merging a PR nor a green historical CI run creates a tag, publishes a package, or verifies a production deployment.
+Use this checklist to move from reviewed code to a release. Record the
+exact revision and its verification, then track the tag, package and
+deployment separately.
 
 ## Version and tag plan
 
@@ -28,7 +30,7 @@ No remote tags or GitHub releases existed when checked on 2026-10-22. `v0.1.0` i
 
 ## Merge review
 
-- Review [release notes](https://github.com/paragon-ux/Patch-DIFF/blob/main/CHANGELOG.md), [README](https://github.com/paragon-ux/Patch-DIFF/blob/main/README.md), [tool contracts](../spec/MCP_TOOLS.md) and [host guidance](../guides/HOST_INTEGRATION_GUIDE.md) against actual discovery and behavior.
+- Review [release notes](https://github.com/paragon-ux/Patch-DIFF/blob/main/CHANGELOG.md), [README](https://github.com/paragon-ux/Patch-DIFF/blob/main/README.md), [tool contracts](../spec/mcp-tools.md) and [host guidance](../guides/host-integration-guide.md) against actual discovery and behavior.
 - Complete integration and release-readiness reviews. Recheck every confirmed finding at a fix revision; preserve historical results and evidence.
 - Check the exact current PR head and generated-merge CI checkout SHAs, test counts, migrations and offline results. A prior check on another revision is insufficient.
 - Verify a real stdio/PostgreSQL workflow outside existing tests, including guard/recovery, bounded preview, ledger, SAVE/replay/export and independent SQL assertions. Retain source and helper hashes.

@@ -25,7 +25,7 @@ xychart-beta
     bar [206, 207, 304, 183]
 ```
 
-> **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime ($n=3$ per arm across 4 experimental conditions, Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized_benchmark_report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
+> **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime ($n=3$ per arm across 4 experimental conditions, Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized-benchmark-report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
 
 ### How Validated Hypotheses and Operational Mechanisms Drive Faster Time Elapsed
 
@@ -81,7 +81,7 @@ PatchDIFF supports three structured transaction input formats (pure declarative 
 - **`patchdiff-tx/2` (`patchdiff_submit_operations`)**: Ordered exact match and `[start, end)` code-point span operations with `expected_text` and optional adjacency guards.
 - **`patchdiff-tx/3` (`patchdiff_submit_replacement`)**: Sole explicit whole-document replacement (`<= 1,000,000` code points and `<= 1,048,576` UTF-8 bytes).
 
-All formats require `expected_target_version` and/or `expected_current_hash` and are processed by the same deterministic core engine. See [PDCP Format](docs/spec/PDCP_FORMAT.md) and [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) for full request schemas and examples.
+All formats require `expected_target_version` and/or `expected_current_hash` and are processed by the same deterministic core engine. See [PDCP Format](docs/spec/transaction-formats.md) and [Host Integration Guide](docs/guides/host-integration-guide.md) for full request schemas and examples.
 
 ---
 
@@ -114,10 +114,10 @@ PatchDIFF exposes a stdio JSON-RPC MCP adapter. For Claude Desktop (`claude_desk
 }
 ```
 
-See [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) for full host integration details.
+See [Claude Desktop Setup](docs/guides/claude-desktop-setup.md) for full host integration details.
 
 To edit an existing file using the installed wheel, follow the
-[workspace quickstart](docs/guides/WORKSPACE_PUBLICATION.md). It covers Python
+[workspace quickstart](docs/guides/workspace-quickstart.md). It covers Python
 and PostgreSQL setup, the five-tool MCP profile, and publishing the file on SAVE.
 The `editor` configuration above is for a host that already has a target ID.
 
@@ -127,8 +127,8 @@ The `editor` configuration above is for a host that already has a target ID.
 
 Set `PATCHDIFF_MCP_PROFILE` before starting the server. The default
 `editor` profile exposes seven tools for an existing target. Choose
-[`workspace`](docs/spec/profiles/WORKSPACE.md) for file import and publication,
-[`observed_v2`](docs/spec/profiles/MCP_EDITOR_V2.md) for structural editing
+[`workspace`](docs/spec/profiles/workspace-profile.md) for file import and publication,
+[`observed_v2`](docs/spec/profiles/observed-editor-v2.md) for structural editing
 with explicit snapshots, or `full` for all 22 tools. The
 [profile catalog](docs/spec/profiles/index.md) lists every tool set.
 
@@ -139,12 +139,12 @@ with explicit snapshots, or `full` for all 22 tools. The
 Full documentation is available on the **[Zensical Documentation Site](https://paragon-ux.github.io/Patch-DIFF/)**:
 
 - **Visual Architecture**: [Visual Architecture & Transaction Lifecycle](docs/architecture.md)
-- **Specifications**: [Core Runtime](docs/spec/PATCHDIFF_CORE_SPEC.md) | [MCP Tools](docs/spec/MCP_TOOLS.md) | [Data Model](docs/spec/DATA_MODEL.md) | [PDCP Formats](docs/spec/PDCP_FORMAT.md) | [Batch Editing](docs/spec/STRUCTURAL_BATCH_EDITING.md)
-- **MCP Profiles**: [Profile Catalog](docs/spec/profiles/index.md) | [Workspace](docs/spec/profiles/WORKSPACE.md) | [Observed Editor v2](docs/spec/profiles/MCP_EDITOR_V2.md)
-- **Guides**: [Host Integration Guide](docs/guides/HOST_INTEGRATION_GUIDE.md) | [Claude Desktop Setup](docs/guides/CLAUDE_DESKTOP_SETUP.md) | [Workspace Editing](docs/guides/WORKSPACE_PUBLICATION.md) | [Observed Workflow](docs/guides/OBSERVED_EDITOR_WORKFLOW.md)
-- **Whitepapers**: [Concept Paper v6](docs/papers/PatchDIFF-Concept-Paper-6.md) | [Modernization Architecture](docs/papers/MODERNIZATION_ARCHITECTURE.md)
-- **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized_benchmark_report.md) | [Test Matrix](docs/benchmarks/TEST_MATRIX.md)
-- **Standards & Legacy**: [PR Review Standard](docs/standards/PR_REVIEW_STANDARD.md) | [Release Readiness](docs/standards/RELEASE_READINESS.md) | [Legacy Compatibility](docs/legacy/LEGACY_COMPATIBILITY.md) | [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md)
+- **Specifications**: [Core Runtime](docs/spec/core-runtime.md) | [MCP Tools](docs/spec/mcp-tools.md) | [Data Model](docs/spec/data-model.md) | [PDCP Formats](docs/spec/transaction-formats.md) | [Batch Editing](docs/spec/structural-batch-editing.md)
+- **MCP Profiles**: [Profile Catalog](docs/spec/profiles/index.md) | [Workspace](docs/spec/profiles/workspace-profile.md) | [Observed Editor v2](docs/spec/profiles/observed-editor-v2.md)
+- **Guides**: [Host Integration Guide](docs/guides/host-integration-guide.md) | [Claude Desktop Setup](docs/guides/claude-desktop-setup.md) | [Workspace Editing](docs/guides/workspace-quickstart.md) | [Observed Workflow](docs/guides/observed-editor-workflow.md)
+- **Whitepapers**: [Concept Paper v6](docs/papers/concept-paper-v6.md) | [Modernization Architecture](docs/papers/modernization-architecture.md)
+- **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized-benchmark-report.md) | [Test Matrix](docs/benchmarks/test-matrix.md)
+- **Standards & Legacy**: [PR Review Standard](docs/standards/pr-review-standard.md) | [Release Readiness](docs/standards/release-readiness.md) | [Legacy Compatibility](docs/legacy/LEGACY_COMPATIBILITY.md) | [Legacy Benchmark Report](docs/legacy/git_benchmark_report.md)
 
 ---
 

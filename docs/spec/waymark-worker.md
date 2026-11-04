@@ -1,18 +1,40 @@
 # Resident Waymark discovery
 
-Set `PATCHDIFF_WAYMARK_MODE=resident` before starting the serving process to reuse one internal Node process. `oneshot` remains the compatibility default. Unknown modes fail startup. `PATCHDIFF_NODE_BINARY` still selects the trusted Node executable; `PATCHDIFF_WAYMARK_WORKERS` currently accepts only `1`.
+Waymark supplies structural discovery for observed edits. Set
+`PATCHDIFF_WAYMARK_MODE=resident` before startup to reuse one internal
+Node process. The default `oneshot` mode starts a process for each discovery.
+An unknown mode prevents startup. Use `PATCHDIFF_NODE_BINARY` to select
+the trusted Node executable. `PATCHDIFF_WAYMARK_WORKERS` accepts only `1`.
+
+## What the worker reuses
 
 Both modes invoke `discovery_core.mjs`, which uses the pinned public `waymark-engine@4.1.0` API. Every discovery writes a fresh isolated file and parses the supplied authoritative content. The worker reuses module/grammar initialization, and does not cache document authority, symbols, observations or edit results. Existing filters, ordering, input domain and Python result validation are shared. Explicit adapter test overrides use the one-shot runner.
 
 The private pipe protocol uses bounded length-prefixed UTF-8 JSON frames with generation and request identities. Source is streamed to an owned request file after admission; the control frame carries its generated directory token, byte count and SHA-256. This introduces no new source-size limit. Output retains the existing 2 MiB cap, and stderr is capped at 64 KiB per generation. Invalid framing, unsolicited data, wrong identities and worker death retire the generation. A failed discovery is never automatically retried or switched to another mode.
 
-There is one active request and at most eight waiting descriptors, in FIFO order. Ordinary admission waits at most two seconds; startup readiness at most seven seconds; active discovery retains its positive finite timeout, normally fifteen seconds. The outer discovery allowance is the active timeout plus thirteen seconds (normally twenty-eight), including bounded failure cleanup under a responsive OS. These are phase ceilings, not mandatory waits, and exclude database/complete MCP request time.
+## Queue and time limits
+
+The worker runs one active request and holds at most eight waiting
+descriptors in FIFO order. Each phase has a separate ceiling.
+
+| Phase | Ceiling |
+| --- | --- |
+| Ordinary admission | 2 seconds |
+| Startup readiness | 7 seconds |
+| Active discovery | Configured positive, finite timeout, normally 15 seconds |
+| Outer discovery allowance | Active timeout plus 13 seconds, normally 28 seconds, including bounded cleanup on a responsive OS |
+
+These limits exclude database work and the rest of the MCP call.
 
 Fresh submissions holding the target lock wait at most 250 ms for an already-ready worker, in the same FIFO. They never start a child while holding that lock. Request-key recovery/conflict detection happens first and remains available without discovery capacity. Queue expiry/full, protocol loss, cancellation, RSS/restart limits and cleanup failures raise `WaymarkWorkerError` with a `WAYMARK_WORKER_*` code. Service-owned transactions roll back; caller-owned transactions remain the caller's responsibility. These failures produce no invented validation attempt. Existing evaluator failures, output-size failures and active timeout retain their existing domain result/audit path.
 
+## Process ownership and cleanup
+
 Node old space is capped at 768 MiB. RSS is sampled every 100 ms against 1 GiB; this is an operational sampled limit. Generations retire after 10,000 requests or sixty minutes. At most three launches are permitted in a rolling minute. Windows Job Object ownership and a separate child stdin-reader thread terminate the child after abrupt parent death; POSIX uses an owned process group and the stdin-reader guard. Normal shutdown reaps the child and removes owned files. Stale-root cleanup requires a valid ownership manifest and confirmed dead/reused process creation identity; ambiguous roots are preserved.
 
-The stdio server owns the worker for its entire serving loop and prewarms resident mode before requests, outside target transactions. Failed prewarming does not prevent recorded-key recovery. FastAPI lifespan owns cleanup but its health-only API starts no child. Trusted direct embeddings should use:
+The stdio server owns the worker across its serving loop and prewarms
+resident mode outside target transactions. The
+[workspace profile](profiles/workspace-profile.md) skips worker startup. Failed prewarming does not prevent recorded-key recovery. FastAPI lifespan owns cleanup but its health-only API starts no child. Trusted direct embeddings should use:
 
 ```python
 from app.services.waymark_worker import serving_worker_owner

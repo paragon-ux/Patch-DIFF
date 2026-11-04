@@ -9,17 +9,17 @@ This file provides guidance for Claude Code and AI assistants operating in the P
 When working in this repository, always consult documentation in the following order of precedence:
 
 1. `AGENTS.md` (locked architectural invariants)
-2. `docs/papers/MODERNIZATION_ARCHITECTURE.md` (architectural decisions A1–A8, contracts C1–C6)
-3. `docs/papers/MODERNIZATION_CHANGE_DOC.md` (product change record and verification scope)
-4. `docs/spec/MCP_TOOLS.md` (MCP tool contracts, schemas, byte budgets)
-5. `docs/spec/PATCHDIFF_CORE_SPEC.md` (deterministic core runtime specification)
-6. `docs/spec/DATA_MODEL.md` (Postgres schema and migrations `20260510_0001` through `20261027_0005`)
-7. `docs/spec/PDCP_FORMAT.md` (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`)
+2. `docs/papers/modernization-architecture.md` (architectural decisions A1–A8, contracts C1–C6)
+3. `docs/papers/product-change-record.md` (product change record and verification scope)
+4. `docs/spec/mcp-tools.md` (MCP tool contracts, schemas, byte budgets)
+5. `docs/spec/core-runtime.md` (deterministic core runtime specification)
+6. `docs/spec/data-model.md` (Postgres schema and migrations `20260510_0001` through `20261027_0005`)
+7. `docs/spec/transaction-formats.md` (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`)
 8. `docs/spec/profiles/index.md` (startup selection and profile contracts)
-9. `docs/spec/STRUCTURAL_BATCH_EDITING.md` (structural observation and batch transactions)
-10. `docs/guides/HOST_INTEGRATION_GUIDE.md` (host loop, reads, retries, and failure handling)
-11. `docs/standards/PR_REVIEW_STANDARD.md` (PR review standard v1.1.0)
-12. `docs/benchmarks/modernized_benchmark_report.md` (certified empirical benchmark results)
+9. `docs/spec/structural-batch-editing.md` (structural observation and batch transactions)
+10. `docs/guides/host-integration-guide.md` (host loop, reads, retries, and failure handling)
+11. `docs/standards/pr-review-standard.md` (PR review standard v1.1.0)
+12. `docs/benchmarks/modernized-benchmark-report.md` (certified empirical benchmark results)
 
 ---
 
@@ -74,4 +74,4 @@ python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-
 
 Choose the external MCP tool catalog with `PATCHDIFF_MCP_PROFILE`. See the
 [profile reference](docs/spec/profiles/index.md) for exact tool lists and
-[workspace startup](docs/spec/profiles/WORKSPACE.md) for file editing.
+[workspace startup](docs/spec/profiles/workspace-profile.md) for file editing.

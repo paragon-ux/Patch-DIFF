@@ -1,100 +1,72 @@
-# PatchDIFF Documentation
+# PatchDIFF documentation
 
-Welcome to the PatchDIFF documentation. PatchDIFF is a server-side, deterministic document transaction service designed for MCP-connected agents and automated workflows.
+PatchDIFF turns proposed text edits into guarded PostgreSQL transactions
+over MCP. Start with the workflow that fits your host.
 
-PatchDIFF transforms untrusted, model-generated text edits into **explicitly preconditioned, atomic, auditable, and deterministically replayable PostgreSQL transactions** over the Model Context Protocol (MCP).
+- [Edit a workspace file](guides/workspace-quickstart.md) with the installed
+  package and publish the edited bytes on SAVE.
+- [Connect Claude Desktop](guides/claude-desktop-setup.md) to the stdio server.
+- [Integrate a host](guides/host-integration-guide.md) to read targets, submit
+  guarded edits, and handle rejections.
+- [Delegate structural editing](guides/observed-editor-workflow.md) while
+  retaining lifecycle tools on a trusted connection.
 
----
+## Shared specifications
 
-## Visual Architecture & Flow
+- [Core runtime](spec/core-runtime.md) covers exact matching, sequential
+  simulation, validation and deterministic replay.
+- [MCP tools](spec/mcp-tools.md) defines shared requests, receipts and errors.
+- [Data model](spec/data-model.md) explains PostgreSQL storage, row locks and migrations.
+- [Transaction formats](spec/transaction-formats.md) covers typed replacements,
+  guarded match and span operations, and whole-target replacement.
+- [Structural batch editing](spec/structural-batch-editing.md) explains scope
+  observation and atomic multi-scope edits.
+- [Waymark worker](spec/waymark-worker.md) describes resident discovery, IPC and cleanup.
 
-For complete visual flowcharts and interactive sequence diagrams:
+## MCP profiles
 
-- [**Visual Architecture & Transaction Lifecycle**](architecture.md): Interactive Mermaid diagrams showing the end-to-end host transaction lifecycle, 5-stage core validation pipeline, 4-tier system architecture, and profile-dispatched replay engine.
+[Choose a profile](spec/profiles/index.md) to see which tools a connection
+can use. These pages explain who should use each profile and how to start.
 
----
+- [Workspace](spec/profiles/workspace-profile.md) for file import, exact editing and publication.
+- [Editing an existing target](spec/profiles/existing-target-editing.md) for
+  `editor`, `unobserved` and `observed`.
+- [Delegated editing and lifecycle](spec/profiles/delegation-and-lifecycle.md)
+  for `observed_editor`, `unobserved_editor`, `hybrid_editor` and `full`.
+- [Observed editor v2](spec/profiles/observed-editor-v2.md) for structural
+  editing with explicit snapshots and bounded receipts.
 
-## Documentation Structure
+## Architecture and evidence
 
-```text
-docs/
-├── spec/          Shared specifications and tool contracts
-│   └── profiles/  MCP startup profiles and profile-specific contracts
-├── guides/        Host integration, client setup, and workflow recipes
-├── benchmarks/    Empirical evaluation reports and test matrix
-├── papers/        Conceptual whitepapers and architecture records
-├── standards/     Engineering standards, PR review rubric, and release checklist
-└── legacy/        Frozen legacy formats, deprecated wrappers, and historical profiles
-```
+- [Architecture diagrams](architecture.md) trace an edit through validation,
+  commit and replay.
+- [Modernization architecture](papers/modernization-architecture.md) records
+  design decisions A1–A8, contracts C1–C6 and evidence E1–E8.
+- [Product change record](papers/product-change-record.md) tracks compatibility
+  and verification scope.
+- [Concept paper v6](papers/concept-paper-v6.md) explains the transaction model,
+  tradeoffs and research hypotheses.
+- [Modernized benchmark](benchmarks/modernized-benchmark-report.md) reports
+  the five-file `observed_v2` experiment. The workspace workflow has separate
+  functional verification.
+- [Test matrix](benchmarks/test-matrix.md) maps unit, PostgreSQL, migration and
+  stdio tests to their contracts.
 
----
+## Review and release
 
-## 1. Specifications (`docs/spec/`)
+- [PR review standard](standards/pr-review-standard.md) defines category
+  coverage, finding severity and evidence requirements.
+- [Release readiness](standards/release-readiness.md) covers versioning,
+  verification and dependency audits.
 
-Authoritative technical specifications and tool schemas:
+## Legacy reference
 
-- [**PATCHDIFF_CORE_SPEC.md**](spec/PATCHDIFF_CORE_SPEC.md): Pure deterministic core runtime, validation stages (`ValidationStage`), overlapping-match enumeration, sequential simulation, and replay engine.
-- [**MCP_TOOLS.md**](spec/MCP_TOOLS.md): Complete Model Context Protocol tool contracts, schemas, byte budgets, and request/response representations.
-- [**DATA_MODEL.md**](spec/DATA_MODEL.md): PostgreSQL relational substrate, row-locking concurrency model (`SELECT ... FOR UPDATE`), and Alembic migrations `20260510_0001` through `20261027_0005`.
-- [**PDCP_FORMAT.md**](spec/PDCP_FORMAT.md): Declarative transaction input formats: typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), and guarded sole replacement (`patchdiff-tx/3`).
-- [**STRUCTURAL_BATCH_EDITING.md**](spec/STRUCTURAL_BATCH_EDITING.md): Multi-scope AST observation and atomic batch execution contracts.
-- [**WAYMARK_WORKER.md**](spec/WAYMARK_WORKER.md): Resident worker process architecture and IPC lifecycle for external AST engines.
-
-### MCP profiles (`docs/spec/profiles/`)
-
-- [Profile catalog](spec/profiles/index.md) lists the startup choices and exact tool sets.
-- [Workspace](spec/profiles/WORKSPACE.md) defines the five-tool file editing profile and startup checks.
-- [Observed editor v2](spec/profiles/MCP_EDITOR_V2.md) defines the explicit snapshots and bounded receipts for structural editing.
-
----
-
-## 2. Host & Client Guides (`docs/guides/`)
-
-Practical guides for integrating PatchDIFF with agents and desktop tools:
-
-- [**Workspace editing**](guides/WORKSPACE_PUBLICATION.md) covers the installed wheel, five-tool profile, and explicit file publication.
-- [**HOST_INTEGRATION_GUIDE.md**](guides/HOST_INTEGRATION_GUIDE.md): Host-owned loop, prompt hygiene rules, reading slices, guarded submissions, handling rejections, and retry orchestration.
-- [**CLAUDE_DESKTOP_SETUP.md**](guides/CLAUDE_DESKTOP_SETUP.md): Step-by-step configuration for connecting Anthropic Claude Desktop to PatchDIFF via stdio MCP.
-- [**OBSERVED_EDITOR_WORKFLOW.md**](guides/OBSERVED_EDITOR_WORKFLOW.md): End-to-end walkthrough for agents using structural observation and atomic batch submission.
-
----
-
-## 3. Benchmarks & Verification (`docs/benchmarks/`)
-
-Empirical validation and testing methodology:
-
-- [**modernized_benchmark_report.md**](benchmarks/modernized_benchmark_report.md): Standalone Modernized 2×2 Factorial Benchmark ($N=12$) demonstrating a -55.8% step reduction, -57.8% tool invocation reduction, -64.8% token reduction, and zero Git verification tax.
-- [**TEST_MATRIX.md**](benchmarks/TEST_MATRIX.md): Comprehensive test coverage matrix across unit, live PostgreSQL, migration roundtrip, and stdio subprocess tests.
-
----
-
-## 4. Concept Papers & Architecture Records (`docs/papers/`)
-
-Conceptual foundations, design rationale, and modernization history:
-
-- [**PatchDIFF-Concept-Paper-6.md**](papers/PatchDIFF-Concept-Paper-6.md): Modernized conceptual whitepaper: theoretical model, comparison with other editing paradigms, operational efficiency bounds, and empirical research hypotheses.
-- [**MODERNIZATION_ARCHITECTURE.md**](papers/MODERNIZATION_ARCHITECTURE.md): Architectural decisions A1–A8, contracts C1–C6, and evidence evaluation E1–E8.
-- [**MODERNIZATION_CHANGE_DOC.md**](papers/MODERNIZATION_CHANGE_DOC.md): Product change record, format compatibility, and verification scope.
-
----
-
-## 5. Engineering Standards (`docs/standards/`)
-
-Engineering governance and release requirements:
-
-- [**PR_REVIEW_STANDARD.md**](standards/PR_REVIEW_STANDARD.md): PR Review Standard v1.1.0: file-to-category mapping, per-category coverage statements, P1/P2/P3 finding lists, and review archiving.
-- [**RELEASE_READINESS.md**](standards/RELEASE_READINESS.md): Production release checklist, verification requirements, and dependency audit limits.
-
----
-
-## 6. Legacy Reference (`docs/legacy/`)
-
-Frozen legacy formats and historical records:
-
-- [**LEGACY_COMPATIBILITY.md**](legacy/LEGACY_COMPATIBILITY.md): Frozen `.pdcp` v0.2.3 wire syntax, legacy submission tool (`patchdiff_submit_pdcp`), deprecated regeneration wrappers, and historical replay profiles.
-- [**ARCHIVE_INDEX.md**](legacy/ARCHIVE_INDEX.md): Commit-pinned archive index and tree links for the 61 historical scratch files pruned in PR #22 Phase 1.
-- [**git_benchmark_report.md**](legacy/git_benchmark_report.md): Legacy baseline 2×2 factorial evaluation ($N=12$); superseded by the modernized benchmark due to prompt confounds in early iterations.
-- [**PatchDIFF-Concept-Paper-5.md**](legacy/PatchDIFF-Concept-Paper-5.md): Historical v0.2.3 conceptual whitepaper.
-- [**PatchDIFF-Protocol-Spec-v0.2.3.md**](legacy/PatchDIFF-Protocol-Spec-v0.2.3.md): Historical v0.2.3 protocol specification.
-- [**PatchDIFF-Implementation-Spec-v0.2.3.md**](legacy/PatchDIFF-Implementation-Spec-v0.2.3.md): Historical v0.2.3 implementation specification.
-- [**PatchDIFF-Snapshot.md**](legacy/PatchDIFF-Snapshot.md): Historical v0.2.3 state snapshot.
+- [Legacy compatibility](legacy/LEGACY_COMPATIBILITY.md) documents frozen
+  `.pdcp` v0.2.3, deprecated wrappers and historical replay profiles.
+- [Archive index](legacy/ARCHIVE_INDEX.md) links to the commit-pinned scratch records.
+- [Legacy benchmark](legacy/git_benchmark_report.md) records the baseline experiment.
+- [Concept paper v5](legacy/PatchDIFF-Concept-Paper-5.md) records the historical model.
+- [Protocol spec v0.2.3](legacy/PatchDIFF-Protocol-Spec-v0.2.3.md) and
+  [implementation spec v0.2.3](legacy/PatchDIFF-Implementation-Spec-v0.2.3.md)
+  document the original protocol and implementation.
+- [Snapshot v0.2.3](legacy/PatchDIFF-Snapshot.md) records the historical state.

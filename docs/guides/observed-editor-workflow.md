@@ -1,9 +1,10 @@
 # Observed editor workflow, version 1
 
-This is a task-independent role brief for an editing subagent. The host supplies
-the original user task and a fresh authorized target mapping. It retains the
-original experimental prompts separately; do not append this brief to conflicting
-instructions requiring the editor to SAVE, replay, or write a detailed report.
+Use this workflow when an editor should read and submit observed edits,
+and a trusted host should handle SAVE, replay and export. The host gives
+the editor the original task and a fresh authorized target mapping. Keep
+the experimental prompts separate and use a role brief that assigns
+lifecycle work to the host.
 
 ## Serving process and contracts
 
@@ -93,7 +94,7 @@ setting. Do not assume a universal byte threshold or invent a host setting. Use
 existing pagination or permitted spill retrieval when required; record residual
 lookups/spills rather than adding a gateway or changing transaction semantics.
 
-Use [trusted scalar finalization](HOST_INTEGRATION_GUIDE.md#trusted-scalar-finalization).
+Use [trusted scalar finalization](host-integration-guide.md#trusted-scalar-finalization).
 Keep manifests, full transcripts, raw MCP arguments/results, rejected attempts,
 exports and independent oracle results private and non-overwriting. A new run of
 this workflow is not the frozen comparative arm; Gate 2 remains closed. Reduced

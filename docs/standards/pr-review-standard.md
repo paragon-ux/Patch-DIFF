@@ -8,7 +8,7 @@ Established: 2026-10-20
 
 A review must make its coverage, reasoning, findings, and evidence inspectable by category. Passing tests, a polished change document, and a previous approval are inputs; none establishes that the implementation satisfies its architecture.
 
-This standard governs PR reviews. The testing skill's concise completion-report example remains appropriate for implementation status updates; it does not replace a PR review.
+Use this standard for a PR review. Implementation status updates are separate from that review.
 
 Changes to this standard require a version bump, a rationale, and a PR that identifies which review requirements change. A reviewer cannot silently omit or weaken a category. This is a repository workflow contract, not a claim that GitHub branch protection or an automated merge gate has been installed.
 

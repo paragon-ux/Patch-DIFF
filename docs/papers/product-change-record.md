@@ -1,8 +1,11 @@
 # PatchDIFF Product Change Record
 
-PatchDIFF provides four declarative transaction formats through one deterministic applier and locked PostgreSQL submission pipeline. Authoritative reads, advisory preview, durable outcome recovery and deterministic replay let hosts propose and verify changes without moving state authority into the host.
+PatchDIFF runs four declarative transaction formats through one applier
+and locked PostgreSQL submission path. Hosts can read a target, preview
+a proposal, recover a recorded outcome and verify history through replay.
+PostgreSQL owns the working target.
 
-Architecture and contracts: [architecture](MODERNIZATION_ARCHITECTURE.md), [MCP tools](../spec/MCP_TOOLS.md), [core runtime](../spec/PATCHDIFF_CORE_SPEC.md), [storage](../spec/DATA_MODEL.md), [transaction formats](../spec/PDCP_FORMAT.md), [host guide](../guides/HOST_INTEGRATION_GUIDE.md), and [legacy compatibility](../legacy/LEGACY_COMPATIBILITY.md).
+Architecture and contracts: [architecture](modernization-architecture.md), [MCP tools](../spec/mcp-tools.md), [core runtime](../spec/core-runtime.md), [storage](../spec/data-model.md), [transaction formats](../spec/transaction-formats.md), [host guide](../guides/host-integration-guide.md), and [legacy compatibility](../legacy/LEGACY_COMPATIBILITY.md).
 
 ## Workspace editing and publication
 
@@ -13,7 +16,7 @@ Guarded typed edits update PostgreSQL. An explicit workspace SAVE publishes
 file bytes and returns a receipt with the path, raw digest, line endings and
 durability. The file install and checkpoint commit have separate outcomes.
 The existing line-ending metadata carries the workspace binding and last
-published digest. See [setup and recovery guidance](../guides/WORKSPACE_PUBLICATION.md).
+published digest. See [setup and recovery guidance](../guides/workspace-quickstart.md).
 
 Installed-wheel checks used PostgreSQL 16 and live stdio to verify the
 working copy before SAVE and exact file bytes and checkpoint afterward.
@@ -31,8 +34,8 @@ and unrelated responses are unchanged. There is no input schema/profile/runtime
 or persistence change. A separate trusted scalar finalization recipe checkpoints,
 replays and exports accepted target states without model lifecycle turns, with
 explicit SAVE uncertainty and partial-failure reporting. See
-[the contract](../spec/MCP_TOOLS.md#external-response-representations) and
-[workflow v1](../guides/OBSERVED_EDITOR_WORKFLOW.md). No host latency improvement or
+[the contract](../spec/mcp-tools.md#external-response-representations) and
+[workflow v1](../guides/observed-editor-workflow.md). No host latency improvement or
 universal spill threshold is established by the deterministic tests.
 
 Structural batches extend the two existing observation tools without adding tool
@@ -44,7 +47,7 @@ pair is `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`; historical
 single-scope and unobserved records/profiles retain their semantics. Migration
 0005 adds bundles and many-to-one accepted linkage while preserving historical
 single uniqueness; replay verifies every recorded scope without Waymark.
-[Limits, error codes, evidence and examples](../spec/STRUCTURAL_BATCH_EDITING.md).
+[Limits, error codes, evidence and examples](../spec/structural-batch-editing.md).
 
 External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
 `unobserved` has 5, `observed` 6, opt-in `observed_editor` 4, and explicit
@@ -89,7 +92,7 @@ Accepted responses carry `current_version`/`current_hash` next to `version`/`aft
 
 Preview uses the shared fresh guard/decode/apply evaluator, one coherent observation and an explicit format. It has no request key, lineage, audit, writes, locks, commit or rollback; pending local target changes are rejected without flushing. Rejected previews return no partial facts. Submission always re-locks and rechecks; a preview reserves no state.
 
-The complete preview payload is capped at 32,768 compact ASCII-escaped JSON bytes, excluding transport envelopes. Accepted facts form a prefix of at most 32 complete facts, 2,048 bytes each and 16,384 bytes including the wrapper. Text evidence caps at 1,024 code points/8,192 wrapped bytes per field; diagnostic wrappers cap at 16,384 bytes. Explicit counts and omission metadata retain verdict, reached stage, valid target/observed identity and accepted hash. Oversized identities are omitted, never shortened. [MCP_TOOLS.md](../spec/MCP_TOOLS.md) defines deterministic omission order. Ordinary submission/recovery facts and stored audit evidence remain complete.
+The complete preview payload is capped at 32,768 compact ASCII-escaped JSON bytes, excluding transport envelopes. Accepted facts form a prefix of at most 32 complete facts, 2,048 bytes each and 16,384 bytes including the wrapper. Text evidence caps at 1,024 code points/8,192 wrapped bytes per field; diagnostic wrappers cap at 16,384 bytes. Explicit counts and omission metadata retain verdict, reached stage, valid target/observed identity and accepted hash. Oversized identities are omitted, never shortened. [MCP tool contracts](../spec/mcp-tools.md) defines deterministic omission order. Ordinary submission/recovery facts and stored audit evidence remain complete.
 
 Discovery examples are deep-copied per result and bounded: 65,536 compact ASCII-escaped JSON bytes for discovery, 8,192 bytes for the complete examples map. The host guide gives the executable sequence binding returned IDs, guards, parents and cursors, including deduplication and complete history traversal.
 
@@ -101,7 +104,7 @@ Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004
 
 ## Verification scope
 
-[TEST_MATRIX.md](../benchmarks/TEST_MATRIX.md) maps unit, live PostgreSQL, populated migration preservation/refusal and real stdio workflows (`1,226` automated tests: `816` unit + `410` live PostgreSQL/stdio integration, plus `235/235` live stdio friction checks at `PR #14`). [Verification documentation](https://github.com/paragon-ux/Patch-DIFF/blob/main/backend/tests/verification/README.md) provides the current reproduction commands. Recorded deterministic byte accounting (`151 B` wire for 1 minimal `tx/1` edit, `259 B` for 5 edits, `341 B` `tools/call` line for small `tx/3` replacement), `SVC-001` 65,536-code-point near-miss latency (`1.7 ms` on varied prose, `41.9 ms` with 100% scan coverage on repetitive logs), and `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger latency over 20 MB substrates (`14.68 ms` ledger / `22.85 ms` log on `50 × 400 KB` `tx/3`; `136.72 ms` log / `221.59 ms` ledger on `20 × 1 MB` `tx/1`). Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
+[test matrix](../benchmarks/test-matrix.md) maps unit, live PostgreSQL, populated migration preservation/refusal and real stdio workflows (`1,226` automated tests: `816` unit + `410` live PostgreSQL/stdio integration, plus `235/235` live stdio friction checks at `PR #14`). [Verification documentation](https://github.com/paragon-ux/Patch-DIFF/blob/main/backend/tests/verification/README.md) provides the current reproduction commands. Recorded deterministic byte accounting (`151 B` wire for 1 minimal `tx/1` edit, `259 B` for 5 edits, `341 B` `tools/call` line for small `tx/3` replacement), `SVC-001` 65,536-code-point near-miss latency (`1.7 ms` on varied prose, `41.9 ms` with 100% scan coverage on repetitive logs), and `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger latency over 20 MB substrates (`14.68 ms` ledger / `22.85 ms` log on `50 × 400 KB` `tx/3`; `136.72 ms` log / `221.59 ms` ledger on `20 × 1 MB` `tx/1`). Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
 
 Offline replacement cases measure serialized bytes and accepted content/hash oracles, not live transport, persistence or timing. No live-model comparison, representative sanitized dataset or production performance threshold has been established. No editing adapter, optional typed guards or normalized request-identity behavior is introduced.
 
@@ -111,7 +114,7 @@ Historical source and verification records remain preserved in Git and internal 
 
 Decision: add `observed_v2` with eight external purposes, six common bundle paths and two single-scope compatibility paths. The latter preserve scopes above the batch issuance cap. Reusable explicit snapshots remove result-to-argument field renaming; bounded receipts preserve immutable transaction evidence separately from current state. Modern MCP revisions are negotiated with text fallback and optional structured results/output schemas. Existing profiles,22 internal handlers, services, transaction formats, migrations and replay runtimes retain their contracts.
 
-[The full contract](../spec/profiles/MCP_EDITOR_V2.md) records compatibility, audited admission/recovery ordering, response limits, host-loading uncertainty and actual verification paths. This is a tool/schema/data change; the rejected prompt-only proposal is not implemented. Static bytes and backend correctness do not establish model-time savings.
+[The full contract](../spec/profiles/observed-editor-v2.md) records compatibility, audited admission/recovery ordering, response limits, host-loading uncertainty and actual verification paths. This is a tool/schema/data change; the rejected prompt-only proposal is not implemented. Static bytes and backend correctness do not establish model-time savings.
 
 ## PR21: streamlined five-tool observed editor surface & receipt compaction
 

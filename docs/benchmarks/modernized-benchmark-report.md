@@ -1,8 +1,11 @@
-# Standalone Modernized 2×2 Factorial Benchmark Report: Native Control vs. Modernized PatchDIFF (`observed_v2`)
+# Modernized PatchDIFF benchmark
 
 ## Executive Summary
 
-This report establishes the **Standalone Modernized 2×2 Factorial Benchmark** evaluating document transaction efficiency between **Native Control** and **Modernized PatchDIFF (`observed_v2`)** across two operating environments (**Standard Non-Git Workspace** and **Initialized Git Repository**).
+This 2×2 benchmark compares native editing with PatchDIFF's
+`observed_v2` profile. Both approaches ran in a non-Git workspace and
+an initialized Git repository. The results apply to this workload and
+host setup.
 
 ### Prompt Modernization Interventions
 In response to the prompt friction points diagnosed during the baseline $N=12$ benchmark, three specific modifications were made to the PatchDIFF prompt contract:

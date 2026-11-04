@@ -1,24 +1,36 @@
-# MCP_TOOLS.md
+# MCP tool contracts
 
-Unicode boundary: edit-submission strings and metadata must be valid UTF-8/PostgreSQL text. Known-target invalid text returns an audited target_encoding_invalid / PROTOCOL_VALIDATION rejection. Existing pdcp_content TEXT carries reversible ASCII-escaped patchdiff-invalid-input/1 evidence; JSONB holds only safe diagnostics. Read/search string errors return invalid_argument with no edit-attempt row. Valid inputs and discovery operation shapes are unchanged.
+PatchDIFF exposes its service tools through stdio JSON-RPC
+(`backend/app/mcp/external_adapter.py`) and a trusted Python registry
+(`backend/app/mcp/server.py`). The service validates each proposed edit and
+commits accepted changes atomically for one PostgreSQL target.
 
-Conflicting-key submissions return context_invalid with `diagnostic.code: "request_key_conflict"` plus a fresh durable rejection log ID. The rejected row uses a NULL key and submitted fingerprint, with original-log linkage, a bounded submitted-key preview and the differing fingerprint components. The response continues to echo the submitted key. Exact recovery of the original request remains deduplicated:true without a new row; repeated conflicts each append an immutable attempt.
+See the [architecture](../papers/modernization-architecture.md) for the
+service boundaries and the [product change record](../papers/product-change-record.md)
+for compatibility and verification.
 
+## Common input and request-key rules
 
-## Purpose
+Edit strings and metadata must be valid UTF-8 PostgreSQL text. For a known
+target, invalid text returns an audited `target_encoding_invalid` rejection
+at `PROTOCOL_VALIDATION`. The existing `pdcp_content` TEXT field carries
+reversible ASCII-escaped `patchdiff-invalid-input/1` evidence. JSONB holds
+safe diagnostics. Invalid read and search text returns `invalid_argument`
+without an edit-attempt row.
 
-This document defines the complete MCP tool surface for PatchDIFF.
-
-PatchDIFF is exposed over stdio JSON-RPC (`backend/app/mcp/external_adapter.py`) and an internal Python registry (`backend/app/mcp/server.py`). All tools route through the deterministic service layer (`backend/app/services/`) and execute per-target atomic commits against Postgres.
-
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
-As-built record: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
+An exact recovery of the original request returns `deduplicated: true`
+without a new row. Reusing its key with a different proposal returns
+`context_invalid` with `diagnostic.code: "request_key_conflict"` and a
+fresh durable rejection log ID. The rejection row stores a NULL key, the
+submitted fingerprint, original-log linkage, a bounded submitted-key
+preview and the differing fingerprint components. The response echoes
+the submitted key. Each repeated conflict appends an immutable attempt.
 
 ## MCP Tool Surface Overview
 
 The 22 internal tools are organized into the groups below. The
 [MCP profile catalog](profiles/index.md) defines which tools each external
-connection advertises and accepts. See [structural batch editing](STRUCTURAL_BATCH_EDITING.md)
+connection advertises and accepts. See [structural batch editing](structural-batch-editing.md)
 for multi-scope observation and submission.
 
 | Group | Tool Name | Role & Modernized Status |
@@ -427,11 +439,34 @@ Retained for backward compatibility with frozen `.pdcp` v0.2.3 text transactions
 
 ### `patchdiff_save`
 Creates a `TargetSnapshots` row (`snapshot_reason = "save_checkpoint"`), closes the active cycle, and opens a new cycle. Does not mutate target text.
-Opt-in workspace publication is a separate filesystem side effect, not an atomic PostgreSQL/filesystem transaction. See [workspace publication](../guides/WORKSPACE_PUBLICATION.md).
+Opt-in workspace publication is a separate filesystem side effect, not an atomic PostgreSQL/filesystem transaction. See [workspace publication](../guides/workspace-quickstart.md).
 - **Arguments**: `target_file_id`, optional `expected_target_version` (non-negative integer), optional `expected_current_hash`, optional `export_after_save` (`boolean`). Optional `sync_workspace` (`boolean | null`) selects managed file publication: true enables, false disables, omitted/null follows `PATCHDIFF_WORKSPACE_SYNC_ON_SAVE` (default false). `workspace_eol_format` is `original_eol` (default), `canonical_lf`, or `crlf`. Both guards are checked when supplied; prefer the version guard, which detects ABA changes that a hash cannot.
 - **Returns**: `status: "saved"`, `target_file_id`, `snapshot_id`, `closed_editing_cycle_id`, `new_editing_cycle_id`, `current_hash`, `version`. A stale version returns `status: "rejected"` with `failure_reason: "target_version_mismatch"`, a stale hash `target_hash_mismatch`, and an invalid version `context_invalid`; none writes a snapshot. `export_after_save` adds a default-format `export`.
 
-Workspace SAVE requires a service-owned transaction; an already active caller transaction rejects with `workspace_requires_owned_transaction` before file IO. Success adds `workspace_sync` with `synced_path` (relative to `PATCHDIFF_WORKSPACE_ROOT`), `disk_sha256` (published raw bytes), `bytes_written`, `content_eol`, `publication: "installed"`, and `durability: "confirmed"`. Pre-publication failures reject without changing the destination or checkpoint (parent directories may have been created for a new path). If installation precedes a durability or checkpoint failure, the result is `status: "partial"`, an installed-file `workspace_sync` receipt, and no asserted checkpoint/cycle IDs. `workspace_durability_uncertain` reports uncertain directory durability; `workspace_checkpoint_uncertain` reports an uncertain database outcome. `workspace_post_install_error` retains an installed receipt if directory-handle teardown fails after publication. Never blindly retry SAVE after partial/unknown outcomes; inspect disk/database and explicitly reconcile or initialize a new target. There is no automatic rollback or retry. Process termination or a lost response can also leave the outcome unknown, as with existing non-idempotent SAVE.
+#### Publication outcomes
+
+A workspace SAVE must own its database transaction. A caller-owned
+transaction returns `workspace_requires_owned_transaction` before file IO.
+
+| Result | Publication and checkpoint |
+| --- | --- |
+| `saved` with `workspace_sync` | The file was installed and the checkpoint committed. The receipt gives `synced_path` relative to `PATCHDIFF_WORKSPACE_ROOT`, `disk_sha256` of the published bytes, `bytes_written`, `content_eol`, `publication: "installed"` and `durability: "confirmed"`. |
+| `rejected` before installation | The destination is unchanged and no checkpoint is created. The service may already have created parent directories for a new path. |
+| `partial` after installation | The file was installed. The receipt includes `workspace_sync` and leaves the checkpoint and cycle IDs unset. |
+
+Partial results report one of the following codes.
+
+- `workspace_durability_uncertain` means the file was installed and directory
+  durability is uncertain.
+- `workspace_checkpoint_uncertain` means the database outcome is uncertain.
+- `workspace_post_install_error` means directory-handle cleanup failed after
+  installation. The receipt retains the installation evidence.
+
+On partial results, inspect the file and database before reconciling or
+initializing a new target. The server leaves installed bytes in place.
+A lost response or process termination can also leave an unknown outcome.
+The [workspace profile](profiles/workspace-profile.md#decide-what-to-do-after-a-failure)
+shows how to proceed in each case.
 
 #### Workspace filesystem contract
 
@@ -582,7 +617,7 @@ one Waymark pass serve all selections; no partial issuance occurs.
 and ordered scope receipts. Total scope contents cap at 65,536 code points;
 initial text totals cap at 32,768 (`BUNDLE_RESPONSE_TOO_LARGE`), with existing
 per-scope default 4,000 / max 8,000 pages and ID pagination. Selection failures
-identify `selection_index`. [Exact fields and lifecycle](STRUCTURAL_BATCH_EDITING.md#observation-contract).
+identify `selection_index`. [Exact fields and lifecycle](structural-batch-editing.md#observation-contract).
 
 - **Arguments**:
   - `target_file_id` (UUID string, required)
@@ -626,7 +661,7 @@ The internal durable pair is `patchdiff-observed-batch/1` /
 `patchdiff-observed-batch-r1`; replay requires every exact authoritative link,
 scope hash, bundle and ordered group mapping without invoking Waymark. Migration
 0005 preserves historical single linkage via a partial unique index.
-[Batch errors, replay and executable examples](STRUCTURAL_BATCH_EDITING.md).
+[Batch errors, replay and executable examples](structural-batch-editing.md).
 
 - **Arguments**:
   - `target_file_id` (UUID string, required)
@@ -677,7 +712,7 @@ direct selection and observation pagination; never silently truncate source.
 
 ## Profile-specific contracts
 
-See [observed editor v2](profiles/MCP_EDITOR_V2.md) for its tool aliases,
+See [observed editor v2](profiles/observed-editor-v2.md) for its tool aliases,
 snapshot envelope, bounded receipts and negotiated MCP revisions. See
-the [workspace profile](profiles/WORKSPACE.md) for its five-tool surface
+the [workspace profile](profiles/workspace-profile.md) for its five-tool surface
 and startup requirements.

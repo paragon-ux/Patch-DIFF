@@ -10,7 +10,7 @@
 
 During Phase 1 of PR #22, 61 historical scratch files, intermediate debug scripts, and legacy phase prompts totaling −7,716 lines were removed from the active Git working tree, alongside 3 consolidated root plans in Phase 2 (64 file removals total across PR #22), to eliminate clutter and prevent AI coding agents from following superseded procedures.
 
-In accordance with [PR Review Standard v1.1.0](../standards/PR_REVIEW_STANDARD.md), all historical artifacts remain immutably preserved in Git history. This document provides direct, commit-pinned links to the exact pre-pruning trees for historical inspection, forensic audit, and empirical reproducibility.
+In accordance with [PR Review Standard v1.1.0](../standards/pr-review-standard.md), all historical artifacts remain immutably preserved in Git history. This document provides direct, commit-pinned links to the exact pre-pruning trees for historical inspection, forensic audit, and empirical reproducibility.
 
 > [!NOTE]
 > Artifacts linked in this archive index are preserved as frozen historical evidence. They are **not** part of the active, normative PatchDIFF runtime or tool surface, and their scripts are not maintained for current execution. For active contracts and specifications, consult `docs/spec/` and `docs/guides/`.
@@ -36,6 +36,6 @@ All links below resolve directly to the pre-pruning tree at commit [`2afcda6`](h
 
 Three early build plans (3 files) from the root of `docs/` were consolidated into the active modernization specifications in Phase 2, bringing total removals to 64 files:
 
-1. **`docs/CODEX_BUILD_PLAN.md`**: Early MVP work plan; consolidated into [`docs/papers/MODERNIZATION_ARCHITECTURE.md`](../papers/MODERNIZATION_ARCHITECTURE.md). Preserved at [`docs/CODEX_BUILD_PLAN.md` @ `2afcda6`](https://github.com/paragon-ux/Patch-DIFF/blob/2afcda61cf9bd4d2d2ec7b84c6d9235b437c852a/docs/CODEX_BUILD_PLAN.md).
-2. **`docs/MCP_FIRST_MVP.md`**: Initial MCP architecture note; consolidated into [`docs/spec/MCP_TOOLS.md`](../spec/MCP_TOOLS.md). Preserved at [`docs/MCP_FIRST_MVP.md` @ `2afcda6`](https://github.com/paragon-ux/Patch-DIFF/blob/2afcda61cf9bd4d2d2ec7b84c6d9235b437c852a/docs/MCP_FIRST_MVP.md).
-3. **`docs/WAYMARK_STRUCTURAL_OBSERVATION_RETEST_PLAN.md`**: Structural observation retest plan; consolidated into [`docs/spec/STRUCTURAL_BATCH_EDITING.md`](../spec/STRUCTURAL_BATCH_EDITING.md). Preserved at [`docs/WAYMARK_STRUCTURAL_OBSERVATION_RETEST_PLAN.md` @ `2afcda6`](https://github.com/paragon-ux/Patch-DIFF/blob/2afcda61cf9bd4d2d2ec7b84c6d9235b437c852a/docs/WAYMARK_STRUCTURAL_OBSERVATION_RETEST_PLAN.md).
+1. **`docs/CODEX_BUILD_PLAN.md`**: Early MVP work plan; consolidated into [`docs/papers/MODERNIZATION_ARCHITECTURE.md`](../papers/modernization-architecture.md). Preserved at [`docs/CODEX_BUILD_PLAN.md` @ `2afcda6`](https://github.com/paragon-ux/Patch-DIFF/blob/2afcda61cf9bd4d2d2ec7b84c6d9235b437c852a/docs/CODEX_BUILD_PLAN.md).
+2. **`docs/MCP_FIRST_MVP.md`**: Initial MCP architecture note; consolidated into [`docs/spec/MCP_TOOLS.md`](../spec/mcp-tools.md). Preserved at [`docs/MCP_FIRST_MVP.md` @ `2afcda6`](https://github.com/paragon-ux/Patch-DIFF/blob/2afcda61cf9bd4d2d2ec7b84c6d9235b437c852a/docs/MCP_FIRST_MVP.md).
+3. **`docs/WAYMARK_STRUCTURAL_OBSERVATION_RETEST_PLAN.md`**: Structural observation retest plan; consolidated into [`docs/spec/STRUCTURAL_BATCH_EDITING.md`](../spec/structural-batch-editing.md). Preserved at [`docs/WAYMARK_STRUCTURAL_OBSERVATION_RETEST_PLAN.md` @ `2afcda6`](https://github.com/paragon-ux/Patch-DIFF/blob/2afcda61cf9bd4d2d2ec7b84c6d9235b437c852a/docs/WAYMARK_STRUCTURAL_OBSERVATION_RETEST_PLAN.md).

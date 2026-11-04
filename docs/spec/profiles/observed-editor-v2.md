@@ -1,11 +1,14 @@
-# Versioned observed editor interface
+# Observed editor v2
 
-`PATCHDIFF_MCP_PROFILE=observed_v2` selects five external tool purposes at process
-startup. It is opt-in. The existing editor (7), unobserved (5), observed (6),
-observed_editor (4) and full (22) profiles retain their tool sets, argument contracts
-and response presentation. The internal registry still has 22 handlers. These
-external aliases dispatch to the existing observation and observed-submission
-services; they introduce no transaction format, runtime, migration or replay path.
+Set `PATCHDIFF_MCP_PROFILE=observed_v2` to delegate structural editing
+through five tools. The editor lists or selects scopes and commits edits
+against an explicit snapshot. A trusted host initializes targets, handles
+SAVE and replay, and exports content through a separate full connection.
+
+The five tools route to the existing observation and submission services.
+They use the same transaction formats, runtime, database schema and replay
+path as other connections. See the [profile catalog](index.md) for the
+other tool sets.
 
 | Tool | Purpose | Existing service route |
 | --- | --- | --- |
@@ -30,10 +33,9 @@ Single commits require `intent` and `operations`; their request key is optional,
 as in the existing single service. The schemas retain both match and span forms,
 disambiguators, insertion guards, source, retry lineage and correlation options.
 
-The model no longer chooses between top-level single/batch argument envelopes,
-combines catalog/selection/page fields, or renames returned version/hash fields.
-It still selects structures, writes exact operations and binds scope IDs. This
-is an interface change, not an instruction to omit discovery or verification.
+Pass the selected snapshot object directly to the commit tool. The editor
+still chooses the structures, writes the exact operations and binds each
+group to its scope ID. Read or search when needed to resolve uncertainty.
 
 Normalization only selects the named route and unwraps supplied fields. It does
 not refill guards, reinterpret coordinates, normalize UUID spelling, derive
@@ -89,17 +91,17 @@ Legacy profiles keep their previous error-envelope behavior.
 
 ## MCP negotiation and startup
 
-The adapter supports 2024-11-05,2025-06-18 and2025-11-25. It honors a supported
-requested revision; an unsupported revision offers 2025-11-25. Missing revision
-retains2024 compatibility. Invalid initialization is rejected and a connection
-cannot renegotiate to a different revision. This is not a 2026 protocol upgrade.
+The adapter supports `2024-11-05`, `2025-06-18` and `2025-11-25`. It uses
+a supported requested revision, offers `2025-11-25` for an unsupported
+revision, and defaults to `2024-11-05` when the client omits it. Invalid
+initialization is rejected. A connection keeps its negotiated revision.
 
-For modern negotiated connections, v2 declarations include outputSchema and
-truthful annotations, and results contain the same logical JSON in text and
-structuredContent. Text remains available for hosts with incomplete structured
-result handling. On2024 connections the additional declarations/channel are
-omitted. Wire bytes include envelope escaping and, for modern v2, both channels;
-the 8 KiB logical cap is not a bound on that duplicated wire envelope.
+On `2025-06-18` and `2025-11-25` connections, declarations include
+`outputSchema` and annotations. Results carry the same logical JSON in
+text and `structuredContent` so hosts can use either channel. The
+`2024-11-05` connection uses the text channel. The 8 KiB cap applies to
+logical commit or error JSON. Wire bytes also include envelope escaping
+and, on newer connections, the second result channel.
 
 Annotations are hints, not enforcement. Read/search/catalog/page are read-only;
 issuing observations writes authority rows. Submissions are destructive and are
@@ -115,8 +117,8 @@ PATCHDIFF_WAYMARK_MODE=resident
 
 Use the same executable/database/Node configuration as the tested deployment.
 Trusted initialization, SAVE, replay and export use a separate full-profile
-connection. The editor's8-tool allowlist denies lifecycle and all old mixed or
-unobserved mutation routes. The host must keep its operator connection, oracle
+connection. The five-tool editor catalog excludes lifecycle calls and the legacy mixed
+and unobserved mutation routes. The host must keep its operator connection, oracle
 and privileged data outside the editing agent's tool/context access.
 
 For a live comparison, keep the ordinary task and target mapping; do not add

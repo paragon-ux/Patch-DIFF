@@ -1,8 +1,9 @@
-# PDCP_FORMAT.md
+# Transaction formats
 
 ## Scope
 
-This document defines the active declarative JSON transaction formats supported by PatchDIFF:
+Choose a format based on the kind of edit you need.
+
 1. **`patchdiff-tx/1` (Primary Typed Match Transaction)**: A structured JSON format passed directly through MCP tool arguments (`patchdiff_submit_edits`), stored as canonical JSON in `append_only_pdcp_logs.pdcp_content` under runtime profile `patchdiff-mvp-0.2.2`. Delimiter-collision free, with minimal mandatory prose overhead (`151 B` wire / `206 B` persisted for a 1-edit transaction; `259 B` wire / `314 B` persisted for 5 edits).
 2. **`patchdiff-tx/2` (Guarded Match & Span Operations)**: Canonical JSON passed through `patchdiff_submit_operations` with required `intent`, required state guard, and ordered `operations[]` carrying explicit `op: "match"` or `op: "span"`. Span records require `start`, `end`, `expected_text`, and `replace`, use sequential canonical Unicode code-point coordinates, and allow explicit empty-span insertion (`start == end`, `expected_text: ""`). Optional `expected_before` / `expected_after` verify exact adjacent text; records using them execute under immutable runtime profile `patchdiff-mvp-0.5.0` (otherwise `patchdiff-mvp-0.3.0`).
 3. **`patchdiff-tx/3` (Guarded Sole Whole-Target Replacement)**: Canonical JSON passed through `patchdiff_submit_replacement` with required `intent`, required state guard, and a single `{"op": "replace_all", "replace": "..."}` operation under immutable runtime profile `patchdiff-mvp-0.4.0` (`232 B` MCP `arguments` JSON / `290 B` persisted record / `341 B` compact `tools/call` line for a 3-byte whole-target replacement).
@@ -11,8 +12,8 @@ This document defines the active declarative JSON transaction formats supported 
 
 None of these formats is executable code. All lower into the same internal `ParsedPDCP` representation and execute through the same deterministic applier (`apply_pdcp_transaction`).
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
-As-built record: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [modernization architecture](../papers/modernization-architecture.md).
+As-built record: [product change record](../papers/product-change-record.md).
 
 ---
 
@@ -112,7 +113,7 @@ Submitted over MCP via `patchdiff_submit_operations` when the caller holds exact
 - **Runtime profile selection**:
   - `patchdiff-mvp-0.3.0` when no span carries `expected_before` or `expected_after`.
   - `patchdiff-mvp-0.5.0` when any span carries `expected_before` or `expected_after`.
-- See [MCP_TOOLS.md](MCP_TOOLS.md#patchdiff_submit_operations-patchdiff-tx2) for complete field schemas.
+- See [MCP tool contracts](mcp-tools.md#patchdiff_submit_operations-patchdiff-tx2) for complete field schemas.
 
 ---
 
@@ -189,7 +190,7 @@ same tx/2 parser and `ParsedPDCP` and executes the existing applier against its
 own original slice. The canonical envelope additionally records target/bundle,
 both guards, intent, editing cycle and immutable authoritative scope evidence.
 Original operation order, group/operation indices, scope hashes/bounds and IDs
-support deterministic replay without discovery. [Complete batch specification](STRUCTURAL_BATCH_EDITING.md).
+support deterministic replay without discovery. [Complete batch specification](structural-batch-editing.md).
 
 All supported transaction formats lower into `ParsedPDCP`:
 ```python

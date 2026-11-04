@@ -1,10 +1,27 @@
-# PATCHDIFF_CORE_SPEC.md
+# Core runtime
 
-Bounded rejection evidence: the pure applier returns at most 256 code points of the actual failing buffer (a prefix, or a window around a known failure location) with its total length and prior simulated-change count, never an unbounded failed buffer. For `match_absent` it also returns a response-only copy of at most the first 65,536 code points for near-miss scanning, which the service never persists. The service adds canonical observed identity and persists `diagnostic.failure_context` once. A later sequential failure is labeled `intermediate_buffer`; it does not imply a partial commit. Service/protocol failures use locked canonical state. Response-only `current_context` is fresh on every rejected call, including exact keyed recovery, while the original diagnostic is immutable and old rows are not retrofitted. MCP_TOOLS defines the complete fields, unavailable states and 4,096/8,192 ASCII-escaped JSON byte budgets. Verdicts, accepted facts, hashes, fingerprints and execution profiles remain unchanged.
+The pure runtime evaluates one declarative transaction against canonical
+target text. It simulates exact edits in order and returns either rejection
+evidence or the resulting text and change facts. The service owns locking,
+commit, audit and SAVE.
+
+On failure the applier returns at most 256 code points of the failing buffer,
+as a prefix or a window around the failure. The evidence includes the buffer
+length and the count of earlier simulated changes. For `match_absent`, the
+service also receives a response-only prefix of at most 65,536 code points
+for near-miss scanning.
+
+The service adds the canonical observed identity and persists
+`diagnostic.failure_context` once. A later sequential failure is labeled
+`intermediate_buffer` because earlier edits were simulated in memory.
+Service and protocol failures use the locked canonical state.
+`current_context` is fresh on each rejected call, including keyed recovery.
+Older rows keep their recorded diagnostic. The [MCP tool contracts](mcp-tools.md)
+define unavailable states and the 4,096- and 8,192-byte escaped JSON budgets.
 
 ## Guarded operations, sole replacement and failure evidence
 
-Tool fields and byte budgets are in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics); this section states the runtime rules.
+Tool fields and byte budgets are in [MCP tool contracts](mcp-tools.md#guarded-editing-reads-preview-and-diagnostics); this section states the runtime rules.
 
 - **Span operations (`patchdiff-tx/2`, profile `patchdiff-mvp-0.3.0`).** A span carries non-bool integer `start`/`end` with `0 <= start <= end`, in code points of the sequential canonical buffer, plus the exact `expected_text` and `replace`. The applier rejects with `span_out_of_bounds` when `end` exceeds the buffer length, and with `span_expected_text_mismatch` unless `buffer[start:end] == canonicalize_text(expected_text)`. `start == end` with an empty `expected_text` inserts. Match operations keep the 0.2.2 exact-match and selector rules. Span facts add `operation: "span"`. Both span failures are transaction-applicability failures, and their diagnostics report `span_check`, `buffer_length` and up to 64 code points of `actual_text`.
 - **Span context (`patchdiff-mvp-0.5.0`).** Optional `expected_before`/`expected_after` must equal `buffer[start-len(expected_before):start]` and `buffer[end:end+len(expected_after)]` after canonicalization; a mismatch is `span_expected_text_mismatch` with `span_check` naming the field. Only a profile with `span_context` accepts them; 0.3.0 rejects the fields at decoding and the applier refuses them under any other profile.
@@ -19,14 +36,18 @@ Tool fields and byte budgets are in [MCP_TOOLS.md](MCP_TOOLS.md#guarded-editing-
 
 This document defines the deterministic PatchDIFF core runtime (`backend/app/core/`, `backend/app/pdcp/`).
 
-The core runtime accepts declarative, non-executable edit transactions—typed edits (`patchdiff-tx/1`), guarded match/span operations (`patchdiff-tx/2`), sole guarded replacement (`patchdiff-tx/3`) and frozen legacy `.pdcp` (v0.2.3) files—and canonical target text. It validates protocol structure, validates transaction applicability, applies exact `MATCH/REPLACE` operations sequentially in memory, computes runtime-derived change facts, commits atomically per target, logs all accepted and rejected attempts with retry lineage and idempotency, supports SAVE checkpointing, and executes deterministic replay.
+The runtime accepts canonical target text and a declarative transaction
+in `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3` or frozen legacy
+`.pdcp` v0.2.3. It checks structure and applicability, simulates the
+operations in memory and computes change facts. Replay runs the recorded
+transaction under its original execution profile.
 
 The core runtime is deterministic, pure, and trusted.
 
 Transaction inputs are untrusted data.
 
-Architecture decisions: [MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md).
-As-built record and verification evidence: [MODERNIZATION_CHANGE_DOC.md](../papers/MODERNIZATION_CHANGE_DOC.md).
+Architecture decisions: [modernization architecture](../papers/modernization-architecture.md).
+As-built record and verification evidence: [product change record](../papers/product-change-record.md).
 
 ## Core Architecture & Representation
 
@@ -248,7 +269,7 @@ application. A failure returns no assembled target. Runtime facts retain ordered
 group/operation indices, observation IDs, original scope bounds and sequential
 local coordinates. Replay checks all exact authoritative links and hashes, never
 calls Waymark and changes no storage. Historical profiles and branches below
-remain unchanged. [Batch contract](STRUCTURAL_BATCH_EDITING.md).
+remain unchanged. [Batch contract](structural-batch-editing.md).
 
 Replay reconstructs canonical target state from the `initial_upload` snapshot plus ordered accepted log entries:
 1. Verify initial snapshot content against `initial_snapshot.content_hash`.

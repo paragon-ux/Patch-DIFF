@@ -2,7 +2,7 @@
 
 This README is for local debugging and test-harness use of the internal MCP registry.
 
-Most users should connect through the external MCP adapter documented in [README.md](README.md) and [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md). The internal registry is still useful for quick local checks because it calls the same service-layer functions without starting an external MCP host.
+Most users should connect through the external MCP adapter documented in [README.md](README.md) and [docs/guides/claude-desktop-setup.md](docs/guides/claude-desktop-setup.md). The internal registry is still useful for quick local checks because it calls the same service-layer functions without starting an external MCP host.
 
 ## Boundary
 
@@ -10,7 +10,7 @@ All 22 internal registry handlers remain available to trusted code. External MCP
 profiles independently restrict both advertised and callable tools (7 by default).
 The internal observed batch form still verifies every server-issued scope under
 the target lock and uses the shared applier, atomic commit and replay path.
-[MCP profile catalog](docs/spec/profiles/index.md) · [Batch contract](docs/spec/STRUCTURAL_BATCH_EDITING.md).
+[MCP profile catalog](docs/spec/profiles/index.md) · [Batch contract](docs/spec/structural-batch-editing.md).
 
 The internal registry is not a separate product path.
 
@@ -19,7 +19,7 @@ It must keep the same invariants as the external adapter:
 - Transactions are untrusted until submitted through `patchdiff_submit_edits` (`patchdiff-tx/1`), `patchdiff_submit_operations` (`patchdiff-tx/2`), `patchdiff_submit_replacement` (`patchdiff-tx/3`) or `patchdiff_submit_pdcp` (legacy `0.2.3`). All use the shared locked commit path.
 - Target content mutation must come only from accepted transactions validated by the deterministic core runtime.
 - The registry must not bypass parser, validator, matcher, applier, or service-layer commit paths.
-- SAVE can create snapshots and advance editing cycles without changing canonical target text. Explicit [workspace publication](docs/guides/WORKSPACE_PUBLICATION.md) can also install the rendered file bytes. Publication requires a service-owned transaction.
+- SAVE can create snapshots and advance editing cycles without changing canonical target text. Explicit [workspace publication](docs/guides/workspace-quickstart.md) can also install the rendered file bytes. Publication requires a service-owned transaction.
 - Admitted known-target rejections append attempt rows within the owner transaction and no ledger rows. Exact recovery, reads, preview and documented pre-admission failures add no attempt; caller rollback/infrastructure failure does not promise durability.
 
 ## Prerequisites

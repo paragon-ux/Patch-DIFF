@@ -1,8 +1,11 @@
 # PatchDIFF Host Integration Guide
 
-Audience: host and client developers integrating model proposals with the PatchDIFF transaction service.
-
-Why this document exists: the server is a transaction service; the host owns planning, wording, retry and compaction ([MODERNIZATION_ARCHITECTURE.md](../papers/MODERNIZATION_ARCHITECTURE.md), A1). If the host's behavior is only specified in server-built prompt strings, it cannot be versioned, reviewed or adapted per host. Here it can. Contract details are in [MCP_TOOLS.md](../spec/MCP_TOOLS.md); this guide says how to *use* them.
+Use this guide to integrate PatchDIFF into a host or MCP client. The host
+owns planning, edit proposals, retry decisions and context compaction.
+The server validates proposals and returns evidence the host can act on.
+See the [architecture](../papers/modernization-architecture.md) for the
+role boundary and the [MCP tool contracts](../spec/mcp-tools.md) for exact
+requests and responses.
 
 ## 0. Stdio transport and host refresh
 
@@ -12,7 +15,7 @@ Use `observed_editor` for delegated structural editing when the host owns
 SAVE/replay. Use `full` for the complete lifecycle, export and audit catalog.
 The default `editor` profile exposes seven tools for working with an existing
 target. The server filters both discovery and dispatch by profile.
-[Profile catalog](../spec/profiles/index.md) · [Structural batch examples](../spec/STRUCTURAL_BATCH_EDITING.md).
+[Profile catalog](../spec/profiles/index.md) · [Structural batch examples](../spec/structural-batch-editing.md).
 
 Send newline-delimited JSON-RPC as UTF-8. The external process entry point configures stdin/stdout as UTF-8 with strict errors, including on Windows; it does not rely on the ambient pipe code page. Malformed wire bytes are not repaired. Valid JSON escapes remain decoded proposal data, so escaped surrogate/NUL strings retain their documented domain rejection and audit behavior below. Response lines are pure ASCII: the JSON-RPC envelope escapes every non-ASCII character, so a host that decodes stdout with a locale code page cannot corrupt text, and U+2028, U+2029 or U+0085 cannot split a line. The tool-result text inside the envelope is literal, so once the envelope is parsed the model sees `🌍` and `中`, not `\ud83c\udf0d` escapes.
 
@@ -124,7 +127,7 @@ If inspecting such a rejection with include_content, pdcp_content is an ASCII-es
 
 ### Guarded operations, replacement, line reads and preview
 
-The full contract is in [MCP_TOOLS.md](../spec/MCP_TOOLS.md#guarded-editing-reads-preview-and-diagnostics); this section covers how to use it.
+The full contract is in [MCP tool contracts](../spec/mcp-tools.md#guarded-editing-reads-preview-and-diagnostics); this section covers how to use it.
 
 - **Choose the narrowest tool.** Use `patchdiff_submit_edits` for exact text matches. Use `patchdiff_submit_operations` when you already hold code-point offsets from `patchdiff_read_target`, `patchdiff_read_lines` or `patchdiff_find_occurrences`: each span carries the exact `expected_text`, and `start == end` with empty `expected_text` inserts. Span coordinates refer to the text after earlier operations in the same transaction, so send several spans from one read in descending `start` order. Use `patchdiff_submit_replacement` only when the user explicitly asked to replace the whole document.
 - **Verify insertions.** An insertion has no `expected_text` to check, so an off-by-N offset (a UTF-16 index, a miscounted line, a stale read) would otherwise commit silently. Add `expected_before` and/or `expected_after`: the exact text immediately before `start` and after `end`, such as the end of the previous line and the start of the next. A mismatch rejects with `span_expected_text_mismatch` and shows the actual adjacent text. A `grapheme_boundary_split` warning on an accepted span means the offset landed inside a character cluster such as an emoji or a combining sequence.
@@ -235,7 +238,7 @@ PatchDIFF's guarantees cover the managed target in Postgres. An exported file ed
 
 In environments with an active version control system (e.g. Git repository), the workspace files on disk are NOT updated by PatchDIFF transactions until the host exports or syncs them. State-dependent Git commands that inspect the working tree (such as `git diff` or `git status`) inspect disk files, not the canonical Postgres substrate, and will not show in-flight or accepted PatchDIFF transactions. Repository inspection commands that read history (`git log`, `git show <commit>`) operate on committed history.
 
-## 10. Host skill checklist
+## 10. Host integration checklist
 
 For observed operations, keep nonempty edits within the observed scope. Insert only strictly inside the current sequential scope; never insert at either boundary. Supply both nonempty `expected_before` and `expected_after`, matching immediately adjacent text entirely inside that scope. Earlier operations can move the scope end and change those neighbors, so derive later guards from the intermediate buffer. On `OBSERVED_INSERTION_GUARDS_REQUIRED`, mismatching adjacency, or `OPERATION_OUTSIDE_OBSERVED_SCOPE`, re-read and correct the proposal; do not bypass strict admission. SAVE closes the observation's editing cycle, so obtain a fresh observation before paging or submitting again.
 
@@ -262,7 +265,7 @@ span offsets use that group's local slice, starting at zero. Submit all groups
 in one target transaction; any failure rejects the whole request, and success
 increments version once. Re-read stale bundles; repeat an identical keyed request
 to recover a lost committed response. SAVE closes the original editing cycle.
-See [limits, errors, replay guarantees and complete Python/JSON/Markdown recipes](../spec/STRUCTURAL_BATCH_EDITING.md).
+See [limits, errors, replay guarantees and complete Python/JSON/Markdown recipes](../spec/structural-batch-editing.md).
 
 The existing single-scope workflow below remains available, with absolute span
 coordinates and its historical record/replay behavior.
@@ -295,7 +298,7 @@ message need not reproduce hashes or lifecycle tables. Public tool discovery sup
 contracts; a host handoff need not repeat a separate tool tutorial.
 
 
-[Observed editor workflow v1](OBSERVED_EDITOR_WORKFLOW.md) assigns editing to the
+[Observed editor workflow v1](observed-editor-workflow.md) assigns editing to the
 model and scalar SAVE/REPLAY/export to the trusted host. The backend contracts do
 not change and targets need not share a project. This removes model-managed
 lifecycle turns, not backend calls or the need for independent task verification.
@@ -359,12 +362,12 @@ outside the editing model's context and under a private ignored capture director
 
 ## Purpose-specific observed interface
 
-For the opt-in five-tool `observed_v2` connection, use [MCP_EDITOR_V2.md](../spec/profiles/MCP_EDITOR_V2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
+For the opt-in five-tool `observed_v2` connection, use [observed editor v2](../spec/profiles/observed-editor-v2.md). Set profile/strict/resident configuration on the actual process; initialize/finalize via a separate trusted full-profile connection. Selection returns the explicit snapshot accepted by commit. Receipt transaction state and current state can differ on recovery. Ordinary task use needs no additional schema-discovery or verification coaching.
 
 
 ## Optional managed workspace publication
 
-The [workspace profile](WORKSPACE_PUBLICATION.md) lets a host start with a
+The [workspace profile](workspace-quickstart.md) lets a host start with a
 filename. Initialize with `from_workspace=true`, pass the returned target ID
 to read/search and guarded edit calls, then SAVE with `sync_workspace=true`
 when the user requests file publication. `full` also exposes these calls for

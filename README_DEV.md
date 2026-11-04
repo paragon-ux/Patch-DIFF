@@ -1,4 +1,7 @@
-# PatchDIFF MVP Backend Development
+# PatchDIFF backend development
+
+Use this checkout for backend development and verification. To connect an MCP
+host to the installed package, follow the [workspace quickstart](docs/guides/workspace-quickstart.md).
 
 ## Local Setup
 
@@ -33,7 +36,9 @@ Install the pinned Node dependency before running unit or integration tests:
 npm --prefix integrations/waymark ci
 ```
 
-To require a server-issued `observation_id` (`patchdiff_observe_scope` -> `patchdiff_submit_observed_operations`) for all edit submissions and reject unobserved writes (`OBSERVATION_REQUIRED`), set:
+Enable strict observation to require server-issued scope authority for
+writes. Unobserved submissions return `OBSERVATION_REQUIRED`. Start the
+server with an [observed profile](docs/spec/profiles/index.md) and set:
 
 ```powershell
 $env:PATCHDIFF_STRICT_OBSERVATION_MODE = "1"
