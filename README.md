@@ -139,18 +139,20 @@ Additional setup guides:
 
 The end-to-end benchmark evaluates editing performance across 6 test conditions ($n=3$ per arm, 18 trials total). The evaluation tests a standardized 5-file, 21-edit canary task in Google Antigravity using operator-attested Gemini 3.8 Flash High across Git Repository and Non-Git Workspace environments.
 
-| Verified Flow Duration | Editor Tool Invocations | Host Lifecycle Calls | Accuracy Across All Arms |
+| Verified Flow Duration | Editor Tool Invocations | Separate Host Lifecycle Calls | Accuracy Across All Arms |
 | :---: | :---: | :---: | :---: |
 | **16.2% Faster** | **42.7% Fewer Calls** | **0 Separate Calls** | **100.0%** |
 | (296.7s vs. 354.2s pooled mean) | (32.0 vs. 55.8 calls per task) | (Agent-owned SAVE vs. 20 host calls) | (90/90 files exact, 360/360 checks) |
 
 ```mermaid
 xychart-beta
-    title "Mean Verified Flow Duration in Seconds (n=3 per arm, 6 conditions)"
+    title "Mean Verified Flow Duration by Environment and Editing Model"
     x-axis ["Git Native", "Git Structural", "Git Workspace", "Non-Git Native", "Non-Git Structural", "Non-Git Workspace"]
     y-axis "Verified Duration (Seconds)" 0 --> 400
     bar [341, 286, 305, 368, 299, 289]
 ```
+
+*Chart values are rounded to the nearest second. The benchmark summary below provides exact means and medians.*
 
 > **Evaluation Disclaimer**: Measured in Google Antigravity ($n=3$ per arm across 6 conditions, operator-attested Gemini 3.8 Flash High) comparing agent-owned Workspace (`observed_workspace`), host-orchestrated structural editing (`observed_v2`), and native file editing on a standardized 5-file, 21-edit canary task. Preparation and connector handoffs are excluded from the verified flow interval and recorded separately as setup overhead. The [Workspace Benchmark Report](docs/benchmarks/workspace-e2e-benchmark.md) publishes the methodology, per-trial metrics, and verification hashes.
 
