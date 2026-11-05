@@ -36,7 +36,6 @@ nav = [
     ]},
     { "Benchmarks" = [
         { "Workspace Editing Benchmark" = "benchmarks/workspace-e2e-benchmark.md" },
-        { "Earlier Modernization Benchmark" = "benchmarks/modernized-benchmark-report.md" },
         { "Verification Test Matrix" = "benchmarks/test-matrix.md" }
     ]},
     { "Papers" = [
@@ -47,7 +46,8 @@ nav = [
     { "Standards" = [
         { "PR Review Standard" = "standards/pr-review-standard.md" },
         { "Release Readiness" = "standards/release-readiness.md" }
-    ]}
+    ]},
+    { "Roadmap" = "ROADMAP.md" }
 ]
 
 [project.theme]
@@ -119,7 +119,7 @@ pymdownx.tilde = {}
 # Preserve public links to the previous documentation filenames.
 [project.plugins.redirects.redirect_maps]
 "benchmarks/TEST_MATRIX.md" = "benchmarks/test-matrix.md"
-"benchmarks/modernized_benchmark_report.md" = "benchmarks/modernized-benchmark-report.md"
+"benchmarks/modernized_benchmark_report.md" = "benchmarks/workspace-e2e-benchmark.md"
 "guides/CLAUDE_DESKTOP_SETUP.md" = "guides/claude-desktop-setup.md"
 "guides/HOST_INTEGRATION_GUIDE.md" = "guides/host-integration-guide.md"
 "guides/OBSERVED_EDITOR_WORKFLOW.md" = "guides/observed-editor-workflow.md"

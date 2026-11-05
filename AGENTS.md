@@ -28,7 +28,7 @@ Read project artifacts in this order:
 3. `docs/papers/product-change-record.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/spec/mcp-tools.md` (MCP tool schemas and request/response contracts)
 5. `docs/spec/core-runtime.md` (deterministic runtime, validation stages, replay profiles)
-6. `docs/spec/data-model.md` (Postgres schema and migrations `0001` through `0005`)
+6. `docs/spec/data-model.md` (Postgres schema and migrations `0001` through `0006`)
 7. `docs/spec/transaction-formats.md` (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement)
 8. `docs/spec/profiles/index.md` and its linked profile contracts (startup selection, tool sets, workspace and observed editor v2)
 9. `docs/guides/host-integration-guide.md` (host-owned loop, prompt hygiene rules, and usage guide)
@@ -149,7 +149,10 @@ before the handshake. File publication is explicit under the default SAVE
 configuration and has a separate outcome from the PostgreSQL checkpoint.
 See the [workspace profile](docs/spec/profiles/workspace-profile.md). Strict
 observed service admission remains independent and prevents this profile from
-starting. The frozen comparative Gate 2 stays closed.
+starting. The seven-tool `observed_workspace` profile combines observed v2
+editing with initialize and SAVE on the same connection. It permits strict
+observation and requires the pinned Waymark installation. The frozen comparative
+Gate 2 stays closed.
 
 PatchDIFF must always preserve:
 
@@ -173,7 +176,7 @@ Use:
 - FastAPI
 - Postgres (`postgres:16.3-alpine` via Docker Compose)
 - SQLAlchemy 2.x
-- Alembic migrations (`20260510_0001` through `20261027_0005`)
+- Alembic migrations (`20260510_0001` through `20261105_0006`)
 - pytest
 - Stdio MCP JSON-RPC adapter (`backend/app/mcp/external_adapter.py`)
 

@@ -9,62 +9,34 @@ Architecture and contracts: [architecture](modernization-architecture.md), [MCP 
 
 ## Workspace editing and publication
 
-The five-tool `workspace` and seven-tool `observed_workspace` profiles start
-with an eager check of the project directory and database migration revision. Initialization can import a file
-using a relative filename and return the target ID without returning source.
-The editor submits guarded text edits through `workspace` or guarded scope
-bundles through `observed_workspace` to update PostgreSQL. An explicit workspace SAVE publishes
-file bytes and returns a receipt with the path, raw digest, line endings and
-durability. The file install and checkpoint commit have separate outcomes.
-The existing line-ending metadata carries the workspace binding and last
-published digest. See [setup and recovery guidance](../guides/workspace-quickstart.md).
+The five-tool `workspace` and seven-tool `observed_workspace` profiles start with an eager validation of the project directory lease and database migration revision. Initialization imports a file using a relative path within the workspace root (`from_workspace: true`) and returns the target ID without returning source text. The editing agent submits guarded text edits through `workspace` (`patchdiff_submit_edits`) or guarded structural scope bundles through `observed_workspace` (`patchdiff_commit_bundle`) to update PostgreSQL as the authoritative working copy.
 
-Installed-wheel checks used PostgreSQL 16 and live stdio to verify the
-working copy before SAVE and exact file bytes and checkpoint afterward.
-The fresh Codex CLI session exercised the same success path with a natural
-request and the five-tool catalog. This is workflow evidence for one file.
-The [PR #24 benchmark](../benchmarks/workspace-e2e-benchmark.md) adds a current
-18-trial comparison of Native, host-orchestrated structural editing and
-agent-owned Workspace editing. All 90 files and 360 behavioral checks passed.
-Workspace used no separate host initialization/export routine. Its mean timed
-interval was 16.2% lower than Native. Preparation and owner handoffs are recorded
-as separate setup overhead. Model/build attribution and the timing boundary are
-recorded in that report.
+Workspace publication is executed explicitly via `patchdiff_save` with `sync_workspace: true`:
+- **State Guards & Directory Verification**: Verifies `expected_target_version` and/or `expected_current_hash` under `SELECT ... FOR UPDATE`, and confirms active directory lease integrity.
+- **Disk Drift Detection**: Reads the physical file bytes currently on disk and computes their SHA-256 digest, comparing against the last observed digest. If external modifications have occurred, the save operation aborts with a drift rejection, leaving both disk and database unmodified.
+- **Canonical Installation**: Converts canonical LF content using the target's recorded `source_line_endings` and writes the exact bytes to disk.
+- **Partial SAVE Recovery Boundary**: The physical file write and the database checkpoint commit operate across distinct failure domains. If file installation succeeds but the database checkpoint transaction fails, `patchdiff_save` returns `status: "partial"` with publication evidence and an unconfirmed database checkpoint receipt, enabling explicit reconciliation without data loss.
 
-## Transaction formats
+Two verified installation and execution pathways are supported:
+1. **Pure Python 5-tool `workspace`**: Starts without Node.js or external toolchains, exposing exact text editing (`initialize_target`, `read_target`, `find_occurrences`, `submit_edits`, `save`).
+2. **7-tool `observed_workspace`**: Uses the Waymark bridge packaged directly with the wheel, requiring Node 22+ and npm setup, enabling structural AST scope discovery, observation, and bundle commits (`list_scopes`, `observe_scopes`, `commit_bundle`) alongside `initialize_target` and `save`.
 
-External `PATCHDIFF_MCP_RESPONSE_MODE` now selects immutable detailed (default) or
-compact presentation. Only observed acceptance, candidate discovery and bundled
-observation successes are projected. Full audit facts, all warnings, guards,
-identities, exact source and continuations remain available as contracted; errors
-and unrelated responses are unchanged. There is no input schema/profile/runtime
-or persistence change. A separate trusted scalar finalization recipe checkpoints,
-replays and exports accepted target states without model lifecycle turns, with
-explicit SAVE uncertainty and partial-failure reporting. See
-[the contract](../spec/mcp-tools.md#external-response-representations) and
-[workflow v1](../guides/observed-editor-workflow.md). No host latency improvement or
-universal spill threshold is established by the deterministic tests.
+Installed-wheel checks used PostgreSQL 16 and live stdio to verify the working copy before SAVE and exact file bytes and checkpoint afterward. The [PR #24 benchmark](../benchmarks/workspace-e2e-benchmark.md) provides an authoritative 18-trial comparison of Native, host-orchestrated structural editing, and agent-owned Workspace editing across 90 files and 360 behavioral checks (all passed). Workspace eliminated host orchestration routines and completed the workflow in 16.2% less time with 42.7% fewer editor calls. Preparation and owner handoffs are recorded as separate setup overhead. Model/build attribution and the timing boundary are recorded in that report.
 
-Structural batches extend the two existing observation tools without adding tool
-names. `patchdiff_observe_scope(selections=...)` issues 1–32 disjoint scopes from
-one snapshot/discovery; `patchdiff_submit_observed_operations(groups=...)`
-requires both guards and a request key, evaluates scope-local tx/2 operations
-through the shared applier and commits one target increment. The internal durable
-pair is `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`; historical
-single-scope and unobserved records/profiles retain their semantics. Migration
-0005 adds bundles and many-to-one accepted linkage while preserving historical
-single uniqueness; replay verifies every recorded scope without Waymark.
-[Limits, error codes, evidence and examples](../spec/structural-batch-editing.md).
+## Transaction formats and retirements
 
-External MCP startup now defaults to `PATCHDIFF_MCP_PROFILE=editor` (7 tools).
-`unobserved` has 5, `observed` 6, opt-in `observed_editor` 4, and explicit
-trusted lifecycle `full` 17. The four-tool delegated role excludes SAVE/replay at
-both advertisement and dispatch while preserving the existing profiles and all
-request shapes. Observation/submission descriptions clarify route inputs, returned
-authority and the scopes-to-groups mapping; service validation and durable
-transaction/replay formats are unchanged. Profiles filter both discovery and calls and remain immutable for a session; the internal
-registry keeps all 17 handlers. Trusted clients that need export, administrative
-history or replay select `full` before starting their session.
+Raw text-delimited patch syntax submission (`patchdiff_submit`), the raw text parser, and prompt-context regeneration tools (`patchdiff_get_regeneration_context`) have been purged entirely from the architecture. All mutation is natively typed JSON (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`, and `patchdiff-observed-batch/1`). The dry-run tool `patchdiff_preview` supports the three typed formats (`tx/1`, `tx/2`, `tx/3`), projecting execution facts within a 32,768-byte budget without writing database rows or reserving locks.
+
+External `PATCHDIFF_MCP_RESPONSE_MODE` selects immutable detailed (default) or compact presentation. Only observed acceptance, candidate discovery, and bundled observation successes are projected. Full audit facts, all warnings, guards, identities, exact source, and continuations remain available as contracted; errors and unrelated responses are unchanged. A separate trusted scalar finalization recipe checkpoints, replays, and exports accepted target states without model lifecycle turns, with explicit SAVE uncertainty and partial-failure reporting. See [MCP tool contracts](../spec/mcp-tools.md#external-response-representations) and [Host Integration Guide](../guides/host-integration-guide.md).
+
+Structural batches extend observation tools to support atomic multi-scope editing without adding redundant tool names. In PR24, the Waymark coordinate integration was updated with a half-open coordinate range fix, ensuring that AST symbol boundaries align precisely with half-open `[start, end)` Unicode code-point spans used by the core applier. In the primary `observed_workspace` profile, five structural routes (`list_scopes`, `observe_scopes`, `commit_bundle`, `find_occurrences`, `read_target`) are exposed alongside agent-owned `initialize_target` and `save`. `patchdiff_observe_scopes` issues 1–32 disjoint scopes from one snapshot; `patchdiff_commit_bundle` requires both guards and a request key, evaluates scope-local `tx/2` operations through the shared applier, and commits one target increment. The internal durable pair is `patchdiff-observed-batch/1` / `patchdiff-observed-batch-r1`; historical single-scope records retain their semantics. Migration 0005 added bundles and many-to-one accepted linkage, and replay verifies every recorded scope without Waymark. See [Structural Batch Editing](../spec/structural-batch-editing.md).
+
+PR24 implements 10 startup profiles in code (`editor` default 7, `unobserved` 5, `observed` 6, `observed_editor` 4, `unobserved_editor` 4, `hybrid_editor` 5, `workspace` 5, `observed_workspace` 7, `observed_v2` 5, and explicit trusted lifecycle `full` 17). External-facing agent documentation focuses on the three active operational profiles corresponding to the benchmark arms:
+1. **`observed_workspace` (Primary)**: 7 tools (`initialize_target`, `read_target`, `find_occurrences`, `list_scopes`, `observe_scopes`, `commit_bundle`, `save`).
+2. **`workspace`**: 5 tools (`initialize_target`, `read_target`, `find_occurrences`, `submit_edits`, `save`).
+3. **`observed_v2`**: 5 tools (`read_target`, `find_occurrences`, `list_scopes`, `observe_scopes`, `commit_bundle`).
+
+Profiles filter both tool discovery (`tools/list`) and call dispatch, remaining immutable for a session. The internal service registry implements all 17 underlying tool handlers. Trusted clients that need export, administrative history, or replay select `full` before starting their session.
 
 | Tool | Stored protocol | Runtime for new submissions | Behavior |
 | --- | --- | --- | --- |
@@ -106,13 +78,15 @@ Discovery examples are deep-copied per result and bounded: 65,536 compact ASCII-
 
 SAVE snapshots current target state and rotates editing cycles without mutating content; optional version and hash guards are both checked. Replay checks initial snapshot ownership/hash, accepted-log ownership/content hashes, contiguous versions, before/after hashes and recorded execution profiles. Materialized health reports independent raw `content_matches`, `stored_hash_matches`, `recomputed_hash_matches` and `version_matches`; successful reconstruction can coexist with unhealthy storage. CRLF/bare-CR corruption is visible even if canonical hashes agree. Replay never repairs target or history.
 
-Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004` (observations) and `20261027_0005` (bundles). Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses when it would discard typed audit evidence. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
+Migrations are `20260510_0001`, `20261020_0002`, `20261022_0003`, `20261026_0004` (observations), `20261027_0005` (bundles) and `20261105_0006` (typed-origin adoption). Migration 0002 adds ledger origin/derived facts, request key/fingerprint and the target/key partial unique index; typed ledger prose may be null. Downgrade refuses when it would discard typed audit evidence. Migration 0003 adds nullable `cloud_target_files.source_line_endings`, recorded for new uploads before LF canonicalization; existing targets keep NULL, and downgrade refuses while recorded facts exist. `patchdiff_export_target` honours `original_text` (canonical LF, the default), `canonical_lf`, `crlf` and `original_eol` and refuses other formats. Ledger and attempt pages expose their join keys, bounded intent and a per-page content byte budget without schema changes.
+
+Additive migration `20261105_0006_typed_origin.py` applies the typed ledger default and check constraint (`ck_append_only_manifest_ledger_origin`) to existing as well as fresh databases under an exclusive table lock. It inspects all existing rows in `append_only_manifest_ledger` and explicitly raises an exception if any non-typed origin is present, refusing upgrade without modifying audit history. It sets `server_default = text("'typed'")` and enforces `origin = 'typed'` without rewriting historical audit records. Historical 0002 retains its original default and protects origin/derived facts and request identity on downgrade. See the [data-model upgrade contract](../spec/data-model.md#typed-origin-adoption-migration-0006).
 
 ## Verification scope
 
-[test matrix](../benchmarks/test-matrix.md) maps unit, live PostgreSQL, populated migration preservation/refusal and real stdio workflows (`1,226` automated tests: `816` unit + `410` live PostgreSQL/stdio integration, plus `235/235` live stdio friction checks at `PR #14`). [Verification documentation](https://github.com/paragon-ux/Patch-DIFF/blob/main/backend/tests/verification/README.md) provides the current reproduction commands. Recorded deterministic byte accounting (`151 B` wire for 1 minimal `tx/1` edit, `259 B` for 5 edits, `341 B` `tools/call` line for small `tx/3` replacement), `SVC-001` 65,536-code-point near-miss latency (`1.7 ms` on varied prose, `41.9 ms` with 100% scan coverage on repetitive logs), and `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger latency over 20 MB substrates (`14.68 ms` ledger / `22.85 ms` log on `50 × 400 KB` `tx/3`; `136.72 ms` log / `221.59 ms` ledger on `20 × 1 MB` `tx/1`). Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
+The [Test Matrix](../benchmarks/test-matrix.md) maps unit, live PostgreSQL, populated migration preservation/refusal, and real stdio workflows. The automated verification suite comprises **1,429 automated tests**: **923 unit tests** (with 1 Windows-only skip for socket transports) and **506 live PostgreSQL integration tests**, plus migration convergence across all six schema revisions. [Verification documentation](https://github.com/paragon-ux/Patch-DIFF/blob/main/backend/tests/verification/README.md) provides reproduction commands. Recorded deterministic byte accounting (`151 B` wire for 1 minimal `tx/1` edit, `259 B` for 5 edits, `341 B` `tools/call` line for small `tx/3` replacement), `SVC-001` 65,536-code-point near-miss latency (`1.7 ms` on varied prose, `41.9 ms` with 100% scan coverage on repetitive logs), and `MCP-001` PostgreSQL 16+ `LATERAL` history/ledger latency over 20 MB substrates (`14.68 ms` ledger / `22.85 ms` log on `50 × 400 KB` `tx/3`; `136.72 ms` log / `221.59 ms` ledger on `20 × 1 MB` `tx/1`). Test counts and CI results apply only to their executed revision; this record does not certify current publication CI.
 
-Offline replacement cases measure serialized bytes and accepted content/hash oracles, not live transport, persistence or timing. No live-model comparison, representative sanitized dataset or production performance threshold has been established. No editing adapter, optional typed guards or normalized request-identity behavior is introduced.
+Live-model performance is established separately by the [Workspace E2E Benchmark](../benchmarks/workspace-e2e-benchmark.md), an empirical evaluation across 18 full trials (90/90 byte-exact files, 360/360 behavioral checks passed) comparing Native, host-orchestrated structural editing, and agent-owned Workspace editing. Deterministic offline oracles (payload byte accounting, near-miss DP benchmarks, and SQL LATERAL pagination benchmarks) measure algorithmic and storage properties and remain strictly separated from live-model claims.
 
 Historical source and verification records remain preserved in Git and internal archives; they do not establish verification of a later revision.
 

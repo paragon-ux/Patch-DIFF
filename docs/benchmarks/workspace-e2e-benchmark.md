@@ -11,8 +11,6 @@ Workspace (`observed_workspace`) averaged **296.742 seconds** from timed start t
 
 The primary comparison runs from the benchmark's timed flow start through publication and verification. Fixture/database preparation and the owner's pre-start workspace/connector handoff are excluded and recorded separately as setup overhead. The editor-only interval and terminal handoff delay are also reported so the timing boundary can be inspected.
 
-This report supersedes the [earlier modernization benchmark](modernized-benchmark-report.md) as the primary comparative evidence for the current Workspace workflow. That earlier report remains a separate historical experiment with different prompts and timing boundaries.
-
 ## Product workflow and guard boundary
 
 | Arm | Editor owns | Separate host lifecycle per trial |
@@ -168,7 +166,7 @@ export PATCHDIFF_WAYMARK_MODE=resident
 python -B backend/tests/verification/workspace_benchmark_audit.py /absolute/path/to/pr24-18trial-production-benchmark /absolute/path/to/new-audit.json
 ```
 
-Running the audit creates its requested output file and checks the existing captures. It performs no model invocation or database restart. Source and test-suite verification remain described in the [test matrix](test-matrix.md).
+The audit script enforces that the output path (e.g. `/absolute/path/to/new-audit.json`) must reside outside the capture packet directory to prevent modifying captured evidence. Running the audit creates its requested output file and checks the existing captures. It performs no model invocation or database restart. Source and test-suite verification remain described in the [test matrix](test-matrix.md).
 
 ## Interpretation
 

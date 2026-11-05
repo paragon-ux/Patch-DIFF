@@ -8,7 +8,8 @@ NOT NULL constraint on the five optional audit columns (`input_state`,
 safely deduplicate transport retries and recover terminal outcomes after a lost
 response.
 
-Existing audit facts are retained.
+The historical default is retained for existing revision compatibility. Migration
+20261105_0006 adopts the typed-only origin contract without relabeling audit rows.
 
 Revision ID: 20261020_0002
 Revises: 20260510_0001
@@ -32,9 +33,8 @@ _RELAXED_COLUMNS = ("input_state", "output_state", "affected_region", "user_visi
 def upgrade() -> None:
     op.add_column(
         "append_only_manifest_ledger",
-        sa.Column("origin", sa.Text(), server_default=sa.text("'typed'"), nullable=False),
+        sa.Column("origin", sa.Text(), server_default=sa.text("'pdcp_manifest'"), nullable=False),
     )
-    op.create_check_constraint("ck_append_only_manifest_ledger_origin", "append_only_manifest_ledger", "origin = 'typed'")
     op.add_column(
         "append_only_manifest_ledger",
         sa.Column("derived_json", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
@@ -67,7 +67,8 @@ def downgrade() -> None:
         BEGIN
             IF EXISTS (
                 SELECT 1 FROM append_only_manifest_ledger
-                WHERE derived_json IS NOT NULL OR input_state IS NULL OR output_state IS NULL
+                WHERE origin <> 'pdcp_manifest' OR derived_json IS NOT NULL
+                   OR input_state IS NULL OR output_state IS NULL
                    OR affected_region IS NULL OR user_visible_change IS NULL OR risk IS NULL
             ) OR EXISTS (
                 SELECT 1 FROM append_only_pdcp_logs
@@ -85,5 +86,4 @@ def downgrade() -> None:
     for column in reversed(_RELAXED_COLUMNS):
         op.alter_column("append_only_manifest_ledger", column, existing_type=sa.Text(), nullable=False)
     op.drop_column("append_only_manifest_ledger", "derived_json")
-    op.drop_constraint("ck_append_only_manifest_ledger_origin", "append_only_manifest_ledger", type_="check")
     op.drop_column("append_only_manifest_ledger", "origin")

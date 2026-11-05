@@ -27,7 +27,9 @@ Unlike `workspace`, `observed_workspace` permits `PATCHDIFF_STRICT_OBSERVATION_M
 
 Install the package and migrate the database with the
 [workspace quickstart](../../guides/workspace-quickstart.md). Set these
-values in the environment of the MCP server process.
+values in the environment of the MCP server process. For `observed_workspace`,
+also follow the [seven-tool structural setup](../../guides/workspace-quickstart.md#seven-tool-structural-setup)
+to install Node.js 22+ and the pinned Waymark npm dependencies before startup.
 
 | Variable | Setting |
 | --- | --- |
@@ -39,8 +41,9 @@ values in the environment of the MCP server process.
 The stdio server prepares the declarations and checks the root, database
 connection and migration revision before the MCP handshake. The profile
 requires POSIX descriptor-relative file access and directory locking.
-Linux is the verified platform. It refuses startup with strict observation
-enabled. A startup failure appears on stderr. Restart the process after
+Linux is the verified platform. The `workspace` profile refuses startup with
+strict observation enabled; `observed_workspace` permits it. A startup failure
+appears on stderr. Restart the process after
 changing its configuration.
 
 ## Import, edit and publish

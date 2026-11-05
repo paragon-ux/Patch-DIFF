@@ -18,7 +18,7 @@ metadata used by export and workspace publication. See the
 ## Scope
 
 This document covers the PostgreSQL schema from the initial migration
-`20260510_0001` through structural batch migration `20261027_0005`.
+`20260510_0001` through typed-origin adoption migration `20261105_0006`.
 
 The schema supports:
 - canonical target storage in Postgres (`cloud_target_files`)
@@ -313,3 +313,24 @@ Replay independently verifies canonical record/hash, exact links, bundle, group
 order, target/cycle/version/preimage and all original scope hashes. Ledger facts
 carry group/operation ordinals, observation IDs, original scope bounds and local
 sequential operation coordinates. [Full durable contract](structural-batch-editing.md#durable-evidence-and-replay).
+
+## Typed-origin adoption (migration 0006)
+
+Migration `20261105_0006_typed_origin.py` follows `20261027_0005`. Historical
+migration 0002 retains its original `pdcp_manifest` origin default. Migration
+0006 adopts the current `typed` default and `CHECK (origin = 'typed')` for both
+fresh installations and databases that already applied the earlier 0005 schema.
+It also converges the unreleased intermediate 0005 candidate that already had
+the typed constraint.
+
+The migration locks the ledger and refuses existing non-typed origin rows before
+changing its default or constraint. It preserves audit rows and request identity.
+The operator retains an incompatible database and resolves its history/runtime
+compatibility explicitly before adopting the typed-only runtime. Startup checks
+require the installed migration head, so an older 0005 database must upgrade.
+
+Downgrading 0006 restores the historical origin default and removes its constraint
+without changing rows. The historical 0002 downgrade separately refuses to discard
+recorded origin/derived facts, nullable typed prose or request keys. Populated
+upgrade/downgrade/re-upgrade coverage includes a frozen copy of the original 0002
+migration and the intermediate candidate schema.

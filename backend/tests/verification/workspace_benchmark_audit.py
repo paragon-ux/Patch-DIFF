@@ -10,6 +10,10 @@ import sys
 
 PACKET = Path(sys.argv[1]).resolve()
 OUTPUT = Path(sys.argv[2]).resolve()
+if OUTPUT.is_relative_to(PACKET):
+    raise SystemExit("Audit output must be outside the captured packet.")
+if OUTPUT.exists():
+    raise SystemExit("Audit output must be a new file.")
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(PACKET / 'inputs/primary/evaluator'))
 from full_byte_oracle import SOURCE_HASHES, expected
@@ -233,7 +237,8 @@ output = {'source_head':summary['head'],'wheel_sha256':digest(wheel.read_bytes()
                          'host_build is the placeholder production, not an exact Antigravity version.',
                          'PostgreSQL was torn down; stored publication checks are captured evidence, not a current database requery.'],
           'one_time_setup':summary['one_time_setup'],'trials':verified}
-OUTPUT.write_text(json.dumps(output,indent=2)+'\n')
+with OUTPUT.open('x') as stream:
+    stream.write(json.dumps(output,indent=2)+'\n')
 print(json.dumps(output['verification']))
 for env in ('git','nongit','pooled'):
  for arm in ('native','structural','workspace'):

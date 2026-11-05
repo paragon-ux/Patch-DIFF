@@ -14,7 +14,7 @@ govern the implementation.
 
 Large language models (LLMs) and coding agents frequently modify existing documents, source files, and structured configurations across multi-turn sessions. Prevailing editing interfaces force an uncomfortable tradeoff: full-document regeneration scales in output cost with total file length and exposes unmodified regions to silent drift, whereas ad-hoc local patching (`str_replace` substring replacement, unified diffs, or unguarded line-range splices) relies on fragile context-copying or line-number arithmetic and typically lacks server-enforced optimistic concurrency, all-or-nothing multi-edit rollback, idempotent retry recovery, and durable auditability.
 
-PatchDIFF reframes agent-driven document editing as a **deterministic, preconditioned relational transaction** exposed over the Model Context Protocol (MCP). Rather than trusting an agent to rewrite a file or directly mutate a workspace buffer, PatchDIFF maintains the canonical document state inside PostgreSQL and requires agents to submit declarative JSON transactions: **`patchdiff-tx/1`** (exact substring match/replace with explicit disambiguation), **`patchdiff-tx/2`** (mixed exact-match and guarded `[start, end)` Unicode code-point span operations with exact `expected_text` and optional `expected_before` / `expected_after` adjacency checks), and **`patchdiff-tx/3`** (explicitly guarded whole-document replacement). Every submission must carry an explicit state precondition (`expected_target_version` and/or `expected_current_hash`). Under a per-target PostgreSQL row lock (`SELECT ... FOR UPDATE`), the pure core runtime validates preconditions, simulates all operations sequentially in memory, derives exact span and cryptographic hash facts, and either commits the entire transaction atomically or rejects it without target mutation while returning bounded recovery diagnostics (`failure_context`, `exact_candidates`, and post-commit Levenshtein `near_misses`). Every attempt admitted into the locked target-submission path (whether accepted or rejected) is recorded in an append-only audit log with `client_request_id` idempotence and retry lineage (`parent_pdcp_log_id`), while accepted changes populate an append-only manifest ledger that supports `SAVE` cycle compaction and deterministic replay across versioned execution profiles.
+PatchDIFF reframes agent-driven document editing as a **deterministic, preconditioned relational transaction** exposed over the Model Context Protocol (MCP). Rather than trusting an agent to rewrite a file or directly mutate a workspace buffer, PatchDIFF maintains the canonical document state inside PostgreSQL and requires agents to submit declarative JSON transactions: **`patchdiff-tx/1`** (exact substring match/replace with explicit disambiguation), **`patchdiff-tx/2`** (mixed exact-match and guarded `[start, end)` Unicode code-point span operations with exact `expected_text` and optional `expected_before` / `expected_after` adjacency checks), and **`patchdiff-tx/3`** (explicitly guarded whole-document replacement). Every submission must carry an explicit state precondition (`expected_target_version` and/or `expected_current_hash`). Under a per-target PostgreSQL row lock (`SELECT ... FOR UPDATE`), the service layer verifies preconditions, coordinates idempotent deduplication, and commits atomic transactions, while the pure deterministic runtime simulates all operations sequentially in memory, enumerates exact matches, and derives span and cryptographic hash facts, rejecting invalid proposals without target mutation while returning bounded recovery diagnostics (`failure_context`, `exact_candidates`, and post-commit Levenshtein `near_misses`). Every attempt admitted into the locked target-submission path (whether accepted or rejected) is recorded in an append-only audit log with `client_request_id` idempotence and retry lineage (`parent_pdcp_log_id`), while accepted changes populate an append-only manifest ledger that supports `SAVE` cycle compaction and deterministic replay across versioned execution profiles.
 
 ---
 
@@ -83,7 +83,7 @@ Existing agent harnesses typically rely on one of five editing paradigms. While 
 
 Line-oriented patch tools fall into two grammar families—traditional unified diffs (`diff -u` with numeric `@@ -l,s +l,s @@` hunk headers) and headerless context diffs (such as OpenAI's V4A `apply_patch` format, which uses `*** Update File:` envelopes and `@@` context markers without numeric line counts)—each carrying distinct failure modes:
 1. **Hunk header arithmetic in `diff -u`:** Standard unified diffs require exact line numbers and line counts (`@@ -l,s +l,s @@`); LLMs frequently miscount hunk lengths, causing strict `patch` parsers to reject otherwise valid edits.
-2. **Envelope and prefix sensitivity:** While standard unified diffs prefix every hunk line with `' '`, `'+'`, or `'-'` (preventing raw payload lines from colliding with hunk headers), unprefixed delimiter-bounded envelopes—such as conflict-marker search/replace blocks (`<<<<<<<` / `=======` / `>>>>>>>`) or custom text-delimited patch blocks—fail with syntax collisions whenever the target text itself contains a standalone delimiter line (e.g., `"a\n=======\nb"`). Even in prefixed V4A `apply_patch` hunks, omitting a single leading space on an unchanged context line invalidates the hunk grammar.
+2. **Envelope and prefix sensitivity:** While standard unified diffs prefix every hunk line with `' '`, `'+'`, or `'-'` (preventing raw payload lines from colliding with hunk headers), text-delimited patch envelopes and conflict-marker formats fail with syntax collisions whenever the target text itself contains standalone delimiter lines. Even in prefixed V4A `apply_patch` hunks, omitting a single leading space on an unchanged context line invalidates the hunk grammar.
 3. **Fuzzy offset application risks:** When diff appliers or `@@` context matchers fall back to fuzzy offset search to mask line shifts or imprecise context, a hunk can silently bind to the wrong repeated block in a file.
 
 ### 4.2 Where Naive `str_replace` Breaks Down
@@ -168,6 +168,14 @@ PatchDIFF enforces a strict separation between the **MCP host/agent** (which pla
 
 The core runtime (Layers 3 and 4) is a pure function of `(target_text, target_version, target_hash, transaction_payload, runtime_profile)`. It never calls an LLM, never performs network or database I/O, and never mutates state outside memory.
 
+### 6.1 Workspace File Lifecycle and Authority Boundary
+
+In agent-owned Workspace editing workflows, the boundary between the physical filesystem and the relational transaction authority operates across three phases:
+
+1. **Physical Import:** When `patchdiff_initialize_target` is called with `from_workspace: true`, the service imports physical workspace bytes into PostgreSQL, retaining source line endings and recording the initial file digest in `cloud_target_files`.
+2. **Authoritative Relational Working Copy:** During multi-turn editing sessions, PostgreSQL serves as the authoritative working copy. All reads (`patchdiff_read_target`), searches (`patchdiff_find_occurrences`), AST scope observations (`patchdiff_observe_scopes`), and guarded mutations (`patchdiff_submit_edits`, `patchdiff_commit_bundle`) operate strictly against locked database rows.
+3. **Guarded Workspace Publication:** When editing concludes, `patchdiff_save` (`sync_workspace: true`) writes canonical bytes to disk. The service validates target version and hash guards, verifies that the physical file has not experienced external disk drift from its last observed digest, writes the updated content to disk, and commits a checkpoint snapshot. If physical disk installation succeeds but database checkpointing fails, `patchdiff_save` returns `status: "partial"` with publication evidence, signaling that the disk reflects the edit while the database checkpoint remains unconfirmed.
+
 ---
 
 ## 7. Why Validation, Audit Logging, Idempotency, and Replay Share One Transactional Substrate
@@ -181,17 +189,18 @@ A natural architectural question is whether PatchDIFF's capabilities could be de
 
 ---
 
-## 8. The PatchDIFF Transaction Protocol Family (`patchdiff-tx/1`, `tx/2`, and `tx/3`)
+## 8. The PatchDIFF Transaction Protocol Family
 
-PatchDIFF provides three declarative JSON transaction formats that lower into a single internal representation and execute through the same deterministic applier:
+PatchDIFF provides four declarative JSON transaction formats that lower into a unified transactional execution pipeline and execute through the deterministic applier:
 
 | Protocol Version | MCP Submission Tool | Execution Profile | Primary Use Case & Operation Types |
 | :--- | :--- | :--- | :--- |
-| **`patchdiff-tx/1`** (Primary) | `patchdiff_submit_edits` | Exact-match profile | Ordered `edits[]` with exact `match` and `replace` strings, plus optional `occurrence_index`, `anchor_before`, and `anchor_after` disambiguators. Recommended primary path for localized code and prose edits. |
+| **`patchdiff-tx/1`** (Exact Match) | `patchdiff_submit_edits` | Exact-match profile | Ordered `edits[]` with exact `match` and `replace` strings, plus optional `occurrence_index`, `anchor_before`, and `anchor_after` disambiguators. Recommended primary path for localized code and prose edits. |
 | **`patchdiff-tx/2`** (Guarded Operations) | `patchdiff_submit_operations` | Match + span profile (with optional adjacency guard profile) | Ordered `operations[]` mixing `{"op": "match", ...}` and `{"op": "span", "start": s, "end": e, "expected_text": ..., "replace": ...}` (including zero-length insertion when `start == end` and `expected_text == ""`, plus optional `expected_before` / `expected_after` adjacency checks). |
 | **`patchdiff-tx/3`** (Whole Replacement) | `patchdiff_submit_replacement` | Whole-target replacement profile | Submitted via MCP argument `replacement: "<new content>"` and persisted canonically as a single `{"op": "replace_all", "replace": "<new content>"}` operation under mandatory version/hash guards and fresh admission caps (`1,000,000` code points and `1,048,576` UTF-8 bytes). |
+| **`patchdiff-observed-batch/1`** (Structural Batch) | `patchdiff_commit_bundle` | Structural batch profile (`patchdiff-observed-batch-r1`) | Atomic bundle committing 1..32 disjoint scope groups discovered via AST Waymark coordinates, evaluated per-group with descending assembly. |
 
-Because all three formats are native JSON objects validated by MCP tool schemas, they eliminate the delimiter-line collisions that affect text-delimited patch envelopes: target text containing standalone `<<<<<<<`, `=======`, `>>>>>>>`, or `@@` lines requires no special escaping beyond standard JSON string serialization.
+Because all transaction formats are native typed JSON objects validated by MCP tool schemas, they eliminate the delimiter-line collisions and escaping ambiguities that affect text-delimited patch envelopes: arbitrary code, syntax markers, or symbols inside target text require no escaping beyond standard JSON string serialization.
 
 ---
 
@@ -436,9 +445,9 @@ The principal persistence entities include:
 Every accepted row in `append_only_pdcp_logs` records both its `protocol_version` and an immutable `runtime_version` profile capturing the exact semantic rule flags active when the transaction was committed (`overlap_aware_matching`, `enforce_singleton_selectors`, `allow_span_operations`, `allow_replace_all_operations`, `allow_span_adjacency_guards`).
 
 When `patchdiff_replay(target_file_id)` is invoked, the replay engine loads the `initial_upload` snapshot, replays every accepted log entry in `log_sequence` order by dispatching on `(protocol_version, runtime_version)`, and verifies four independent `materialized_state_checks` against `cloud_target_files`:
-1. `content_matches`: Replayed canonical text equals `cloud_target_files.current_content`.
-2. `stored_hash_matches`: Replayed SHA-256 hash equals `cloud_target_files.current_hash`.
-3. `recomputed_hash_matches`: `SHA256(cloud_target_files.current_content)` equals `cloud_target_files.current_hash` (detecting raw out-of-band database corruption such as injected CRLF bytes).
+1. `content_matches`: Replayed canonical LF text exactly matches `cloud_target_files.current_content`. Raw text comparison under this check detects out-of-band CRLF or bare-CR byte corruption even when canonical LF hashes would agree.
+2. `stored_hash_matches`: Replayed SHA-256 equals `cloud_target_files.current_hash`.
+3. `recomputed_hash_matches`: `SHA256(canonical(cloud_target_files.current_content))` equals `cloud_target_files.current_hash` (verifying persisted hash integrity).
 4. `version_matches`: Replayed version equals `cloud_target_files.version`.
 
 ---
@@ -453,53 +462,58 @@ Multiple MCP hosts, background workers, or subagents may connect to the same Pat
 
 ---
 
-## 21. MCP Tool Surface and Host Integration Workflow
+## 21. MCP Tool Surface and Operational Profiles
 
-PatchDIFF exposes transaction and inspection tools through startup profiles, with
-identical advertisement and dispatch permissions: editor (default, seven tools),
-unobserved (five), observed (six), workspace (five) and trusted lifecycle full (17).
-Trusted initialization/export/history uses full; strict observed service admission
-is independently configured. Structural batching extends two existing tools,
-patchdiff_observe_scope and patchdiff_submit_observed_operations.
+PatchDIFF structures its Model Context Protocol (MCP) tool exposure around three core operational profiles, corresponding directly to the experimental arms of empirical verification:
 
-1. **Target Initialization & Export (`4` tools):** `patchdiff_handle_upload`, `patchdiff_initialize_target`, `patchdiff_get_target`, `patchdiff_export_target`.
-2. **Authoritative Bounded Reads & Search (`3` tools):** `patchdiff_read_target` (code-point slices, `4,000` default / `8,000` max, returning `next_start`), `patchdiff_read_lines` (1-based inclusive `start_line` / `end_line` ranges with `offset`, `max_chars`, and `include_line_starts`, capped at `4,000` default / `8,000` max Unicode code points per page and returning range-relative `next_offset` and absolute `next_start`), `patchdiff_find_occurrences` (exact substring search with `40` default / `400` max side context, up to `200` results).
-3. **Guarded Transaction Submission (`3` tools):** `patchdiff_submit_edits` (`tx/1`), `patchdiff_submit_operations` (`tx/2`), and `patchdiff_submit_replacement` (`tx/3`).
-4. **Advisory Dry-Run Preview (`1` tool):** `patchdiff_preview` (`<= 32,768 B` response budget).
-5. **Checkpointing, Replay & Bounded History (`4` tools):** `patchdiff_save`, `patchdiff_replay`, `patchdiff_get_pdcp_log`, and `patchdiff_get_manifest_ledger`.
+1. **`observed_workspace` (Primary)**: The primary 7-tool structural editing profile enabling autonomous agents to manage the complete file lifecycle from physical import to disk publication:
+   - `patchdiff_initialize_target` (imports workspace file into PostgreSQL working copy),
+   - `patchdiff_read_target` (bounded Unicode code-point slice reads),
+   - `patchdiff_find_occurrences` (exact substring search with surrounding context),
+   - `patchdiff_list_scopes` (structural symbol candidate discovery via AST Waymark coordinates),
+   - `patchdiff_observe_scopes` (observes 1..32 disjoint scopes on a locked snapshot),
+   - `patchdiff_commit_bundle` (atomically commits ordered operations across scope groups),
+   - `patchdiff_save` (publishes canonical content to disk with drift detection and checkpoints the cycle).
 
-These functional examples do not enumerate the trusted lifecycle catalog. Immutable
-`PATCHDIFF_MCP_RESPONSE_MODE=detailed|compact` selects external presentation
-independently of profile; detailed remains the default. Compact observed successes
-omit supplementary change evidence or duplicate discovery metadata, preserving
-all warnings, guards, identities, exact source and continuations. Persistence,
-recovery, deterministic verdicts and replay are unchanged. This reduces payload
-overhead but does not prove reduced model latency or eliminate arbitrary host
-spills. [Workflow v1](../guides/observed-editor-workflow.md) separates model editing from
-trusted host finalization and independent task verification.
+2. **`workspace`**: The 5-tool exact text editing profile for autonomous agents operating without AST structural parsing:
+   - `patchdiff_initialize_target` (imports workspace file into PostgreSQL working copy),
+   - `patchdiff_read_target` (bounded Unicode code-point slice reads),
+   - `patchdiff_find_occurrences` (exact substring search with surrounding context),
+   - `patchdiff_submit_edits` (submits ordered exact-match `patchdiff-tx/1` transactions),
+   - `patchdiff_save` (publishes canonical content to disk with drift detection and checkpoints the cycle).
+
+3. **`observed_v2`**: The 5-tool structural editing profile designed for host-managed lifecycle environments, where the host harness manages pre-edit setup and post-edit publication out-of-band:
+   - `patchdiff_read_target` (bounded Unicode code-point slice reads),
+   - `patchdiff_find_occurrences` (exact substring search with surrounding context),
+   - `patchdiff_list_scopes` (structural symbol candidate discovery via AST Waymark coordinates),
+   - `patchdiff_observe_scopes` (observes 1..32 disjoint scopes on a locked snapshot),
+   - `patchdiff_commit_bundle` (atomically commits ordered operations across scope groups).
+
+Each profile enforces identical advertisement and dispatch filtering: tools outside the active profile are neither exposed during discovery nor callable over the transport.
 
 ---
 
-## 22. `SAVE` Compaction and Long-Session Context Hygiene
+## 22. `SAVE` Compaction, Physical Publication, and Context Hygiene
 
-During a long editing session (for example, 40 sequential edits to a specification or module), two distinct histories grow:
+During an extended editing session (for example, 40 sequential edits to a specification or module), two distinct histories grow:
 1. The **server-side manifest ledger** (`append_only_manifest_ledger`), and
 2. The **host's LLM conversation history** (past tool calls, responses, and reasoning turns).
 
-`patchdiff_save(target_file_id)` provides an explicit **cycle boundary** in the persistence substrate:
-1. Under `SELECT ... FOR UPDATE`, it records an immutable `save_checkpoint` row in `target_snapshots` capturing content, hash and version.
-2. It closes the current cycle (`status = 'closed'`, `closed_at`, `save_snapshot_id`) and opens the next active `cycle_index`. There are no started/ended-version columns; SAVE does not change target text/hash/version.
-3. Because `patchdiff_get_manifest_ledger` defaults to `include_previous_cycles = False`, querying the ledger immediately after `patchdiff_save` returns an **empty active-cycle ledger (`entries: []`)** for the new cycle, while setting `include_previous_cycles = True` still exposes the complete historical ledger across prior cycles, and `patchdiff_replay` still verifies the full history from `initial_upload`.
+### 22.1 Cycle Checkpointing and Publication Semantics
+
+`patchdiff_save` provides an explicit **cycle boundary** in the persistence substrate and, in workspace mode, publishes edited bytes to disk:
+
+1. **State Guards & Lock Acquisition:** Under `SELECT ... FOR UPDATE`, `patchdiff_save` verifies target version and hash guards (`expected_target_version`, `expected_current_hash`).
+2. **Physical Workspace Synchronization (`sync_workspace: true`):**
+   - The service reads the current bytes on disk and verifies that the physical file has not experienced external disk drift from its last recorded digest.
+   - If drift is detected, `patchdiff_save` aborts without writing to disk or advancing the cycle, returning a rejection error.
+   - If the disk digest matches, the canonical LF content is formatted using the target's recorded `source_line_endings` and written to disk.
+3. **Database Checkpoint Snapshot:** An immutable `save_checkpoint` row is recorded in `target_snapshots` capturing the committed content, hash, and version.
+4. **Cycle Rotation:** The current editing cycle is closed (`status = 'closed'`, `closed_at`, `save_snapshot_id`) and a new active cycle is opened (`cycle_index + 1`).
+5. **Partial SAVE Handling:** If the physical disk write succeeds but the subsequent database transaction fails to commit, `patchdiff_save` returns `status: "partial"` accompanied by physical publication details and an unconfirmed database checkpoint receipt.
+6. **Active-Cycle Ledger Reset:** Because `patchdiff_get_manifest_ledger` defaults to `include_previous_cycles = False`, querying the ledger immediately after `patchdiff_save` returns an **empty active-cycle ledger (`entries: []`)** for the new cycle. Setting `include_previous_cycles = True` continues to expose all prior cycles, and `patchdiff_replay` still verifies complete history from `initial_upload`.
 
 **Scope boundary:** `patchdiff_save` rotates the server-side active cycle view and records a durable checkpoint snapshot; it does **not** automatically summarize or truncate the host's in-memory LLM chat transcript. Instead, hosts use `patchdiff_save` as a safe synchronization point at which the host can discard prior edit-turn messages from its prompt window and retain only the new `current_version` / `current_hash` and active slices read via `patchdiff_read_target`.
-
-The trusted host can call existing scalar SAVE, REPLAY and export after editing
-ends. This does not require multi-target transactions or model-managed lifecycle
-turns. Unchanged guards do not make SAVE idempotent: lost or unrecordable receipts
-are explicitly uncertain and must not be blindly retried. Replay reconstructs
-history and checks materialized integrity; an independent evaluator owns task
-correctness. The [operator recipe](../guides/host-integration-guide.md#trusted-scalar-finalization)
-records per-target outcomes without claiming cross-target atomicity.
 
 ---
 
@@ -509,7 +523,7 @@ All quantitative and comparative claims in this paper follow a four-tier classif
 1. **`Enforced Contract / Hard Cap`**: Deterministic byte, code-point, or row-count bounds enforced in software.
 2. **`Measured (PatchDIFF-only)`**: Deterministic byte counts from `backend/tests/verification/offline_eval.py` and local reference workload medians.
 3. **`Analytical Comparison`**: Structural complexity and round-trip comparisons under stated workflow assumptions.
-4. **`Empirical Evidence / Open Hypotheses`**. The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) is the current comparison of Native, host-orchestrated structural editing and agent-owned Workspace editing. The [modernization benchmark](../benchmarks/modernized-benchmark-report.md) is a separate earlier experiment. Neither establishes multi-agent contention, long-horizon or human-review outcomes.
+4. **`Empirical Evidence / Open Hypotheses`**. The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) is the current empirical comparison of Native, host-orchestrated structural editing, and agent-owned Workspace editing across 18 verified trials. Multi-agent contention, long-horizon sessions, and human-review outcomes remain open empirical investigations.
 
 ### 23.1 Deterministic Payload Byte Scaling & Reference Runtime Characteristics (`Measured`)
 
@@ -521,7 +535,7 @@ Reproducible via `PYTHONPATH=backend python backend/tests/verification/offline_e
 | **5 small edits in 1 transaction (`5 × 1 B`)** | `5 B` | **`259 B`** / **`314 B`** | `1,139 B` / `1,194 B` | — |
 | **1 edit, 2 KB span (`2,053 B` match/replace)** | `2,053 B` (`2,109 B` full body) | **`4,441 B`** / **`4,496 B`** | `4,617 B` / `4,672 B` | **`2,377 B`** / **`2,435 B`** / **`2,486 B`** |
 | **Quotes + backslashes + Unicode (`🌍`, `中`)** | `16 B` | **`172 B`** / **`227 B`** | `348 B` / `403 B` | **`250 B`** / **`308 B`** / **`359 B`** |
-| **Payload containing a standalone `=======` line** | `14 B` | **`162 B`** / **`217 B`** | `338 B` / `393 B` | — |
+| **Payload containing delimiter-like syntax line** | `14 B` | **`162 B`** / **`217 B`** | `338 B` / `393 B` | — |
 
 - **Marginal wire cost per additional `patchdiff-tx/1` edit:** Each additional minimal edit item `{"match":"...","replace":"..."}` in `edits[]` adds exactly **`26 B` of JSON structure** (`25 B` object keys/punctuation + `1 B` comma) plus the JSON-escaped UTF-8 lengths of `match` and `replace` (`28 B` total for two 1-byte ASCII strings).
 - **Hard context-protection caps (`Enforced Contract`):**
@@ -543,12 +557,12 @@ The table below states each of PatchDIFF's seven core research hypotheses (`H1`�
 | Research Hypothesis | Established Today (Deterministic Runtime & Offline Measurements) | Empirical Status & Evaluation Protocol |
 | :--- | :--- | :--- |
 | **H1: PatchDIFF reduces full-document decoding cost** | **Deterministic payload byte accounting (`backend/tests/verification/offline_eval.py`):** Localized `patchdiff-tx/1` payloads scale with $O(|\Delta|)$ rather than document size $|T|$ (`151 B` MCP `arguments` for 1 minimal edit, `259 B` for 5 edits, `+28 B` per additional 1-byte edit). | The [current 18-trial benchmark](../benchmarks/workspace-e2e-benchmark.md) measures cumulative exported token fields and editor activity on one task. Workspace used 42.7% fewer editor calls and a 16.2% lower timed interval than Native. These observations support workflow efficiency on that workload. They do not isolate decoding cost or unique context growth. |
-| **H2: PatchDIFF reduces unintended mutation** | **Deterministic locality for localized operations (Invariant 1):** For every accepted `tx/1` and `tx/2` transaction, code points outside the resolved $[s_i, e_i)$ spans are provably invariant (`T_i[0:s_i] == T_{i-1}[0:s_i]` and `T_i[s_i+|r_i|:] == T_{i-1}[e_i:]`). Unintended whole-file rewrites cannot occur via `tx/1` or `tx/2`. | **End-to-end agent edit-fidelity study (`NOT RUN`):** Measure how often live models select an unintended span or over-broad `match` string compared to silent drift in full-file rewrites or misapplied fuzzy diffs. |
-| **H3: PatchDIFF improves stale-context detection** | **Enforced optimistic concurrency guards:** Every submission requires `expected_target_version` and/or `expected_current_hash` evaluated under `SELECT ... FOR UPDATE`. Any version or hash divergence deterministically rejects (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation. | **Multi-agent contention & recovery study (`NOT RUN`):** Measure conflict recovery success rates and wasted turns when multiple live agents concurrently edit shared documents under optimistic locking. |
-| **H4: PatchDIFF supports multi-edit cached-document workflows** | **Multi-edit batching, `SAVE` cycles, and bounded SQL history:** `tx/1` and `tx/2` execute ordered multi-edit batches atomically in memory; `patchdiff_save` rotates active editing cycles (`include_previous_cycles=False` returns an empty active-cycle ledger `entries: []`); SQL `LATERAL` projection bounds 50-row history reads over `20 MB` logs to `14.68–221.59 ms`. | **Long-horizon session study (`NOT RUN`):** Measure cumulative prompt token growth and task completion over 20–100 sequential edits with periodic `patchdiff_save` compaction vs. uncompacted agent loops. |
+| **H2: PatchDIFF reduces unintended mutation** | **Deterministic locality for localized operations (Invariant 1):** For every accepted `tx/1` and `tx/2` transaction, code points outside the resolved $[s_i, e_i)$ spans are provably invariant (`T_i[0:s_i] == T_{i-1}[0:s_i]` and `T_i[s_i+|r_i|:] == T_{i-1}[e_i:]`). If an agent selects an over-broad match, text within that span can change, but unintended whole-file rewrites cannot occur via `tx/1` or `tx/2`. | **End-to-end agent edit-fidelity study (`NOT RUN`):** Measure how often live models select an unintended span or over-broad `match` string compared to silent drift in full-file rewrites or misapplied fuzzy diffs. |
+| **H3: PatchDIFF improves stale-context detection** | **Enforced optimistic concurrency guards:** Typed submission tools require `expected_target_version` and/or `expected_current_hash` evaluated under `SELECT ... FOR UPDATE`, while observed bundles strictly require both guards. Any version or hash divergence deterministically rejects (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation. | **Multi-agent contention & recovery study (`NOT RUN`):** Measure conflict recovery success rates and wasted turns when multiple live agents concurrently edit shared documents under optimistic locking. |
+| **H4: PatchDIFF supports multi-edit cached-document workflows** | **Multi-edit batching, `SAVE` cycles, and bounded SQL history:** `tx/1` and `tx/2` execute ordered multi-edit batches atomically in memory; `patchdiff_save` rotates active editing cycles, immediately resetting the active-cycle manifest ledger to empty (`entries: []`) while retaining prior cycles on request; SQL `LATERAL` projection bounds 50-row history reads over `20 MB` logs to `14.68–221.59 ms`. | **Long-horizon session study (`NOT RUN`):** Measure cumulative prompt token growth and task completion over 20–100 sequential edits with periodic `patchdiff_save` compaction vs. uncompacted agent loops. |
 | **H5: PatchDIFF preserves deterministic replay** | **Verified by implementation tests across supported execution profiles:** `patchdiff_replay` reconstructs canonical state from `initial_upload` + ordered accepted logs and verifies all four `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`), including detection of out-of-band raw CRLF injection. | **Supported replay behavior verified in the reference implementation test suite.** *(Cross-implementation conformance and multi-million-row longitudinal archive benchmarks remain future work.)* |
 | **H6: PatchDIFF improves reviewability** | **Separation of asserted intent from derived facts:** `append_only_manifest_ledger` stores model-claimed `intent` / `rationale` alongside runtime-computed `derived_json` (`span_start`, `span_end`, char counts, SHA-256 hashes), and `patchdiff_preview` exposes those exact facts prior to commit. | **Human reviewer & auditing study (`NOT RUN`):** Measure human review time and defect-detection accuracy when inspecting PatchDIFF manifest ledgers + derived span facts vs. raw unified diffs or full-file rewrites. |
-| **H7: LLMs can reliably generate valid PatchDIFF transactions** | **JSON-native schema & delimiter-collision elimination:** `patchdiff-tx/1..3` use standard JSON tool arguments (`TYPED_EDIT_JSON_SCHEMA`, `TYPED_OPERATIONS_JSON_SCHEMA`, `TYPED_REPLACEMENT_JSON_SCHEMA`) advertised with 13 executable discovery examples (`<= 8,192 B`), eliminating line-delimiter collisions (`"a\n=======\nb"` is accepted at `162 B`). | In the [current benchmark](../benchmarks/workspace-e2e-benchmark.md), all 60 guarded commits across the 12 PatchDIFF trials were accepted and independently reconstructed. Both PatchDIFF arms produced 60/60 exact files and passed 240/240 behavior checks. Including Native, all 18 trials passed 90 file comparisons and 360 checks. The requested Gemini setting is operator-attested, with provider identity and exact host build unavailable. |
+| **H7: LLMs can reliably generate valid PatchDIFF transactions** | **JSON-native schema & delimiter-collision elimination:** `patchdiff-tx/1..3` and observed bundles use standard JSON tool arguments advertised with executable discovery examples (`<= 8,192 B`), eliminating text-envelope collisions and escaping ambiguities. | In the [current benchmark](../benchmarks/workspace-e2e-benchmark.md), all 60 guarded commits across the 12 PatchDIFF trials were accepted and independently reconstructed. Both PatchDIFF arms produced 60/60 exact files and passed 240/240 behavior checks. Including Native, all 18 trials passed 90 file comparisons and 360 checks. The requested Gemini setting is operator-attested, with provider identity and exact host build unavailable. |
 
 ### 23.3 Experimental Design for Live-Model & Human Benchmarks (`H1`–`H4`, `H6`, `H7`)
 
@@ -636,6 +650,8 @@ PatchDIFF deliberately trades heuristic permissiveness for deterministic safety.
    - An accepted PatchDIFF transaction guarantees that precondition guards held and exact text/span operations succeeded (`protocol_valid: true`, `transaction_valid: true`). It never guarantees that the resulting code compiles, passes tests, or satisfies the user's intent (`task_correct: "not_evaluated"`, `semantic: "not_evaluated"`).
 6. **Empirically measured efficiency and remaining open questions (`Decision A8`):**
    - The [current Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) records timed execution, setup delays, calls, tokens and exact task outcomes across 18 runs. It supports the agent-owned guarded editing/publication workflow for this task. Multi-agent contention, long-horizon sessions and human review remain open investigations.
+7. **Single-file workspace publication & cooperative writer limits:**
+   - Workspace publication via `patchdiff_save(sync_workspace=True)` synchronizes individual files to disk and guards against external disk drift. It does not provide cross-file filesystem transactions, and assumes a cooperative POSIX writer environment where external processes do not concurrently overwrite target files outside PatchDIFF.
 
 ---
 
@@ -643,6 +659,7 @@ PatchDIFF deliberately trades heuristic permissiveness for deterministic safety.
 
 - **Trust boundary:** Model outputs and MCP tool arguments are untrusted inputs validated at the protocol and service layers. The PostgreSQL database and PatchDIFF Python runtime are trusted infrastructure components.
 - **Resource & DoS bounds:** Read/search tools enforce hard code-point and result caps (`8,000` code points, `200` occurrences); `tx/3` enforces a `1 MiB` (`1,048,576 B`) / `1,000,000`-code-point fresh admission cap; `near_misses` execute *after* releasing the target row lock under a hard `1,000,000`-cell budget; and `include_content=True` history paging enforces a `1 MiB` cumulative page budget (after the first non-empty entry on a page).
+- **Filesystem concurrency & operational scope:** Filesystem synchronization operates strictly on individual target files within a designated workspace root. The server does not manage distributed filesystem locks or intercept OS write syscalls; it relies on per-target optimistic concurrency in PostgreSQL, pre-write disk drift validation, and cooperative POSIX writer environments.
 - **Authentication & multi-tenant isolation:** PatchDIFF is designed as a local or private-network MCP transaction service (`stdio` subprocess or internal FastAPI/MCP registry). Multi-tenant authentication, RBAC, and network TLS termination are deployment-layer responsibilities outside the core transaction engine.
 
 ---

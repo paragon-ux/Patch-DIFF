@@ -256,11 +256,9 @@ A host skill or system prompt for PatchDIFF should say, at minimum: read before 
 
 ### Host Prompt Hygiene & Friction Prevention
 
-The [earlier modernization experiment](../benchmarks/modernized-benchmark-report.md)
-studied schema reads, post-commit audits and environment-specific coaching.
-The [current Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md)
-uses a separate prompt policy and measures complete publication workflows.
-It does not isolate individual prompt interventions.
+The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md)
+evaluates complete publication workflows across Native, host-orchestrated structural editing,
+and agent-owned Workspace editing.
 
 Keep task intent, tool permissions and publication ownership clear. Native
 and non-Git variants should use the same task and completion contract for

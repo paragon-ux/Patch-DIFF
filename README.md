@@ -37,13 +37,13 @@ xychart-beta
     bar [341, 286, 305, 368, 299, 289]
 ```
 
-> **Evaluation Disclaimer**: Measured in Google Antigravity ($n=3$ per cell across 6 conditions, 18 total trials, operator-attested Gemini 3.8 Flash High) comparing agent-owned Workspace (`observed_workspace`), host-orchestrated structural editing (`observed_v2`), and native file editing on a standardized 5-file, 21-edit canary task. Preparation and owner connector handoffs are excluded from the verified flow interval and recorded separately as setup overhead. Full methodology, transcripts, seed hashes, and receipts are published in the [Workspace Benchmark Report](docs/benchmarks/workspace-e2e-benchmark.md). The earlier five-tool experiment is preserved in the [Earlier Modernization Benchmark](docs/benchmarks/modernized-benchmark-report.md).
+> **Evaluation Disclaimer**: Measured in Google Antigravity ($n=3$ per cell across 6 conditions, 18 total trials, operator-attested Gemini 3.8 Flash High) comparing agent-owned Workspace (`observed_workspace`), host-orchestrated structural editing (`observed_v2`), and native file editing on a standardized 5-file, 21-edit canary task. Preparation and owner connector handoffs are excluded from the verified flow interval and recorded separately as setup overhead. The [Workspace Benchmark Report](docs/benchmarks/workspace-e2e-benchmark.md) publishes the methodology and sanitized per-trial metrics and hashes. Raw transcripts and full receipts remain in the private capture packet.
 
-### How Agent-Owned Workspace Editing Drives Faster Execution and Eliminates Host Friction
+### Measured Workspace Execution and Host Lifecycle
 
 Across all 18 trials, agent-owned Workspace averaged **296.7s vs. 354.2s for Native (16.2% faster pooled; up to 28.3% faster in Non-Git median)** while reducing editor tool calls from **55.8 down to 32.0 (-42.7%)**:
 
-1. **Context-Gathering Reduction**: Waymark AST structural indexing (`list_scopes`, `observe_scopes`) eliminates repetitive multi-chunk file scanning and text searching, saving ~24–34 iterative `read_file` round-trips per trial.
+1. **Context-Gathering Reduction**: Workspace averaged 6 `list_scopes`, 5 `observe_scopes` and 1.67 exact-search calls per trial; Native averaged 34.83 `read_file` calls. This workflow comparison does not isolate indexing from prompt policy, context acquisition or batching.
 2. **Self-Contained Agent Lifecycle (`observed_workspace`)**: The editing agent imports files (`initialize_target`), submits guarded multi-scope bundles (`commit_bundle`), and publishes directly to project files (`save` with `sync_workspace: true`) through its own 7 MCP tools. This eliminates the **20 separate host lifecycle calls and 5 host file writes per trial** required by standalone structural mode.
 3. **Turnaround Consistency & Zero Retries**: All 18 trials achieved **100.0% full-byte accuracy** against the independent oracle across all 90 target files (0 byte diffs) and passed **360/360 behavioral assertions**, with 0 MCP errors, 0 rejections, and 0 native retries.
 4. **Dominant Paired Performance**: Workspace finished faster than its same-block Native control in **all 6 paired comparisons** across both Git and Non-Git environments.
@@ -124,7 +124,7 @@ Full documentation is available on the **[Zensical Documentation Site](https://p
 - **MCP Profiles**: [Profile Catalog](docs/spec/profiles/index.md) | [Workspace](docs/spec/profiles/workspace-profile.md) | [Observed Editor v2](docs/spec/profiles/observed-editor-v2.md)
 - **Guides**: [Host Integration Guide](docs/guides/host-integration-guide.md) | [Claude Desktop Setup](docs/guides/claude-desktop-setup.md) | [Workspace Editing](docs/guides/workspace-quickstart.md) | [Observed Workflow](docs/guides/observed-editor-workflow.md)
 - **Whitepapers**: [Concept Paper v6](docs/papers/concept-paper-v6.md) | [Modernization Architecture](docs/papers/modernization-architecture.md)
-- **Benchmarks**: [Workspace Benchmark](docs/benchmarks/workspace-e2e-benchmark.md) | [Earlier Modernization Benchmark](docs/benchmarks/modernized-benchmark-report.md) | [Test Matrix](docs/benchmarks/test-matrix.md)
+- **Benchmarks**: [Workspace Benchmark](docs/benchmarks/workspace-e2e-benchmark.md) | [Test Matrix](docs/benchmarks/test-matrix.md)
 - **Standards**: [PR Review Standard](docs/standards/pr-review-standard.md) | [Release Readiness](docs/standards/release-readiness.md)
 
 ---

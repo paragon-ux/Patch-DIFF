@@ -25,11 +25,11 @@ operator inspects disk and database before reconciling.
 This boundary relies on a stable, cooperatively owned POSIX workspace and a
 service-owned database transaction. See the [workspace contract](../guides/workspace-quickstart.md).
 
-## Goal F extensions: guarded operations, replacement, preview and diagnostics
+## Guarded operations, whole-document replacement, preview and diagnostics
 
-These extensions keep the thesis unchanged: exact matching, sequential in-memory simulation, per-target atomic commit, append-only history and PostgreSQL authority. Decisions are recorded in [F01](https://github.com/paragon-ux/Patch-DIFF/blob/main/docs/usability/F01-decision.md), [Pass A](https://github.com/paragon-ux/Patch-DIFF/blob/main/docs/usability/PASS-A-decision.md), [Pass B](https://github.com/paragon-ux/Patch-DIFF/blob/main/docs/usability/PASS-B-decision.md) and the [PR #11 friction follow-up](https://github.com/paragon-ux/Patch-DIFF/blob/main/docs/usability/friction-followup-decision.md). The normative tool contract is [MCP tool contracts](../spec/mcp-tools.md#guarded-editing-reads-preview-and-diagnostics).
+These native capabilities keep the core thesis unchanged: exact matching, sequential in-memory simulation, per-target atomic commit, append-only history and PostgreSQL authority. The normative specifications are defined in [MCP tool contracts](../spec/mcp-tools.md#guarded-editing-reads-preview-and-diagnostics) and [Transaction formats](../spec/transaction-formats.md).
 
-- **New formats, new immutable profiles.** `patchdiff-tx/2` (ordered match/span operations with exact `expected_text`, runtime `patchdiff-mvp-0.3.0`) and `patchdiff-tx/3` (one guarded `replace_all`, runtime `patchdiff-mvp-0.4.0`) lower into the shared `ParsedPDCP` and applier. tx/2 spans that carry `expected_before`/`expected_after` adjacency guards record the separate immutable runtime `patchdiff-mvp-0.5.0`. Earlier formats, profiles, records and fingerprints are unchanged.
+- **New formats, new immutable profiles.** `patchdiff-tx/2` (ordered match/span operations with exact `expected_text`, runtime `patchdiff-mvp-0.3.0`) and `patchdiff-tx/3` (one guarded `replace_all`, runtime `patchdiff-mvp-0.4.0`) lower into the shared transaction applier. tx/2 spans that carry `expected_before`/`expected_after` adjacency guards record the separate immutable runtime `patchdiff-mvp-0.5.0`.
 - **Admission is a service boundary.** tx/3 fresh size limits (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) run after request-key recovery or conflict auditing and never during replay.
 - **Advisory reads are not authority.** `patchdiff_preview` and `patchdiff_read_lines` observe one committed row without locks or writes; submission always re-locks and rechecks guards. Preview evidence is projected into a 32,768-byte budget with explicit omission metadata, without changing shared results or stored history.
 - **Bounded failure evidence.** Rejections persist at most 256 code points of the actual failing buffer (a prefix, or a window around a known failure location), bounded exact candidates, consumed-match evidence and the bounded near-miss query. Near-miss ranking and `current_context` are response-only. Near misses run only after a service-owned commit releases the lock, never inside caller-owned transactions, over a bounded in-memory copy of the failing buffer, using an exact Ukkonen-banded Landau–Vishkin Levenshtein program with exact positional pigeonhole filtering within a fixed cell cap.
@@ -41,18 +41,21 @@ These extensions keep the thesis unchanged: exact matching, sequential in-memory
 ## 0. Reading guide and evidence limits
 
 The structural batch extension preserves per-target atomicity across multiple
-server-issued scopes. Its decision and contracts are in
+server-issued scopes. Its specification is defined in
 [structural batch contract](../spec/structural-batch-editing.md): one discovery per
 snapshot, per-group tx/2 evaluation through the existing applier, descending
-assembly, one locked commit, exact request recovery, all-scope replay without
-Waymark, and immutable `patchdiff-observed-batch/1` /
-`patchdiff-observed-batch-r1`. External MCP defaults to seven advertised and callable tools.
-Select `workspace` for file editing or `full` for the complete catalog.
+assembly, one locked commit, exact request recovery, and all-scope replay without
+Waymark.
 
-- **Conceptual design thesis** = [concept paper v6](concept-paper-v6.md). The [earlier design paper](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/PatchDIFF-Concept-Paper-5.md) records the original thesis.
-- **Active implementation contract** = `docs/spec/core-runtime.md`, `docs/spec/mcp-tools.md`, `docs/spec/data-model.md`, `docs/spec/transaction-formats.md`, `docs/spec/profiles/index.md`, `docs/spec/structural-batch-editing.md`, `docs/benchmarks/test-matrix.md`, `docs/guides/host-integration-guide.md`, `docs/guides/claude-desktop-setup.md`, `README.md`, `README_INTERNAL_MCP.md`. Active documents state the current modernized system coherently in their main body rather than contradicting themselves via tacked-on footers.
-- **Primary external evidence (E1–E8)** was fetched and verified directly from the primary vendor documentation pages and release endpoints on `2026-10-20` (Section 3.1).
-- **Current empirical evidence**. The [PR #24 Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) compares three complete workflows across 18 trials, with three repetitions per arm and environment. All 90 files and 360 behavioral checks passed. Workspace's mean timed interval and editor-call totals were 16.2% and 42.7% lower than Native. Preparation and owner handoffs are recorded separately from the timed comparison. The report separates runtime captures from operator model attestations and the unavailable exact host build. The [earlier modernization experiment](../benchmarks/modernized-benchmark-report.md) remains historical evidence. Automated source conformance, this model experiment and broader production behavior have separate verification scopes.
+PatchDIFF organizes public tool access around three primary profiles aligned with its operational arms:
+1. **`observed_workspace` (Primary)**: The full 7-tool structural editing profile enabling autonomous agents to manage file import, AST scope discovery, observation, atomic bundle commits, and explicit SAVE publication.
+2. **`workspace`**: The 5-tool exact text file editing profile from import to SAVE publication.
+3. **`observed_v2`**: The 5-tool structural profile for host-managed lifecycle environments where pre-edit setup, checkpointing, and disk writes are orchestrated by the host.
+
+- **Conceptual design thesis** = [concept paper v6](concept-paper-v6.md).
+- **Active implementation contracts** = `docs/spec/core-runtime.md`, `docs/spec/mcp-tools.md`, `docs/spec/data-model.md`, `docs/spec/transaction-formats.md`, `docs/spec/profiles/index.md`, `docs/spec/structural-batch-editing.md`, `docs/benchmarks/test-matrix.md`, `docs/guides/host-integration-guide.md`, `docs/guides/claude-desktop-setup.md`, `README.md`.
+- **Historical design context (E1–E8)**: External vendor tooling patterns surveyed during architectural formation (Section 3).
+- **Current empirical evidence**: The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) compares three complete workflows across 18 trials (90 exact files, 360 behavioral assertions passed). Workspace's mean verified flow duration and editor-call totals were 16.2% and 42.7% lower than Native. Preparation and owner connector handoffs are recorded separately as setup overhead.
 
 ## 1. The thesis, restated
 
@@ -77,28 +80,30 @@ From [concept paper v6](concept-paper-v6.md) (carrying forward the core thesis o
 
 ### 1.1 Whitepaper Hypothesis & Limitation Reconciliation (`PatchDIFF-Concept-Paper-5.md` -> `concept-paper-v6.md`)
 
-The [earlier design paper](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/PatchDIFF-Concept-Paper-5.md) introduced the research hypotheses below. The [current Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md), [earlier modernization experiment](../benchmarks/modernized-benchmark-report.md) and [earlier baseline](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/git_benchmark_report.md) document separate model experiments. The current benchmark includes agent-owned file import and publication.
+The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md)
+documents the current comparative model experiments across Native, host-orchestrated structural editing,
+and agent-owned Workspace editing.
 
-| Historical v0.2.3 Concept Paper Design | Current Modernized Implementation (`patchdiff-tx/1..3` + Profiles `0.1.0`..`0.5.0`) |
+| Structured Declarative Design | Current Modernized Implementation (`patchdiff-tx/1..3` + Profiles `0.1.0`..`0.5.0`) |
 | --- | --- |
-| Text-delimited `.pdcp` v0.2.3 as the primary model-facing transaction format | Structured JSON transactions (`patchdiff-tx/1`, `tx/2`, `tx/3`) |
-| 7 mandatory `# MANIFEST` prose fields per change block | Required top-level transaction `intent`, optional per-edit `rationale`/`risk`, and runtime-derived `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests) |
-| Server-mediated regeneration prompt/context workflow | Host-owned planning, bounded reading (`patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`), proposal, and retry loop over MCP |
-| Match-only edit representation (`<<<<<<< MATCH` / `>>>>>>> REPLACE`) | Exact match (`tx/1`/`tx/2`), guarded `[start, end)` code-point spans with `expected_text` and optional `expected_before`/`expected_after` adjacency checks (`tx/2`), and guarded whole-target replacement (`tx/3`) |
-| Single-dimensional rejection reason without structured recovery slices | Stage-aware `ValidationStage`, bounded `failure_context` / `current_context` (`<= 256` code points), `exact_candidates` (up to 5), post-commit `near_misses` (up to 3), and read-only `patchdiff_preview` |
-| Unkeyed submission retries | Durable idempotent outcome recovery via `(target_file_id, client_request_id)` |
-| Single active runtime behavior | Versioned immutable replay profiles (`patchdiff-mvp-0.1.0` through `patchdiff-mvp-0.5.0`) dispatched per `(protocol_version, runtime_version)` |
+| Declarative JSON as primary model-facing transaction format | Structured JSON transactions (`patchdiff-tx/1`, `tx/2`, `tx/3`) |
+| Structured metadata per transaction | Required top-level transaction `intent`, optional per-edit `rationale`/`risk`, and runtime-derived `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests) |
+| Server-mediated context workflow | Host-owned planning, bounded reading (`patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`), proposal, and retry loop over MCP |
+| Expressive edit representations | Exact match (`tx/1`/`tx/2`), guarded `[start, end)` code-point spans with `expected_text` and optional `expected_before`/`expected_after` adjacency checks (`tx/2`), and guarded whole-target replacement (`tx/3`) |
+| Structured recovery diagnostics | Stage-aware `ValidationStage`, bounded `failure_context` / `current_context` (`<= 256` code points), `exact_candidates` (up to 5), post-commit `near_misses` (up to 3), and read-only `patchdiff_preview` |
+| Idempotent keyed retries | Durable idempotent outcome recovery via `(target_file_id, client_request_id)` |
+| Immutable runtime behaviors | Versioned immutable replay profiles (`patchdiff-mvp-0.1.0` through `patchdiff-mvp-0.5.0`) dispatched per `(protocol_version, runtime_version)` |
 
-| Whitepaper Hypothesis / Limitation (`PatchDIFF-Concept-Paper-5.md`) | Modernized Architectural Mechanism (`patchdiff-tx/1..3`) | Measured / Verified Evidence (`PR #14`) |
+| Research Hypothesis / Architectural Mechanism | Modernized Mechanism (`patchdiff-tx/1..3`) | Measured / Verified Evidence |
 | --- | --- | --- |
-| **H1: Reduces full-document decoding & wire cost** (§23.1) | Typed JSON transactions (`patchdiff-tx/1`, `tx/2`) scale $O(\text{delta})$ and drop the 7 mandatory prose fields of `.pdcp` v0.2.3 to top-level `intent` + optional per-edit `rationale`. | [Historical byte accounting](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/backend/tests/verification/offline_eval.py): **`151 B`** wire (`206 B` stored) for 1 edit (**-66.5%** vs. `.pdcp`); **`259 B`** wire (`314 B` stored) for 5 edits (**-82.3%** wire, **-75.6%** stored vs. `.pdcp`). |
-| **H2: Reduces unintended mutation outside requested regions** (§23.2, §26) | Exact LF-canonical code-point matching (`tx/1`), exact `expected_text` + optional `expected_before` / `expected_after` span adjacency guards (`tx/2`, profile `0.5.0`), and UAX #29 `grapheme_boundary_split` warnings. | Verified across **816** unit tests and **410** live PostgreSQL/stdio integration tests; unmatched spans are byte-for-byte invariant. |
-| **H3: Improves stale-context & concurrent divergence detection** (§23.3, §26) | Required `expected_target_version` and/or `expected_current_hash` on all typed tools under PostgreSQL `SELECT ... FOR UPDATE`, plus `no_op_change` / `no_op_transaction` warnings for ABA/no-op detection. | Deterministic rejection (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation; `client_request_id` recovers lost responses (`deduplicated: true`). |
-| **H4: Supports multi-edit cached-document workflows** (§23.4) | Sequential in-memory simulation, SAVE cycle rotation (`patchdiff_save`), and PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` history/ledger projection (`MCP-001`). | Over a **20 MB** history substrate: **`14.68 ms`** ledger / **`22.85 ms`** log for `50 × 400 KB` `tx/3` (**16–19× faster**); **`136.72 ms`** log / **`221.59 ms`** ledger for `20 × 1 MB` `tx/1`. |
-| **H5: Preserves deterministic replay across protocol evolution** (§23.5, §28) | Profile-dispatched replay (`(protocol_version, runtime_version)` across `0.1.0`..`0.5.0`) + 4-component `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`). | Live replay checks cover typed and observed histories, unknown profiles, and component-level divergence including raw CRLF. |
-| **H6: Improves reviewability & separates claims from facts** (§23.6, §26) | Accepted-only `append_only_manifest_ledger` separates model-claimed `intent` / `rationale` from runtime-derived `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests). | Preview (`patchdiff_preview`, `<= 32,768 B`) and ledger entries expose exact runtime-computed spans and hashes without trusting model prose. |
-| **H7: LLMs can reliably generate valid PatchDIFF transactions** (§23.7) | Native MCP JSON tool schemas (`TYPED_EDIT_JSON_SCHEMA`, `TYPED_OPERATIONS_JSON_SCHEMA`, `TYPED_REPLACEMENT_JSON_SCHEMA` advertised in `tools/list`), 13 executable discovery examples (`<= 8,192 B`), and removal of custom text-delimiter framing (`<<<<<<< MATCH`) and 7 mandatory `# MANIFEST` prose headers per edit. | Automated tests cover schema and admission behavior. The [current Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) independently reconstructed all 60 accepted guarded commits across 12 PatchDIFF trials. All 90 files across the 18 Native/Structural/Workspace trials matched the oracle and all 360 behavioral checks passed. Model selection is operator-attested and broader workloads remain unmeasured. |
-| **§26/§28 Limitations Resolved: Delimiter collision & rich rejection diagnostics** (§26, §28) | JSON-native `patchdiff-tx/1..3` eliminates `.pdcp` delimiter-line collisions (`<<<<<<< MATCH`, `=======`, `>>>>>>> REPLACE`) while keeping JSON syntax protocol-validated; `SVC-001` adds exact pigeonhole + Landau–Vishkin Levenshtein `near_misses` after lock release (`<= 18,432 B` newly added enrichment), plus bounded `failure_context`, `exact_candidates`, `patchdiff_preview`, and `client_request_id` idempotency. | Payload containing a standalone `=======` line (`"a\n=======\nb"`) is **accepted (`162 B` wire / `217 B` stored)** on `tx/1` (vs. `rejected:block_malformed` on `.pdcp`). Local 5-run 65,536-code-point near-miss medians (`SVC-001`): **`1.7 ms`** on prose (**58.9× faster** vs. PR #13) and **`41.9 ms`** on repetitive logs (**16.9× faster**, 100% scanned). |
+| **H1: Reduces full-document decoding & wire cost** | Typed JSON transactions (`patchdiff-tx/1`, `tx/2`) scale $O(\text{delta})$ with top-level `intent` + optional per-edit `rationale`. | [Deterministic byte accounting](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/backend/tests/verification/offline_eval.py): **`151 B`** wire (`206 B` stored) for 1 edit; **`259 B`** wire (`314 B` stored) for 5 edits. |
+| **H2: Reduces unintended mutation outside requested regions** | Exact LF-canonical code-point matching (`tx/1`), exact `expected_text` + optional `expected_before` / `expected_after` span adjacency guards (`tx/2`, profile `0.5.0`), and UAX #29 `grapheme_boundary_split` warnings. | Verified across **923** unit tests and **506** live PostgreSQL/stdio integration tests; unmatched spans are byte-for-byte invariant. |
+| **H3: Improves stale-context & concurrent divergence detection** | Required `expected_target_version` and/or `expected_current_hash` on all typed tools under PostgreSQL `SELECT ... FOR UPDATE`, plus `no_op_change` / `no_op_transaction` warnings for ABA/no-op detection. | Deterministic rejection (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation; `client_request_id` recovers lost responses (`deduplicated: true`). |
+| **H4: Supports multi-edit cached-document workflows** | Sequential in-memory simulation, SAVE cycle rotation (`patchdiff_save`), and PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` history/ledger projection (`MCP-001`). | Over a **20 MB** history substrate: **`14.68 ms`** ledger / **`22.85 ms`** log for `50 × 400 KB` `tx/3` (**16–19× faster**); **`136.72 ms`** log / **`221.59 ms`** ledger for `20 × 1 MB` `tx/1`. |
+| **H5: Preserves deterministic replay across protocol evolution** | Profile-dispatched replay (`(protocol_version, runtime_version)` across `0.1.0`..`0.5.0`) + 4-component `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`). | Live replay checks cover typed and observed histories, unknown profiles, and component-level divergence including raw CRLF. |
+| **H6: Improves reviewability & separates claims from facts** | Accepted-only `append_only_manifest_ledger` separates model-claimed `intent` / `rationale` from runtime-derived `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests). | Preview (`patchdiff_preview`, `<= 32,768 B`) and ledger entries expose exact runtime-computed spans and hashes without trusting model prose. |
+| **H7: LLMs can reliably generate valid PatchDIFF transactions** | Native MCP JSON tool schemas (`TYPED_EDIT_JSON_SCHEMA`, `TYPED_OPERATIONS_JSON_SCHEMA`, `TYPED_REPLACEMENT_JSON_SCHEMA` advertised in `tools/list`), 13 executable discovery examples (`<= 8,192 B`). | Automated tests cover schema and admission behavior. The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) independently reconstructed all 60 accepted guarded commits across 12 PatchDIFF trials. All 90 files across the 18 Native/Structural/Workspace trials matched the oracle and all 360 behavioral checks passed. Model selection is operator-attested. |
+| **Limitations Resolved: Delimiter collision & rich rejection diagnostics** | JSON-native `patchdiff-tx/1..3` eliminates text delimiter collisions while keeping JSON syntax protocol-validated; exact pigeonhole + Landau–Vishkin Levenshtein `near_misses` after lock release, plus bounded `failure_context`, `exact_candidates`, `patchdiff_preview`, and `client_request_id` idempotency. | Target content containing standalone delimiter lines is safely accepted as valid JSON strings. Local 5-run 65,536-code-point near-miss medians: **`1.7 ms`** on prose and **`41.9 ms`** on repetitive logs (100% scanned). |
 
 ## 2. Responsibility map (modernized state)
 
@@ -106,11 +111,14 @@ The [earlier design paper](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545
 | --- | --- | --- |
 | User intent, planning, model selection, conversation compaction | **Host** | Host/client loop (`host-integration-guide.md`). PatchDIFF never calls an LLM or holds model credentials. |
 | Authoritative target reads and exact occurrence search | **PatchDIFF** | `patchdiff_read_target` (`start`, `length`, `next_start`, `truncated`) and `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`). |
+| Structural AST scope discovery & observation | **PatchDIFF (Waymark)** | `patchdiff_list_scopes` and `patchdiff_observe_scopes` in `observed_workspace` and `observed_v2`. |
 | Proposal generation & retry loop | **Host / Model** | Model emits a guarded typed proposal. On rejection, host inspects diagnostics, re-reads via `patchdiff_read_target` / `patchdiff_find_occurrences`, and resubmits with `parent_pdcp_log_id` and `attempt`. |
 | Precondition guards, applicability validation, sequential simulation | **PatchDIFF Core & Service** | Typed submission paths in `pdcp_service.py` share guards and `apply_pdcp_transaction` in `pdcp/applier.py`. |
 | Request idempotency & lost-response outcome recovery | **PatchDIFF Service & DB** | `client_request_id` + `request_fingerprint` on `append_only_pdcp_logs` (`uq_pdcp_logs_target_client_request_id`). |
 | Atomic persistence & append-only audit | **PatchDIFF Storage (Postgres)** | Row-locked `cloud_target_files`, `append_only_pdcp_logs`, `append_only_manifest_ledger`, `target_snapshots`, `editing_cycles`. |
 | Deterministic replay & materialized-state verification | **PatchDIFF Replay Service** | `replay_target` dispatches on `(protocol_version, runtime_version)` and reports `materialized_state_matches` and `materialized_state_checks`. |
+| **Agent-Owned Workspace Editing** (`observed_workspace` / `workspace`) | **Agent** | Agent imports project files via `patchdiff_initialize_target` (`from_workspace: true`), submits guarded edits or scope bundles, and directly publishes to disk via `patchdiff_save` (`sync_workspace: true`) with drift validation. |
+| **Host-Orchestrated Lifecycle Editing** (`observed_v2`) | **Host Harness** | Agent submits structural edits; host harness manages pre-edit target initialization, SAVE checkpointing, replay verification, and physical file export out-of-band. |
 
 ## 3. Primary external evidence (E1–E8, verified 2026-10-20)
 
@@ -131,7 +139,7 @@ All eight external sources were fetched directly from their primary vendor pages
 
 1. **Checked state transitions on a single authoritative target**: `expected_target_version` and/or `expected_current_hash` verified under Postgres `SELECT ... FOR UPDATE`, plus a post-simulation `TARGET_DIVERGED` guard.
 2. **All-or-nothing multi-edit atomicity per target**: Sequential in-memory simulation of `edits[]`; if edit $k$ fails, zero edits are committed.
-3. **Durable append-only history of both accepted and rejected attempts**: Every rejected attempt is persisted with its exact payload, hash, `failure_reason`, `diagnostic_json`, retry lineage (`parent_pdcp_log_id`), and `client_request_id`.
+3. **Durable append-only history of both accepted and rejected attempts**: Every admitted target-linked attempt evaluated under a target row lock is persisted with its exact payload, hash, `failure_reason`, `diagnostic_json`, retry lineage (`parent_pdcp_log_id`), and `client_request_id`. Pre-admission errors (such as malformed transport envelopes, missing `target_file_id`, or unregistered targets) fail closed immediately without writing database rows.
 4. **Idempotent submission & lost-response outcome recovery**: Retrying a request with the same `(target_file_id, client_request_id)` returns the recorded terminal outcome (`deduplicated: true`) even after the target has advanced or returned to an earlier hash.
 5. **Deterministic replay & component-level materialized-state verification**: Reconstructs target state from `initial_upload` snapshot + ordered accepted logs, dispatching on `(protocol_version, runtime_version)` and verifying `content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, and `version_matches`.
 
@@ -180,7 +188,7 @@ flowchart LR
     - `region_hint` is **not** part of `patchdiff-tx/1` and is rejected as an unknown edit field (`FailureReason.MANIFEST_INVALID`).
 - **Canonical Persisted Record (ordinary input; invalid-text evidence exception below)**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over the submitted record with raw decoded string values preserved. Canonical JSON normalizes object-key order and serialization, not newlines inside string values; runtime matching separately canonicalizes text. This follows the request identity contract and existing build_record/canonical_record_json behavior; it does not introduce a new normalized-identity alternative.
 
-Rejection context: newly recorded rejections persist immutable `diagnostic.failure_context`; rejected submission responses also return separate response-only `current_context` from the refreshed locked canonical target. The full representation and numeric budgets are specified in [MCP tool contracts](../spec/mcp-tools.md). Applicability failures capture only a bounded prefix of the actual failing buffer, labeled `canonical_target` or `intermediate_buffer` with `prior_changes`. Observed version/hash always identify transaction-start canonical state, never an uncommitted intermediate hash. Unknown/malformed targets and pending caller-local dirty state return explicit unavailable contexts. Acceptance, exact matching, request identity and replay profiles are unchanged.
+Rejection context: newly recorded rejections for admitted target-linked attempts persist immutable `diagnostic.failure_context` bounded to at most 256 code points (prefix or window around the failure point); rejected submission responses also return separate response-only `current_context` from the refreshed locked canonical target. The full representation and numeric budgets are specified in [MCP tool contracts](../spec/mcp-tools.md). Applicability failures capture only a bounded prefix of the actual failing buffer, labeled `canonical_target` or `intermediate_buffer` with `prior_changes`. Observed version/hash always identify transaction-start canonical state, never an uncommitted intermediate hash. Pre-admission rejections (such as malformed envelopes or missing target IDs), unknown targets, and pending caller-local dirty state fail closed without database rows and return explicit unavailable contexts. Acceptance, exact matching, request identity and replay profiles are unchanged.
 
 #### C2. Validation Stage Model, Failure Mapping, and Format-Specific Diagnostics
 
@@ -262,7 +270,7 @@ Parent identity: retain existing parent identity. Only a same-target rejected pa
 
 For rejected exact recovery, the complete stored diagnostic (including original `failure_context`, when present) remains unchanged. Only top-level `current_context` and existing current identity fields reflect the newly locked target. Older rows without failure context are returned without retrofitting evidence. Context is cheap bounded capture inside the existing transaction; caller-owned locks and commit/rollback ownership are preserved.
 
-#### C5. Ledger and Schema Contract (Migration `20261020_0002`)
+#### C5. Ledger and Schema Contract (Migrations `20261020_0002` and `20261105_0006`)
 
 - `append_only_manifest_ledger`:
   - `origin`: `TEXT NOT NULL DEFAULT 'typed'` with `CHECK (origin = 'typed')`.
@@ -273,12 +281,16 @@ For rejected exact recovery, the complete stored diagnostic (including original 
   - `client_request_id`: `TEXT NULL`.
   - `request_fingerprint`: `VARCHAR(64) NULL`.
   - Partial unique index `uq_pdcp_logs_target_client_request_id`.
+- Historical 0002 retains its original origin default. Additive 0006 adopts the
+  typed default/check for fresh and existing 0005 databases, refusing incompatible
+  non-typed origins before schema changes. Downgrade of 0006 restores the
+  historical default and removes its check without changing rows.
 - Downgrade refuses when it would discard typed audit facts or request identity, or when restored column constraints would reject stored rows.
 
 #### C5b. Source Line-Ending Metadata (Migration `20261022_0003`)
 
 - `cloud_target_files.source_line_endings`: `JSONB NULL`. New uploads record `{style, lf, crlf, cr, normalized, source_code_points, source_utf8_bytes, source_sha256}` from the raw upload before LF canonicalization. Existing targets keep NULL, meaning unknown; nothing is backfilled.
-- Canonical content, `current_hash`, snapshots, history and replay are unchanged. Only export reads the column.
+- Export and workspace publication read the column. Workspace initialization records `workspace_tracked` and `workspace_root_identity`; publication checks the binding and expected raw disk digest, and successful workspace SAVE stores `last_synced_disk_sha256` and `last_synced_version`. These metadata facts do not alter canonical text or its hashes, and replay does not evaluate them.
 - Downgrade `20261022_0003 -> 20261020_0002` checks `IF EXISTS (SELECT 1 FROM cloud_target_files WHERE source_line_endings IS NOT NULL)` and raises an exception rather than discarding recorded facts.
 
 #### C6. Read, Search, and History Pagination Contract
@@ -304,26 +316,28 @@ For rejected exact recovery, the complete stored diagnostic (including original 
   - Caller note: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal.
   - include_previous_cycles must be boolean. Attempts remain newest-first; ledger selects the newest eligible page then renders it oldest-first. With sequences 1..10 and limit 3, attempts=[10,9,8], ledger=[8,9,10], both next_sequence=8; ledger before_sequence=8 gives [5,6,7]. Newer inserts do not enter a traversal continuing below its exclusive cursor.
 
-## 5. Documentation Architecture and Precedence (Section 10)
+## 5. Documentation Architecture
 
-### 5.1 Documentation Layers
+PatchDIFF documentation is organized into three distinct public collections:
 
-| Layer | Files | Role & Maintenance Rule |
-| --- | --- | --- |
-| **1. Historical research and decisions** | [Earlier design records](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy), `docs/usability/` | Provenance for research and design decisions. Cite review evidence in the PR. |
-| **2. Architecture & Change Record** | `docs/papers/modernization-architecture.md`, `docs/papers/product-change-record.md` | This document holds decisions A1–A8, contracts C1–C6 and primary evidence E1–E8. The change record holds current product behavior, format compatibility and verification scope. |
-| **3. Active specifications** | `docs/spec/`, `docs/benchmarks/test-matrix.md` | Shared runtime and tool contracts, profile-specific workflows and verification scope. |
-| **4. Host & Operator Guides** | `docs/guides/host-integration-guide.md`, `docs/guides/claude-desktop-setup.md`, `docs/guides/observed-editor-workflow.md`, `README.md`, `README_INTERNAL_MCP.md` | Operational and host-facing instructions aligned with Layer 3. |
+1. **Foundational Papers and Architecture** (`docs/papers/`):
+   - [Modernization Architecture](modernization-architecture.md): Architectural decisions A1–A8, contracts C1–C6, and empirical evidence E1–E8.
+   - [Concept Paper v6](concept-paper-v6.md): Formal transaction and state-transition model, mathematical invariants, deterministic replay guarantees, and Workspace publication semantics.
+   - [Product Change Record](product-change-record.md): Authoritative ledger of capabilities, format evolution, migration integrity, and verified boundaries.
 
-### 5.2 Precedence Order
+2. **Normative Specifications** (`docs/spec/`):
+   - [MCP Tool Contracts](../spec/mcp-tools.md): Authoritative input schemas, parameter bounds, response envelopes, error codes, and failure contexts.
+   - [Core Runtime Specification](../spec/core-runtime.md): Pure deterministic matching, span calculation, and text transformation algorithms.
+   - [Data Model & Database Schema](../spec/data-model.md): PostgreSQL relational tables, row locking semantics, constraints, and audit log structures.
+   - [Transaction Formats](../spec/transaction-formats.md): Wire schemas and invariants for `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`, and `patchdiff-observed-batch/1`.
+   - [Profiles Catalog](../spec/profiles/index.md): Standard tool profiles (`observed_workspace`, `workspace`, `observed_v2`).
 
-1. Locked invariants in `AGENTS.md` (deterministic non-executable core, per-target atomic commit, append-only history, accepted-only ledger, Postgres authority, deterministic replay).
-2. `docs/papers/modernization-architecture.md` and `docs/papers/product-change-record.md`.
-3. Active contract documents (`docs/spec/mcp-tools.md`, `docs/spec/core-runtime.md`, `docs/spec/data-model.md`, `docs/spec/transaction-formats.md`, `docs/spec/profiles/index.md`, `docs/spec/structural-batch-editing.md`, `docs/benchmarks/test-matrix.md`).
-4. Host guides and READMEs.
+3. **Integration Guides and Operational Evidence**:
+   - [Host Integration Guide](../guides/host-integration-guide.md): Client-side orchestration patterns, tool filtering, and error handling.
+   - [Workspace Quickstart](../guides/workspace-quickstart.md): Getting started with agent-owned workspace editing.
+   - [Workspace E2E Benchmark Report](../benchmarks/workspace-e2e-benchmark.md): Verified 18-trial empirical evaluation across real-world editing workloads.
+   - [Verification Test Matrix](../benchmarks/test-matrix.md): Complete automated test suite coverage across unit, integration, migration, and audit suites.
 
 ## 6. Verification Summary
 
-[product change record](product-change-record.md) records product behavior and verification scope. [test matrix](../benchmarks/test-matrix.md) maps unit, live PostgreSQL, real stdio subprocess and isolated populated migration preservation/refusal coverage. Test and CI results must identify the executed revision; historical suite totals do not certify later changes.
-
-No live-model comparative study or external Desktop-host performance claim is established by these deterministic tests.
+The [Product Change Record](product-change-record.md) records current product behavior and verification scope. The [Test Matrix](../benchmarks/test-matrix.md) maps unit, live PostgreSQL, real stdio subprocess, and isolated migration preservation coverage. Test and CI results identify the executed revision; historical suite totals do not certify later changes. Live-model performance across agent-owned and host-orchestrated workflows is established separately by the [Workspace E2E Benchmark](../benchmarks/workspace-e2e-benchmark.md).

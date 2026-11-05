@@ -13,7 +13,7 @@ When working in this repository, always consult documentation in the following o
 3. `docs/papers/product-change-record.md` (product change record and verification scope)
 4. `docs/spec/mcp-tools.md` (MCP tool contracts, schemas, byte budgets)
 5. `docs/spec/core-runtime.md` (deterministic core runtime specification)
-6. `docs/spec/data-model.md` (Postgres schema and migrations `20260510_0001` through `20261027_0005`)
+6. `docs/spec/data-model.md` (Postgres schema and migrations `20260510_0001` through `20261105_0006`)
 7. `docs/spec/transaction-formats.md` (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`)
 8. `docs/spec/profiles/index.md` (startup selection and profile contracts)
 9. `docs/spec/structural-batch-editing.md` (structural observation and batch transactions)

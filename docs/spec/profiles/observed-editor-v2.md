@@ -25,13 +25,13 @@ Budget for all five declarations unless actual host evidence shows otherwise.
 ## Explicit snapshots and route boundaries
 
 Selection returns `snapshot` with exactly `target_file_id`,
-`expected_target_version`, `expected_current_hash`, and `observation_bundle_id`
-(or `observation_id` for observe_one). A commit accepts that same object without
-renaming fields. Bundle commits also require `intent`, `client_request_id` and
-`groups`; each group pairs a returned observation ID with its ordered operations.
-Single commits require `intent` and `operations`; their request key is optional,
-as in the existing single service. The schemas retain both match and span forms,
-disambiguators, insertion guards, source, retry lineage and correlation options.
+`expected_target_version`, `expected_current_hash`, and `observation_bundle_id`.
+`patchdiff_commit_bundle` accepts that same object without renaming fields and
+requires `intent`, `client_request_id` and `groups`; each group pairs a returned
+observation ID with its ordered operations. A one-scope edit uses one selection
+and one group, with the same mandatory request key. The schemas retain both
+match and span forms, disambiguators, insertion guards, source, retry lineage
+and correlation options.
 
 Pass the selected snapshot object directly to the commit tool. The editor
 still chooses the structures, writes the exact operations and binds each
@@ -41,8 +41,7 @@ Normalization only selects the named route and unwraps supplied fields. It does
 not refill guards, reinterpret coordinates, normalize UUID spelling, derive
 operations, or infer authority. Unknown envelope fields and unrouteable snapshots
 fail explicitly. Known-target malformed operational values still reach the
-shared service's audited admission path. Missing/null single/page identities
-cannot fall through to candidate discovery. Tools/list schemas guide construction;
+shared service's audited admission path. Tools/list schemas guide construction;
 they are not a prevalidation layer that bypasses service audit or keyed recovery.
 
 The existing target lock, both explicit guards, current-cycle observation checks,

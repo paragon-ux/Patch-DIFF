@@ -30,11 +30,12 @@ Repository = "https://github.com/paragon-ux/Patch-DIFF"
 Issues = "https://github.com/paragon-ux/Patch-DIFF/issues"
 
 [tool.setuptools.packages.find]
-where = ["backend"]
-include = ["app", "app.*"]
+where = ["backend", "."]
+include = ["app", "app.*", "integrations.waymark"]
 
 [tool.setuptools.package-data]
 app = ["migrations/alembic.ini", "migrations/script.py.mako"]
+"integrations.waymark" = ["*.mjs", "package.json", "package-lock.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["backend", "."]

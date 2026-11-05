@@ -26,6 +26,30 @@ alembic_ini=$(python -c 'from pathlib import Path; import app; print(Path(app.__
 python -m alembic -c "$alembic_ini" upgrade head
 ```
 
+### Seven-tool structural setup
+
+The five-tool `workspace` profile needs no Node.js installation. For the
+seven-tool `observed_workspace` profile, install Node.js 22+ on the server,
+then install the pinned npm dependencies beside the bridge shipped in the
+wheel. Run this with the same virtual environment activated:
+
+```bash
+node --version
+waymark_dir=$(python -c 'from app.services.waymark_adapter import WAYMARK_INTEGRATION_DIR; print(WAYMARK_INTEGRATION_DIR)')
+npm --prefix "$waymark_dir" ci --omit=dev
+```
+
+The shipped `package-lock.json` pins Waymark Engine 4.1.0 and its dependencies.
+Repeat this npm command after upgrading the Python package. In the MCP
+configuration below, select `PATCHDIFF_MCP_PROFILE=observed_workspace` and
+add `PATCHDIFF_WAYMARK_MODE=resident`. Set
+`PATCHDIFF_STRICT_OBSERVATION_MODE=1` to require observed writes. That profile
+imports files and publishes SAVE through the same connection, using
+`patchdiff_list_scopes`, `patchdiff_observe_scopes` and
+`patchdiff_commit_bundle` for guarded structural editing.
+
+## Connect the MCP client
+
 Configure your MCP client to start that interpreter. Replace the paths and
 database URL with the values for your environment.
 
@@ -47,8 +71,8 @@ database URL with the values for your environment.
 ```
 
 Start or refresh the MCP connection and verify that it exposes the
-[five workspace tools](../spec/profiles/workspace-profile.md). Startup errors appear
-on stderr.
+[selected workspace catalog](../spec/profiles/workspace-profile.md): five tools
+for `workspace` or seven for `observed_workspace`. Startup errors appear on stderr.
 
 Set the MCP server's workspace root to the same project directory the host
 opens, so server-relative paths and client-rendered links refer to the same
@@ -60,6 +84,8 @@ Use `sync_workspace=true` when you want SAVE to write the file. The
 startup requirements and the server-wide sync default.
 
 ## Edit and publish a file
+
+The following example uses the five-tool `workspace` profile.
 
 Give the host a request with the file path, the desired edit and whether
 to write the result to disk. For example, ask it to move the maintenance
