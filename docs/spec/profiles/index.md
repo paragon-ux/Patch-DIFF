@@ -4,8 +4,9 @@ Profiles select the tools available on one external MCP connection.
 
 ## Choose a profile
 
-- Start with a project file using [workspace](workspace-profile.md), which can import,
-  edit and publish through one connection.
+- Start with a project file using [workspace or observed_workspace](workspace-profile.md), which can import,
+  edit and publish through one connection. Choose `workspace` for 5-tool exact text editing, or
+  `observed_workspace` for 7-tool structural AST observation and atomic multi-edit bundling.
 - Work with a target ID using [editor, unobserved or observed](existing-target-editing.md).
   These profiles combine editing with checkpointing and replay.
 - Separate editing from lifecycle work using
@@ -40,4 +41,5 @@ The same immutable profile controls both `tools/list` and `tools/call`.
 | `hybrid_editor` | 1 | `patchdiff_submit_edits` |
 | `observed_v2` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle` |
 | `workspace` | 5 | `patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save` |
+| `observed_workspace` | 7 | `patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_save` |
 | `full` (trusted lifecycle) | 17 | Complete registry, including initialization, SAVE, export, audit and replay |

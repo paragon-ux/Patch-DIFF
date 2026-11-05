@@ -12,7 +12,7 @@ from app.mcp.external_adapter import ExternalMCPAdapter, MCP_PROFILES
 from app.mcp.server import registry
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("workspace", 5), ("full", 17)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("workspace", 5), ("observed_workspace", 7), ("full", 17)])
 def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch):
     adapter = ExternalMCPAdapter(profile=profile)
     assert len(adapter.list_tools()) == count
@@ -53,6 +53,27 @@ def test_workspace_preflight_runs_before_mcp_replies(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match="apply the installed Alembic migrations"):
         external_adapter.serve_stdio(StringIO(request), stdout)
     assert stdout.getvalue() == ""
+
+
+def test_observed_workspace_profile_contract_and_strict_observation(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "observed_workspace")
+    monkeypatch.setenv("PATCHDIFF_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("PATCHDIFF_DATABASE_URL", "postgresql+psycopg://unused")
+    monkeypatch.setenv("PATCHDIFF_STRICT_OBSERVATION_MODE", "1")
+    monkeypatch.setattr(external_adapter, "database_schema_is_current", lambda: False)
+    request = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n'
+    stdout = StringIO()
+    # Observed workspace permits strict observation mode (unlike workspace), but still fails on stale schema.
+    with pytest.raises(SystemExit, match="apply the installed Alembic migrations"):
+        external_adapter.serve_stdio(StringIO(request), stdout)
+
+    adapter = ExternalMCPAdapter(profile="observed_workspace")
+    tools_by_name = {tool["name"]: tool for tool in adapter.list_tools()}
+    assert len(tools_by_name) == 7
+    assert "Import an existing workspace file" in tools_by_name["patchdiff_initialize_target"]["description"]
+    assert "patchdiff_observe_scopes" in tools_by_name["patchdiff_initialize_target"]["description"]
+    assert "patchdiff_commit_bundle" in tools_by_name
+    assert "patchdiff_save" in tools_by_name
 
 
 def test_batch_schemas_are_typed_bounded_and_mutually_exclusive():

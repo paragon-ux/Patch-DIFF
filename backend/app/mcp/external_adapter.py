@@ -152,6 +152,16 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
 
 
 _BASE_EDITOR_TOOLS = frozenset({"patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_save", "patchdiff_replay"})
+_WORKSPACE_LIFECYCLE = frozenset({"patchdiff_initialize_target", "patchdiff_save"})
+_WORKSPACE_PROFILES = frozenset({"workspace", "observed_workspace"})
+_STRUCTURAL_PROFILES = frozenset({"observed_v2", "observed_workspace"})
+_OBSERVED_WORKSPACE_INITIALIZE = (
+    "Import an existing workspace file as a PatchDIFF working target. Pass its workspace-relative "
+    "path as filename, set from_workspace=true, and omit content. The result includes the target ID, "
+    "version, and hash. For structural edits, use the returned target ID with patchdiff_observe_scopes "
+    "before patchdiff_commit_bundle. Use patchdiff_list_scopes when you need help identifying scopes."
+)
+
 MCP_PROFILES = {
     "editor": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_edits", "patchdiff_submit_observed_operations"},
     "unobserved": _BASE_EDITOR_TOOLS | {"patchdiff_submit_edits"},
@@ -165,6 +175,7 @@ MCP_PROFILES = {
         "patchdiff_initialize_target", "patchdiff_read_target", "patchdiff_find_occurrences",
         "patchdiff_submit_edits", "patchdiff_save",
     }),
+    "observed_workspace": EDITOR_V2_TOOLS | _WORKSPACE_LIFECYCLE,
     "full": frozenset(EXPECTED_TOOL_NAMES),
 }
 
@@ -197,13 +208,18 @@ class ExternalMCPAdapter:
         object.__setattr__(self, "_workspace_declarations", declarations)
 
     def list_tools(self) -> list[dict[str, Any]]:
-        if self.profile == "observed_v2":
+        if self.profile in _STRUCTURAL_PROFILES:
             declarations = []
             for name in self._tool_names:
-                declaration = tool_declaration(name, _input_schema_for(EDITOR_V2_ROUTES[name]))
-                if self._protocol_version == PROTOCOL_VERSION:
-                    for key in ("outputSchema", "annotations", "_meta"):
-                        declaration.pop(key, None)
+                if name in EDITOR_V2_TOOLS:
+                    declaration = tool_declaration(name, _input_schema_for(EDITOR_V2_ROUTES[name]))
+                    if self._protocol_version == PROTOCOL_VERSION:
+                        for key in ("outputSchema", "annotations", "_meta"):
+                            declaration.pop(key, None)
+                else:
+                    description = (_OBSERVED_WORKSPACE_INITIALIZE if name == "patchdiff_initialize_target"
+                                   else TOOL_DESCRIPTIONS[name])
+                    declaration = {"name": name, "description": description, "inputSchema": _input_schema_for(name)}
                 declarations.append(declaration)
             return declarations
         if self._workspace_declarations is not None:
@@ -227,7 +243,7 @@ class ExternalMCPAdapter:
         if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
-        if self.profile == "observed_v2":
+        if self.profile in _STRUCTURAL_PROFILES and name in EDITOR_V2_TOOLS:
             return self._call_editor_tool(name, args)
         argument_error = _argument_error(name, args)
         if argument_error is not None:
@@ -317,12 +333,12 @@ class ExternalMCPAdapter:
         return _rpc_error(request_id, -32601, f"Unsupported MCP method: {method}")
 
 
-def _check_workspace_startup() -> None:
+def _check_workspace_startup(profile: str) -> None:
     try:
         validate_workspace_root(get_workspace_root())
     except WorkspaceSyncError as exc:
         raise SystemExit(f"PatchDIFF workspace startup: {exc}") from None
-    if is_strict_observation_mode_enabled():
+    if profile == "workspace" and is_strict_observation_mode_enabled():
         raise SystemExit("PatchDIFF workspace startup: strict observation requires an observed profile.")
     if not os.getenv("PATCHDIFF_DATABASE_URL", "").strip():
         raise SystemExit("PatchDIFF workspace startup: set PATCHDIFF_DATABASE_URL explicitly.")
@@ -339,8 +355,8 @@ def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.st
 
     from app.services.waymark_worker import serving_worker_owner
     adapter = ExternalMCPAdapter()
-    if adapter.profile == "workspace":
-        _check_workspace_startup()
+    if adapter.profile in _WORKSPACE_PROFILES:
+        _check_workspace_startup(adapter.profile)
     worker_owner = nullcontext() if adapter.profile == "workspace" else serving_worker_owner(prewarm=True)
     with worker_owner:
         for line in input_stream:

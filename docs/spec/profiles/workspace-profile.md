@@ -1,22 +1,27 @@
-# Workspace profile
+# Workspace profiles (`workspace` and `observed_workspace`)
 
-Choose `workspace` when the host should start with a file path and publish
+Choose a workspace profile when the host should start with a file path and publish
 the edited bytes back to one project directory. A target is the working
 copy that PatchDIFF keeps in PostgreSQL. The file, the working copy and the
 database checkpoint are separate.
 
-| Tool | Use |
-| --- | --- |
-| `patchdiff_initialize_target` | Import a file and get a working target ID. |
-| `patchdiff_read_target` | Read a bounded slice of the working text and get its version and hash. |
-| `patchdiff_find_occurrences` | Find exact matches in the working copy and distinguish repeated text. |
-| `patchdiff_submit_edits` | Apply a guarded batch of exact replacements to the working copy. |
-| `patchdiff_save` | Checkpoint that version in PostgreSQL and optionally publish its bytes. |
+### Workspace Profile Tool Catalogs
 
-This profile uses exact text, so it starts without Node or Waymark. Use
-[observed editor v2](observed-editor-v2.md) for structural editing with
-server-issued scopes. Use [full](delegation-and-lifecycle.md#full) for
-standalone export, replay or audit inspection.
+| Tool | Profile | Use |
+| --- | --- | --- |
+| `patchdiff_initialize_target` | Both | Import a workspace file and obtain a working target ID. |
+| `patchdiff_read_target` | Both | Read a bounded slice of the working text and get its version and hash. |
+| `patchdiff_find_occurrences` | Both | Find exact matches in the working copy and distinguish repeated text. |
+| `patchdiff_submit_edits` | `workspace` only | Apply a guarded batch of exact replacements to the working copy. |
+| `patchdiff_list_scopes` | `observed_workspace` only | List AST structural candidate symbols and scope outlines. |
+| `patchdiff_observe_scopes` | `observed_workspace` only | Request bounded AST scope snapshots with observation IDs. |
+| `patchdiff_commit_bundle` | `observed_workspace` only | Submit an atomic multi-edit transaction guarded by scope snapshots. |
+| `patchdiff_save` | Both | Checkpoint that version in PostgreSQL and optionally publish its bytes with `sync_workspace: true`. |
+
+The 5-tool `workspace` profile uses exact text, so it starts without Node or Waymark.
+The 7-tool `observed_workspace` profile connects the Waymark structural parser to the workspace
+lifecycle, enabling high-performance AST scoped observation and atomic commit bundling.
+Unlike `workspace`, `observed_workspace` permits `PATCHDIFF_STRICT_OBSERVATION_MODE=1`.
 
 ## Startup requirements
 
@@ -26,7 +31,7 @@ values in the environment of the MCP server process.
 
 | Variable | Setting |
 | --- | --- |
-| `PATCHDIFF_MCP_PROFILE` | `workspace` |
+| `PATCHDIFF_MCP_PROFILE` | `workspace` or `observed_workspace` |
 | `PATCHDIFF_WORKSPACE_ROOT` | An absolute path to the project directory on the server. Use the same project in the host so links resolve to the edited files. |
 | `PATCHDIFF_DATABASE_URL` | Explicit connection URL for PostgreSQL. The database must be at the installed Alembic head. |
 | `PATCHDIFF_WORKSPACE_SYNC_ON_SAVE` | Defaults to off. Set `sync_workspace` on the SAVE call to choose explicitly. |

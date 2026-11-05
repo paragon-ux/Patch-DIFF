@@ -102,7 +102,8 @@ All formats require `expected_target_version` and/or `expected_current_hash` and
 
 Set `PATCHDIFF_MCP_PROFILE` before starting the server. The default
 `editor` profile exposes seven tools for an existing target. Choose
-[`workspace`](docs/spec/profiles/workspace-profile.md) for file import and publication,
+[`workspace`](docs/spec/profiles/workspace-profile.md) for 5-tool exact text file import and publication,
+[`observed_workspace`](docs/spec/profiles/workspace-profile.md) for 7-tool structural AST observation with direct publication,
 [`observed_v2`](docs/spec/profiles/observed-editor-v2.md) for structural editing
 with explicit snapshots, or `full` for the 17-tool trusted lifecycle catalog. The
 [profile catalog](docs/spec/profiles/index.md) lists every tool set.

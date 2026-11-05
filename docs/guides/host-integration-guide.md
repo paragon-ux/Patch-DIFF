@@ -19,6 +19,7 @@ the returned target ID, submit guarded edits and explicitly SAVE with
 
 Choose the immutable `PATCHDIFF_MCP_PROFILE` before starting a session.
 Use `workspace` for the five-tool file import, edit and publication workflow.
+Use `observed_workspace` for the seven-tool structural AST observation, batch bundling, and direct workspace publication workflow.
 Use `observed_editor` for delegated structural editing when the host owns
 SAVE/replay. Use `full` for the complete lifecycle, export and audit catalog.
 The default `editor` profile exposes seven tools for working with an existing
