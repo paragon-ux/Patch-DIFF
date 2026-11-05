@@ -15,18 +15,37 @@ PatchDIFF turns model-generated document edits into preconditioned, atomic, audi
 
 ## Why PatchDIFF?
 
-Conventional language-model editing workflows rely on full-file regeneration, fragile line diffs, or unguarded search-and-replace strings. PatchDIFF replaces these failure modes with structured, transactional document updates:
+Modern coding agents in Native Git environments achieve high accuracy when editing code through iterative reading and exact string replacement. In benchmark evaluations on multi-file canary tasks, Native Git editing achieved 100 percent byte accuracy. However, native filesystem editing operates without transactional guarantees:
 
-| Editing Problem | Conventional Approach | What PatchDIFF Provides Directly |
+- **High discovery overhead**: Locating target context and verifying line coordinates requires repeated chunk scanning, averaging nearly 35 read calls per task.
+- **Direct disk mutation without rollback**: Edits write directly to the filesystem. If edit four of a five-step refactor fails, preceding changes remain on disk without automatic rollback.
+- **Post-hoc concurrency**: Collisions and stale reads are detected only after mutations hit the filesystem, relying on git diffs or file modification timestamps.
+- **Ephemeral audit history**: Failed attempts, syntax rejections, and discarded candidate patches disappear with the chat context, leaving only explicit git commits for inspection.
+- **Premature workspace exposure**: The workspace filesystem serves as the active scratchpad, exposing intermediate and broken states to compilers, test runners, and language servers.
+
+PatchDIFF provides a deterministic, transactional editing runtime backed by PostgreSQL. The foundation of the system is exact matching: every edit requires an exact, unique substring or a strictly guarded `[start, end)` code-point span matching `expected_text`. If a target shifts by even a single character, the operation fails closed without mutating state.
+
+Every transactional guarantee builds directly on top of exact matching:
+
+| Operational Dimension | Native Git Baseline | PatchDIFF Transactional Runtime |
 | :--- | :--- | :--- |
-| **Small edit in large file** | Full regeneration emits complete replacement document | `patchdiff-tx/1` and `tx/2` emit only matched or replaced spans |
-| **Repeated identical text** | `str_replace` requires expanding `old_str` with surrounding lines | Explicit `occurrence_index`, `anchor_before` / `anchor_after`, or code-point spans |
-| **Line-diff grammars (`diff -u`)** | Line-prefixed diff syntax or numeric hunk headers | Structured JSON fields (`edits[]` / `operations[]`) without delimiter collisions |
-| **Coordinate and state drift** | Line-based edits assume target positions remain unchanged | Required `expected_target_version` and `expected_current_hash` under row locks |
-| **Multiple changes in one file** | Single replacements require repeated calls with partial failure risks | Multi-scope bundles simulated sequentially and committed atomically |
-| **Missing or ambiguous match** | Basic interfaces return uninformative error strings | Structured diagnostics: `failure_context`, `exact_candidates`, and near misses |
-| **Lost submission response** | Host must re-read disk to guess whether a timed-out write succeeded | Resubmitting with the same `client_request_id` returns the recorded outcome |
-| **Audit and session history** | Host must build custom logging and snapshot tracking | Append-only attempt logs, audit ledger with runtime-derived facts, and replay tools |
+| **Bedrock matching** | Search-and-replace strings requiring manual line offset tracking or context padding | Exact matching on unique substrings or guarded code-point spans; fails closed if target shifts |
+| **Context discovery** | Iterative chunk reads (averaging 34.8 calls per task) to inspect surrounding code and line coordinates | Targeted AST scope discovery (11 inspections per task), reducing editor tool calls by 42.7% |
+| **Multi-edit atomicity** | Direct filesystem writes; an error midway leaves partial modifications on disk | Sequential in-memory simulation with all-or-nothing commits across targets and scopes (`commit_bundle`) |
+| **Concurrency control** | Post-hoc detection using git diff or file modification timestamps after writes occur | Optimistic row locks (`SELECT ... FOR UPDATE`) checking target version and content hash before mutation |
+| **Audit and replay** | Ephemeral tool attempts; only explicit git commits persist, losing intermediate trials and failure diagnostics | Append-only attempt log with client request keys, structured failure context, and deterministic replay |
+| **Workspace isolation** | Workspace filesystem serves as scratchpad, exposing unverified intermediate states | PostgreSQL maintains the authoritative working copy; `save` verifies disk drift before writing to disk |
+
+### The Determinism Hierarchy
+
+PatchDIFF organizes transactional safety as a strict progression from exact matching:
+
+1. **Exact Matching**: Every edit applies to an exact, unique substring or strictly guarded `[start, end)` code-point span matching `expected_text`. If the target shifts by even one character, the transaction aborts without mutating state.
+2. **Optimistic Concurrency**: Row locks (`SELECT ... FOR UPDATE`) verify `expected_target_version` and `expected_current_hash` before any update executes. Stale reads fail immediately.
+3. **Multi-Edit Atomicity**: Multi-scope bundles simulate sequentially in memory against the verified base version. If any single replacement or coordinate guard fails, the entire transaction rolls back.
+4. **AST Structural Discovery**: Resident AST indexing locates target scopes directly (`list_scopes`, `observe_scopes`), replacing iterative chunk reads with targeted inspections.
+5. **Append-Only Durability**: An immutable attempt ledger records client request keys, execution parameters, and failure diagnostics for auditability and deterministic replay.
+6. **Controlled Publication**: PostgreSQL holds the authoritative working copy during editing. Disk publication (`save` with `sync_workspace: true`) verifies filesystem drift before writing bytes to the workspace.
 
 ---
 
