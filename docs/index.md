@@ -36,11 +36,13 @@ PatchDIFF exposes focused tool profiles aligned with its editing workflows:
 - [Architecture diagrams](architecture.md) trace an edit through validation,
   commit and replay.
 - [Modernization architecture](papers/modernization-architecture.md) records
-  design decisions A1–A8, contracts C1–C6 and evidence E1–E8.
+  design decisions A1 to A8, contracts C1 to C6 and evidence E1 to E8.
 - [Product change record](papers/product-change-record.md) tracks product behavior
   and verification scope.
 - [Concept paper v6](papers/concept-paper-v6.md) explains the transaction model,
   tradeoffs and research hypotheses.
+- [Formal transaction model](papers/formal-transaction-model.md) provides the
+  formal mathematical specification, state space, and invariant proofs.
 - [Workspace benchmark](benchmarks/workspace-e2e-benchmark.md) compares Native,
   host-orchestrated structural editing and agent-owned Workspace editing through
   publication and independent verification.

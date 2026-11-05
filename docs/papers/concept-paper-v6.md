@@ -1,7 +1,10 @@
 # PatchDIFF: Transactional Document Editing for AI Agents
 
-This paper explains PatchDIFF's transaction model, tradeoffs and research
-hypotheses. For implementation details, start with the
+This paper explains PatchDIFF's transaction model, tradeoffs, and research
+hypotheses. For the mathematical state space, operational transition algebra,
+and invariant proofs, see the companion paper:
+[Formal Transaction Model](formal-transaction-model.md).
+For implementation details, start with the
 [architecture](modernization-architecture.md),
 [MCP tools](../spec/mcp-tools.md), [core runtime](../spec/core-runtime.md),
 [data model](../spec/data-model.md), and [transaction formats](../spec/transaction-formats.md).
@@ -121,52 +124,14 @@ PatchDIFF is governed by eight architectural invariants:
 
 ## 6. System Architecture and Runtime Boundary
 
-PatchDIFF enforces a strict separation between the **MCP host/agent** (which plans edits, selects context slices, calls the model, and decides when to retry) and the **PatchDIFF transaction server** (which owns authoritative reads, validation, atomic commits, history, and replay):
+PatchDIFF enforces a strict operational separation between the external MCP host or coding agent and the internal transaction server:
 
-```text
-+-------------------------------------------------------------------------+
-|                        MCP Host / Coding Agent                          |
-|  - Planning, prompt construction, model invocation, retry decisions     |
-|  - Semantic & task-level verification (tests, linters, human review)    |
-+------------------------------------+------------------------------------+
-                                     |
-                                     | Model Context Protocol (MCP)
-                                     | (stdio JSON-RPC / internal registry)
-                                     v
-+-------------------------------------------------------------------------+
-|                      PatchDIFF Transaction Server                       |
-|                                                                         |
-|  +-------------------------------------------------------------------+  |
-|  | Layer 1: MCP Transport & Tool Interface                           |  |
-|  |   Advertises JSON schemas & examples; enforces response byte caps |  |
-|  +---------------------------------+---------------------------------+  |
-|                                    v                                    |
-|  +-------------------------------------------------------------------+  |
-|  | Layer 2: Transaction & Read Service Layer                         |  |
-|  |   Acquires SELECT ... FOR UPDATE; checks client_request_id        |  |
-|  |   idempotency, version/hash guards, and tx/3 admission caps;      |  |
-|  |   computes post-commit Levenshtein near_misses on rejection.      |  |
-|  +---------------------------------+---------------------------------+  |
-|                                    v                                    |
-|  +-------------------------------------------------------------------+  |
-|  | Layer 3: Declarative Transaction Decoders & Validators            |  |
-|  |   Typed JSON decoders (patchdiff-tx/1, tx/2, tx/3) lowering       |  |
-|  |   into the shared internal transaction representation.            |  |
-|  +---------------------------------+---------------------------------+  |
-|                                    v                                    |
-|  +-------------------------------------------------------------------+  |
-|  | Layer 4: Pure Deterministic Core Applier                          |  |
-|  |   LF canonicalization, exact match enumeration, disambiguation,   |  |
-|  |   span verification, sequential simulation, change_facts, replay. |  |
-|  +---------------------------------+---------------------------------+  |
-|                                    v                                    |
-|  +-------------------------------------------------------------------+  |
-|  | Layer 5: Relational Persistence Substrate (PostgreSQL)            |  |
-|  |   cloud_target_files, append_only_pdcp_logs,                      |  |
-|  |   append_only_manifest_ledger, target_snapshots, editing_cycles   |  |
-|  +-------------------------------------------------------------------+  |
-+-------------------------------------------------------------------------+
-```
+1. **MCP Host and Coding Agent (External Client)**: Owns planning, prompt assembly, probabilistic model invocation, retry policies, and domain verification (including linters, test suites, and human review). The agent interacts with PatchDIFF exclusively through standardized Model Context Protocol (MCP) tool invocations over standard input and output (stdio JSON-RPC) or an internal service registry.
+2. **Layer 1: MCP Transport and Tool Interface**: Advertises typed JSON tool schemas and discovery examples, validates input arguments against strict structural constraints, and enforces response byte budgets.
+3. **Layer 2: Transaction and Read Service Layer**: Coordinates per-target concurrency by acquiring row-level `SELECT ... FOR UPDATE` locks on `cloud_target_files`. It verifies `client_request_id` idempotency, enforces target version and hash guards, applies fresh admission limits, and computes post-commit Levenshtein near-miss diagnostics when an exact match is absent.
+4. **Layer 3: Declarative Transaction Decoders and Validators**: Parses and validates typed JSON transaction payloads (`patchdiff-tx/1`, `patchdiff-tx/2`, and `patchdiff-tx/3`), lowering them into a uniform internal representation.
+5. **Layer 4: Pure Deterministic Core Applier**: Executes sequential in-memory simulation against canonical LF text. It handles exact match enumeration, disambiguation, Unicode code-point span verification, change-fact derivation, and deterministic replay.
+6. **Layer 5: Relational Persistence Substrate (PostgreSQL)**: Serves as the authoritative source of truth, persisting target files (`cloud_target_files`), immutable attempt logs (`append_only_pdcp_logs`), accepted change facts (`append_only_manifest_ledger`), durable snapshots (`target_snapshots`), and editing cycle boundaries (`editing_cycles`).
 
 The core runtime (Layers 3 and 4) is a pure function of `(target_text, target_version, target_hash, transaction_payload, runtime_profile)`. It never calls an LLM, never performs network or database I/O, and never mutates state outside memory.
 
@@ -226,72 +191,48 @@ This separation allows `patchdiff_get_manifest_ledger` (which defaults to `inclu
 
 ---
 
-## 10. Formal Transaction Model and Core Invariants
+## 10. Conceptual Transaction Model and Core Invariants
 
-Let $\Sigma^*$ denote the set of valid, LF-normalized UTF-8 strings (sequences of Unicode scalar values containing no UTF-16 surrogates `\uD800-\uDFFF` and no `NUL` code point `\u0000`, with `\r\n` and `\r` normalized to `\n`). For any string $T \in \Sigma^*$, let $|T|$ denote its length in Unicode code points, let $T[a:b]$ ($0 \le a \le b \le |T|$) denote the half-open code-point slice from index $a$ to $b$, and let $H(T) = \text{SHA256}_{\text{hex}}(\text{UTF8}(T))$.
+PatchDIFF models document editing as a deterministic state machine operating over canonical text. Rather than treating an edit as an imperative disk write, the system evaluates declarative proposals against explicit preconditions, simulating changes in memory before committing.
 
-### 10.1 Target State and Transaction Structure
+> [!NOTE] Formal Mathematical Treatment
+> For the complete algebraic formalization, including metric spaces over Unicode scalar sequences, operational transition functions, and formal proofs of all theorems, see the companion paper: [Formal Transaction Model and System Invariants](formal-transaction-model.md).
 
-An authoritative target document at rest is a tuple:
-$$\mathcal{S} = (T_0, v_0, h_0) \quad \text{where } T_0 \in \Sigma^*,\; v_0 \in \mathbb{N}_0,\; h_0 = H(T_0).$$
+### 10.1 Authoritative Document State
 
-A PatchDIFF transaction submission $\mathcal{X}$ evaluated under a server-selected immutable execution profile $\pi$ is a tuple:
-$$\mathcal{X} = \bigl(\tau,\; \pi,\; g_v,\; g_h,\; \text{intent},\; \langle o_1, o_2, \dots, o_k \rangle\bigr)$$
-where:
-- $\tau \in \{\texttt{patchdiff-tx/1},\; \texttt{patchdiff-tx/2},\; \texttt{patchdiff-tx/3}\}$ is the protocol version,
-- $\pi$ is the server-selected immutable execution profile determined from $\tau$ and the submitted operation capabilities (`overlap_aware_matching`, `enforce_singleton_selectors`, `allow_span_operations`, `allow_replace_all_operations`, `allow_span_context`) and recorded on the audit row for replay (clients never supply arbitrary runtime flags),
-- $(g_v, g_h) \in (\mathbb{N}_0 \cup \{\bot\}) \times (\Sigma^{64} \cup \{\bot\})$ is the state precondition guard, with the requirement that $(g_v, g_h) \neq (\bot, \bot)$,
-- $\text{intent} \in \Sigma^+$ is the non-blank transaction intent, and
-- $\langle o_1, \dots, o_k \rangle$ ($k \ge 1$) is an ordered non-empty sequence of declarative operations.
+An authoritative target document at rest within PostgreSQL is defined by three elements:
+1. **Canonical content ($T_0$)**: An LF-normalized Unicode scalar string.
+2. **Version counter ($v_0$)**: A strictly monotonic non-negative integer, initialized to `0` upon target creation.
+3. **Content digest ($h_0$)**: The SHA-256 cryptographic hash of the UTF-8 encoded canonical content.
 
-### 10.2 Precondition Verification
+Every transaction submission must declare an explicit state precondition: an expected target version, an expected content hash, or both. Before any edit operation is evaluated, the service verifies these preconditions under a per-target row lock (`SELECT ... FOR UPDATE`). If the target has advanced or diverged, the transaction fails closed immediately with zero document mutation.
 
-Before any operation $o_i$ is evaluated, the state guard is checked against $(T_0, v_0, h_0)$:
-$$\text{GuardOK}(\mathcal{S}, g_v, g_h) \iff (g_v = \bot \lor g_v = v_0) \;\land\; (g_h = \bot \lor g_h = h_0).$$
-When both $g_v$ and $g_h$ are supplied, the version precondition $g_v = v_0$ is checked first. If $\neg\text{GuardOK}(\mathcal{S}, g_v, g_h)$, the transaction is rejected at stage `precondition_guard` (with `target_version_mismatch` when $g_v \neq \bot \land g_v \neq v_0$, or `target_hash_mismatch` when $g_h \neq \bot \land g_h \neq h_0$), reporting `protocol_valid: null` and `transaction_valid: null`, and $\mathcal{S}$ remains unchanged. Separately, if a post-simulation commit verification detects that the locked target state diverged from $(v_0, h_0)$ before commit, the transaction is rejected with `target_diverged` at stage `commit_guard` (`protocol_valid: true`, `transaction_valid: true`).
+### 10.2 Sequential In-Memory Simulation
 
-### 10.3 Sequential Operation Semantics Across All Three Operation Classes
+When preconditions are satisfied, the deterministic core applier initializes an in-memory buffer sequence:
+$$T_0 \xrightarrow{o_1} T_1 \xrightarrow{o_2} \dots \xrightarrow{o_k} T_k$$
 
-When $\text{GuardOK}(\mathcal{S}, g_v, g_h)$ holds, the applier initializes $T^{(0)} = T_0$ and evaluates $o_1, \dots, o_k$ sequentially. Each operation $o_i$ ($1 \le i \le k$) maps intermediate buffer $T_{i-1}$ to either a unique resolved span $[s_i, e_i)$ ($0 \le s_i \le e_i \le |T_{i-1}|$) with canonical replacement string $r_i \in \Sigma^*$, or to a deterministic rejection $\bot$:
+Edits within a transaction execute strictly sequentially in array order against the evolving buffer. If an edit targets a repeated string, disambiguation occurs deterministically:
+- **Global occurrence index**: Selects the exact occurrence from the original unedited candidate list.
+- **Contextual anchors**: Evaluates prefix (`anchor_before`) and suffix (`anchor_after`) constraints anywhere in the document outside the candidate span, avoiding the brittle requirement of immediate adjacency.
 
-1. **Localized Exact-Match Operation (`tx/1` and `tx/2` `op="match"`):**
-   $$o_i = \text{Match}(m_i, r_i, \text{occ}_i, \alpha_i, \beta_i), \quad m_i \in \Sigma^+,\; r_i \in \Sigma^*$$
-   Let $\text{Occ}_\pi(T_{i-1}, m_i)$ be the ordered sequence of all exact code-point spans $[s, e)$ in $T_{i-1}$ such that $T_{i-1}[s:e] = m_i$ (enumerating every start index $s$ where $T_{i-1}[s:s+|m_i|] = m_i$, including overlapping occurrences under current profiles).
-   - **Absence & sequential consumption:** If $|\text{Occ}_\pi(T_{i-1}, m_i)| = 0$, $o_i$ rejects with `match_absent` (or `sequential_match_invalid` when $i > 1$ and $m_i$ occurred in $T_0$ at a span overlapped/consumed by an earlier operation $o_j$, $j < i$, in which case post-commit `near_misses` are omitted with `omission_reason: "sequential_match_consumed"`).
-   - **Un-disambiguated multiplicity:** If $|\text{Occ}_\pi(T_{i-1}, m_i)| > 1$ and no selector ($\text{occ}_i, \alpha_i, \beta_i$) is supplied, $o_i$ rejects with `match_ambiguous`.
-   - **Step 1: Global `occurrence_index` selection (before anchor filtering):** Initialize candidate list $C_0 = \text{Occ}_\pi(T_{i-1}, m_i)$ (when `enforce_singleton_selectors` is active, selectors are validated even when $|C_0| = 1$). If $\text{occ}_i \neq \bot$, it indexes directly into the **original global exact-occurrence list** $C_0$: if $1 \le \text{occ}_i \le |C_0|$, set $C_1 = [C_0[\text{occ}_i - 1]]$; otherwise reject with `disambiguation_invalid`. If $\text{occ}_i = \bot$, set $C_1 = C_0$.
-   - **Step 2: Conjunctive non-adjacent `anchor_before` and `anchor_after` filtering:** Filter $[s, e) \in C_1$ by requiring that $\alpha_i$ (when $\alpha_i \neq \bot$) occurs **anywhere in the prefix** $T_{i-1}[0 : s]$ (`anchor_before in target[:span.start]`), and $\beta_i$ (when $\beta_i \neq \bot$) occurs **anywhere in the suffix** $T_{i-1}[e : |T_{i-1}|]$ (`anchor_after in target[span.end:]`). Unlike `tx/2` span adjacency guards, match anchors need not be immediately adjacent to $[s, e)$. Operation $o_i$ succeeds iff exactly one span $[s_i, e_i)$ remains after Step 1 and Step 2 (otherwise rejecting with `disambiguation_invalid`).
+When operations specify explicit code-point spans (`patchdiff-tx/2`), the applier requires an exact match on `expected_text` before replacing the span. If any operation fails, the entire transaction aborts without mutating the database row or filesystem.
 
-2. **Localized Guarded Code-Point Span Operation (`tx/2` `op="span"`):**
-   $$o_i = \text{Span}(s_i, e_i, x_i, r_i, b_i, a_i), \quad 0 \le s_i \le e_i,\; x_i, r_i \in \Sigma^*,\; |x_i| = e_i - s_i$$
-   Operation $o_i$ succeeds on intermediate buffer $T_{i-1}$ iff:
-   - Bounds hold: $0 \le s_i \le e_i \le |T_{i-1}|$ (otherwise `span_out_of_bounds`),
-   - Substring precondition holds: $T_{i-1}[s_i:e_i] = x_i$ (otherwise `span_expected_text_mismatch` with `span_check: "expected_text"`; when $s_i = e_i$ and $x_i = \varepsilon$, this defines an exact **zero-length insertion** at code-point offset $s_i$), and
-   - Immediate-adjacency preconditions hold when supplied ($b_i \neq \bot$ or $a_i \neq \bot$): $s_i \ge |b_i| \land T_{i-1}[s_i - |b_i| : s_i] = b_i$, and $e_i + |a_i| \le |T_{i-1}| \land T_{i-1}[e_i : e_i + |a_i|] = a_i$ (otherwise `span_expected_text_mismatch` with `span_check: "expected_before"` or `"expected_after"`).
+### 10.3 Core System Invariants
 
-3. **Guarded Whole-Target Replacement Operation (`tx/3` `op="replace_all"`):**
-   $$k = 1,\quad o_1 = \text{ReplaceAll}(r_1), \quad r_1 \in \Sigma^*$$
-   Subject to service-level fresh admission bounds on raw and canonical content ($|r_1| \le 1{,}000{,}000$ code points and $|\text{UTF8}(r_1)| \le 1{,}048{,}576$ bytes; fresh submissions exceeding these bounds return `invalid_argument` with `code: "replacement_too_large"` before entering the applier, whereas replay never re-applies fresh admission bounds), $o_1$ selects the full target span $[s_1, e_1) = [0, |T_0|)$ and replaces $T_0$ with $r_1$.
+Four formal invariants govern every PatchDIFF transaction:
 
-When operation $o_i$ resolves to $[s_i, e_i)$, the next buffer state is:
-$$T_i = T_{i-1}[0 : s_i] \,\|\, r_i \,\|\, T_{i-1}[e_i : |T_{i-1}|].$$
+1. **Invariant 1: Localized Unmatched-Content Preservation**
+   For all localized operations (`patchdiff-tx/1` exact match and `patchdiff-tx/2` guarded span), all code points outside the resolved target spans are guaranteed to remain invariant. Unlike whole-file rewrites, localized transactions make it impossible for unmentioned paragraphs, functions, or comments to undergo silent model drift.
 
-### 10.4 Four Core Formal Invariants
+2. **Invariant 2: All-or-Nothing Per-Target Atomicity**
+   A multi-edit transaction succeeds completely or not at all. If the fifth edit in a five-edit batch fails (for example, due to a missing match or out-of-bounds offset), the preceding four in-memory edits are discarded, the document remains at its original version and hash, and a detailed diagnostic payload is returned.
 
-#### Invariant 1: Localized Unmatched-Content Preservation (`tx/1` and `tx/2`)
-For every individual localized operation $o_i \in \{\text{Match}, \text{Span}\}$ that resolves to span $[s_i, e_i)$ in $T_{i-1}$, the prefix and suffix outside $[s_i, e_i)$ are preserved code-point-for-code-point:
-$$T_i[0 : s_i] = T_{i-1}[0 : s_i] \quad \text{and} \quad T_i\bigl[s_i + |r_i| : |T_i|\bigr] = T_{i-1}\bigl[e_i : |T_{i-1}|\bigr].$$
-*(Note: Whole-target replacement `tx/3` is intentionally excluded from localized preservation because its explicit contract is to replace the full span $[0, |T_0|)$ under mandatory version/hash guards.)*
+3. **Invariant 3: Deterministic Replay Equivalence**
+   Given an initial snapshot and an ordered sequence of accepted audit records, replaying transactions under each record's immutable execution profile deterministically reconstructs the exact committed document, version counter, and SHA-256 hash. Replay verifies that historical logs remain authoritative over time without depending on external parser versions.
 
-#### Invariant 2: All-or-Nothing Per-Target Atomic State Transition
-If any precondition fails or any operation $o_i$ ($1 \le i \le k$) yields $\bot$, the committed target state remains identically $\mathcal{S}' = \mathcal{S} = (T_0, v_0, h_0)$. Only if all $k$ operations succeed does the target advance atomically to:
-$$\mathcal{S}' = \bigl(T_k,\; v_0 + 1,\; H(T_k)\bigr).$$
-
-#### Invariant 3: Deterministic Execution and Profile-Dispatched Replay Equivalence
-For any fixed initial snapshot $T_{\text{init}}$ and ordered sequence of accepted log records $\langle (\mathcal{X}_1, \pi_1), \dots, (\mathcal{X}_m, \pi_m) \rangle$, sequential evaluation of $\mathcal{X}_j$ under its recorded profile $\pi_j$ is a pure deterministic function that yields the exact materialized state $(T_m, m, H(T_m))$.
-
-#### Invariant 4: Request-Key Idempotency
-For any target $F$ and non-null `client_request_id` $q$, at most one transaction submission with key $(F, q)$ is ever executed. Any subsequent submission carrying $(F, q)$ with an identical request fingerprint returns the recorded terminal response (`deduplicated: true`) without re-executing the applier or mutating $\mathcal{S}$. Any submission carrying $(F, q)$ with a different request fingerprint is rejected without mutating $\mathcal{S}$, returning `failure_reason: "context_invalid"` and `diagnostic.code: "request_key_conflict"` (logged as a separate rejected attempt with `client_request_id = NULL` so the original key binding remains intact).
+4. **Invariant 4: Request-Key Idempotency**
+   Every submission may carry a unique `client_request_id`. If a transport disconnect occurs after a commit and the client resends the payload, the server detects the recorded request key and returns the identical accepted outcome with `deduplicated: true`, preventing accidental duplicate applications.
 
 ---
 
@@ -351,21 +292,13 @@ All common document editing actions map cleanly onto `patchdiff-tx/1`, `patchdif
 
 A central flaw in naive patch tools is collapsing all failures into an unstructured error string, or conversely treating a syntactically applied patch as proof that the user's task succeeded. PatchDIFF tracks the exact `ValidationStage` reached by each submission in the execution path and reports a four-part `validity` object on every response:
 
-```text
-1. precondition_guard        (target lookup, UUID/lineage checks, pre-parse version/hash & request-key guards)
-   |
-   v
-2. protocol_validation       (structural/schema decoding, UTF-8/NUL text safety, non-empty match, selector syntax)
-   |
-   v
-3. transaction_applicability (sequential in-memory simulation: match resolution, span bounds, expected_text & adjacency)
-   |
-   v
-4. commit_guard              (post-simulation target version/hash verification before commit)
-   |
-   v
-5. accepted                  (atomic database commit; non-blocking advisory warnings attached if present)
-```
+1. `precondition_guard`: Target lookup, UUID and lineage validation, pre-parse version and hash guards, and request-key verification.
+2. `protocol_validation`: Structural schema decoding, UTF-8 and NUL text safety checks, non-empty match validation, and selector syntax verification.
+3. `transaction_applicability`: Sequential in-memory simulation against intermediate buffers, evaluating exact match resolution, span boundary bounds, expected text verification, and optional adjacency predicates.
+4. `commit_guard`: Post-simulation target version and hash verification under the held row lock prior to database commit.
+5. `accepted`: Atomic database commit, durable attempt and manifest ledger recording, and generation of non-blocking advisory warnings.
+
+Every response returns a structured four-part validity object reflecting the outcome at these stages:
 
 | Validity Dimension | `precondition_guard` Rejection | `protocol_validation` Rejection | `transaction_applicability` Rejection | `commit_guard` Rejection | `accepted` | Meaning |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -392,14 +325,13 @@ Instead of embedding a hidden LLM inside the database server to silently rewrite
 
 ## 17. Structural Safety and the Non-Executable Boundary
 
-PatchDIFF treats every transaction submission as **untrusted data**, never executable code:
+PatchDIFF treats every transaction submission as untrusted declarative data rather than executable code. The system enforces strict boundaries between three distinct roles:
 
-```text
-patchdiff-tx/1, patchdiff-tx/2, or patchdiff-tx/3 = declarative, non-executable transaction data
-PatchDIFF core runtime & service layers           = trusted deterministic validator and applier
-target document                                   = Markdown / Python / YAML / JSON / prose / etc.
-```
+- **Untrusted Transaction Payloads (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`)**: Pure declarative data structures specifying matches, offsets, and replacement text without executable logic.
+- **Trusted Transaction Server and Pure Core Applier**: Deterministic software components responsible for validating preconditions, executing exact string operations, and managing relational persistence.
+- **Authoritative Target Document**: The static target file at rest, whether formatted as Python, YAML, JSON, Markdown, or plain prose.
 
+The operational boundaries include:
 - **No `eval`, shell, regex, or AST execution:** The runtime performs only deterministic Unicode string slicing, exact substring search, SHA-256 hashing, and parameterized SQL queries via SQLAlchemy.
 - **Typed JSON validation vs. prose freedom:** In `patchdiff-tx/1`, `patchdiff-tx/2`, and `patchdiff-tx/3`, proposals arrive as structured JSON objects validated against strict schemas (`additionalProperties: false`, type and bound checks, and UTF-8/PostgreSQL text validation). Because JSON keys and string values are structurally separated, `intent` and `rationale` strings in typed transactions may freely mention code symbols (`import`, `def`, `class`, SQL keywords, or diff markers) without triggering false-positive rejections.
 
@@ -587,42 +519,21 @@ Because PatchDIFF acts as an authoritative transaction monitor, its deterministi
 
 ## 25. End-to-End Transactional Walkthrough
 
-Consider a target file `config.yaml` initialized at `current_version = 0`, `current_hash = "8f4a..."`:
+Consider a target configuration document `config.yaml` initialized at `current_version = 0` and content hash `8f4a...`. The document defines two services: an `auth-api` service and a `background-sync` worker, each configured with `timeout_ms: 1000` and `retry: false`.
 
-```yaml
-service:
-  name: auth-api
-  timeout_ms: 1000
-  retry: false
-worker:
-  name: background-sync
-  timeout_ms: 1000
-  retry: false
-```
+1. **Bounded Read and Occurrence Discovery**:
+   The agent calls `patchdiff_find_occurrences(target_file_id, text="retry: false")`. PatchDIFF returns `occurrence_count: 2`, reporting occurrence 1 at code-point offset `[47, 59)` under `auth-api` and occurrence 2 at offset `[113, 125)` under `worker`, together with `current_version: 0`.
 
-1. **Bounded Read / Search:** The agent calls `patchdiff_find_occurrences(target_file_id, text="retry: false")`. PatchDIFF returns `occurrence_count: 2` (`occurrence_index: 1` at `[47, 59)` under `service`, and `occurrence_index: 2` at `[113, 125)` under `worker`), along with `current_version: 0`.
-2. **Guarded Multi-Edit Submission (`patchdiff-tx/1`):** To update `service.timeout_ms` to `2500` and enable `retry: true` only on `worker`, the agent submits a single atomic transaction:
-   ```json
-   {
-     "target_file_id": "2c6f9c9c-6e9e-4f15-9a25-88c5b6e2f101",
-     "expected_target_version": 0,
-     "client_request_id": "req-worker-retry-01",
-     "intent": "Increase service timeout to 2500ms and enable worker retries",
-     "edits": [
-       {
-         "match": "  name: auth-api\n  timeout_ms: 1000",
-         "replace": "  name: auth-api\n  timeout_ms: 2500"
-       },
-       {
-         "match": "retry: false",
-         "replace": "retry: true",
-         "occurrence_index": 2
-       }
-     ]
-   }
-   ```
-3. **Deterministic Validation & Atomic Commit:** Under `SELECT ... FOR UPDATE`, PatchDIFF verifies `current_version == 0`, applies edit 1 in memory ($T_0 \rightarrow T_1$), resolves occurrence `2` of `"retry: false"` in $T_1$ ($T_1 \rightarrow T_2$), increments `current_version` to `1`, records the accepted attempt in `append_only_pdcp_logs` and two derived change rows in `append_only_manifest_ledger`, and returns `status: "accepted"`, `current_version: 1`.
-4. **Idempotent Retry Recovery:** If a network glitch drops the response and the host resends the identical payload with `"client_request_id": "req-worker-retry-01"`, PatchDIFF sees the recorded key, skips re-execution, and returns the exact `status: "accepted"`, `current_version: 1` response with `"deduplicated": true`.
+2. **Guarded Multi-Edit Submission (`patchdiff-tx/1`)**:
+   To increase the `auth-api` timeout to `2500` ms and enable retries only on the worker, the agent submits a single atomic transaction carrying `expected_target_version: 0`, a client request key `req-worker-retry-01`, and two sequential edits:
+   - Edit 1 matches `name: auth-api\n  timeout_ms: 1000` and replaces it with `name: auth-api\n  timeout_ms: 2500`.
+   - Edit 2 matches `retry: false` with `occurrence_index: 2` and replaces it with `retry: true`, using explicit index disambiguation instead of padding the payload with dozens of lines of surrounding context.
+
+3. **Deterministic Validation and Atomic Commit**:
+   Under a row-level `SELECT ... FOR UPDATE` lock, PatchDIFF verifies that the target version is still `0`. The runtime applies edit 1 in memory ($T_0 \rightarrow T_1$), resolves occurrence 2 of `retry: false` in $T_1$ ($T_1 \rightarrow T_2$), increments `current_version` to `1`, records the accepted transaction in `append_only_pdcp_logs`, appends two derived change records to `append_only_manifest_ledger`, and returns `status: "accepted"`.
+
+4. **Idempotent Retry Recovery**:
+   If a network or transport disconnect drops the response and the host resends the submission with request key `req-worker-retry-01`, PatchDIFF recognizes the recorded key, skips applier re-execution, and returns the recorded accepted outcome with `deduplicated: true`.
 
 ---
 
@@ -688,6 +599,7 @@ PatchDIFF demonstrates that agent document editing is naturally modeled as a **d
    - OpenAI, *Apply Patch Tool (`apply_patch` V4A Diff Format)*, OpenAI Platform Documentation & Cookbook, `https://platform.openai.com/docs/guides/tools`.
 7. **PatchDIFF Normative Specifications:**
    - [AGENTS.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/AGENTS.md): Locked architectural invariants and runtime boundaries.
+   - [formal transaction model](formal-transaction-model.md): Mathematical state space, operational transition algebra, and invariant proofs.
    - [modernization architecture](modernization-architecture.md): Architecture decisions (`A1` to `A8`), contracts (`C1` to `C6`), and historical design reconciliation.
    - [MCP tool contracts](../spec/mcp-tools.md): Normative MCP tool contracts, schemas, and byte budgets.
    - [core runtime](../spec/core-runtime.md): Deterministic core runtime specification and validation stages.

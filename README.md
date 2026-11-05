@@ -186,7 +186,7 @@ Full documentation is available on the [Zensical Documentation Site](https://par
 - **Specifications**: [Core Runtime](docs/spec/core-runtime.md) | [MCP Tools](docs/spec/mcp-tools.md) | [Data Model](docs/spec/data-model.md) | [Transaction Formats](docs/spec/transaction-formats.md) | [Structural Batch Editing](docs/spec/structural-batch-editing.md)
 - **MCP Profiles**: [Profile Catalog](docs/spec/profiles/index.md) | [Workspace Profile](docs/spec/profiles/workspace-profile.md) | [Observed Editor v2](docs/spec/profiles/observed-editor-v2.md)
 - **Guides**: [Host Integration Guide](docs/guides/host-integration-guide.md) | [Claude Desktop Setup](docs/guides/claude-desktop-setup.md) | [Workspace Editing Quickstart](docs/guides/workspace-quickstart.md) | [Observed Workflow](docs/guides/observed-editor-workflow.md)
-- **Whitepapers**: [Concept Paper v6](docs/papers/concept-paper-v6.md) | [Modernization Architecture](docs/papers/modernization-architecture.md)
+- **Whitepapers**: [Concept Paper v6](docs/papers/concept-paper-v6.md) | [Formal Transaction Model](docs/papers/formal-transaction-model.md) | [Modernization Architecture](docs/papers/modernization-architecture.md)
 - **Benchmarks**: [Workspace Benchmark Report](docs/benchmarks/workspace-e2e-benchmark.md) | [Test Matrix](docs/benchmarks/test-matrix.md)
 - **Standards**: [PR Review Standard](docs/standards/pr-review-standard.md) | [Release Readiness](docs/standards/release-readiness.md)
 
