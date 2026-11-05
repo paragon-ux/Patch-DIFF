@@ -33,7 +33,7 @@ Read project artifacts in this order:
 8. `docs/spec/profiles/index.md` and its linked profile contracts (startup selection, tool sets, workspace and observed editor v2)
 9. `docs/guides/host-integration-guide.md` (host-owned loop, prompt hygiene rules, and usage guide)
 10. `docs/papers/concept-paper-v6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, design rationale, tradeoffs, and empirical research hypotheses)
-11. `docs/benchmarks/test-matrix.md`, `docs/benchmarks/modernized-benchmark-report.md` & `backend/tests/verification/README.md` (verification matrix, certified empirical benchmark reports, and offline evaluation methodology)
+11. `docs/benchmarks/test-matrix.md`, `docs/benchmarks/workspace-e2e-benchmark.md` & `backend/tests/verification/README.md` (verification matrix, current comparative benchmark and offline evaluation methodology; the earlier modernization benchmark remains historical evidence)
 
 Concept Paper v6 (`docs/papers/concept-paper-v6.md`) is the current explanation of PatchDIFF's theoretical model, design rationale, tradeoffs, and research claims. For executable API schemas, persistence behavior, runtime profiles, and exact limits, use the current normative specifications and implementation (`AGENTS.md` and the active specifications above).
 

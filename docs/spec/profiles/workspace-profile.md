@@ -187,3 +187,13 @@ needs to inspect audit or replay evidence.
 See the [shared SAVE contract](../mcp-tools.md#patchdiff_save) for exact
 error codes, the destination lease, and the limits of file publication
 in the presence of other writers.
+
+## Comparative workflow evidence
+
+The [PR #24 Workspace benchmark](../../benchmarks/workspace-e2e-benchmark.md)
+compares `observed_workspace` with Native and standalone `observed_v2` across
+18 trials. Workspace's editing agent imported files, submitted guarded scope
+bundles and published through SAVE. Standalone `observed_v2` used separate
+host initialization and finalization. Both apply guarded atomic transactions
+per target. Timings, preparation costs, accuracy and model/build attribution
+limits are recorded in the report.

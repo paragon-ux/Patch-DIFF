@@ -19,7 +19,7 @@ When working in this repository, always consult documentation in the following o
 9. `docs/spec/structural-batch-editing.md` (structural observation and batch transactions)
 10. `docs/guides/host-integration-guide.md` (host loop, reads, retries, and failure handling)
 11. `docs/standards/pr-review-standard.md` (PR review standard v1.1.0)
-12. `docs/benchmarks/modernized-benchmark-report.md` (certified empirical benchmark results)
+12. `docs/benchmarks/workspace-e2e-benchmark.md` (current comparative results and independent verification; the modernization benchmark is historical evidence)
 
 ---
 

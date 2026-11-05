@@ -9,10 +9,11 @@ Architecture and contracts: [architecture](modernization-architecture.md), [MCP 
 
 ## Workspace editing and publication
 
-The five-tool `workspace` profile starts with an eager check of the project
-directory and database migration revision. Initialization can import a file
+The five-tool `workspace` and seven-tool `observed_workspace` profiles start
+with an eager check of the project directory and database migration revision. Initialization can import a file
 using a relative filename and return the target ID without returning source.
-Guarded typed edits update PostgreSQL. An explicit workspace SAVE publishes
+The editor submits guarded text edits through `workspace` or guarded scope
+bundles through `observed_workspace` to update PostgreSQL. An explicit workspace SAVE publishes
 file bytes and returns a receipt with the path, raw digest, line endings and
 durability. The file install and checkpoint commit have separate outcomes.
 The existing line-ending metadata carries the workspace binding and last
@@ -21,8 +22,14 @@ published digest. See [setup and recovery guidance](../guides/workspace-quicksta
 Installed-wheel checks used PostgreSQL 16 and live stdio to verify the
 working copy before SAVE and exact file bytes and checkpoint afterward.
 The fresh Codex CLI session exercised the same success path with a natural
-request and the five-tool catalog. This is workflow evidence for one file,
-separate from the comparative benchmark.
+request and the five-tool catalog. This is workflow evidence for one file.
+The [PR #24 benchmark](../benchmarks/workspace-e2e-benchmark.md) adds a current
+18-trial comparison of Native, host-orchestrated structural editing and
+agent-owned Workspace editing. All 90 files and 360 behavioral checks passed.
+Workspace used no separate host initialization/export routine. Its mean timed
+interval was 16.2% lower than Native. Preparation and owner handoffs are recorded
+as separate setup overhead. Model/build attribution and the timing boundary are
+recorded in that report.
 
 ## Transaction formats
 

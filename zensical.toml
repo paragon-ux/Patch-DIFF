@@ -35,7 +35,8 @@ nav = [
         { "Observed Editor Workflow" = "guides/observed-editor-workflow.md" }
     ]},
     { "Benchmarks" = [
-        { "Modernized 2×2 Factorial Benchmark" = "benchmarks/modernized-benchmark-report.md" },
+        { "Workspace Editing Benchmark" = "benchmarks/workspace-e2e-benchmark.md" },
+        { "Earlier Modernization Benchmark" = "benchmarks/modernized-benchmark-report.md" },
         { "Verification Test Matrix" = "benchmarks/test-matrix.md" }
     ]},
     { "Papers" = [

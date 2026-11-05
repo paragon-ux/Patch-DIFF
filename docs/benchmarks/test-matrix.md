@@ -16,7 +16,14 @@ Workspace checks in `test_mcp_profiles.py` and
 safe path resolution, drift, directory lease contention, line endings and
 partial SAVE receipts. Installed-wheel verification uses live MCP and
 PostgreSQL to check the working copy before SAVE and exact file bytes and
-checkpoint afterward. These checks are separate from the comparative benchmark.
+checkpoint afterward. The seven-tool `observed_workspace` profile adds the
+observed v2 editing routes to agent-owned import and SAVE publication.
+
+The [PR #24 comparative benchmark](workspace-e2e-benchmark.md) records 18 live-model
+trials across Native, Structural and Workspace in Git and non-Git. Independent
+capture verification confirmed 90 exact files, 360 behavioral checks and
+reconstructed all 60 accepted guarded commits. The model experiment and its
+operator/build limitations are distinct from automated source conformance tests.
 
 Compact presentation is covered by `test_mcp_response_modes.py`,
 `test_host_finalize.py` and `test_compact_host_workflow.py`: immutable mode/default

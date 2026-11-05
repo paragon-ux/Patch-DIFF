@@ -46,9 +46,9 @@ can use. These pages explain who should use each profile and how to start.
   and verification scope.
 - [Concept paper v6](papers/concept-paper-v6.md) explains the transaction model,
   tradeoffs and research hypotheses.
-- [Modernized benchmark](benchmarks/modernized-benchmark-report.md) reports
-  the five-file `observed_v2` experiment. The workspace workflow has separate
-  functional verification.
+- [Workspace benchmark](benchmarks/workspace-e2e-benchmark.md) compares Native,
+  host-orchestrated structural editing and agent-owned Workspace editing through
+  publication and independent verification. It is the current comparative report.
 - [Test matrix](benchmarks/test-matrix.md) maps unit, PostgreSQL, migration and
   stdio tests to their contracts.
 
@@ -59,6 +59,9 @@ can use. These pages explain who should use each profile and how to start.
 - [Release readiness](standards/release-readiness.md) covers versioning,
   verification and dependency audits.
 
-## Earlier benchmark
+## Earlier benchmarks
+
+- [Modernization benchmark](benchmarks/modernized-benchmark-report.md) records
+  the previous five-tool structural editing experiment.
 
 - [Earlier baseline benchmark](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/git_benchmark_report.md) records the original experiment.

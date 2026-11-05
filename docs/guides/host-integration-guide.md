@@ -15,6 +15,12 @@ connecting. For file editing, initialize from the workspace, read or search
 the returned target ID, submit guarded edits and explicitly SAVE with
 `sync_workspace: true`. Check publication and checkpoint results separately.
 
+The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) compares this
+agent-owned lifecycle with Native and host-orchestrated structural editing.
+Workspace includes initialization and explicit SAVE in the editor catalog,
+so the successful file-editing path needs no separate host export routine.
+The host can still run independent validators or inspect uncertain outcomes.
+
 ## Stdio transport and host refresh
 
 Choose the immutable `PATCHDIFF_MCP_PROFILE` before starting a session.
@@ -240,7 +246,7 @@ With `core.autocrlf=true`, git converts line endings on checkout and on commit, 
 
 PatchDIFF's guarantees cover the managed target in Postgres. An exported file edited elsewhere, a shell, another database writer, or another editor can change content PatchDIFF never sees. A skill or instruction asking the model to "use PatchDIFF" is guidance, not enforcement. Re-importing an edited export is a **new upload and a new target**; nothing is merged or synchronized.
 
-In environments with an active version control system (e.g. Git repository), the workspace files on disk are NOT updated by PatchDIFF transactions until the host exports or syncs them. State-dependent Git commands that inspect the working tree (such as `git diff` or `git status`) inspect disk files, not the canonical Postgres substrate, and will not show in-flight or accepted PatchDIFF transactions. Repository inspection commands that read history (`git log`, `git show <commit>`) operate on committed history.
+Guarded commits update PostgreSQL. In a workspace profile, the editor publishes each file with explicit SAVE. In a delegated structural profile, the trusted host publishes after editing. Git working-tree commands show disk bytes at the latest publication point. Use current target receipts for the canonical working state.
 
 ## Host integration checklist
 
@@ -250,14 +256,20 @@ A host skill or system prompt for PatchDIFF should say, at minimum: read before 
 
 ### Host Prompt Hygiene & Friction Prevention
 
-Empirical $2\times2$ factorial evaluation ($n=3$ per arm across Non-Git and Git environments, $N=12$ runs) identified three critical prompt hygiene principles that govern agent efficiency:
+The [earlier modernization experiment](../benchmarks/modernized-benchmark-report.md)
+studied schema reads, post-commit audits and environment-specific coaching.
+The [current Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md)
+uses a separate prompt policy and measures complete publication workflows.
+It does not isolate individual prompt interventions.
 
-1. **Omit Obsolete Schema and Spill Permissions**: When MCP tools are eagerly delivered via `tools/list` (e.g. `observed_v2`), do NOT include legacy permissions clauses such as `"Registered help/schema resources and this session's spills are allowed"`. Empirical trials showed that LLMs interpret this phrase as an instruction to inspect local disk schemas and help files via native filesystem tools, wasting 5–6 tool calls upfront before beginning edits.
-2. **Explicitly Forbid Post-Commit Verification Audits**: Host prompts should state:
-   > *"The host performs independent final verification after you report completion. Do NOT perform post-commit verification audits or read-back loops once all targets are committed. Send your completion message immediately after committing all files."*
-   Ambiguous phrasing such as *"Read/search/observe when needed to resolve editing uncertainty"* causes models to launch into redundant post-commit read loops (`find_occurrences`, `read_target`), adding 9–12 unnecessary tool invocations per session.
-3. **Harmonize Prompts Across Git and Non-Git Environments**: Do not inject cautionary warnings into editor prompts regarding `git diff` or `git status` vs. PostgreSQL substrate state. Adding negative warnings about version control inadvertently primes the model with Git terminology and cognitive load. An identical, harmonized prompt achieves complete cross-environment performance parity ($21.7 \pm 1.2$ steps in Git vs. $26.7 \pm 2.5$ steps in Non-Git, $p=0.06$).
-
+Keep task intent, tool permissions and publication ownership clear. Native
+and non-Git variants should use the same task and completion contract for
+an arm. Give the editor the active tool schemas and allow reads/searches
+when needed to resolve editing uncertainty. Describe who performs SAVE and
+publication. In `observed_workspace`, those are editor responsibilities.
+Record auxiliary schema reads and verification work in the measured calls.
+The benchmark uses independent final checks after the editor reports its
+terminal status.
 
 ## Waymark structural observation workflow (`waymark-engine@4.1.0`)
 

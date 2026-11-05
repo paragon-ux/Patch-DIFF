@@ -22,38 +22,43 @@ submits guarded edits and publishes with explicit SAVE.
 [Claude Desktop setup](docs/guides/claude-desktop-setup.md) ·
 [Workspace requests and receipts](docs/spec/profiles/workspace-profile.md)
 
-## Structural editing benchmark
+## Workspace editing benchmark
 
-| ⚡ Time Elapsed (Git) | ⏱️ Turnaround Predictability | 📉 Context Window Burn | 🎯 Byte Accuracy |
+| ⚡ Verified Flow Duration | 📉 Editor Tool Invocations | 🔄 Host Lifecycle Calls | 🎯 Full-Byte Accuracy |
 | :---: | :---: | :---: | :---: |
-| **1.66× Faster** | **4.7× Tighter** | **-64.8%** | **100.0%** |
-| *(3m 03s vs. 5m 04s in Git)* | *(±20s vs. ±96s variance)* | *(1.61M tokens saved/task)* | *(0 diffs across all runs)* |
+| **16.2% Faster** | **-42.7% Calls** | **0 Separate Calls** | **100.0%** |
+| *(296.7s vs. 354.2s pooled)* | *(32.0 vs. 55.8 calls/task)* | *(Agent-owned SAVE vs. 20 host calls)* | *(90/90 files, 360/360 checks)* |
 
 ```mermaid
 xychart-beta
-    title "Mean Time Elapsed in Seconds (n=3 per arm, 4 conditions)"
-    x-axis ["Non-Git Control", "Non-Git PatchDIFF", "Git Repo Control", "Git Repo PatchDIFF"]
-    y-axis "Time Elapsed (Seconds)" 0 --> 350
-    bar [206, 207, 304, 183]
+    title "Mean Verified Flow Duration in Seconds (18 Trials: Git & Non-Git)"
+    x-axis ["Git Native", "Git Structural", "Git Workspace", "Non-Git Native", "Non-Git Structural", "Non-Git Workspace"]
+    y-axis "Verified Duration (Seconds)" 0 --> 400
+    bar [341, 286, 305, 368, 299, 289]
 ```
 
-> **Evaluation Disclaimer**: Measured in the Google Antigravity agent runtime ($n=3$ per arm across 4 experimental conditions, Gemini 3.8 Flash High) comparing Modernized PatchDIFF (`observed_v2`) against the native Antigravity file-editing control baseline on a standardized 5-file, 21-edit canary task. Transcripts, seeds, and evaluation methodology are published in the [Modernized Benchmark Report](docs/benchmarks/modernized-benchmark-report.md). The earlier baseline evaluation is separated in [Legacy Benchmark Report](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/git_benchmark_report.md) due to prompt confounds in early iterations.
+> **Evaluation Disclaimer**: Measured in Google Antigravity ($n=3$ per cell across 6 conditions, 18 total trials, operator-attested Gemini 3.8 Flash High) comparing agent-owned Workspace (`observed_workspace`), host-orchestrated structural editing (`observed_v2`), and native file editing on a standardized 5-file, 21-edit canary task. Preparation and owner connector handoffs are excluded from the verified flow interval and recorded separately as setup overhead. Full methodology, transcripts, seed hashes, and receipts are published in the [Workspace Benchmark Report](docs/benchmarks/workspace-e2e-benchmark.md). The earlier five-tool experiment is preserved in the [Earlier Modernization Benchmark](docs/benchmarks/modernized-benchmark-report.md).
 
-### How Validated Hypotheses and Operational Mechanisms Drive Faster Time Elapsed
+### How Agent-Owned Workspace Editing Drives Faster Execution and Eliminates Host Friction
 
-In this five-file benchmark, the Git arm averaged **3m 03s with `observed_v2` versus 5m 04s for the control**. The measurements below apply to that workflow. The single-file `workspace` profile has separate functional verification.
+Across all 18 trials, agent-owned Workspace averaged **296.7s vs. 354.2s for Native (16.2% faster pooled; up to 28.3% faster in Non-Git median)** while reducing editor tool calls from **55.8 down to 32.0 (-42.7%)**:
 
-1. **Decoding & Context Reduction (`H1`)**: Emitting targeted patches instead of full-file rewrites cuts total context tokens by **-64.8%** (876K vs. 2.49M, saving 1.61M tokens/task, Welch $t=10.292, \text{df}=7.17, p < 0.00002$), drastically reducing model prefill and generation overhead.
-2. **Reliability & Turnaround Predictability (`H7`)**: The model reliably generated valid declarative transactions, achieving **100.0% full-byte accuracy** against the oracle reference (0 byte diffs across all 12 runs × 5 canary files = 60 targets evaluated; 240/240 test assertions passed) with zero rejections, collapsing Time Elapsed standard deviation from $\pm 96.0\text{s}$ down to **$\pm 20.3\text{s}$** ($\pm 14\text{s}$ in Git).
-3. **Structural Batching (Operational Finding)**: Submitting multi-scope edits in a single atomic bundle (`observed_v2`) rather than sequential roundtrips cuts interaction steps by **-55.8%** (24.2 vs. 54.8 turns, $p < 0.00001$) and tool invocations by **-57.8%** (22.7 vs. 53.8 calls, $p < 0.00001$).
-4. **Authoritative State Confirmation (Operational Finding)**: Receiving cryptographic receipts (`after_hash`) under PostgreSQL row locks confirms atomic transaction application directly to the agent, eliminating the **10.0 exploratory `git diff` / `git status` commands** per task observed in the control baseline canary. Independent semantic and task validation remain host responsibilities.
+1. **Context-Gathering Reduction**: Waymark AST structural indexing (`list_scopes`, `observe_scopes`) eliminates repetitive multi-chunk file scanning and text searching, saving ~24–34 iterative `read_file` round-trips per trial.
+2. **Self-Contained Agent Lifecycle (`observed_workspace`)**: The editing agent imports files (`initialize_target`), submits guarded multi-scope bundles (`commit_bundle`), and publishes directly to project files (`save` with `sync_workspace: true`) through its own 7 MCP tools. This eliminates the **20 separate host lifecycle calls and 5 host file writes per trial** required by standalone structural mode.
+3. **Turnaround Consistency & Zero Retries**: All 18 trials achieved **100.0% full-byte accuracy** against the independent oracle across all 90 target files (0 byte diffs) and passed **360/360 behavioral assertions**, with 0 MCP errors, 0 rejections, and 0 native retries.
+4. **Dominant Paired Performance**: Workspace finished faster than its same-block Native control in **all 6 paired comparisons** across both Git and Non-Git environments.
 
-| Operating Environment | Paradigm ($n=3$ per cell) | Mean Time Elapsed | Mean Steps | Mean Tool Calls | Git Commands | Mean Context Tokens | Full-Byte Match |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Non-Git Workspace** | Control Baseline | 3m 26s ± 1m 11s | 53.0 ± 3.6 | 52.0 ± 3.6 | N/A | 2,451,605 ± 507,644 | 100% (0 diffs) |
-| **Non-Git Workspace** | Modernized PatchDIFF | **3m 27s ± 21s** | **26.7 ± 2.5** | **24.7 ± 4.2** | N/A | **1,001,039 ± 143,395** | **100% (0 diffs)** |
-| **Git Repository** | Control Baseline | 5m 04s ± 1m 44s | 56.7 ± 6.1 | 55.7 ± 6.1 | 10.0 ± 0.0 | 2,529,918 ± 196,075 | 100% (0 diffs) |
-| **Git Repository** | Modernized PatchDIFF | **3m 03s ± 14s** | **21.7 ± 1.2** | **20.7 ± 1.2** | **0.0 ± 0.0** | **750,230 ± 30,670** | **100% (0 diffs)** |
+| Environment | Arm | Mean Verified Flow s | Median Verified s | Mean Steps | Mean Editor Calls | Separate Host Calls / Writes | Full-Byte Match | Behavioral Suite |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Git Repository** | Native Baseline | 340.94s | 330.32s | 52.67 | 52.00 | 0 / 0 | 100% (15/15) | 60/60 (100%) |
+| **Git Repository** | Structural / `observed_v2` | **286.14s** | **299.42s** | **30.00** | **29.00** | 20 / 5 | 100% (15/15) | 60/60 (100%) |
+| **Git Repository** | Workspace / `observed_workspace` | **304.65s** | **307.74s** | **31.67** | **30.67** | **0 / 0** | 100% (15/15) | 60/60 (100%) |
+| **Non-Git Workspace** | Native Baseline | 367.53s | 398.03s | 60.67 | 59.67 | 0 / 0 | 100% (15/15) | 60/60 (100%) |
+| **Non-Git Workspace** | Structural / `observed_v2` | **299.34s** | **281.28s** | **35.33** | **34.33** | 20 / 5 | 100% (15/15) | 60/60 (100%) |
+| **Non-Git Workspace** | Workspace / `observed_workspace` | **288.84s** | **285.55s** | **34.33** | **33.33** | **0 / 0** | 100% (15/15) | 60/60 (100%) |
+| **Pooled (Git + Non-Git)** | Native Baseline | 354.23s | 364.17s | 56.67 | 55.83 | 0 / 0 | 100% (30/30) | 120/120 (100%) |
+| **Pooled (Git + Non-Git)** | Structural / `observed_v2` | 292.74s | 290.35s | 32.67 | 31.67 | 20 / 5 | 100% (30/30) | 120/120 (100%) |
+| **Pooled (Git + Non-Git)** | Workspace / `observed_workspace` | **296.74s** | **296.54s** | **33.00** | **32.00** | **0 / 0** | 100% (30/30) | 120/120 (100%) |
 
 ---
 
@@ -119,7 +124,7 @@ Full documentation is available on the **[Zensical Documentation Site](https://p
 - **MCP Profiles**: [Profile Catalog](docs/spec/profiles/index.md) | [Workspace](docs/spec/profiles/workspace-profile.md) | [Observed Editor v2](docs/spec/profiles/observed-editor-v2.md)
 - **Guides**: [Host Integration Guide](docs/guides/host-integration-guide.md) | [Claude Desktop Setup](docs/guides/claude-desktop-setup.md) | [Workspace Editing](docs/guides/workspace-quickstart.md) | [Observed Workflow](docs/guides/observed-editor-workflow.md)
 - **Whitepapers**: [Concept Paper v6](docs/papers/concept-paper-v6.md) | [Modernization Architecture](docs/papers/modernization-architecture.md)
-- **Benchmarks**: [Modernized Benchmark](docs/benchmarks/modernized-benchmark-report.md) | [Test Matrix](docs/benchmarks/test-matrix.md)
+- **Benchmarks**: [Workspace Benchmark](docs/benchmarks/workspace-e2e-benchmark.md) | [Earlier Modernization Benchmark](docs/benchmarks/modernized-benchmark-report.md) | [Test Matrix](docs/benchmarks/test-matrix.md)
 - **Standards**: [PR Review Standard](docs/standards/pr-review-standard.md) | [Release Readiness](docs/standards/release-readiness.md)
 
 ---

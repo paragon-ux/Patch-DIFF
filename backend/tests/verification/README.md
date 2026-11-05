@@ -44,3 +44,20 @@ Historical documents can reference the original local evaluation paths; current
 reproduction commands use this directory.
 
 Versioned eight-tool editor regression uses the same authenticated fixtures and archived operations: `python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize --output /tmp/five-file-v2-fresh`. It negotiates 2025 MCP, validates actual input/output schemas and equal text/structured channels, then independently checks five exports, 20 behaviors and scalar SAVE/replay. This is zero-model backend verification; never use archived operations to perform a live canary.
+
+## Captured Workspace benchmark audit
+
+The current live-model report is [the PR #24 Workspace benchmark](../../../docs/benchmarks/workspace-e2e-benchmark.md).
+Its sanitized per-trial metrics live beside the report. Raw transcripts remain
+in the private captured packet. With the packet's pinned runtime and evaluator
+dependencies, independently check output bytes, behavior, transcript/wire counts,
+clock intervals and deterministic guarded-commit reconstruction with:
+
+```bash
+export PATCHDIFF_WAYMARK_MODE=resident
+python -B backend/tests/verification/workspace_benchmark_audit.py /absolute/path/to/packet /absolute/path/to/new-audit.json
+```
+
+The command creates its requested output file. It uses existing captures and
+performs no model invocation or PostgreSQL restart. Provider identity and an
+exact host build cannot be recovered from receipts that did not record them.
