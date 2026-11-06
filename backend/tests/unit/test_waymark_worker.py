@@ -231,6 +231,19 @@ def test_nested_lifetimes_and_unknown_configuration(monkeypatch):
         worker.get_process_worker_owner()
 
 
+def test_default_waymark_mode_is_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    worker.close_process_worker_owner()
+    monkeypatch.delenv("PATCHDIFF_WAYMARK_MODE", raising=False)
+    default_owner = worker.WaymarkWorkerOwner()
+    assert default_owner.mode == "resident"
+    default_owner.close()
+
+    monkeypatch.setenv("PATCHDIFF_WAYMARK_MODE", "oneshot")
+    oneshot_owner = worker.WaymarkWorkerOwner()
+    assert oneshot_owner.mode == "oneshot"
+    oneshot_owner.close()
+
+
 def test_abrupt_parent_exit_kills_child_and_next_start_removes_only_its_root(tmp_path):
     program = '''import json, time
 from app.services.waymark_worker import WaymarkWorkerOwner

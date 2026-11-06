@@ -376,7 +376,7 @@ class _Generation:
 class WaymarkWorkerOwner:
     def __init__(self, *, mode=None, node=None, script=None):
         self.pid = os.getpid()
-        self.mode = mode or os.getenv("PATCHDIFF_WAYMARK_MODE", "oneshot")
+        self.mode = mode or os.getenv("PATCHDIFF_WAYMARK_MODE", "resident")
         if self.mode not in ("oneshot", "resident"):
             raise ValueError("Unknown PATCHDIFF_WAYMARK_MODE; expected oneshot or resident")
         if os.getenv("PATCHDIFF_WAYMARK_WORKERS", "1") != "1":

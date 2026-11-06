@@ -28,7 +28,7 @@ Use `workspace` for the five-tool file import, edit and publication workflow.
 Use `observed_workspace` for the seven-tool structural AST observation, batch bundling, and direct workspace publication workflow.
 Use `observed_editor` for delegated structural editing when the host owns
 SAVE/replay. Use `full` for the complete lifecycle, export and audit catalog.
-The default `editor` profile exposes seven tools for working with an existing
+The opt-in `editor` profile exposes seven tools for working with an existing
 target. The server filters both discovery and dispatch by profile.
 [Profile catalog](../spec/profiles/index.md) · [Structural batch examples](../spec/structural-batch-editing.md).
 
@@ -304,7 +304,7 @@ Start the editor with resident/observed/strict observation and optional compact
 responses as specified in that brief. `PATCHDIFF_MCP_RESPONSE_MODE` defaults to
 `detailed`; only compact successful observed results omit supplementary evidence
 or duplicate metadata. Warnings, guards, exact source, failure diagnostics and
-stored facts remain authoritative. The existing oneshot default remains intact.
+stored facts remain authoritative. The worker defaults to resident mode.
 Verify the actual serving process and tools/list after restart. Host schema
 preloading/output limits are integration-specific; retain ordinary help lookup,
 existing observation paging and authorized spill-file retrieval as fallbacks.

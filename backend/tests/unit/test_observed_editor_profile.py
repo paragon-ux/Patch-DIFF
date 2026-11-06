@@ -20,12 +20,13 @@ LIFECYCLE_TOOLS = {"patchdiff_save", "patchdiff_replay"}
 def test_delegated_profile_is_opt_in_and_preserves_existing_catalogs(monkeypatch):
     monkeypatch.delenv("PATCHDIFF_MCP_PROFILE", raising=False)
     default = ExternalMCPAdapter()
-    assert default.profile == "editor"
+    assert default.profile == "observed_workspace"
     expected = {
         "editor": EDITOR_TOOLS | LIFECYCLE_TOOLS | {"patchdiff_submit_edits"},
         "unobserved": {"patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_submit_edits"} | LIFECYCLE_TOOLS,
         "observed": EDITOR_TOOLS | LIFECYCLE_TOOLS,
         "observed_editor": EDITOR_TOOLS,
+        "observed_workspace": {"patchdiff_initialize_target", "patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_list_scopes", "patchdiff_observe_scopes", "patchdiff_commit_bundle", "patchdiff_save"},
         "full": set(registry.names()),
     }
     assert len(expected["full"]) == 18
@@ -36,7 +37,7 @@ def test_delegated_profile_is_opt_in_and_preserves_existing_catalogs(monkeypatch
     assert delegated.profile == "observed_editor"
     monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "full")
     assert {tool["name"] for tool in delegated.list_tools()} == EDITOR_TOOLS
-    assert {tool["name"] for tool in default.list_tools()} == expected["editor"]
+    assert {tool["name"] for tool in default.list_tools()} == expected["observed_workspace"]
     with pytest.raises(FrozenInstanceError):
         delegated.profile = "full"
     with pytest.raises(ValueError, match="observed_editor"):

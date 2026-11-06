@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+from typing import Any
 import json
 import os
 from pathlib import Path
@@ -17,7 +18,11 @@ BACKEND = Path(__file__).resolve().parents[2]
 
 def _subprocess(messages: bytes) -> subprocess.CompletedProcess[bytes]:
     env = os.environ.copy()
-    env.update(PYTHONPATH=str(BACKEND), PYTHONIOENCODING="cp1252:surrogateescape")
+    env.update(
+        PYTHONPATH=str(BACKEND),
+        PYTHONIOENCODING="cp1252:surrogateescape",
+        PATCHDIFF_MCP_PROFILE="editor",
+    )
     env.pop("PYTHONUTF8", None)
     return subprocess.run(
         [sys.executable, "-m", "app.mcp.external_adapter"],
@@ -49,18 +54,18 @@ def test_main_configures_existing_stream_wrappers_before_serving(monkeypatch: py
     monkeypatch.setattr(external_adapter.sys, "stdout", outgoing)
     seen = []
 
-    def serve() -> None:
+    def serve(*args: object, **kwargs: object) -> None:
         seen.append((incoming.encoding, incoming.errors, outgoing.encoding, outgoing.errors))
 
     monkeypatch.setattr(external_adapter, "serve_stdio", serve)
-    external_adapter.main()
+    external_adapter.main([])
     assert seen == [("utf-8", "strict", "utf-8", "strict")]
 
 
 def test_injected_text_streams_remain_usable() -> None:
     incoming = io.StringIO('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n')
     outgoing = io.StringIO()
-    external_adapter.serve_stdio(incoming, outgoing)
+    external_adapter.serve_stdio(incoming, outgoing, profile="editor")
     assert json.loads(outgoing.getvalue())["result"]["serverInfo"]["name"] == "patchdiff-mvp"
 
 
@@ -96,3 +101,62 @@ def test_main_migrate_flag_executes_upgrade(monkeypatch: pytest.MonkeyPatch, cap
     assert calls[0][0].endswith("alembic.ini")
     assert calls[0][1] == "head"
     assert "PatchDIFF database migrations upgraded to head." in captured.out
+
+def test_main_profile_and_response_mode_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_serve(*args: object, **kwargs: object) -> None:
+        seen.update(kwargs)
+
+    monkeypatch.setattr(external_adapter, "serve_stdio", fake_serve)
+    incoming = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+    outgoing = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+    monkeypatch.setattr(external_adapter.sys, "stdin", incoming)
+    monkeypatch.setattr(external_adapter.sys, "stdout", outgoing)
+
+    external_adapter.main(["--profile", "observed_workspace", "--response-mode", "compact"])
+    assert seen == {"profile": "observed_workspace", "response_mode": "compact"}
+
+
+def test_main_rejects_missing_profile_argument(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        external_adapter.main(["--profile"])
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "requires an argument" in captured.err
+
+
+def test_main_rejects_unknown_option(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        external_adapter.main(["--unknown-flag"])
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "unrecognized option" in captured.err
+
+
+def test_main_rejects_invalid_profile(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        external_adapter.main(["--profile", "invalid_profile"])
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "unknown profile" in captured.err
+
+
+def test_pure_python_profiles_do_not_prewarm_waymark_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    from contextlib import nullcontext
+    from app.services import waymark_worker
+    prewarmed: list[bool] = []
+
+    def fake_serving_worker_owner(*, prewarm: bool = False) -> Any:
+        prewarmed.append(prewarm)
+        return nullcontext()
+
+    monkeypatch.setattr(waymark_worker, "serving_worker_owner", fake_serving_worker_owner)
+
+    incoming = io.StringIO()
+    outgoing = io.StringIO()
+    external_adapter.serve_stdio(incoming, outgoing, profile="unobserved_editor")
+    assert prewarmed == []
+
+    external_adapter.serve_stdio(incoming, outgoing, profile="editor")
+    assert prewarmed == [True]
