@@ -500,11 +500,17 @@ def _check_workspace_startup(profile: str) -> None:
         raise SystemExit("PatchDIFF workspace startup: apply the installed Alembic migrations before connecting.")
 
 
-def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
+def serve_stdio(
+    input_stream: TextIO = sys.stdin,
+    output_stream: TextIO = sys.stdout,
+    *,
+    profile: str | None = None,
+    response_mode: str | None = None,
+) -> None:
     """Serve newline-delimited JSON-RPC requests over stdio."""
 
     from app.services.waymark_worker import serving_worker_owner
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile=profile, response_mode=response_mode)
     if adapter.profile in _WORKSPACE_PROFILES:
         _check_workspace_startup(adapter.profile)
     worker_owner = nullcontext() if adapter.profile == "workspace" else serving_worker_owner(prewarm=True)
@@ -533,8 +539,9 @@ def main(argv: list[str] | None = None) -> None:
     if args and args[0] in ("--help", "-h"):
         print("PatchDIFF MCP Server (patchdiff-mcp)\n\n"
               "Usage:\n"
-              "  patchdiff-mcp             Run stdio MCP server (default)\n"
-              "  patchdiff-mcp --migrate   Run database migrations to latest head revision\n"
+              "  patchdiff-mcp                   Run stdio MCP server (default)\n"
+              "  patchdiff-mcp --profile <name>  Run stdio MCP server with explicit profile\n"
+              "  patchdiff-mcp --migrate         Run database migrations to latest head revision\n"
               "  patchdiff-mcp --version   Show server version\n"
               "  patchdiff-mcp --help      Show this help message\n\n"
               "Environment variables:\n"
@@ -555,9 +562,34 @@ def main(argv: list[str] | None = None) -> None:
         command.upgrade(cfg, "head")
         print("PatchDIFF database migrations upgraded to head.")
         return
+    profile = None
+    response_mode = None
+    idx = 0
+    while idx < len(args):
+        arg = args[idx]
+        if arg in ("--profile", "-p") and idx + 1 < len(args):
+            profile = args[idx + 1]
+            idx += 2
+        elif arg.startswith("--profile="):
+            profile = arg.split("=", 1)[1]
+            idx += 1
+        elif arg in ("--response-mode", "-m") and idx + 1 < len(args):
+            response_mode = args[idx + 1]
+            idx += 2
+        elif arg.startswith("--response-mode="):
+            response_mode = arg.split("=", 1)[1]
+            idx += 1
+        else:
+            idx += 1
+
     sys.stdin.reconfigure(encoding="utf-8", errors="strict")
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
-    serve_stdio()
+    kwargs: dict[str, Any] = {}
+    if profile is not None:
+        kwargs["profile"] = profile
+    if response_mode is not None:
+        kwargs["response_mode"] = response_mode
+    serve_stdio(**kwargs)
 
 
 def _dumps(value: Any, **options: Any) -> str:
