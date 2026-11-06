@@ -44,9 +44,9 @@ In accordance with [PR Review Standard v1.1.0](standards/pr-review-standard.md):
 
 ## 2. Profile Surface and Packaging
 
-### 2.1 Distribution (`patchdiff-mvp`)
+### 2.1 Distribution (`patchdiff-mcp`)
 
-- **PyPI Package Name**: `patchdiff-mvp`.
+- **PyPI Package Name**: `patchdiff-mcp`.
 - **Runtime Environment**: Python >= 3.11 with PostgreSQL 16+ as the backing relational substrate.
 - **Waymark AST Parser Bridge**: Packaged with the wheel; requires Node.js 22+ for resident structural AST scope observation.
 
