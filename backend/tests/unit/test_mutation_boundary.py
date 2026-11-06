@@ -12,7 +12,7 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[2] / "app"
 ASSIGNMENT = re.compile(r"\.current_content\s*=[^=]")
-ALLOWED_ASSIGNERS = {"services/pdcp_service.py"}
+ALLOWED_ASSIGNERS = {"services/pdcp_service.py", "services/coordinated_transaction_service.py"}
 
 
 def test_only_the_submit_service_assigns_target_content() -> None:

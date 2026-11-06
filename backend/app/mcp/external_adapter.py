@@ -73,6 +73,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "Use the version returned by the edit as a guard. If SAVE reports partial, inspect the file and database "
         "before reconciling either outcome."
     ),
+    "patchdiff_commit_multi_target": (
+        "Commit coordinated edits across multiple distinct target files atomically. "
+        "Locks all targets in canonical ascending UUID order to eliminate deadlocks. "
+        "All targets commit together or all fail together with zero database mutation."
+    ),
     "patchdiff_replay": "Replay accepted logs (dispatching on protocol_version and runtime_version), verify hash/version chain, and report component-level materialized_state_checks.",
     "patchdiff_export_target": "Export the current target content and metadata. format: original_text (default, legacy alias of canonical LF), canonical_lf, crlf, or original_eol (restore the uniform line endings recorded at upload).",
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
@@ -489,6 +494,7 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "symbol_name": "Exact returned Waymark symbol name (or parent.name), including Markdown punctuation, to select uniquely and issue an observation_id. Ambiguity rejects.",
     "kind": "Optional Waymark symbol kind filter (e.g. function, class, method, variable, property, object, section, table_row, code_block).",
     "observation_id": "Server-issued UUID identifying a verified structural scope observation.",
+    "targets": "List of per-target coordinated transaction specifications with operations or edits.",
 }
 
 

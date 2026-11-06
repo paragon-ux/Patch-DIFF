@@ -73,7 +73,7 @@ def test_subprocess_initialize_and_list_new_tools_with_complete_schema() -> None
         "patchdiff_submit_pdcp", "patchdiff_build_prompt_context", "patchdiff_get_regeneration_context",
         "patchdiff_build_regeneration_prompt", "patchdiff_request_regeneration",
     }
-    assert len(tools) == 17
+    assert len(tools) == 18
     assert retired.isdisjoint(tools)
     preview = tools["patchdiff_preview"]["inputSchema"]["properties"]
     assert preview["format"]["enum"] == ["patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
