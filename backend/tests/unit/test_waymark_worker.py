@@ -231,7 +231,7 @@ def test_nested_lifetimes_and_unknown_configuration(monkeypatch):
         worker.get_process_worker_owner()
 
 
-def test_default_waymark_mode_is_resident(monkeypatch):
+def test_default_waymark_mode_is_resident(monkeypatch: pytest.MonkeyPatch) -> None:
     worker.close_process_worker_owner()
     monkeypatch.delenv("PATCHDIFF_WAYMARK_MODE", raising=False)
     default_owner = worker.WaymarkWorkerOwner()

@@ -32,7 +32,7 @@ def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch)
 def test_default_startup_environment_and_session_immutability(monkeypatch):
     monkeypatch.delenv("PATCHDIFF_MCP_PROFILE", raising=False)
     adapter = ExternalMCPAdapter()
-    assert adapter.profile == "observed_workspace" and len(adapter.list_tools()) == 7
+    assert adapter.profile == "editor" and len(adapter.list_tools()) == 7
     monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "full")
     assert len(adapter.list_tools()) == 7 and ExternalMCPAdapter().profile == "full"
     with pytest.raises(FrozenInstanceError): adapter.profile = "full"
@@ -77,7 +77,7 @@ def test_observed_workspace_profile_contract_and_strict_observation(tmp_path, mo
 
 
 def test_batch_schemas_are_typed_bounded_and_mutually_exclusive():
-    schemas = {item["name"]: item["inputSchema"] for item in ExternalMCPAdapter(profile="editor").list_tools()}
+    schemas = {item["name"]: item["inputSchema"] for item in ExternalMCPAdapter().list_tools()}
     observe = Draft202012Validator(schemas["patchdiff_observe_scope"])
     tid, bid, oid = (str(uuid.uuid4()) for _ in range(3))
     selector = {"target_file_id": tid, "selections": [{"symbol_name": "f", "kind": "function"}]}

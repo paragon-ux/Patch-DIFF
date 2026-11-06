@@ -24,7 +24,7 @@ from app.services.waymark_adapter import (
 
 
 @pytest.fixture(autouse=True)
-def force_adapter_oneshot_mode(monkeypatch):
+def force_adapter_oneshot_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATCHDIFF_WAYMARK_MODE", "oneshot")
 
 

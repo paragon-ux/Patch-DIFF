@@ -8,13 +8,13 @@ The format follows Keep a Changelog.
 
 ### Changed
 
-- **Default MCP profile changed to `observed_workspace`**: `ExternalMCPAdapter` and `patchdiff-mcp` now default to the 7-tool `observed_workspace` profile (`patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_save`) for full agentic workspace refactoring. Existing hosts requiring the legacy inline editing toolset should set `PATCHDIFF_MCP_PROFILE=editor` or pass `--profile editor`.
-- **Default Waymark discovery worker mode changed to `resident`**: `WaymarkWorkerOwner` now defaults to `resident` mode to reuse a single Node.js worker across queries. Set `PATCHDIFF_WAYMARK_MODE=oneshot` for per-query worker processes.
+- **Default Waymark discovery worker mode changed to `resident`**: `WaymarkWorkerOwner` now defaults to `resident` mode to reuse a single Node.js worker across queries, with selective prewarming restricted to profiles with structural discovery tools (`_WAYMARK_PROFILES`). Set `PATCHDIFF_WAYMARK_MODE=oneshot` for per-query worker processes.
 
 ### Added
 
-- Added `--profile` / `-p` and `--response-mode` / `-m` CLI startup flags to `patchdiff-mcp`.
+- Added `--profile` / `-p` and `--response-mode` / `-m` CLI startup flags to `patchdiff-mcp` with strict option validation.
 - Added end-user troubleshooting guide (`docs/guides/troubleshooting.md`) for WSL2 memory limits, Docker Desktop visibility, and test isolation.
+- Added Profile Compatibility & Deployment Matrix (`docs/spec/profiles/profile-compatibility.md`) covering OS, Docker configurations, and reproducible recipes.
 
 ## [0.1.0] - 2026-11-05
 

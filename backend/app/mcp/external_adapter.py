@@ -184,6 +184,14 @@ _BASE_EDITOR_TOOLS = frozenset({"patchdiff_read_target", "patchdiff_find_occurre
 _WORKSPACE_LIFECYCLE = frozenset({"patchdiff_initialize_target", "patchdiff_save"})
 _WORKSPACE_PROFILES = frozenset({"workspace", "observed_workspace"})
 _STRUCTURAL_PROFILES = frozenset({"observed_v2", "observed_workspace"})
+_WAYMARK_PROFILES = frozenset({
+    "editor",
+    "observed",
+    "observed_editor",
+    "observed_v2",
+    "observed_workspace",
+    "full",
+})
 _OBSERVED_WORKSPACE_INITIALIZE = (
     "Import an existing workspace file as a PatchDIFF working target. Pass its workspace-relative "
     "path as filename, set from_workspace=true, and omit content. The result includes the target ID, "
@@ -261,7 +269,7 @@ class ExternalMCPAdapter:
     _negotiated_capabilities: dict[str, Any] | None
 
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
-        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "observed_workspace") if profile is None else profile
+        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
         if selected not in MCP_PROFILES:
             expected = ", ".join(sorted(MCP_PROFILES))
             raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected one of {expected}.")
@@ -513,7 +521,11 @@ def serve_stdio(
     adapter = ExternalMCPAdapter(profile=profile, response_mode=response_mode)
     if adapter.profile in _WORKSPACE_PROFILES:
         _check_workspace_startup(adapter.profile)
-    worker_owner = nullcontext() if adapter.profile == "workspace" else serving_worker_owner(prewarm=True)
+    worker_owner = (
+        serving_worker_owner(prewarm=True)
+        if adapter.profile in _WAYMARK_PROFILES
+        else nullcontext()
+    )
     with worker_owner:
         for line in input_stream:
             if not line.strip():
@@ -546,7 +558,7 @@ def main(argv: list[str] | None = None) -> None:
               "  patchdiff-mcp --help      Show this help message\n\n"
               "Environment variables:\n"
               "  PATCHDIFF_DATABASE_URL    PostgreSQL connection URL\n"
-              "  PATCHDIFF_MCP_PROFILE     MCP tool profile (default: observed_workspace, or editor, workspace, full)\n"
+              "  PATCHDIFF_MCP_PROFILE     MCP tool profile (default: editor, or observed_workspace, workspace, full)\n"
               "  PATCHDIFF_WORKSPACE_ROOT  Workspace root path for file operations\n")
         return
     if args and args[0] in ("--version", "-v"):
@@ -567,20 +579,42 @@ def main(argv: list[str] | None = None) -> None:
     idx = 0
     while idx < len(args):
         arg = args[idx]
-        if arg in ("--profile", "-p") and idx + 1 < len(args):
+        if arg in ("--profile", "-p"):
+            if idx + 1 >= len(args) or args[idx + 1].startswith("-"):
+                sys.stderr.write(f"patchdiff-mcp: error: {arg} requires an argument\n")
+                sys.exit(2)
             profile = args[idx + 1]
             idx += 2
         elif arg.startswith("--profile="):
             profile = arg.split("=", 1)[1]
+            if not profile:
+                sys.stderr.write("patchdiff-mcp: error: --profile requires a non-empty argument\n")
+                sys.exit(2)
             idx += 1
-        elif arg in ("--response-mode", "-m") and idx + 1 < len(args):
+        elif arg in ("--response-mode", "-m"):
+            if idx + 1 >= len(args) or args[idx + 1].startswith("-"):
+                sys.stderr.write(f"patchdiff-mcp: error: {arg} requires an argument\n")
+                sys.exit(2)
             response_mode = args[idx + 1]
             idx += 2
         elif arg.startswith("--response-mode="):
             response_mode = arg.split("=", 1)[1]
+            if not response_mode:
+                sys.stderr.write("patchdiff-mcp: error: --response-mode requires a non-empty argument\n")
+                sys.exit(2)
             idx += 1
         else:
-            idx += 1
+            sys.stderr.write(f"patchdiff-mcp: error: unrecognized option: {arg}\n")
+            sys.exit(2)
+
+    if profile is not None and profile not in MCP_PROFILES:
+        expected = ", ".join(sorted(MCP_PROFILES))
+        sys.stderr.write(f"patchdiff-mcp: error: unknown profile {profile!r}; expected one of: {expected}\n")
+        sys.exit(2)
+
+    if response_mode is not None and response_mode not in {"detailed", "compact"}:
+        sys.stderr.write(f"patchdiff-mcp: error: unknown response mode {response_mode!r}; expected detailed or compact\n")
+        sys.exit(2)
 
     sys.stdin.reconfigure(encoding="utf-8", errors="strict")
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
