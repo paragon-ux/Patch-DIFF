@@ -640,6 +640,8 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "kind": "Optional Waymark symbol kind filter (e.g. function, class, method, variable, property, object, section, table_row, code_block).",
     "observation_id": "Server-issued UUID identifying a verified structural scope observation.",
     "targets": "List of per-target coordinated transaction specifications with operations or edits.",
+    "verify_syntax": "When true, runs AST parse or syntax verification for Python, JSON, or Markdown targets during preview.",
+    "verification_hooks": "Optional list of specific semantic verification hooks to run (e.g. python_syntax, json_syntax, markdown_fences).",
 }
 
 

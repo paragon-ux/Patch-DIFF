@@ -311,9 +311,14 @@ def patchdiff_preview(
     *, target_file_id: str, format: str, intent: str | None = _UNSET, edits: list[dict] | None = _UNSET,
     operations: list[dict] | None = _UNSET, replacement: str | None = _UNSET,
     expected_target_version: int | None = None, expected_current_hash: str | None = None,
+    verify_syntax: bool = False, verification_hooks: list[str] | None = None,
 ) -> dict[str, Any]:
     proposal = {key: value for key, value in {"intent": intent, "edits": edits, "operations": operations,
                 "replacement": replacement}.items() if value is not _UNSET}
+    if verify_syntax:
+        proposal["verify_syntax"] = verify_syntax
+    if verification_hooks is not None:
+        proposal["verification_hooks"] = verification_hooks
     with SessionLocal() as session:
         return preview(session, target_file_id=target_file_id, format=format, **proposal,
                        expected_target_version=expected_target_version, expected_current_hash=expected_current_hash)

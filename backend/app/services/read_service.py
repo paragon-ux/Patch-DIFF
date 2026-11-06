@@ -35,6 +35,7 @@ class TargetObservation:
     current_content: str
     current_version: int
     current_hash: str
+    filename: str = ""
 
 
 def observe_target(session: Session, target_file_id: uuid.UUID) -> TargetObservation | None:
@@ -43,7 +44,7 @@ def observe_target(session: Session, target_file_id: uuid.UUID) -> TargetObserva
         row = session.execute(select(
             CloudTargetFiles.target_file_id, CloudTargetFiles.target_type,
             CloudTargetFiles.current_content, CloudTargetFiles.version,
-            CloudTargetFiles.current_hash,
+            CloudTargetFiles.current_hash, CloudTargetFiles.filename,
         ).where(CloudTargetFiles.target_file_id == target_file_id)).one_or_none()
     return TargetObservation(*row) if row is not None else None
 
