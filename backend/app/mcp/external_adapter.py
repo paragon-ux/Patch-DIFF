@@ -25,13 +25,18 @@ from app.mcp.editor_contracts import (
     EDITOR_V2_TOOLS, EDITOR_V2_ROUTES, ContractArgumentError,
     tool_declaration, normalize_arguments, project_result, is_success,
 )
-from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
+from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA, TYPED_PROTOCOL_VERSION
 from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
 from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
 from app.core.line_endings import EXPORT_FORMATS
 from app.services.workspace_sync_service import WORKSPACE_EOL_FORMATS, WorkspaceSyncError, validate_workspace_root
 from app.storage.db import database_schema_is_current
-from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, SPAN_CONTEXT_RUNTIME_VERSION
+from app.core.versions import (
+    RUNTIME_VERSION,
+    OPERATIONS_RUNTIME_VERSION,
+    REPLACEMENT_RUNTIME_VERSION,
+    SPAN_CONTEXT_RUNTIME_VERSION,
+)
 from app.pdcp.observed_batch import (SELECTION_JSON_SCHEMA, GROUP_JSON_SCHEMA, MAX_BATCH_SCOPES,
                                      MAX_BATCH_OPERATIONS, BATCH_ERROR_CODES, BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION)
 
@@ -42,6 +47,25 @@ LATEST_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[-1]
 SERVER_NAME = "patchdiff-mvp"
 SERVER_VERSION = "0.2.2"
 EXPECTED_TOOL_NAMES = registry.names()
+
+SUPPORTED_TRANSACTION_FORMATS = (
+    TYPED_PROTOCOL_VERSION,
+    OPERATIONS_PROTOCOL_VERSION,
+    REPLACEMENT_PROTOCOL_VERSION,
+)
+SUPPORTED_RUNTIME_VERSIONS: dict[str, str] = {
+    TYPED_PROTOCOL_VERSION: RUNTIME_VERSION,
+    OPERATIONS_PROTOCOL_VERSION: OPERATIONS_RUNTIME_VERSION,
+    REPLACEMENT_PROTOCOL_VERSION: REPLACEMENT_RUNTIME_VERSION,
+    "observed_batch": BATCH_RUNTIME_VERSION,
+}
+SUPPORTED_FEATURES = frozenset({
+    "multi_target",
+    "span_context",
+    "workspace_sync",
+    "observed_scopes",
+    "deterministic_replay",
+})
 
 _GUARD_RULE = " Requires expected_target_version and/or expected_current_hash; every supplied guard is checked."
 _CODE_POINTS = " Offsets are Unicode code points of canonical LF text; UTF-16 hosts such as JavaScript must convert."
@@ -185,6 +209,45 @@ MCP_PROFILES = {
 }
 
 
+def _negotiate_patchdiff_capabilities(client_pd: dict[str, Any]) -> dict[str, Any]:
+    """Negotiate PatchDIFF capabilities based on client request and server support."""
+    client_formats = client_pd.get("supported_formats")
+    if isinstance(client_formats, (list, tuple)):
+        negotiated_formats = tuple(fmt for fmt in SUPPORTED_TRANSACTION_FORMATS if fmt in client_formats)
+    else:
+        negotiated_formats = SUPPORTED_TRANSACTION_FORMATS
+
+    runtime_versions = {
+        fmt: SUPPORTED_RUNTIME_VERSIONS[fmt]
+        for fmt in negotiated_formats
+        if fmt in SUPPORTED_RUNTIME_VERSIONS
+    }
+    if "observed_batch" in SUPPORTED_RUNTIME_VERSIONS:
+        runtime_versions["observed_batch"] = SUPPORTED_RUNTIME_VERSIONS["observed_batch"]
+
+    client_features = client_pd.get("features")
+    if isinstance(client_features, dict):
+        negotiated_features = {
+            feat: bool(client_features[feat])
+            for feat in SUPPORTED_FEATURES
+            if feat in client_features
+        }
+    elif isinstance(client_features, (list, tuple)):
+        negotiated_features = {
+            feat: True
+            for feat in SUPPORTED_FEATURES
+            if feat in client_features
+        }
+    else:
+        negotiated_features = {feat: True for feat in SUPPORTED_FEATURES}
+
+    return {
+        "supported_formats": list(negotiated_formats),
+        "runtime_versions": runtime_versions,
+        "features": negotiated_features,
+    }
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class ExternalMCPAdapter:
     """Minimal JSON-RPC MCP adapter backed by the internal PatchDIFF registry."""
@@ -195,6 +258,7 @@ class ExternalMCPAdapter:
     _protocol_version: str
     _workspace_declarations: list[dict[str, Any]] | None
     _initialized: bool
+    _negotiated_capabilities: dict[str, Any] | None
 
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
         selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
@@ -204,6 +268,7 @@ class ExternalMCPAdapter:
         object.__setattr__(self, "profile", selected)
         object.__setattr__(self, "_protocol_version", PROTOCOL_VERSION)
         object.__setattr__(self, "_initialized", False)
+        object.__setattr__(self, "_negotiated_capabilities", None)
         mode = os.getenv("PATCHDIFF_MCP_RESPONSE_MODE", "detailed") if response_mode is None else response_mode
         if mode not in {"detailed", "compact"}:
             raise ValueError(f"Unknown PATCHDIFF_MCP_RESPONSE_MODE: {mode!r}; expected detailed or compact.")
@@ -211,6 +276,11 @@ class ExternalMCPAdapter:
         object.__setattr__(self, "_tool_names", tuple(sorted(MCP_PROFILES[selected])))
         declarations = self._legacy_tool_declarations() if selected == "workspace" else None
         object.__setattr__(self, "_workspace_declarations", declarations)
+
+    @property
+    def negotiated_capabilities(self) -> dict[str, Any] | None:
+        """Return the negotiated capabilities dictionary, or None if unnegotiated."""
+        return self._negotiated_capabilities
 
     def list_tools(self) -> list[dict[str, Any]]:
         if self.profile in _STRUCTURAL_PROFILES:
@@ -248,6 +318,10 @@ class ExternalMCPAdapter:
         if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
+        if self._negotiated_capabilities is not None:
+            capability_error = self._check_negotiated_capabilities(name, args)
+            if capability_error is not None:
+                return {"content": [{"type": "text", "text": _dumps(capability_error, sort_keys=True)}], "isError": True}
         if self.profile in _STRUCTURAL_PROFILES and name in EDITOR_V2_TOOLS:
             return self._call_editor_tool(name, args)
         argument_error = _argument_error(name, args)
@@ -264,6 +338,58 @@ class ExternalMCPAdapter:
             if projected is not payload:
                 return _tool_result(projected, compact=True)
         return _tool_result(payload)
+
+    def _check_negotiated_capabilities(self, name: str, args: dict[str, Any]) -> dict[str, Any] | None:
+        if self._negotiated_capabilities is None:
+            return None
+        formats = set(self._negotiated_capabilities.get("supported_formats", ()))
+        features = self._negotiated_capabilities.get("features", {})
+
+        if name == "patchdiff_submit_edits" and TYPED_PROTOCOL_VERSION not in formats:
+            return {
+                "status": "rejected",
+                "code": "unnegotiated_transaction_format",
+                "failure_detail": f"Transaction format {TYPED_PROTOCOL_VERSION} was not negotiated during initialize (negotiated: {sorted(formats)}).",
+                "negotiated_formats": sorted(formats),
+            }
+        if name == "patchdiff_submit_operations" and OPERATIONS_PROTOCOL_VERSION not in formats:
+            return {
+                "status": "rejected",
+                "code": "unnegotiated_transaction_format",
+                "failure_detail": f"Transaction format {OPERATIONS_PROTOCOL_VERSION} was not negotiated during initialize (negotiated: {sorted(formats)}).",
+                "negotiated_formats": sorted(formats),
+            }
+        if name == "patchdiff_submit_replacement" and REPLACEMENT_PROTOCOL_VERSION not in formats:
+            return {
+                "status": "rejected",
+                "code": "unnegotiated_transaction_format",
+                "failure_detail": f"Transaction format {REPLACEMENT_PROTOCOL_VERSION} was not negotiated during initialize (negotiated: {sorted(formats)}).",
+                "negotiated_formats": sorted(formats),
+            }
+        if name == "patchdiff_preview":
+            fmt = args.get("format")
+            if fmt and fmt in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION) and fmt not in formats:
+                return {
+                    "status": "rejected",
+                    "code": "unnegotiated_transaction_format",
+                    "failure_detail": f"Transaction format {fmt} was not negotiated during initialize (negotiated: {sorted(formats)}).",
+                    "negotiated_formats": sorted(formats),
+                }
+
+        if name == "patchdiff_commit_multi_target" and not features.get("multi_target", False):
+            return {
+                "status": "rejected",
+                "code": "unnegotiated_feature",
+                "failure_detail": "Feature multi_target was not negotiated during initialize.",
+            }
+        if name == "patchdiff_save" and args.get("sync_workspace") and not features.get("workspace_sync", False):
+            return {
+                "status": "rejected",
+                "code": "unnegotiated_feature",
+                "failure_detail": "Feature workspace_sync was not negotiated during initialize.",
+            }
+
+        return None
 
     def _call_editor_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -307,13 +433,32 @@ class ExternalMCPAdapter:
             if not isinstance(requested, str):
                 return _rpc_error(request_id, -32602, "protocolVersion must be a string.")
             negotiated = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else LATEST_PROTOCOL_VERSION
-            if self._initialized and negotiated != self._protocol_version:
-                return _rpc_error(request_id, -32602, "A connection cannot renegotiate its protocol revision.")
+
+            client_capabilities = params.get("capabilities", {})
+            if not isinstance(client_capabilities, dict):
+                return _rpc_error(request_id, -32602, "capabilities must be an object.")
+
+            negotiated_patchdiff = None
+            server_capabilities: dict[str, Any] = {"tools": {}}
+            if "patchdiff" in client_capabilities:
+                client_pd = client_capabilities["patchdiff"]
+                if not isinstance(client_pd, dict):
+                    return _rpc_error(request_id, -32602, "capabilities.patchdiff must be an object.")
+                negotiated_patchdiff = _negotiate_patchdiff_capabilities(client_pd)
+                server_capabilities["patchdiff"] = negotiated_patchdiff
+
+            if self._initialized:
+                if negotiated != self._protocol_version:
+                    return _rpc_error(request_id, -32602, "A connection cannot renegotiate its protocol revision.")
+                if negotiated_patchdiff != self._negotiated_capabilities:
+                    return _rpc_error(request_id, -32602, "A connection cannot renegotiate its protocol capabilities.")
+
             object.__setattr__(self, "_protocol_version", negotiated)
+            object.__setattr__(self, "_negotiated_capabilities", negotiated_patchdiff)
             object.__setattr__(self, "_initialized", True)
             return _rpc_result(
                 request_id,
-                {"protocolVersion": negotiated, "capabilities": {"tools": {}},
+                {"protocolVersion": negotiated, "capabilities": server_capabilities,
                  "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION}},
             )
         if method == "tools/list":
