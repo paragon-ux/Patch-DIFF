@@ -261,7 +261,7 @@ class ExternalMCPAdapter:
     _negotiated_capabilities: dict[str, Any] | None
 
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
-        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
+        selected = os.getenv("PATCHDIFF_MCP_PROFILE", "observed_workspace") if profile is None else profile
         if selected not in MCP_PROFILES:
             expected = ", ".join(sorted(MCP_PROFILES))
             raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected one of {expected}.")
@@ -546,7 +546,7 @@ def main(argv: list[str] | None = None) -> None:
               "  patchdiff-mcp --help      Show this help message\n\n"
               "Environment variables:\n"
               "  PATCHDIFF_DATABASE_URL    PostgreSQL connection URL\n"
-              "  PATCHDIFF_MCP_PROFILE     MCP tool profile (default: full, or observed_workspace, workspace)\n"
+              "  PATCHDIFF_MCP_PROFILE     MCP tool profile (default: observed_workspace, or editor, workspace, full)\n"
               "  PATCHDIFF_WORKSPACE_ROOT  Workspace root path for file operations\n")
         return
     if args and args[0] in ("--version", "-v"):

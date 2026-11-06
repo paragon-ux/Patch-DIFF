@@ -24,7 +24,7 @@ startup with strict observation enabled.
 ## Startup selection
 
 Set `PATCHDIFF_MCP_PROFILE` before starting `python -m app.mcp.external_adapter`.
-An unset variable selects `editor`. An unknown value prevents startup. Restart
+An unset variable selects `observed_workspace`. An unknown value prevents startup. Restart
 the MCP session to change its profile. Trusted embeddings may construct
 `ExternalMCPAdapter(profile="observed")`. Agents cannot override it in a request.
 The same immutable profile controls both `tools/list` and `tools/call`.
@@ -33,7 +33,7 @@ The same immutable profile controls both `tools/list` and `tools/call`.
 
 | Profile | Count | Advertised and callable tools |
 | --- | ---: | --- |
-| `editor` (default) | 7 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
+| `editor` | 7 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_edits`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
 | `unobserved` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save`, `patchdiff_replay` |
 | `observed` | 6 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations`, `patchdiff_save`, `patchdiff_replay` |
 | `observed_editor` (delegated role) | 4 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_observe_scope`, `patchdiff_submit_observed_operations` |
@@ -41,5 +41,5 @@ The same immutable profile controls both `tools/list` and `tools/call`.
 | `hybrid_editor` | 1 | `patchdiff_submit_edits` |
 | `observed_v2` | 5 | `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle` |
 | `workspace` | 5 | `patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_submit_edits`, `patchdiff_save` |
-| `observed_workspace` | 7 | `patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_save` |
+| `observed_workspace` (default) | 7 | `patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_save` |
 | `full` (trusted lifecycle) | 17 | Complete registry, including initialization, SAVE, export, audit and replay |

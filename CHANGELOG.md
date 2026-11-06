@@ -4,6 +4,18 @@ All notable features of `patchdiff-mcp` are documented in this file.
 
 The format follows Keep a Changelog.
 
+## [Unreleased]
+
+### Changed
+
+- **Default MCP profile changed to `observed_workspace`**: `ExternalMCPAdapter` and `patchdiff-mcp` now default to the 7-tool `observed_workspace` profile (`patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_save`) for full agentic workspace refactoring. Existing hosts requiring the legacy inline editing toolset should set `PATCHDIFF_MCP_PROFILE=editor` or pass `--profile editor`.
+- **Default Waymark discovery worker mode changed to `resident`**: `WaymarkWorkerOwner` now defaults to `resident` mode to reuse a single Node.js worker across queries. Set `PATCHDIFF_WAYMARK_MODE=oneshot` for per-query worker processes.
+
+### Added
+
+- Added `--profile` / `-p` and `--response-mode` / `-m` CLI startup flags to `patchdiff-mcp`.
+- Added end-user troubleshooting guide (`docs/guides/troubleshooting.md`) for WSL2 memory limits, Docker Desktop visibility, and test isolation.
+
 ## [0.1.0] - 2026-11-05
 
 ### Added

@@ -17,7 +17,11 @@ BACKEND = Path(__file__).resolve().parents[2]
 
 def _subprocess(messages: bytes) -> subprocess.CompletedProcess[bytes]:
     env = os.environ.copy()
-    env.update(PYTHONPATH=str(BACKEND), PYTHONIOENCODING="cp1252:surrogateescape")
+    env.update(
+        PYTHONPATH=str(BACKEND),
+        PYTHONIOENCODING="cp1252:surrogateescape",
+        PATCHDIFF_MCP_PROFILE="editor",
+    )
     env.pop("PYTHONUTF8", None)
     return subprocess.run(
         [sys.executable, "-m", "app.mcp.external_adapter"],
@@ -60,7 +64,7 @@ def test_main_configures_existing_stream_wrappers_before_serving(monkeypatch: py
 def test_injected_text_streams_remain_usable() -> None:
     incoming = io.StringIO('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n')
     outgoing = io.StringIO()
-    external_adapter.serve_stdio(incoming, outgoing)
+    external_adapter.serve_stdio(incoming, outgoing, profile="editor")
     assert json.loads(outgoing.getvalue())["result"]["serverInfo"]["name"] == "patchdiff-mvp"
 
 
