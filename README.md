@@ -70,7 +70,7 @@ PatchDIFF supports multiple editing workflows by configuring the `PATCHDIFF_MCP_
 2. **Host-Orchestrated Structural Editing (`observed_v2`)**: A 5-tool MCP profile providing Abstract Syntax Tree (AST) scope discovery and guarded atomic commits. The host environment retains lifecycle authority, executing separate orchestration calls to initialize targets, save revisions, export files to disk, and verify state.
 3. **Agent-Owned Workspace Editing (`observed_workspace`)**: A 7-tool MCP profile where the editing agent directly owns the complete lifecycle over MCP. The agent imports files (`initialize_target`), discovers and inspects AST scopes (`list_scopes`, `observe_scopes`), commits atomic bundles (`commit_bundle`), and publishes verified edits directly to disk (`save` with `sync_workspace: true`), requiring zero external host lifecycle calls.
 
-Additional profiles include `workspace` (a 5-tool profile for exact text editing without Node.js AST dependencies), `editor` (the opt-in 7-tool profile for existing database targets), and `full` (an 18-tool trusted lifecycle catalog). See the [profile catalog](docs/spec/profiles/index.md) for full details.
+Additional profiles include `workspace` (a 5-tool profile for exact text editing without Node.js AST dependencies), `editor` (the opt-in 7-tool profile for existing database targets), and `full` (an 18-tool trusted lifecycle catalog). See the [profile catalog](docs/spec/profiles/index.md) and the [Profile Compatibility & Deployment Matrix](docs/spec/profiles/profile-compatibility.md) for full details.
 
 ### Transaction Formats
 
@@ -86,7 +86,16 @@ All formats enforce `expected_target_version` and `expected_current_hash` concur
 
 ## Quickstart
 
-Follow the [workspace quickstart](docs/guides/workspace-quickstart.md) to install the package, connect PostgreSQL 16, and configure your MCP host.
+Follow the steps below to configure the default **`observed_workspace`** profile.
+
+> [!NOTE]
+> **Environment Support & Prerequisites:**
+> The default `observed_workspace` quickstart requires a POSIX environment (**Linux, WSL2 on Windows, macOS, or Docker**) because directory writebacks and concurrent file updates enforce descriptor-relative operations and POSIX file locking (`fcntl.flock`). It also requires Python 3.11+, PostgreSQL 16+, and Node.js 22+ (for Waymark AST structural indexing).
+>
+> If you are running on **bare Windows** (cmd.exe or PowerShell), in an environment without Node.js, or prefer inline ledger editing without filesystem synchronization:
+> - Consult the [**Profile Compatibility & Deployment Matrix**](docs/spec/profiles/profile-compatibility.md) for OS-specific compatibility and reproducible Docker recipes.
+> - Use `--profile observed_v2` or `--profile editor` for zero-filesystem inline editing.
+> - If you run into port 5432 conflicts or WSL2 memory issues, see the [**Troubleshooting & Operations Guide**](docs/guides/troubleshooting.md).
 
 ### 1. Install and Migrate
 
@@ -129,7 +138,10 @@ Configure your MCP host (such as Claude Desktop or Antigravity):
 }
 ```
 
-Additional setup guides:
+Additional setup and operations guides:
+- [Profile Compatibility & Deployment Matrix](docs/spec/profiles/profile-compatibility.md) — OS support (Bare Windows, WSL2, Linux, macOS) and reproducible Docker setup recipes
+- [Troubleshooting & Operations Guide](docs/guides/troubleshooting.md) — Resolving port 5432 conflicts, WSL2 resource reclamation, and common environment fixes
+- [Workspace quickstart guide](docs/guides/workspace-quickstart.md) — Detailed manual walkthrough
 - [Claude Desktop setup](docs/guides/claude-desktop-setup.md)
 - [Workspace profile specification](docs/spec/profiles/workspace-profile.md)
 
