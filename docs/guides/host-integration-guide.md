@@ -304,7 +304,7 @@ Start the editor with resident/observed/strict observation and optional compact
 responses as specified in that brief. `PATCHDIFF_MCP_RESPONSE_MODE` defaults to
 `detailed`; only compact successful observed results omit supplementary evidence
 or duplicate metadata. Warnings, guards, exact source, failure diagnostics and
-stored facts remain authoritative. The existing oneshot default remains intact.
+stored facts remain authoritative. The worker defaults to resident mode.
 Verify the actual serving process and tools/list after restart. Host schema
 preloading/output limits are integration-specific; retain ordinary help lookup,
 existing observation paging and authorized spill-file retrieval as fallbacks.

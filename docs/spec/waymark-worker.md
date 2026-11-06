@@ -1,8 +1,8 @@
 # Resident Waymark discovery
 
-Waymark supplies structural discovery for observed edits. Set
-`PATCHDIFF_WAYMARK_MODE=resident` before startup to reuse one internal
-Node process. The default `oneshot` mode starts a process for each discovery.
+Waymark supplies structural discovery for observed edits.
+The worker defaults to `resident` mode to reuse one internal
+Node process. An optional `oneshot` mode (`PATCHDIFF_WAYMARK_MODE=oneshot`) starts a process for each discovery.
 An unknown mode prevents startup. Use `PATCHDIFF_NODE_BINARY` to select
 the trusted Node executable. `PATCHDIFF_WAYMARK_WORKERS` accepts only `1`.
 
