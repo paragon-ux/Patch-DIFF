@@ -135,9 +135,11 @@ replay verifies every authoritative scope without Waymark. Additive migration
 `20261027_0005` follows `20261026_0004`, preserving historical single linkage and
 refusing destructive downgrade. See [the batch contract](docs/spec/structural-batch-editing.md).
 
-External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default `editor`
-advertises and permits exactly 7 tools; `unobserved` 5, `observed` 6 and explicit
-trusted lifecycle `full` all 17. Opt-in `observed_editor` advertises and permits only
+External MCP uses immutable startup `PATCHDIFF_MCP_PROFILE`: default
+`observed_workspace` advertises and permits exactly 7 tools (combining observed
+v2 editing with initialize and SAVE on the same connection for the complete
+agentic editing lifecycle); opt-in `editor` advertises and permits the 7 legacy
+inline tools; `unobserved` 5, `observed` 6 and explicit trusted lifecycle `full` all 18. Opt-in `observed_editor` advertises and permits only
 the four observed editing/read tools; that profile rejects SAVE/replay. Opt-in
 `observed_v2` exposes five purpose-specific external tools through the same
 services with explicit snapshots and bounded typed receipts; see

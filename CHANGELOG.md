@@ -8,6 +8,7 @@ The format follows Keep a Changelog.
 
 ### Changed
 
+- **Default MCP profile changed to `observed_workspace`**: `ExternalMCPAdapter` and `patchdiff-mcp` now default to the 7-tool `observed_workspace` profile (`patchdiff_initialize_target`, `patchdiff_read_target`, `patchdiff_find_occurrences`, `patchdiff_list_scopes`, `patchdiff_observe_scopes`, `patchdiff_commit_bundle`, `patchdiff_save`) for the full autonomous agentic editing lifecycle. Existing hosts requiring the legacy inline editing toolset should set `PATCHDIFF_MCP_PROFILE=editor` or pass `--profile editor`.
 - **Default Waymark discovery worker mode changed to `resident`**: `WaymarkWorkerOwner` now defaults to `resident` mode to reuse a single Node.js worker across queries, with selective prewarming restricted to profiles with structural discovery tools (`_WAYMARK_PROFILES`). Set `PATCHDIFF_WAYMARK_MODE=oneshot` for per-query worker processes.
 
 ### Added

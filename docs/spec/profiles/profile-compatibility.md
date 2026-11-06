@@ -22,13 +22,13 @@ PatchDIFF profiles fall into two operational classes:
 
 | Profile | Tools | Bare Windows | WSL2 (Ubuntu/Debian) | Native Linux | macOS | Docker Desktop (WSL2) | Docker Engine (Linux) | Docker Desktop (macOS) | Fully Containerized |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`observed_workspace`** | 7 | ❌ Incompatible¹ | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| **`observed_workspace`** *(default)* | 7 | ❌ Incompatible¹ | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`workspace`** | 5 | ❌ Incompatible¹ | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`observed_v2`** | 5 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`observed_editor`** | 4 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`unobserved_editor`**| 3 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`hybrid_editor`** | 1 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
-| **`editor`** *(default)* | 7 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
+| **`editor`** | 7 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`observed`** | 6 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`unobserved`** | 5 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`full`** | 18 | ⚠️ Inline only¹| ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
