@@ -23,6 +23,11 @@ from app.services.waymark_adapter import (
 )
 
 
+@pytest.fixture(autouse=True)
+def force_adapter_oneshot_mode(monkeypatch):
+    monkeypatch.setenv("PATCHDIFF_WAYMARK_MODE", "oneshot")
+
+
 def test_waymark_package_manifest_and_lockfile_pin_exact_npm_release() -> None:
     package_json_path = WAYMARK_INTEGRATION_DIR / "package.json"
     lockfile_path = WAYMARK_INTEGRATION_DIR / "package-lock.json"
