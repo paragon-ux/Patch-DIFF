@@ -382,7 +382,11 @@ def main(argv: list[str] | None = None) -> None:
     args = sys.argv[1:] if argv is None else argv
     if args and args[0] in ("--help", "-h"):
         print("PatchDIFF MCP Server (patchdiff-mcp)\n\n"
-              "Usage: patchdiff-mcp\n\n"
+              "Usage:\n"
+              "  patchdiff-mcp             Run stdio MCP server (default)\n"
+              "  patchdiff-mcp --migrate   Run database migrations to latest head revision\n"
+              "  patchdiff-mcp --version   Show server version\n"
+              "  patchdiff-mcp --help      Show this help message\n\n"
               "Environment variables:\n"
               "  PATCHDIFF_DATABASE_URL    PostgreSQL connection URL\n"
               "  PATCHDIFF_MCP_PROFILE     MCP tool profile (default: full, or observed_workspace, workspace)\n"
@@ -390,6 +394,16 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args and args[0] in ("--version", "-v"):
         print(f"patchdiff-mcp {SERVER_VERSION}")
+        return
+    if args and args[0] in ("--migrate", "migrate"):
+        from pathlib import Path
+        import app
+        from alembic.config import Config
+        from alembic import command
+        ini_path = str(Path(app.__file__).with_name("migrations") / "alembic.ini")
+        cfg = Config(ini_path)
+        command.upgrade(cfg, "head")
+        print("PatchDIFF database migrations upgraded to head.")
         return
     sys.stdin.reconfigure(encoding="utf-8", errors="strict")
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")

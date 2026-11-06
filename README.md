@@ -94,8 +94,7 @@ python3.11 -m venv .venv
 . .venv/bin/activate
 python -m pip install /absolute/path/to/patchdiff_mcp-0.1.0-py3-none-any.whl
 export PATCHDIFF_DATABASE_URL='postgresql+psycopg://patchdiff@localhost:5432/patchdiff'
-alembic_ini=$(python -c 'from pathlib import Path; import app; print(Path(app.__file__).with_name("migrations") / "alembic.ini")')
-python -m alembic -c "$alembic_ini" upgrade head
+patchdiff-mcp --migrate
 ```
 
 ### 2. Configure Resident AST Service (Structural Profiles)

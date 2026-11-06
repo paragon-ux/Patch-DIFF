@@ -82,3 +82,17 @@ def test_main_version_flag_prints_version_and_exits(capsys: pytest.CaptureFixtur
     external_adapter.main(["--version"])
     captured = capsys.readouterr()
     assert captured.out.strip() == f"patchdiff-mcp {external_adapter.SERVER_VERSION}"
+
+
+def test_main_migrate_flag_executes_upgrade(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    from alembic import command
+    calls = []
+    def fake_upgrade(config, revision):
+        calls.append((config.config_file_name, revision))
+    monkeypatch.setattr(command, "upgrade", fake_upgrade)
+    external_adapter.main(["--migrate"])
+    captured = capsys.readouterr()
+    assert len(calls) == 1
+    assert calls[0][0].endswith("alembic.ini")
+    assert calls[0][1] == "head"
+    assert "PatchDIFF database migrations upgraded to head." in captured.out
