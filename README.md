@@ -85,21 +85,21 @@ All formats enforce `expected_target_version` and `expected_current_hash` concur
 
 ## Quickstart
 
-Follow the [workspace quickstart](docs/guides/workspace-quickstart.md) to install the wheel, connect PostgreSQL 16, and configure your MCP host.
+Follow the [workspace quickstart](docs/guides/workspace-quickstart.md) to install the package, connect PostgreSQL 16, and configure your MCP host.
 
 ### 1. Install and Migrate
 
 ```bash
 python3.11 -m venv .venv
 . .venv/bin/activate
-python -m pip install /absolute/path/to/patchdiff_mcp-0.1.0-py3-none-any.whl
+pip install patchdiff-mcp
 export PATCHDIFF_DATABASE_URL='postgresql+psycopg://patchdiff@localhost:5432/patchdiff'
 patchdiff-mcp --migrate
 ```
 
 ### 2. Configure Resident AST Service (Structural Profiles)
 
-For the 7-tool `observed_workspace` profile, install the pinned Waymark Engine 4.1.0 dependencies beside the bridge shipped in the wheel:
+For the 7-tool `observed_workspace` profile, install the pinned Waymark Engine 4.1.0 dependencies beside the bridge shipped with the package:
 
 ```bash
 waymark_dir=$(python -c 'from app.services.waymark_adapter import WAYMARK_INTEGRATION_DIR; print(WAYMARK_INTEGRATION_DIR)')

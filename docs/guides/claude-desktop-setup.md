@@ -2,13 +2,17 @@
 
 Claude Desktop connects to PatchDIFF over stdio. Use the five-tool
 `workspace` profile to edit a project file through a Linux server. First
-install the wheel and migrate your PostgreSQL 16 database as shown in the
+install `patchdiff-mcp` and migrate your PostgreSQL 16 database as shown in the
 [workspace quickstart](workspace-quickstart.md).
 
 ## Configure the connection
 
-Open Claude Desktop settings and choose **Developer → Edit Config**.
-Add an entry under `mcpServers`, preserving any existing entries.
+Before modifying the configuration file, create a backup copy of your existing
+`claude_desktop_config.json` (such as `claude_desktop_config.json.bak`).
+
+Open Claude Desktop settings and choose **Developer > Edit Config**.
+Add the `patchdiff-workspace` entry under `mcpServers`, preserving any existing
+server entries to avoid overwriting current MCP tools.
 Use the absolute path to the installed environment's `patchdiff-mcp` executable
 (or its Python interpreter running `-m app.mcp.external_adapter`),
 the PostgreSQL connection URL and the server's project root.

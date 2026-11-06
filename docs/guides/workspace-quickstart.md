@@ -13,14 +13,14 @@ fails startup on native Windows, where inline upload, edit and export remain
 available through `full`. A Linux/WSL server
 can access a mounted project only if its filesystem supports these operations.
 
-Create a Python 3.11 virtual environment and install the PatchDIFF wheel.
+Create a Python 3.11 virtual environment and install `patchdiff-mcp`.
 Provision a PostgreSQL 16 database and set `PATCHDIFF_DATABASE_URL` to its
-connection URL before applying the migrations shipped with the wheel.
+connection URL before applying the migrations shipped with the package.
 
 ```bash
 python3.11 -m venv .venv
 . .venv/bin/activate
-python -m pip install /absolute/path/to/patchdiff_mcp-0.1.0-py3-none-any.whl
+pip install patchdiff-mcp
 export PATCHDIFF_DATABASE_URL='postgresql+psycopg://patchdiff@localhost:5432/patchdiff'
 patchdiff-mcp --migrate
 ```
@@ -29,8 +29,8 @@ patchdiff-mcp --migrate
 
 The five-tool `workspace` profile needs no Node.js installation. For the
 seven-tool `observed_workspace` profile, install Node.js 22+ on the server,
-then install the pinned npm dependencies beside the bridge shipped in the
-wheel. Run this with the same virtual environment activated:
+then install the pinned npm dependencies beside the bridge shipped with the
+package. Run this with the same virtual environment activated:
 
 ```bash
 node --version
