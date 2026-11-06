@@ -14,6 +14,8 @@ Profiles select the tools available on one external MCP connection.
   context the delegate can read and which edit form it can submit.
 - Use [observed editor v2](observed-editor-v2.md) for structural delegation
   with an explicit snapshot envelope and compact commit receipts.
+- Consult the [Profile Compatibility & Deployment Matrix](profile-compatibility.md) for OS,
+  Docker configurations, and runtime dependency support across all profiles.
 
 The [shared tool specification](../mcp-tools.md) defines the underlying
 arguments, receipts and errors. Strict observation is a service setting.
