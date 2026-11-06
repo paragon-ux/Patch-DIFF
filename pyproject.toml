@@ -25,6 +25,9 @@ test = [
     "pytest>=9.0.3,<10.0",
 ]
 
+[project.scripts]
+patchdiff-mcp = "app.mcp.external_adapter:main"
+
 [project.urls]
 Repository = "https://github.com/paragon-ux/Patch-DIFF"
 Issues = "https://github.com/paragon-ux/Patch-DIFF/issues"

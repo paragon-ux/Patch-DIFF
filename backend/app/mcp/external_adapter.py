@@ -378,7 +378,19 @@ def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.st
                 output_stream.flush()
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    args = sys.argv[1:] if argv is None else argv
+    if args and args[0] in ("--help", "-h"):
+        print("PatchDIFF MCP Server (patchdiff-mcp)\n\n"
+              "Usage: patchdiff-mcp\n\n"
+              "Environment variables:\n"
+              "  PATCHDIFF_DATABASE_URL    PostgreSQL connection URL\n"
+              "  PATCHDIFF_MCP_PROFILE     MCP tool profile (default: full, or observed_workspace, workspace)\n"
+              "  PATCHDIFF_WORKSPACE_ROOT  Workspace root path for file operations\n")
+        return
+    if args and args[0] in ("--version", "-v"):
+        print(f"patchdiff-mcp {SERVER_VERSION}")
+        return
     sys.stdin.reconfigure(encoding="utf-8", errors="strict")
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
     serve_stdio()

@@ -69,3 +69,16 @@ def test_invalid_utf8_wire_bytes_fail_before_tool_dispatch() -> None:
     assert completed.returncode != 0
     assert completed.stdout == b""
     assert b"UnicodeDecodeError" in completed.stderr
+
+
+def test_main_help_flag_prints_help_and_exits(capsys: pytest.CaptureFixture[str]) -> None:
+    external_adapter.main(["--help"])
+    captured = capsys.readouterr()
+    assert "PatchDIFF MCP Server (patchdiff-mcp)" in captured.out
+    assert "PATCHDIFF_DATABASE_URL" in captured.out
+
+
+def test_main_version_flag_prints_version_and_exits(capsys: pytest.CaptureFixture[str]) -> None:
+    external_adapter.main(["--version"])
+    captured = capsys.readouterr()
+    assert captured.out.strip() == f"patchdiff-mcp {external_adapter.SERVER_VERSION}"

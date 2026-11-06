@@ -115,8 +115,8 @@ Configure your MCP host (such as Claude Desktop or Antigravity):
 {
   "mcpServers": {
     "patchdiff-workspace": {
-      "command": "/absolute/path/to/venv/bin/python",
-      "args": ["-m", "app.mcp.external_adapter"],
+      "command": "/absolute/path/to/venv/bin/patchdiff-mcp",
+      "args": [],
       "env": {
         "PATCHDIFF_MCP_PROFILE": "observed_workspace",
         "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff@localhost:5432/patchdiff",
