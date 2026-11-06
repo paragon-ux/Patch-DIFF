@@ -239,7 +239,7 @@ def test_encoding_validation_rejects_nul_and_invalid_utf8(tmp_path) -> None:
 def test_mcp_from_workspace_and_sync_save_emit_compact_receipts_without_full_text(tmp_path) -> None:
     # Schema & tool-count invariants remain intact across profiles
     full_tools = {t["name"]: t for t in ExternalMCPAdapter(profile="full").list_tools()}
-    assert len(full_tools) == 17
+    assert len(full_tools) == 18
     Draft202012Validator.check_schema(full_tools["patchdiff_initialize_target"]["inputSchema"])
     Draft202012Validator.check_schema(full_tools["patchdiff_save"]["inputSchema"])
 

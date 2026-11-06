@@ -922,3 +922,27 @@ def _try_coerce_uuid(value: uuid.UUID | str) -> uuid.UUID | None:
         return uuid.UUID(str(value))
     except (ValueError, TypeError):
         return None
+
+
+@registry.register("patchdiff_commit_multi_target")
+def patchdiff_commit_multi_target(
+    *,
+    intent: str,
+    targets: list[dict[str, Any]],
+    client_request_id: str | None = None,
+) -> dict[str, Any]:
+    """Execute an all-or-nothing multi-target coordinated transaction across multiple files.
+
+    Acquires row locks in canonical ascending UUID order to eliminate deadlocks.
+    """
+    from app.services.coordinated_transaction_service import submit_coordinated_transactions
+
+    with SessionLocal() as session:
+        with session.begin():
+            return submit_coordinated_transactions(
+                session,
+                intent=intent,
+                targets=targets,
+                client_request_id=client_request_id,
+            )
+
