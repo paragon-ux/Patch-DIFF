@@ -31,7 +31,7 @@ Every transactional guarantee builds directly on top of exact matching:
 | :--- | :--- | :--- |
 | **Bedrock matching** | Search-and-replace strings requiring manual line offset tracking or context padding | Exact matching on unique substrings or guarded code-point spans; fails closed if target shifts |
 | **Context discovery** | Iterative chunk reads (averaging 34.8 calls per task) to inspect surrounding code and line coordinates | Targeted AST scope discovery (11 inspections per task), reducing editor tool calls by 42.7% |
-| **Multi-edit atomicity** | Direct filesystem writes; an error midway leaves partial modifications on disk | Sequential in-memory simulation with all-or-nothing commits across targets and scopes (`commit_bundle`) |
+| **Multi-edit atomicity** | Direct filesystem writes; an error midway leaves partial modifications on disk | Sequential in-memory simulation with all-or-nothing commits within a target across its edits and scopes (`commit_bundle`) |
 | **Concurrency control** | Post-hoc detection using git diff or file modification timestamps after writes occur | Optimistic row locks (`SELECT ... FOR UPDATE`) checking target version and content hash before mutation |
 | **Audit and replay** | Ephemeral tool attempts; only explicit git commits persist, losing intermediate trials and failure diagnostics | Append-only attempt log with client request keys, structured failure context, and deterministic replay |
 | **Workspace isolation** | Workspace filesystem serves as scratchpad, exposing unverified intermediate states | PostgreSQL maintains the authoritative working copy; `save` verifies disk drift before writing to disk |
