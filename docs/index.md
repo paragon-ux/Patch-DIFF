@@ -10,6 +10,8 @@ over MCP. Start with the workflow that fits your host.
   guarded edits, and handle rejections.
 - [Delegate structural editing](guides/observed-editor-workflow.md) while
   retaining lifecycle tools on a trusted connection.
+- [Troubleshoot environment setup](guides/troubleshooting.md) for port conflicts,
+  WSL2 memory tuning, and Docker Desktop configurations.
 
 ## Shared specifications
 
@@ -27,7 +29,9 @@ over MCP. Start with the workflow that fits your host.
 
 PatchDIFF exposes focused tool profiles aligned with its editing workflows:
 
-- [Observed Workspace](spec/profiles/workspace-profile.md) (Primary): 7-tool structural AST editing enabling autonomous agents to own the complete lifecycle from file import to SAVE publication.
+- [Profile Catalog](spec/profiles/index.md): Summary of all 10 operational profiles and startup configuration.
+- [Profile Compatibility Matrix](spec/profiles/profile-compatibility.md): OS support (Bare Windows, WSL2, Linux, macOS) and Docker deployment recipes.
+- [Observed Workspace](spec/profiles/workspace-profile.md) (Default): 7-tool structural AST editing enabling autonomous agents to own the complete lifecycle from file import to SAVE publication.
 - [Workspace](spec/profiles/workspace-profile.md): 5-tool exact text editing from file import to SAVE publication.
 - [Observed Editor v2](spec/profiles/observed-editor-v2.md): 5-tool structural editing for host-managed lifecycle environments.
 

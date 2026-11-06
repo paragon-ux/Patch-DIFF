@@ -139,9 +139,9 @@ Configure your MCP host (such as Claude Desktop or Antigravity):
 ```
 
 Additional setup and operations guides:
-- [Profile Compatibility & Deployment Matrix](docs/spec/profiles/profile-compatibility.md) — OS support (Bare Windows, WSL2, Linux, macOS) and reproducible Docker setup recipes
-- [Troubleshooting & Operations Guide](docs/guides/troubleshooting.md) — Resolving port 5432 conflicts, WSL2 resource reclamation, and common environment fixes
-- [Workspace quickstart guide](docs/guides/workspace-quickstart.md) — Detailed manual walkthrough
+- [Profile Compatibility & Deployment Matrix](docs/spec/profiles/profile-compatibility.md): OS support (Bare Windows, WSL2, Linux, macOS) and reproducible Docker setup recipes.
+- [Troubleshooting & Operations Guide](docs/guides/troubleshooting.md): Resolving port 5432 conflicts, WSL2 resource reclamation, and common environment fixes.
+- [Workspace quickstart guide](docs/guides/workspace-quickstart.md): Detailed manual walkthrough.
 - [Claude Desktop setup](docs/guides/claude-desktop-setup.md)
 - [Workspace profile specification](docs/spec/profiles/workspace-profile.md)
 

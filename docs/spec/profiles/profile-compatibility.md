@@ -56,7 +56,7 @@ PatchDIFF profiles fall into two operational classes:
 
 ## 4. Reproducible Setup Instructions by Environment
 
-### Configuration A: Windows with Docker Desktop (WSL2 Backend) — Recommended for Windows
+### Configuration A: Windows with Docker Desktop (WSL2 Backend) (Recommended for Windows)
 
 This configuration runs the PatchDIFF server inside WSL2 while PostgreSQL runs in Docker Desktop, with full support for the default `observed_workspace` profile.
 
@@ -256,3 +256,5 @@ volumes:
 | `PatchDIFF workspace startup: PATCHDIFF_WORKSPACE_ROOT is not configured` | Server started with default `observed_workspace` without setting workspace directory | Export `PATCHDIFF_WORKSPACE_ROOT="$(pwd)"` or pass `--profile observed_v2` / `--profile editor` for inline editing. |
 | Docker Desktop GUI shows `0 containers running` | Containers started under an isolated WSL distro without Docker Desktop integration | Enable **Settings > Resources > WSL Integration** for your specific distro in Docker Desktop. |
 | `ModuleNotFoundError: No module named 'fcntl'` | Running `observed_workspace` or `workspace` directly on bare Windows | Switch to WSL2, Docker, or select an inline profile (`--profile observed_v2` / `--profile editor`). |
+
+For host configuration, WSL2 resource compaction, and background process management, see the [Troubleshooting & Operations Guide](../../guides/troubleshooting.md).

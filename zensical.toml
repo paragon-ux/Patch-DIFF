@@ -23,6 +23,7 @@ nav = [
     ]},
     { "MCP Profiles" = [
         { "Profile Catalog" = "spec/profiles/index.md" },
+        { "Profile Compatibility Matrix" = "spec/profiles/profile-compatibility.md" },
         { "Workspace" = "spec/profiles/workspace-profile.md" },
         { "Editing an Existing Target" = "spec/profiles/existing-target-editing.md" },
         { "Delegated Editing and Lifecycle" = "spec/profiles/delegation-and-lifecycle.md" },
@@ -32,7 +33,8 @@ nav = [
         { "Workspace Editing" = "guides/workspace-quickstart.md" },
         { "Host Integration Guide" = "guides/host-integration-guide.md" },
         { "Claude Desktop Setup" = "guides/claude-desktop-setup.md" },
-        { "Observed Editor Workflow" = "guides/observed-editor-workflow.md" }
+        { "Observed Editor Workflow" = "guides/observed-editor-workflow.md" },
+        { "Troubleshooting & Operations" = "guides/troubleshooting.md" }
     ]},
     { "Benchmarks" = [
         { "Workspace Editing Benchmark" = "benchmarks/workspace-e2e-benchmark.md" },

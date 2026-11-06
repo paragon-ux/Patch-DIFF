@@ -2,6 +2,8 @@
 
 This guide provides operational troubleshooting, environment diagnostics, and configuration best practices for running PatchDIFF across Windows, WSL2, macOS, and Linux environments.
 
+For operating system support matrices and reproducible Docker setup instructions, see the [Profile Compatibility & Deployment Matrix](../spec/profiles/profile-compatibility.md).
+
 ---
 
 ## 1. WSL2 Setup, Memory Limits & Resource Reclamation
