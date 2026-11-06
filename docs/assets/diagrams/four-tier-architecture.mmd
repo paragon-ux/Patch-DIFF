@@ -1,0 +1,25 @@
+flowchart TB
+    subgraph T1["Tier 1: MCP host"]
+        HOST["Claude Desktop / agentic host / IDE workflow<br/>Selects context and formulates proposals<br/>Owns retries, recovery lineage, and completion evaluation"]
+    end
+
+    subgraph T2["Tier 2: MCP transport layer"]
+        MCP["external_adapter.py and tools.py<br/>Exposes active tool profiles and JSON schemas<br/>Validates arguments and request limits<br/>Formats bounded responses and receipts"]
+    end
+
+    subgraph T3["Tier 3: Transaction service layer"]
+        SERVICE["backend/app/services/<br/>Owns SQLAlchemy session and per-target row lock<br/>Checks request-key idempotency and state guards<br/>Coordinates import, SAVE, checkpoints, and replay"]
+        CORE["Pure deterministic core<br/>Exact-match enumeration and sequential application<br/>Change facts and validity derivation<br/>No database, network, or LLM I/O"]
+        SERVICE <-->|"Target text, transaction, profile / result and derived facts"| CORE
+    end
+
+    subgraph T4["Tier 4: PostgreSQL substrate"]
+        DB["backend/app/storage/<br/>cloud_target_files<br/>append_only_pdcp_logs<br/>append_only_manifest_ledger<br/>target_snapshots and editing_cycles<br/>client_request_id recovery and lineage"]
+    end
+
+    FILE["Workspace file<br/>Source bytes on import<br/>Rendered bytes on SAVE publication"]
+
+    HOST <-->|"JSON-RPC (stdio transport)"| MCP
+    MCP <-->|"Internal service calls"| SERVICE
+    SERVICE <-->|"SELECT ... FOR UPDATE (atomic commit/audit)"| DB
+    SERVICE <-->|"Import bytes / guarded SAVE publication"| FILE

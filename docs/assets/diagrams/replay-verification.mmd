@@ -1,0 +1,21 @@
+flowchart TD
+    SNAP["Initial upload snapshot<br/>Canonical text, initial version, and hash"] --> REPLAY["Replay engine<br/>patchdiff_replay"]
+    LOGS["Accepted append-only logs<br/>Ordered by log_sequence"] --> REPLAY
+
+    REPLAY --> DISPATCH["For each accepted log entry<br/>Read protocol_version and runtime_version"]
+    DISPATCH --> PROFILE{"Dispatch to recorded profile"}
+
+    PROFILE --> TX1["patchdiff-tx/1<br/>Exact-match operations"]
+    PROFILE --> TX2["patchdiff-tx/2<br/>Match and guarded-span operations"]
+    PROFILE --> TX3["patchdiff-tx/3<br/>Whole-target replacement"]
+    PROFILE --> BATCH["patchdiff-observed-batch/1<br/>Structural scope bundle"]
+
+    TX1 --> APPLY["Apply transaction deterministically<br/>to the in-memory buffer"]
+    TX2 --> APPLY
+    TX3 --> APPLY
+    BATCH --> APPLY
+
+    APPLY --> VERIFY["Verify 4 Materialized State Checks<br/>content_matches<br/>stored_hash_matches<br/>recomputed_hash_matches<br/>version_matches"]
+    VERIFY --> RES{"All 4 checks pass?"}
+    RES -- Yes --> PASS["materialized_state_matches: true<br/>Reconstruction verified"]
+    RES -- No --> FAIL["materialized_state_matches: false<br/>Content or line-ending divergence"]

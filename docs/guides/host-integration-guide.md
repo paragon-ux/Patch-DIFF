@@ -52,24 +52,7 @@ Accepted means *protocol-valid and transaction-valid*. `validity.task_correct` a
 
 ## The standard loop
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant H as Host + model
-    participant P as PatchDIFF
-    U->>H: edit request
-    H->>P: patchdiff_find_occurrences / patchdiff_read_target
-    P-->>H: version, current_hash, exact spans
-    H->>P: patchdiff_submit_edits (guard + edits)
-    alt accepted
-        P-->>H: accepted, new version, evidence, warnings, validity
-        H->>H: run tests / review (task correctness is the host's job)
-    else rejected
-        P-->>H: failure_reason, diagnostic, pdcp_log_id, current version/hash
-        H->>P: fresh read / find_occurrences
-        H->>P: patchdiff_submit_edits (parent_pdcp_log_id = rejected log)
-    end
-```
+![The Standard Host Integration Loop](../assets/diagrams/host-integration-loop.svg)
 
 1. **Read first.** Use `patchdiff_read_target` for a region (by code-point offset), `patchdiff_read_lines` for a line range, or `patchdiff_find_occurrences` to locate a string. All return `version` and `current_hash`. Do not copy from a stale summary or a cached earlier read. Offsets are Unicode code points: a JavaScript or TypeScript host must convert UTF-16 string indexes before sending them.
 2. **Submit with a guard.** Pass `expected_target_version` and/or `expected_current_hash` from the read you based the edit on. Typed submissions without a guard are rejected (`context_missing`).
@@ -84,7 +67,7 @@ sequenceDiagram
 | `disambiguation_invalid` | Selector did not isolate one span | Recount: indexes after earlier edits are renumbered. For several same-string edits, use descending tx/2 spans |
 | `span_out_of_bounds`, `span_expected_text_mismatch` | A span does not fit, or its `expected_text` or context differs from the text in the sequential buffer; `diagnostic.span_check` says which check and `actual_text` shows what is there | Re-read, recompute offsets against the text after earlier operations, copy `expected_text` exactly |
 | `context_invalid` with `diagnostic.code: "request_key_conflict"` | The `client_request_id` was already used for a different proposal; `differing_fields` names what changed | Resend the original proposal unchanged to recover it, or use a new key for the new proposal (see [lost responses](#lost-responses-and-request-idempotency)) |
-| `context_invalid` with `diagnostic.code: "invalid_client_request_id"` | The key is not 1–128 printable ASCII characters without whitespace | Fix the key |
+| `context_invalid` with `diagnostic.code: "invalid_client_request_id"` | The key is not 1 to 128 printable ASCII characters without whitespace | Fix the key |
 | `manifest_*`, `block_malformed`, other `context_*` | Malformed typed input | Fix the request shape |
 
 4. **Link retries.** Set `parent_pdcp_log_id` to the rejected attempt and `attempt` to your own counter. The rejected row stays in the log. Retry limits are your policy; the server enforces none.

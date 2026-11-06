@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-xychart" viewBox="0 0 700 500" width="700" height="500" style="max-width:100%;height:auto;--_bg:var(--pele-bg,#fff);--_fg:var(--pele-fg,#1f1f1f);--_m:var(--pele-muted,#6e6e6e);--_l:var(--pele-line,#1f1f1f);--_s:var(--pele-surface,#f3f3f3);--_a:var(--pele-surface-alt,#e6e6e6);--_b:var(--pele-border,#8a8a8a);--_c:var(--pele-accent,#5b7bd5);color:var(--_fg);--_tw:var(--pele-title-weight,bold);--_fm:var(--pele-font-mono,monospace);font:16px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,sans-serif)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="xychart">
+  <style>
+    :root {
+      --pele-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      --pele-bg: #ffffff;
+      --pele-fg: #1f2328;
+      --pele-muted: #656d76;
+      --pele-line: #57606a;
+      --pele-surface: #f6f8fa;
+      --pele-surface-alt: #eaeef2;
+      --pele-border: #d0d7de;
+      --pele-accent: #0969da;
+      --pele-series-1: #0969da;
+      --pele-series-2: #1a7f37;
+      --pele-series-3: #9a6700;
+      --pele-series-4: #8250df;
+      --pele-series-5: #cf222e;
+      --pele-series-6: #bf3989;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --pele-bg: #0d1117;
+        --pele-fg: #e6edf3;
+        --pele-muted: #8b949e;
+        --pele-line: #8b949e;
+        --pele-surface: #161b22;
+        --pele-surface-alt: #21262d;
+        --pele-border: #30363d;
+        --pele-accent: #2f81f7;
+        --pele-series-1: #2f81f7;
+        --pele-series-2: #3fb950;
+        --pele-series-3: #d29922;
+        --pele-series-4: #a371f7;
+        --pele-series-5: #f85149;
+        --pele-series-6: #db61a2;
+      }
+    }
+  </style>
+<text class="pele-title" font-weight="var(--_tw)" text-anchor="middle" xml:space="preserve"><tspan x="350" y="25.6">Mean Verified Flow Duration by Environment and Editing Model</tspan></text><path class="pele-grid" d="M68.35,448H692M68.35,398.81H692M68.35,349.63H692M68.35,300.44H692M68.35,251.25H692M68.35,202.06H692M68.35,152.88H692M68.35,103.69H692M68.35,54.5H692" stroke="var(--_a)"/><g class="pele-plot"><g class="pele-series pele-bars" fill="var(--pele-series-1,#4c78a8)"><rect x="83.94" y="112.54" width="72.76" height="335.46"/><rect x="187.88" y="166.65" width="72.76" height="281.35"/><rect x="291.83" y="147.96" width="72.76" height="300.04"/><rect x="395.77" y="85.98" width="72.76" height="362.02"/><rect x="499.71" y="153.86" width="72.76" height="294.14"/><rect x="603.65" y="163.7" width="72.76" height="284.3"/></g></g><path class="pele-axis" d="M68.35,54.5V448M68.35,448H692M68.35,448h-4M68.35,398.81h-4M68.35,349.63h-4M68.35,300.44h-4M68.35,251.25h-4M68.35,202.06h-4M68.35,152.88h-4M68.35,103.69h-4M68.35,54.5h-4M120.32,448v4M224.26,448v4M328.21,448v4M432.15,448v4M536.09,448v4M640.03,448v4" fill="none" stroke="var(--_b)"/><g class="pele-axis-labels" font-size="14" fill="var(--_m)"><text x="58.35" y="452.9" text-anchor="end">0</text><text x="58.35" y="403.71" text-anchor="end">50</text><text x="58.35" y="354.53" text-anchor="end">100</text><text x="58.35" y="305.34" text-anchor="end">150</text><text x="58.35" y="256.15" text-anchor="end">200</text><text x="58.35" y="206.96" text-anchor="end">250</text><text x="58.35" y="157.78" text-anchor="end">300</text><text x="58.35" y="108.59" text-anchor="end">350</text><text x="58.35" y="59.4" text-anchor="end">400</text><text x="120.32" y="471.4" text-anchor="middle">Git Native</text><text x="224.26" y="471.4" text-anchor="middle">Git Structural</text><text x="328.21" y="471.4" text-anchor="middle">Git Workspace</text><text x="432.15" y="471.4" text-anchor="middle">Non-Git Native</text><text text-anchor="middle" xml:space="preserve"><tspan x="536.09" y="469.9">Non-Git</tspan><tspan x="536.09" y="487.9">Structural</tspan></text><text text-anchor="middle" xml:space="preserve"><tspan x="640.03" y="469.9">Non-Git</tspan><tspan x="640.03" y="487.9">Workspace</tspan></text></g><g class="pele-axis-titles" font-size="14"><g transform="translate(18.5,251.25) rotate(-90)"><text x="0" y="4.9" text-anchor="middle">Verified Duration (Seconds)</text></g></g></svg>

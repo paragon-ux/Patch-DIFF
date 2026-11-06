@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant U as User
+    participant H as Host + model
+    participant P as PatchDIFF
+    U->>H: edit request
+    H->>P: patchdiff_find_occurrences / patchdiff_read_target
+    P-->>H: version, current_hash, exact spans
+    H->>P: patchdiff_submit_edits (guard + edits)
+    alt accepted
+        P-->>H: accepted, new version, evidence, warnings, validity
+        H->>H: run tests / review (task correctness is the host's job)
+    else rejected
+        P-->>H: failure_reason, diagnostic, pdcp_log_id, current version/hash
+        H->>P: fresh read / find_occurrences
+        H->>P: patchdiff_submit_edits (parent_pdcp_log_id = rejected log)
+    end

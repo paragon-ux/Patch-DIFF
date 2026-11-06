@@ -145,22 +145,7 @@ All eight external sources were fetched directly from their primary vendor pages
 
 ## 4. Architecture Decisions (A1 to A8) and Contract Specifications (C1 to C6)
 
-```mermaid
-flowchart LR
-    U["User"] --> H["Host: planning, generation, retry, review UI"]
-    F["Workspace file"] -- "Starting bytes on import" --> T
-    T -- "Explicit SAVE publication after drift check" --> F
-    H -- "patchdiff_read_target / patchdiff_find_occurrences" --> T
-    H -- "patchdiff_submit_edits (typed, guarded, idempotent)" --> T
-    H -- "save / replay / export / get_pdcp_log / get_manifest_ledger" --> T
-    subgraph T ["PatchDIFF Transaction Service"]
-        direction TB
-        MCP["MCP Tools / Stdio Adapter (Full JSON Schema)"] --> SVC["Service Layer: Idempotency + Guards + Single Commit Path"]
-        SVC --> D1["Typed Decoders (tx/1, tx/2, tx/3)"] --> APP
-        APP["Deterministic Applier + Matcher (All Exact Spans)"] --> DB[("PostgreSQL: Working Copy, Attempts, Ledger, Snapshots, Cycles")]
-        DB --> R["Replay Engine: Explicit (protocol_version, runtime_version) Dispatch"]
-    end
-```
+![Modernization Architecture and Service Flow](../assets/diagrams/modernization-architecture-flow.svg)
 
 ### Summary of Decisions A1 to A8
 

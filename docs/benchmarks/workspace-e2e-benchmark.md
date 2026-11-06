@@ -77,21 +77,9 @@ Each environment/arm row contains three trials. Means below use the same three r
 | pooled | structural | 6 | 292.741 | 290.345 | 232.619–352.717 | 254.7 | 32.67 | 31.67 | 1,278,618 | 24,844 |
 | pooled | workspace | 6 | 296.742 | 296.544 | 275.569–318.512 | 263.0 | 33.00 | 32.00 | 1,317,124 | 25,819 |
 
-```mermaid
-xychart-beta
-    title "Mean Verified Flow Duration in Seconds (18 Trials: Git & Non-Git)"
-    x-axis ["Git Native", "Git Structural", "Git Workspace", "Non-Git Native", "Non-Git Structural", "Non-Git Workspace"]
-    y-axis "Verified Duration (Seconds)" 0 --> 400
-    bar [341, 286, 305, 368, 299, 289]
-```
+![Mean Verified Flow Duration in Seconds (18 Trials: Git & Non-Git)](../assets/diagrams/benchmark-duration-full.svg)
 
-```mermaid
-xychart-beta
-    title "Mean Editor Tool Invocations per Task (Git vs. Non-Git)"
-    x-axis ["Git Native", "Git Structural", "Git Workspace", "Non-Git Native", "Non-Git Structural", "Non-Git Workspace"]
-    y-axis "Editor Calls" 0 --> 70
-    bar [52, 29, 31, 60, 34, 33]
-```
+![Mean Editor Tool Invocations per Task (Git vs. Non-Git)](../assets/diagrams/benchmark-tool-calls.svg)
 
 Workspace’s mean timed interval was **10.6% lower in Git** and **21.4% lower in non-Git** than Native. The corresponding editor-call reductions were **41.0%** and **44.1%**. Workspace had a lower timed interval than its same-block Native control in all six blocks. Structural was faster in four of six paired blocks. These are observations from one task and one requested model setting, with three repetitions per cell. No general performance or statistical-significance claim follows from them.
 

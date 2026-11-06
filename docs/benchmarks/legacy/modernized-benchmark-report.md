@@ -51,13 +51,7 @@ Every single run in this evaluation (**12 out of 12**) achieved **100.0% full-by
 
 ## 2. Statistical Hypothesis Testing & Welch's Two-Sample $t$-Tests
 
-```mermaid
-xychart-beta
-    title "Mean Tool Invocations (± SD): Control vs. Modernized PatchDIFF"
-    x-axis ["Non-Git Control", "Non-Git Mod-PD", "Git Repo Control", "Git Repo Mod-PD"]
-    y-axis "Tool Calls" 0 --> 70
-    bar [52.0, 24.7, 55.7, 20.7]
-```
+![Mean Tool Invocations: Control vs. Modernized PatchDIFF](../../assets/diagrams/legacy-benchmark-invocations.svg)
 
 Welch's two-sample unequal variances $t$-tests were conducted comparing the pooled Control group ($n=6$) against the pooled Modernized PatchDIFF group ($n=6$):
 

@@ -1,0 +1,40 @@
+sequenceDiagram
+    autonumber
+    participant H as MCP host
+    participant S as PatchDIFF service
+    participant F as Workspace file
+    participant D as PostgreSQL working copy
+
+    H->>S: Initialize target with from_workspace=true
+    S->>F: Read source bytes and record source digest
+    S->>D: Store canonical LF text and workspace binding
+    S-->>H: Return target ID, version, and canonical hash
+
+    H->>S: Read/search text or observe scopes
+    S->>D: Read canonical working copy
+    S-->>H: Return bounded text, matches, or scope snapshots
+
+    H->>S: Submit edits or commit bundle with version/hash guard
+    S->>D: Lock target and validate guards
+    alt Proposal accepted
+        S->>D: Commit working version, attempt log, and manifest entries
+        S-->>H: Return accepted version and hash
+    else Proposal rejected
+        S->>D: Record rejected attempt
+        S-->>H: Return bounded diagnostics for host review
+    end
+
+    H->>S: SAVE accepted version with sync_workspace=true
+    S->>D: Verify working version and state guards
+    S->>F: Verify workspace binding and expected disk digest
+    alt External disk drift detected
+        S-->>H: Reject publication, do not checkpoint
+    else Disk is in the expected state
+        S->>F: Install rendered file bytes
+        alt Publication and checkpoint confirmed
+            S->>D: Record checkpoint and rotate editing cycle
+            S-->>H: Return saved status, snapshot ID, and publication receipt
+        else Disk install succeeded but checkpoint failed
+            S-->>H: Return partial status and publication receipt, no confirmed checkpoint ID
+        end
+    end

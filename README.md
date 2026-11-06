@@ -144,13 +144,7 @@ The end-to-end benchmark evaluates editing performance across 6 test conditions 
 | **16.2% Faster** | **42.7% Fewer Calls** | **0 Separate Calls** | **100.0%** |
 | (296.7s vs. 354.2s pooled mean) | (32.0 vs. 55.8 calls per task) | (Agent-owned SAVE vs. 20 host calls) | (90/90 files exact, 360/360 checks) |
 
-```mermaid
-xychart-beta
-    title "Mean Verified Flow Duration by Environment and Editing Model"
-    x-axis ["Git Native", "Git Structural", "Git Workspace", "Non-Git Native", "Non-Git Structural", "Non-Git Workspace"]
-    y-axis "Verified Duration (Seconds)" 0 --> 400
-    bar [341, 286, 305, 368, 299, 289]
-```
+![Mean Verified Flow Duration by Environment and Editing Model](docs/assets/diagrams/benchmark-duration.svg)
 
 *Chart values are rounded to the nearest second. The benchmark summary below provides exact means and medians.*
 
