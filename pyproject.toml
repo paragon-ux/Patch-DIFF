@@ -7,7 +7,8 @@ name = "patchdiff-mcp"
 version = "0.1.0"
 description = "MCP-first PatchDIFF backend"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.13,<2.0",
@@ -24,6 +25,9 @@ test = [
     "jsonschema>=4,<5",
     "pytest>=9.0.3,<10.0",
 ]
+
+[project.scripts]
+patchdiff-mcp = "app.mcp.external_adapter:main"
 
 [project.urls]
 Repository = "https://github.com/paragon-ux/Patch-DIFF"

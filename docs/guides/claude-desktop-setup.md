@@ -9,15 +9,16 @@ install the wheel and migrate your PostgreSQL 16 database as shown in the
 
 Open Claude Desktop settings and choose **Developer → Edit Config**.
 Add an entry under `mcpServers`, preserving any existing entries.
-Use the absolute path to the installed environment's Python interpreter,
+Use the absolute path to the installed environment's `patchdiff-mcp` executable
+(or its Python interpreter running `-m app.mcp.external_adapter`),
 the PostgreSQL connection URL and the server's project root.
 
 ```json
 {
   "mcpServers": {
     "patchdiff-workspace": {
-      "command": "/absolute/path/to/venv/bin/python",
-      "args": ["-m", "app.mcp.external_adapter"],
+      "command": "/absolute/path/to/venv/bin/patchdiff-mcp",
+      "args": [],
       "env": {
         "PATCHDIFF_MCP_PROFILE": "workspace",
         "PATCHDIFF_DATABASE_URL": "postgresql+psycopg://patchdiff@localhost:5432/patchdiff",
