@@ -45,7 +45,8 @@ nav = [
         { "Concept Paper v6" = "papers/concept-paper-v6.md" },
         { "Formal Transaction Model" = "papers/formal-transaction-model.md" },
         { "Modernization Architecture" = "papers/modernization-architecture.md" },
-        { "Modernization Change Record" = "papers/product-change-record.md" }
+        { "Modernization Change Record" = "papers/product-change-record.md" },
+        { "Workstation & LAN Hub Architecture" = "papers/lan-workstation-appliance.md" }
     ]},
     { "Standards" = [
         { "PR Review Standard" = "standards/pr-review-standard.md" },

@@ -77,3 +77,5 @@ PatchDIFF documentation and public interfaces focus on three core profiles align
    - Standardized advisory verification hooks via `verify_syntax` and `verification_hooks` in `patchdiff_preview` allowing hosts to evaluate simulated buffer AST syntax (Python, JSON, Markdown fence balance) before committing transactions, reporting `validity.semantic`.
 4. **Long-Horizon Multi-Agent Contention Studies** (Implemented):
    - Empirical evaluation across concurrent disjoint workloads, hotspot file contention with lineage retries, and circular multi-target refactorings, proving 100% recovery rates, zero deadlocks, and verified cryptographic replay ([docs/benchmarks/multi-agent-contention.md](benchmarks/multi-agent-contention.md)).
+5. **Workstation and LAN Hub Reference Architecture with Automated Log Compaction** (Specified):
+   - Blueprint for running PatchDIFF as an agent-deployed workstation or team LAN appliance backed by PostgreSQL, enabling zero-client-footprint multi-agent coordination with automated log compaction on N SAVE cycles ([docs/papers/lan-workstation-appliance.md](papers/lan-workstation-appliance.md)).
