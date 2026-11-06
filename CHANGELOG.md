@@ -4,7 +4,7 @@ All notable features of `patchdiff-mcp` are documented in this file.
 
 The format follows Keep a Changelog.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-06
 
 ### Changed
 
