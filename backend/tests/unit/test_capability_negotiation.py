@@ -210,3 +210,31 @@ def test_invalid_capabilities_structure_rejected():
         "params": {"capabilities": {"patchdiff": "not_an_object"}},
     })
     assert res2["error"]["code"] == -32602
+
+
+def test_capability_negotiation_profile_immutability():
+    # Adapter starts with profile "editor" (7 tools)
+    adapter = ExternalMCPAdapter(profile="editor")
+    assert adapter.profile == "editor"
+    assert len(adapter.list_tools()) == 7
+
+    response = adapter.handle_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {
+                "patchdiff": {
+                    "profile": "observed",
+                    "supported_formats": ["patchdiff-tx/1"],
+                }
+            },
+        },
+    })
+    pd = response["result"]["capabilities"]["patchdiff"]
+    # Profile negotiation over wire is ignored; profile remains strictly immutable
+    assert "profile" not in pd
+    assert adapter.profile == "editor"
+    assert len(adapter.list_tools()) == 7
+

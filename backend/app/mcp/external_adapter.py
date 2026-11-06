@@ -500,11 +500,17 @@ def _check_workspace_startup(profile: str) -> None:
         raise SystemExit("PatchDIFF workspace startup: apply the installed Alembic migrations before connecting.")
 
 
-def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
+def serve_stdio(
+    input_stream: TextIO = sys.stdin,
+    output_stream: TextIO = sys.stdout,
+    *,
+    profile: str | None = None,
+    response_mode: str | None = None,
+) -> None:
     """Serve newline-delimited JSON-RPC requests over stdio."""
 
     from app.services.waymark_worker import serving_worker_owner
-    adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter(profile=profile, response_mode=response_mode)
     if adapter.profile in _WORKSPACE_PROFILES:
         _check_workspace_startup(adapter.profile)
     worker_owner = nullcontext() if adapter.profile == "workspace" else serving_worker_owner(prewarm=True)
@@ -528,19 +534,134 @@ def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.st
                 output_stream.flush()
 
 
+def run_doctor() -> int:
+    """Diagnose the host runtime, database connectivity, and environment health."""
+    import platform
+    import shutil
+    import subprocess
+    from pathlib import Path
+    from app.core.config import settings, get_workspace_root
+    from app.services.waymark_adapter import WAYMARK_INTEGRATION_DIR
+
+    print("=" * 60)
+    print("PatchDIFF System & Environment Doctor")
+    print("=" * 60)
+
+    issues = 0
+
+    # 1. Platform & OS
+    sys_name = platform.system()
+    is_wsl = False
+    if sys_name == "Linux":
+        try:
+            with open("/proc/version", "r") as f:
+                if "microsoft" in f.read().lower():
+                    is_wsl = True
+        except OSError:
+            pass
+
+    platform_desc = f"{sys_name} (WSL2)" if is_wsl else sys_name
+    print(f"\n[+] OS & Platform: {platform_desc}")
+
+    posix_io_ok = os.name == "posix" and hasattr(os, "O_NOFOLLOW") and hasattr(os, "O_DIRECTORY")
+    if posix_io_ok:
+        print("    - Filesystem POSIX Descriptor I/O: Supported (openat/O_NOFOLLOW/flock ready)")
+    else:
+        print("    - Filesystem POSIX Descriptor I/O: Not supported natively on this OS.")
+        print("      (Note: 'observed_workspace' and 'workspace' sync require WSL2 or Linux/Docker.")
+        print("       Inline profiles 'observed_v2', 'editor', and 'full' work natively on Windows.)")
+        if sys_name == "Windows":
+            issues += 1
+
+    # 2. Workspace Root
+    ws_root = get_workspace_root()
+    if ws_root:
+        if Path(ws_root).is_dir():
+            print(f"\n[+] Workspace Root: {ws_root} (Verified directory)")
+        else:
+            print(f"\n[!] Workspace Root: {ws_root} (Directory does not exist!)")
+            issues += 1
+    else:
+        print("\n[-] Workspace Root: Unconfigured (set PATCHDIFF_WORKSPACE_ROOT for workspace sync)")
+
+    # 3. PostgreSQL Database
+    db_url = settings.database_url
+    masked_url = db_url
+    if "@" in db_url:
+        prefix, host_part = db_url.split("@", 1)
+        proto = prefix.split("://")[0]
+        masked_url = f"{proto}://***:***@{host_part}"
+
+    print(f"\n[+] Database URL: {masked_url}")
+    try:
+        current = database_schema_is_current()
+        if current:
+            print("    - Connection: Successful (PostgreSQL connected)")
+            print("    - Schema: Up to date (Alembic head revision installed)")
+        else:
+            print("    - Connection: Successful")
+            print("    - Schema: Out of date! Run 'patchdiff-mcp --migrate' to upgrade.")
+            issues += 1
+    except Exception as exc:
+        print(f"    - Connection: Failed ({exc})")
+        print("      Tip: Ensure PostgreSQL is running (native or 'docker compose up -d').")
+        issues += 1
+
+    # 4. Waymark Discovery Worker
+    print("\n[+] Waymark AST Structural Worker:")
+    node_bin = os.getenv("PATCHDIFF_NODE_BINARY", "node")
+    node_path = shutil.which(node_bin)
+    if node_path:
+        try:
+            res = subprocess.run([node_path, "--version"], capture_output=True, text=True, check=True)
+            node_ver = res.stdout.strip()
+            print(f"    - Node.js binary: {node_path} ({node_ver})")
+        except Exception:
+            print(f"    - Node.js binary: {node_path} (Failed to execute)")
+            issues += 1
+    else:
+        print(f"    - Node.js binary: Not found on PATH! ('{node_bin}')")
+        issues += 1
+
+    worker_script = WAYMARK_INTEGRATION_DIR / "worker.mjs"
+    node_modules = WAYMARK_INTEGRATION_DIR / "node_modules"
+    if worker_script.is_file() and node_modules.is_dir():
+        print(f"    - Waymark engine: Installed at {WAYMARK_INTEGRATION_DIR}")
+    else:
+        print(f"    - Waymark engine: Incomplete installation at {WAYMARK_INTEGRATION_DIR}")
+        print("      Tip: Run 'npm --prefix integrations/waymark ci --omit=dev'")
+        issues += 1
+
+    # 5. Default MCP Server Profile
+    default_profile = os.getenv("PATCHDIFF_MCP_PROFILE", "observed_workspace")
+    print(f"\n[+] Default Server Profile: {default_profile}")
+
+    print("\n" + "=" * 60)
+    if issues == 0:
+        print("RESULT: ALL CHECKS PASSED. PatchDIFF is ready for MCP connections.")
+    else:
+        print(f"RESULT: {issues} issue(s) detected. See guidance above.")
+    print("=" * 60)
+    return 0 if issues == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> None:
     args = sys.argv[1:] if argv is None else argv
     if args and args[0] in ("--help", "-h"):
+        expected_profiles = ", ".join(sorted(MCP_PROFILES))
         print("PatchDIFF MCP Server (patchdiff-mcp)\n\n"
               "Usage:\n"
-              "  patchdiff-mcp             Run stdio MCP server (default)\n"
-              "  patchdiff-mcp --migrate   Run database migrations to latest head revision\n"
-              "  patchdiff-mcp --version   Show server version\n"
-              "  patchdiff-mcp --help      Show this help message\n\n"
+              "  patchdiff-mcp                   Run stdio MCP server (default profile: observed_workspace)\n"
+              "  patchdiff-mcp doctor            Diagnose environment, database, and dependencies\n"
+              "  patchdiff-mcp --profile <name>  Run stdio MCP server with explicit profile\n"
+              "  patchdiff-mcp --migrate         Run database migrations to latest head revision\n"
+              "  patchdiff-mcp --version         Show server version\n"
+              "  patchdiff-mcp --help            Show this help message\n\n"
               "Environment variables:\n"
-              "  PATCHDIFF_DATABASE_URL    PostgreSQL connection URL\n"
-              "  PATCHDIFF_MCP_PROFILE     MCP tool profile (default: full, or observed_workspace, workspace)\n"
-              "  PATCHDIFF_WORKSPACE_ROOT  Workspace root path for file operations\n")
+              "  PATCHDIFF_DATABASE_URL          PostgreSQL connection URL\n"
+              "  PATCHDIFF_MCP_PROFILE           MCP tool profile (default: observed_workspace)\n"
+              "  PATCHDIFF_WORKSPACE_ROOT        Workspace root path for file operations\n\n"
+              f"Available profiles: {expected_profiles}\n")
         return
     if args and args[0] in ("--version", "-v"):
         print(f"patchdiff-mcp {SERVER_VERSION}")
@@ -555,9 +676,40 @@ def main(argv: list[str] | None = None) -> None:
         command.upgrade(cfg, "head")
         print("PatchDIFF database migrations upgraded to head.")
         return
+    if args and args[0] in ("doctor", "--doctor"):
+        sys.exit(run_doctor())
+
+    profile = None
+    response_mode = None
+    idx = 0
+    while idx < len(args):
+        arg = args[idx]
+        if arg in ("--profile", "-p") and idx + 1 < len(args):
+            profile = args[idx + 1]
+            idx += 2
+        elif arg.startswith("--profile="):
+            profile = arg.split("=", 1)[1]
+            idx += 1
+        elif arg in ("--response-mode", "-m") and idx + 1 < len(args):
+            response_mode = args[idx + 1]
+            idx += 2
+        elif arg.startswith("--response-mode="):
+            response_mode = arg.split("=", 1)[1]
+            idx += 1
+        else:
+            idx += 1
+
+    if profile is None and "PATCHDIFF_MCP_PROFILE" not in os.environ:
+        profile = "observed_workspace"
+
     sys.stdin.reconfigure(encoding="utf-8", errors="strict")
     sys.stdout.reconfigure(encoding="utf-8", errors="strict")
-    serve_stdio()
+    kwargs: dict[str, Any] = {}
+    if profile is not None:
+        kwargs["profile"] = profile
+    if response_mode is not None:
+        kwargs["response_mode"] = response_mode
+    serve_stdio(**kwargs)
 
 
 def _dumps(value: Any, **options: Any) -> str:
