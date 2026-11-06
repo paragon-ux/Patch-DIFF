@@ -75,5 +75,5 @@ PatchDIFF documentation and public interfaces focus on three core profiles align
    - Explicit MCP capability-negotiation handshake (`capabilities.patchdiff`) allowing hosts and servers across versions to negotiate supported transaction formats (`tx/1..3`), runtime profiles, and observation features dynamically at connection startup.
 3. **Pre-Commit Semantic Verification Hooks** (Implemented):
    - Standardized advisory verification hooks via `verify_syntax` and `verification_hooks` in `patchdiff_preview` allowing hosts to evaluate simulated buffer AST syntax (Python, JSON, Markdown fence balance) before committing transactions, reporting `validity.semantic`.
-4. **Long-Horizon Multi-Agent Contention Studies**:
-   - Expanding empirical evaluation from isolated tasks to multi-agent concurrent refactoring workloads, measuring conflict recovery rates, latency, and prompt context growth across extended sessions.
+4. **Long-Horizon Multi-Agent Contention Studies** (Implemented):
+   - Empirical evaluation across concurrent disjoint workloads, hotspot file contention with lineage retries, and circular multi-target refactorings, proving 100% recovery rates, zero deadlocks, and verified cryptographic replay ([docs/benchmarks/multi-agent-contention.md](benchmarks/multi-agent-contention.md)).

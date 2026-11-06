@@ -36,6 +36,7 @@ nav = [
     ]},
     { "Benchmarks" = [
         { "Workspace Editing Benchmark" = "benchmarks/workspace-e2e-benchmark.md" },
+        { "Multi-Agent Contention Studies" = "benchmarks/multi-agent-contention.md" },
         { "Verification Test Matrix" = "benchmarks/test-matrix.md" }
     ]},
     { "Papers" = [
