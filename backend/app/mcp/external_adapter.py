@@ -495,7 +495,10 @@ def _check_workspace_startup(profile: str) -> None:
     try:
         validate_workspace_root(get_workspace_root())
     except WorkspaceSyncError as exc:
-        raise SystemExit(f"PatchDIFF workspace startup: {exc}") from None
+        raise SystemExit(
+            f"PatchDIFF workspace startup: {exc}\n"
+            "Tip: For inline editing without a workspace root on this OS, use '--profile observed_v2' or '--profile editor'."
+        ) from None
     if profile == "workspace" and is_strict_observation_mode_enabled():
         raise SystemExit("PatchDIFF workspace startup: strict observation requires an observed profile.")
     if not os.getenv("PATCHDIFF_DATABASE_URL", "").strip():

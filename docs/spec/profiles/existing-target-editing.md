@@ -9,7 +9,7 @@ publish the result.
 
 ## Editor
 
-Use `editor`, the default profile, when one connection needs both exact text
+Use `editor`, the opt-in profile, when one connection needs both exact text
 edits and structural edits on an existing target. Read or search the working
 text and submit guarded `patchdiff_submit_edits` for an exact replacement.
 For a structural edit, call `patchdiff_observe_scope` to obtain a scope receipt

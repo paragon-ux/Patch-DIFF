@@ -70,7 +70,7 @@ PatchDIFF supports multiple editing workflows by configuring the `PATCHDIFF_MCP_
 2. **Host-Orchestrated Structural Editing (`observed_v2`)**: A 5-tool MCP profile providing Abstract Syntax Tree (AST) scope discovery and guarded atomic commits. The host environment retains lifecycle authority, executing separate orchestration calls to initialize targets, save revisions, export files to disk, and verify state.
 3. **Agent-Owned Workspace Editing (`observed_workspace`)**: A 7-tool MCP profile where the editing agent directly owns the complete lifecycle over MCP. The agent imports files (`initialize_target`), discovers and inspects AST scopes (`list_scopes`, `observe_scopes`), commits atomic bundles (`commit_bundle`), and publishes verified edits directly to disk (`save` with `sync_workspace: true`), requiring zero external host lifecycle calls.
 
-Additional profiles include `workspace` (a 5-tool profile for exact text editing without Node.js AST dependencies), `editor` (the default 7-tool profile for existing database targets), and `full` (a 17-tool trusted lifecycle catalog). See the [profile catalog](docs/spec/profiles/index.md) for full details.
+Additional profiles include `workspace` (a 5-tool profile for exact text editing without Node.js AST dependencies), `editor` (the opt-in 7-tool profile for existing database targets), and `full` (an 18-tool trusted lifecycle catalog). See the [profile catalog](docs/spec/profiles/index.md) for full details.
 
 ### Transaction Formats
 

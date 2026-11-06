@@ -23,7 +23,7 @@ Exactly four tools are advertised and callable: patchdiff_read_target,
 patchdiff_find_occurrences, patchdiff_observe_scope and
 patchdiff_submit_observed_operations. SAVE/replay are rejected on this connection;
 the trusted host uses a separate full session for lifecycle work. Existing
-observed (six-tool) and default editor profiles retain their behavior.
+observed (six-tool) and legacy editor profiles retain their behavior.
 
 Provide the published tool contracts through the host's supported schema/context
 mechanism. Direct typed exposure or preloading may depend on the host. When a

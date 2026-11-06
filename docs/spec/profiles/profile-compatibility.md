@@ -33,7 +33,7 @@ PatchDIFF profiles fall into two operational classes:
 | **`unobserved`** | 5 | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 | **`full`** | 18 | ⚠️ Inline only¹| ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported | ✅ Supported |
 
-> ¹ *Note for Bare Windows:* `workspace` and `observed_workspace` require POSIX `fcntl.flock` and descriptor-relative operations. On Windows, run PatchDIFF server inside WSL2 or Docker to use workspace profiles. Inline profiles (`observed_v2`, `editor`, `full`) do not access the host filesystem and run natively on Windows.
+> ¹ *Note for Bare Windows:* Although inline-content `patchdiff_initialize_target` has no POSIX filesystem dependency, the workspace startup preflight check (`_check_workspace_startup`) executes before the MCP handshake and requires POSIX descriptor-relative operations and directory locks (`fcntl.flock`). Because bare Windows cmd/PowerShell lacks these primitives, the server refuses to start in `workspace` or `observed_workspace` profiles even for inline-only use. On Windows, run PatchDIFF inside WSL2 or Docker to use workspace profiles, or specify `--profile observed_v2` or `--profile editor` for native bare Windows inline editing.
 
 ---
 
@@ -253,6 +253,6 @@ volumes:
 | Symptom | Cause | Resolution |
 | :--- | :--- | :--- |
 | `Bind for 0.0.0.0:5432 failed: port is already allocated` | Native PostgreSQL daemon already running on port 5432 | Stop native postgres (`sudo systemctl stop postgresql`) or map Docker to host port `5433:5432`. |
-| `PatchDIFF workspace startup: PATCHDIFF_WORKSPACE_ROOT is not configured` | Server started with default `observed_workspace` without setting workspace directory | Export `PATCHDIFF_WORKSPACE_ROOT="$(pwd)"` or pass `--profile editor` for inline editing. |
+| `PatchDIFF workspace startup: PATCHDIFF_WORKSPACE_ROOT is not configured` | Server started with default `observed_workspace` without setting workspace directory | Export `PATCHDIFF_WORKSPACE_ROOT="$(pwd)"` or pass `--profile observed_v2` / `--profile editor` for inline editing. |
 | Docker Desktop GUI shows `0 containers running` | Containers started under an isolated WSL distro without Docker Desktop integration | Enable **Settings > Resources > WSL Integration** for your specific distro in Docker Desktop. |
 | `ModuleNotFoundError: No module named 'fcntl'` | Running `observed_workspace` or `workspace` directly on bare Windows | Switch to WSL2, Docker, or select an inline profile (`--profile observed_v2` / `--profile editor`). |

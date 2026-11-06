@@ -113,3 +113,14 @@ def test_profile_schema_sizes_are_actual_serialized_tools_list_bytes():
                                    ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
              for profile in MCP_PROFILES}
     assert sizes["unobserved"] < sizes["observed"] < sizes["editor"] < sizes["full"]
+
+
+def test_workspace_startup_unconfigured_root_provides_helpful_tip(monkeypatch):
+    monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "observed_workspace")
+    monkeypatch.delenv("PATCHDIFF_WORKSPACE_ROOT", raising=False)
+    stdout = StringIO()
+    with pytest.raises(SystemExit) as exc_info:
+        external_adapter.serve_stdio(StringIO(), stdout)
+    message = str(exc_info.value)
+    assert "PatchDIFF workspace startup:" in message
+    assert "Tip: For inline editing without a workspace root on this OS, use '--profile observed_v2' or '--profile editor'." in message
