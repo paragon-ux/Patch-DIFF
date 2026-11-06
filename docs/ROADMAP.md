@@ -67,13 +67,13 @@ PatchDIFF documentation and public interfaces focus on three core profiles align
 
 ---
 
-## 3. Forward-Looking Research & Architectural Extensions
+## 3. Forward-Looking Research and Architectural Extensions
 
-1. **Multi-Target Coordinated Transactions**:
-   - Extending `SELECT ... FOR UPDATE` lock ordering across canonical UUID sort order (`target_file_id[]`) to support all-or-nothing multi-file refactoring transactions while preserving per-target replayable ledgers.
-2. **Client/Server Protocol Capability Negotiation**:
-   - Adding an explicit MCP capability-negotiation handshake allowing hosts and servers at different minor versions to negotiate supported transaction formats (`tx/1..3`) and observation features dynamically at connection startup.
-3. **Pre-Commit Semantic Verification Hooks**:
-   - Standardizing post-preview / pre-commit callback hooks so hosts can run syntax linters, typecheckers, or unit tests against `patchdiff_preview` outputs before committing transactions to PostgreSQL.
+1. **Multi-Target Coordinated Transactions** (Implemented):
+   - Deadlock-free `SELECT ... FOR UPDATE` lock ordering across canonical UUID sort order (`target_file_id[]`) supporting all-or-nothing multi-file refactoring transactions via `patchdiff_commit_multi_target` while preserving per-target replayable ledgers.
+2. **Client/Server Protocol Capability Negotiation** (Implemented):
+   - Explicit MCP capability-negotiation handshake (`capabilities.patchdiff`) allowing hosts and servers across versions to negotiate supported transaction formats (`tx/1..3`), runtime profiles, and observation features dynamically at connection startup.
+3. **Pre-Commit Semantic Verification Hooks** (Implemented):
+   - Standardized advisory verification hooks via `verify_syntax` and `verification_hooks` in `patchdiff_preview` allowing hosts to evaluate simulated buffer AST syntax (Python, JSON, Markdown fence balance) before committing transactions, reporting `validity.semantic`.
 4. **Long-Horizon Multi-Agent Contention Studies**:
    - Expanding empirical evaluation from isolated tasks to multi-agent concurrent refactoring workloads, measuring conflict recovery rates, latency, and prompt context growth across extended sessions.

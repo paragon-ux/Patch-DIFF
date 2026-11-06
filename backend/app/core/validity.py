@@ -75,6 +75,7 @@ def validity_levels(
     failure_reason: FailureReason | str | None = None,
     *,
     stage: ValidationStage | str | None = None,
+    semantic: bool | str = NOT_EVALUATED,
 ) -> dict[str, Any]:
     """Return the four-level validity dictionary for an accept or reject outcome.
 
@@ -92,7 +93,7 @@ def validity_levels(
             "protocol_valid": True,
             "transaction_valid": True,
             "task_correct": NOT_EVALUATED,
-            "semantic": NOT_EVALUATED,
+            "semantic": semantic,
         }
 
     if stage_val == ValidationStage.PRECONDITION_GUARD.value:
@@ -129,5 +130,5 @@ def validity_levels(
         "protocol_valid": protocol_valid,
         "transaction_valid": transaction_valid,
         "task_correct": NOT_EVALUATED,
-        "semantic": NOT_EVALUATED,
+        "semantic": semantic,
     }

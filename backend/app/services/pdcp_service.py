@@ -20,7 +20,7 @@ from app.core.hashing import canonical_sha256
 from app.core.canonicalization import canonicalize_text
 from app.core.input_text import invalid_text_paths, is_persistable_text, safe_input_text
 from app.core.result import AcceptedCoreResult, FailureBufferContext, RejectedCoreResult
-from app.core.validity import ValidationStage, validity_levels
+from app.core.validity import NOT_EVALUATED, ValidationStage, validity_levels
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, RUNTIME_VERSION, resolve_runtime_profile
 from app.pdcp.applier import apply_pdcp_transaction
 from app.pdcp.observed_batch import (
@@ -362,10 +362,22 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
     if not isinstance(format, str) or format not in fields:
         return {**common, "status": "invalid_argument", "code": "invalid_format", "detail": "Unsupported preview format.",
                 "failure_detail": "Unsupported preview format."}
-    if set(proposal) - fields[format] - {"expected_target_version", "expected_current_hash"}:
+    allowed_meta = {"expected_target_version", "expected_current_hash", "verify_syntax", "verification_hooks"}
+    if set(proposal) - fields[format] - allowed_meta:
         return {**common, "status": "invalid_argument", "code": "irrelevant_proposal_fields",
                 "detail": "Preview fields must belong to the explicit format.",
                 "failure_detail": "Preview fields must belong to the explicit format."}
+    verify_syntax = proposal.get("verify_syntax", False)
+    if not isinstance(verify_syntax, bool):
+        return {**common, "status": "invalid_argument", "code": "invalid_parameter",
+                "detail": "verify_syntax must be a boolean.", "failure_detail": "verify_syntax must be a boolean."}
+    verification_hooks = proposal.get("verification_hooks")
+    if verification_hooks is not None and (
+        not isinstance(verification_hooks, list) or not all(isinstance(h, str) for h in verification_hooks)
+    ):
+        return {**common, "status": "invalid_argument", "code": "invalid_parameter",
+                "detail": "verification_hooks must be a list of strings.",
+                "failure_detail": "verification_hooks must be a list of strings."}
     target_uuid = _try_coerce_uuid(target_file_id)
     if target_uuid is None:
         result = _invalid_target_uuid_result(target_file_id)
@@ -398,9 +410,14 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
                 "diagnostic": {"failure_context": context}, "current_context": context,
                 "current_hash": None, "current_version": None, "before_hash": None, "before_version": None,
                 "after_hash": None}
-    target = SimpleNamespace(target_file_id=observation.target_file_id, target_type=observation.target_type,
-                             current_content=observation.current_content, current_hash=observation.current_hash,
-                             version=observation.current_version)
+    target = SimpleNamespace(
+        target_file_id=observation.target_file_id,
+        target_type=observation.target_type,
+        current_content=observation.current_content,
+        current_hash=observation.current_hash,
+        version=observation.current_version,
+        filename=observation.filename,
+    )
     version, digest = proposal.get("expected_target_version"), proposal.get("expected_current_hash")
     record_args = {"target_file_id": str(target_uuid), "intent": proposal.get("intent"),
                    "expected_target_version": version, "expected_current_hash": digest}
@@ -444,9 +461,35 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
                   failed_change_id=None)
     if isinstance(result, AcceptedCoreResult):
         envelope = bounded_warnings(result.warnings)
-        return {**common, "change_facts": list(result.change_facts), "warnings": warning_strings(envelope["warnings"]),
-                "warning_details": envelope["warnings"], "warning_count": envelope["warning_count"],
-                "warnings_truncated": envelope["warnings_truncated"]}
+        verification = None
+        semantic_val = NOT_EVALUATED
+        if verify_syntax or verification_hooks:
+            from app.services.verification_service import run_verification_hooks
+
+            verification = run_verification_hooks(
+                result.target_content,
+                target_type=target.target_type,
+                filename=target.filename,
+                verify_syntax=verify_syntax,
+                hooks=verification_hooks,
+            )
+            semantic_val = verification["passed"]
+        common["validity"] = validity_levels(
+            result.status,
+            stage=ValidationStage.ACCEPTED,
+            semantic=semantic_val,
+        )
+        payload = {
+            **common,
+            "change_facts": list(result.change_facts),
+            "warnings": warning_strings(envelope["warnings"]),
+            "warning_details": envelope["warnings"],
+            "warning_count": envelope["warning_count"],
+            "warnings_truncated": envelope["warnings_truncated"],
+        }
+        if verification is not None:
+            payload["verification"] = verification
+        return payload
     diagnostic = dict(result.diagnostic or {})
     diagnostic["failure_context"] = available_context(
         result.failure_buffer or FailureBufferContext.capture(target.current_content),
