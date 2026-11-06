@@ -7,7 +7,7 @@ from app.services.pdcp_service import preview, submit_edits
 from app.services.preview_evidence import MAX_PREVIEW_BYTES, json_bytes
 from app.storage.db import SessionLocal
 from app.storage.models import Projects
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target
 from backend.tests.integration.test_pass_b_submission_preview import table_snapshot
 
 
@@ -41,27 +41,6 @@ def test_many_preview_facts_are_bounded_without_changing_full_submit_facts_or_pe
         accepted = submit_edits(session, **arguments)
     assert accepted.status == "accepted" and len(accepted.change_facts) == 40
     assert observed["change_facts"] == list(accepted.change_facts[:32])
-
-
-@pytest.mark.parametrize("absent", [False, True])
-def test_oversized_legacy_change_identity_is_omitted_whole_without_changing_verdict_or_database(absent):
-    target_id = create_target("old")
-    giant_id = "identity_" + "\U0001f31f" * 2000
-    content = pdcp_for(target_id, ("absent" if absent else "old", "new"))
-    content = content.replace("# change_id: chg_001", "# change_id: " + giant_id)
-    before = table_snapshot()
-    with SessionLocal() as session:
-        result = preview(session, target_file_id=target_id, format="0.2.3", pdcp_content=content, expected_target_version=0)
-    assert json_bytes(result) <= MAX_PREVIEW_BYTES and table_snapshot() == before
-    if absent:
-        assert result["status"] == "rejected" and result["failure_reason"] == "match_absent"
-        assert result["failed_change_id"] is None
-        assert result["evidence_omissions"]["failed_change_id"] == "code_points_limit"
-        assert "change_facts" not in result
-    else:
-        assert result["status"] == "accepted" and result["after_hash"] == canonical_sha256("new")
-        assert result["total_change_count"] == 1 and result["returned_fact_count"] == 0
-        assert result["change_facts"] == [] and result["change_facts_omission_reason"] == "fact_byte_limit"
 
 
 def test_oversized_raw_guard_diagnostic_keeps_bounded_context_and_observed_identity_without_audit():

@@ -10,7 +10,7 @@ from app.core.result import FailureBufferContext, RejectedCoreResult
 from app.core.hashing import canonical_sha256
 from app.pdcp.applier import apply_pdcp_transaction
 from app.services.rejection_context import available_context, unavailable_context
-from backend.tests.unit.test_transaction_applier import parsed_pdcp
+from backend.tests.unit.test_transaction_applier import parsed_edits
 
 
 def encoded(value):
@@ -59,12 +59,12 @@ def test_unavailable_has_no_fabricated_text_or_identity(reason):
 @pytest.mark.parametrize("initial,changes,expected,prior,reason", [
     ("alpha", [("missing", "x", None)], "alpha", 0, "match_absent"),
     ("alpha alpha", [("alpha", "x", None)], "alpha alpha", 0, "match_ambiguous"),
-    ("alpha", [("alpha", "x", {"occurrence_index": "2"})], "alpha", 0, "disambiguation_invalid"),
+    ("alpha", [("alpha", "x", {"occurrence_index": 2})], "alpha", 0, "disambiguation_invalid"),
     ("alpha beta", [("alpha", "ALPHA", None), ("alpha", "x", None)], "ALPHA beta", 1, "sequential_match_invalid"),
     ("alpha beta", [("alpha", "ALPHA", None), ("absent", "x", None)], "ALPHA beta", 1, "match_absent"),
 ])
 def test_applier_captures_actual_failed_buffer(initial, changes, expected, prior, reason):
-    result = apply_pdcp_transaction(initial, parsed_pdcp(*changes))
+    result = apply_pdcp_transaction(initial, parsed_edits(*changes))
     assert isinstance(result, RejectedCoreResult)
     assert result.failure_reason.value == reason
     assert result.before_hash == canonical_sha256(initial)
@@ -74,26 +74,20 @@ def test_applier_captures_actual_failed_buffer(initial, changes, expected, prior
 
 def test_applier_never_retains_whole_intermediate_buffer():
     replacement = "\U0001f642" * 10000
-    result = apply_pdcp_transaction("alpha", parsed_pdcp(("alpha", replacement, None), ("missing", "x", None)))
+    result = apply_pdcp_transaction("alpha", parsed_edits(("alpha", replacement, None), ("missing", "x", None)))
     assert result.failure_buffer.text == replacement[:256]
     assert result.failure_buffer.total_chars == 10000
     assert result.failure_buffer.prior_changes == 1
 
 
-def test_applier_captures_header_and_manifest_hash_failures():
-    parsed = parsed_pdcp(("alpha", "new", None), header_hash="0" * 64)
+def test_applier_captures_scope_hash_failure():
+    parsed = parsed_edits(("alpha", "new", None), header_hash="0" * 64)
     result = apply_pdcp_transaction("alpha", parsed)
     assert result.failure_buffer == FailureBufferContext("alpha", 5, 0)
-    parsed = parsed_pdcp(("alpha", "new", None), ("beta", "x", None))
-    fields = {**parsed.changes[1].manifest.fields, "target_hash": "0" * 64}
-    change = replace(parsed.changes[1], manifest=replace(parsed.changes[1].manifest, fields=fields))
-    parsed = replace(parsed, changes=(parsed.changes[0], change))
-    result = apply_pdcp_transaction("alpha beta", parsed)
-    assert result.failure_buffer == FailureBufferContext("new beta", 8, 1)
 
 
 def test_empty_match_core_guard_keeps_actual_failure_buffer():
-    parsed = parsed_pdcp(("alpha", "new", None))
+    parsed = parsed_edits(("alpha", "new", None))
     parsed = replace(parsed, changes=(replace(parsed.changes[0], match_payload=""),))
     result = apply_pdcp_transaction("alpha", parsed)
     assert result.failure_reason.value == "block_malformed"

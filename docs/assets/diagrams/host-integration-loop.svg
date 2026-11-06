@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="pele pele-sequence" viewBox="0 0 651 542" width="651" height="542" style="max-width:100%;height:auto;--_bg:var(--pele-bg,#fff);--_fg:var(--pele-fg,#1f1f1f);--_m:var(--pele-muted,#6e6e6e);--_l:var(--pele-line,#1f1f1f);--_s:var(--pele-surface,#f3f3f3);--_a:var(--pele-surface-alt,#e6e6e6);--_b:var(--pele-border,#8a8a8a);--_c:var(--pele-accent,#5b7bd5);color:var(--_fg);--_r:var(--pele-radius,4px);--_hw:var(--pele-heading-weight,bold);--_fm:var(--pele-font-mono,monospace);font:16px sans-serif;letter-spacing:normal;word-spacing:normal;text-transform:none;direction:ltr;font-family:var(--pele-font,sans-serif)" fill="var(--_fg)" role="graphics-document document" aria-roledescription="sequence">
+  <style>
+    :root {
+      --pele-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      --pele-bg: #ffffff;
+      --pele-fg: #1f2328;
+      --pele-muted: #656d76;
+      --pele-line: #57606a;
+      --pele-surface: #f6f8fa;
+      --pele-surface-alt: #eaeef2;
+      --pele-border: #d0d7de;
+      --pele-accent: #0969da;
+      --pele-series-1: #0969da;
+      --pele-series-2: #1a7f37;
+      --pele-series-3: #9a6700;
+      --pele-series-4: #8250df;
+      --pele-series-5: #cf222e;
+      --pele-series-6: #bf3989;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --pele-bg: #0d1117;
+        --pele-fg: #e6edf3;
+        --pele-muted: #8b949e;
+        --pele-line: #8b949e;
+        --pele-surface: #161b22;
+        --pele-surface-alt: #21262d;
+        --pele-border: #30363d;
+        --pele-accent: #2f81f7;
+        --pele-series-1: #2f81f7;
+        --pele-series-2: #3fb950;
+        --pele-series-3: #d29922;
+        --pele-series-4: #a371f7;
+        --pele-series-5: #f85149;
+        --pele-series-6: #db61a2;
+      }
+    }
+  </style>
+<g transform="translate(40.89,8)"><g class="pele-lifelines" fill="none" stroke="var(--_b)"><path class="pele-lifeline" data-id="U" d="M0,44V482"/><path class="pele-lifeline" data-id="H" d="M136.24,44V482"/><path class="pele-lifeline" data-id="P" d="M547.64,44V482"/></g><g class="pele-frames" font-size="14" stroke="var(--_b)"><g class="pele-frame pele-frame-alt"><rect x="116.24" y="210" width="451.4" height="252" fill="none" style="rx:var(--_r)"/><path d="M116.24,318H567.64" stroke-dasharray="4 4"/><rect x="121.24" y="322" width="63.58" height="17" rx="3" fill="var(--_bg)" stroke="none"/><text class="pele-frame-label" fill="var(--_m)" stroke="none" x="153.03" y="335.4" text-anchor="middle">[rejected]</text><rect x="116.24" y="210" width="28" height="20" fill="var(--_s)" style="rx:var(--_r)"/><text class="pele-frame-kind" x="130.24" y="224.2" text-anchor="middle" font-size="12" font-weight="var(--_hw)" fill="var(--_m)" stroke="none">alt</text><text class="pele-frame-label" fill="var(--_m)" stroke="none" x="184.54" y="225.4" text-anchor="middle">[accepted]</text></g></g><g class="pele-edges" fill="none" stroke="var(--_l)" stroke-linecap="round"><g class="pele-edge pele-message" data-id="i0"><path d="M0,87H129.24"/><path class="pele-marker" d="M136.24,87L128.24,90.36L128.24,83.64Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i1"><path d="M136.24,124H540.64"/><path class="pele-marker" d="M547.64,124L539.64,127.36L539.64,120.64Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i2"><path d="M547.64,161H143.24" stroke-dasharray="4 4"/><path class="pele-marker" d="M136.24,161L144.24,157.64L144.24,164.36Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i3"><path d="M136.24,198H540.64"/><path class="pele-marker" d="M547.64,198L539.64,201.36L539.64,194.64Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i5"><path d="M547.64,270H143.24" stroke-dasharray="4 4"/><path class="pele-marker" d="M136.24,270L144.24,266.64L144.24,273.36Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i6"><path d="M136.24,284H158.24A6,6 0 0 1 164.24,290V300A6,6 0 0 1 158.24,306H143.24"/><path class="pele-marker" d="M136.24,306L144.24,302.64L144.24,309.36Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i8"><path d="M547.64,376H143.24" stroke-dasharray="4 4"/><path class="pele-marker" d="M136.24,376L144.24,372.64L144.24,379.36Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i9"><path d="M136.24,413H540.64"/><path class="pele-marker" d="M547.64,413L539.64,416.36L539.64,409.64Z" fill="var(--_l)" stroke="none"/></g><g class="pele-edge pele-message" data-id="i10"><path d="M136.24,450H540.64"/><path class="pele-marker" d="M547.64,450L539.64,453.36L539.64,446.64Z" fill="var(--_l)" stroke="none"/></g></g><g class="pele-edge-labels" font-size="14"><g class="pele-edge-label" data-id="i0"><text x="68.12" y="77.4" text-anchor="middle">edit request</text></g><g class="pele-edge-label" data-id="i1"><text x="341.94" y="114.4" text-anchor="middle">patchdiff_find_occurrences / patchdiff_read_target</text></g><g class="pele-edge-label" data-id="i2"><text x="341.94" y="151.4" text-anchor="middle">version, current_hash, exact spans</text></g><g class="pele-edge-label" data-id="i3"><text x="341.94" y="188.4" text-anchor="middle">patchdiff_submit_edits (guard + edits)</text></g><g class="pele-edge-label" data-id="i5"><text x="341.94" y="260.4" text-anchor="middle">accepted, new version, evidence, warnings, validity</text></g><g class="pele-edge-label" data-id="i6"><text x="332.69" y="299.9" text-anchor="middle">run tests / review (task correctness is the host's job)</text></g><g class="pele-edge-label" data-id="i8"><text x="341.94" y="366.4" text-anchor="middle">failure_reason, diagnostic, pdcp_log_id, current version/hash</text></g><g class="pele-edge-label" data-id="i9"><text x="341.94" y="403.4" text-anchor="middle">fresh read / find_occurrences</text></g><g class="pele-edge-label" data-id="i10"><text x="341.94" y="440.4" text-anchor="middle">patchdiff_submit_edits (parent_pdcp_log_id = rejected log)</text></g></g><g class="pele-nodes"><g class="pele-node pele-actor pele-actor-participant pele-actor-footer" data-id="U"><rect x="-32.89" y="482" width="65.78" height="44" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="509.6" text-anchor="middle">User</text></g><g class="pele-node pele-actor pele-actor-participant pele-actor-footer" data-id="H"><rect x="72.89" y="482" width="126.7" height="44" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="136.24" y="509.6" text-anchor="middle">Host + model</text></g><g class="pele-node pele-actor pele-actor-participant pele-actor-footer" data-id="P"><rect x="493.41" y="482" width="108.46" height="44" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="547.64" y="509.6" text-anchor="middle">PatchDIFF</text></g><g class="pele-node pele-actor pele-actor-participant" data-id="U"><rect x="-32.89" y="0" width="65.78" height="44" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="0" y="27.6" text-anchor="middle">User</text></g><g class="pele-node pele-actor pele-actor-participant" data-id="H"><rect x="72.89" y="0" width="126.7" height="44" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="136.24" y="27.6" text-anchor="middle">Host + model</text></g><g class="pele-node pele-actor pele-actor-participant" data-id="P"><rect x="493.41" y="0" width="108.46" height="44" fill="var(--_s)" stroke="var(--_b)" style="rx:var(--_r)"/><text class="pele-label" x="547.64" y="27.6" text-anchor="middle">PatchDIFF</text></g></g></g></svg>

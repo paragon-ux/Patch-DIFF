@@ -12,7 +12,7 @@ from app.storage.models import (
     EditingCycles,
     TargetSnapshots,
 )
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import edit_pairs
 
 
 def test_mcp_save_creates_snapshot_cycle_transition_without_target_content_mutation() -> None:
@@ -24,9 +24,9 @@ def test_mcp_save_creates_snapshot_cycle_transition_without_target_content_mutat
     )
     target_id = upload["target_file_id"]
     registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("old", "new")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")),
     )
 
     before = registry.call("patchdiff_get_target", target_file_id=target_id)
@@ -68,9 +68,9 @@ def test_mcp_replay_reconstructs_hash_and_ignores_current_pdcp_and_manifest_ledg
     )
     target_id = upload["target_file_id"]
     registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("old", "new")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")),
     )
 
     with SessionLocal() as session:
@@ -101,9 +101,9 @@ def test_mcp_export_returns_current_canonical_content_type_version_and_hash() ->
     )
     target_id = upload["target_file_id"]
     registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("old", "new")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")),
     )
 
     exported = registry.call("patchdiff_export_target", target_file_id=target_id)

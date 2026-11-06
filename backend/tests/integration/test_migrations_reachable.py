@@ -1,6 +1,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 import json
+import shutil
+from contextlib import nullcontext
 import uuid
 
 import pytest
@@ -11,12 +13,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from app.core.hashing import canonical_sha256
+from app.core.versions import RUNTIME_VERSION
+from app.pdcp.typed import TYPED_PROTOCOL_VERSION, build_record, canonical_record_json
 from app.services.export_service import export_target
 from app.services.pdcp_service import submit_edits
 from app.services.replay_service import replay_target
 from app.services.target_service import initialize_target
 from app.storage.db import engine
-from backend.tests.integration.helpers import pdcp_for
 
 
 from sqlalchemy import text
@@ -178,7 +181,7 @@ def seed_legacy_target(connection, content="alpha"):
     return SimpleNamespace(target_file_id=target_id, active_editing_cycle_id=cycle_id, current_hash=digest)
 
 
-def seed_legacy_history(connection):
+def seed_legacy_history(connection, *, origin=None):
     # The ORM model tracks head, so legacy rows are written through reflected tables.
     target = seed_legacy_target(connection)
     metadata = MetaData()
@@ -186,24 +189,30 @@ def seed_legacy_history(connection):
     ledger = Table("append_only_manifest_ledger", metadata, autoload_with=connection)
     targets = Table("cloud_target_files", metadata, autoload_with=connection)
     accepted_id, rejected_id = uuid.uuid4(), uuid.uuid4()
-    accepted_content = pdcp_for(target.target_file_id, ("alpha", "beta"))
-    rejected_content = pdcp_for(target.target_file_id, ("absent", "ignored"))
-    common = dict(target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id, submission_source="migration_fixture", protocol_version="0.2.3", runtime_version="patchdiff-mvp-0.1.0", change_count=1)
+    def record(match, version):
+        return canonical_record_json(build_record(
+            target_file_id=str(target.target_file_id), intent="Update text.",
+            edits=[{"match": match, "replace": "beta"}],
+            expected_target_version=version, expected_current_hash=None,
+        ))
+    accepted_content = record("alpha", 0)
+    rejected_content = record("absent", 1)
+    common = dict(target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id, submission_source="migration_fixture", protocol_version=TYPED_PROTOCOL_VERSION, runtime_version=RUNTIME_VERSION, change_count=1)
     connection.execute(logs.insert().values(**common, pdcp_log_id=accepted_id, pdcp_content=accepted_content, pdcp_content_hash=canonical_sha256(accepted_content), status="accepted", before_version=0, after_version=1, before_hash=target.current_hash, after_hash=canonical_sha256("beta")))
     connection.execute(logs.insert().values(**common, pdcp_log_id=rejected_id, pdcp_content=rejected_content, pdcp_content_hash=canonical_sha256(rejected_content), status="rejected", failure_reason="match_absent", failure_detail="MATCH text was not found.", before_version=1, before_hash=canonical_sha256("beta")))
-    connection.execute(ledger.insert().values(manifest_entry_id=uuid.uuid4(), target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id, pdcp_log_id=accepted_id, change_index=1, change_id="chg_001", intent="Update text.", input_state="Old text exists.", output_state="New text exists.", affected_region="example", user_visible_change="Text changes.", risk="low"))
+    connection.execute(ledger.insert().values(manifest_entry_id=uuid.uuid4(), target_file_id=target.target_file_id, editing_cycle_id=target.active_editing_cycle_id, pdcp_log_id=accepted_id, change_index=1, change_id="chg_001", intent="Update text.", input_state="Old text exists.", output_state="New text exists.", affected_region="example", user_visible_change="Text changes.", risk="low", **({"origin": origin} if origin is not None else {})))
     connection.execute(targets.update().where(targets.c.target_file_id == target.target_file_id).values(current_content="beta", current_hash=canonical_sha256("beta"), version=1, latest_accepted_pdcp_log_id=accepted_id))
     connection.commit()
     return target.target_file_id
 
 
-def test_populated_legacy_upgrade_downgrade_upgrade_preserves_history(isolated_migrations):
+def test_populated_legacy_roundtrip_preserves_history_before_typed_only_boundary(isolated_migrations):
     config, connection = isolated_migrations
     command.upgrade(config, "20260510_0001")
     target_id = seed_legacy_history(connection)
     baseline = snapshot(connection)
     connection.commit()
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261027_0005")
     assert_legacy_preserved(connection, baseline)
     assert connection.scalar(text("SELECT origin FROM append_only_manifest_ledger")) == "pdcp_manifest"
     assert connection.scalar(text("SELECT client_request_id FROM append_only_pdcp_logs LIMIT 1")) is None
@@ -211,23 +220,28 @@ def test_populated_legacy_upgrade_downgrade_upgrade_preserves_history(isolated_m
     command.downgrade(config, "20260510_0001")
     assert_legacy_preserved(connection, baseline)
     connection.commit()
-    command.upgrade(config, "head")
+    command.upgrade(config, "20261027_0005")
     assert_legacy_preserved(connection, baseline)
     with Session(bind=connection) as session:
         replay = replay_target(session, target_file_id=target_id)
         assert replay.status == "success" and replay.materialized_state_matches
-        assert replay.reconstructed_content == "beta" and replay.reconstructed_version == 1
 
 
-def test_live_migration_refuses_downgrade_when_typed_rows_exist(isolated_migrations):
+@pytest.mark.parametrize("status", ["accepted", "rejected"])
+def test_live_migration_refuses_downgrade_when_typed_evidence_exists(isolated_migrations, status):
     config, connection = isolated_migrations
     command.upgrade(config, "head")
     assert connection.scalar(text("SELECT count(*) FROM append_only_manifest_ledger")) == 0
     connection.commit()
     with Session(bind=connection) as session:
         target = initialize_target(session, filename="typed.txt", content="alpha", target_type="text/plain")
-        accepted = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=0, intent="Create typed history", edits=[{"match": "alpha", "replace": "beta"}])
-        assert accepted.status == "accepted"
+        result = submit_edits(
+            session, target_file_id=target.target_file_id, expected_target_version=0,
+            intent="Create typed history",
+            edits=[{"match": "alpha" if status == "accepted" else "absent", "replace": "beta"}],
+            client_request_id="migration-rejection" if status == "rejected" else None,
+        )
+        assert result.status == status
     # Simulate a typed target created before 0003 so only the 0002 refusal is exercised.
     connection.execute(text("UPDATE cloud_target_files SET source_line_endings = NULL"))
     connection.commit()
@@ -236,9 +250,10 @@ def test_live_migration_refuses_downgrade_when_typed_rows_exist(isolated_migrati
     baseline = snapshot(connection)
     revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
     assert revision == "20261020_0002"
-    assert connection.scalar(text("SELECT origin FROM append_only_manifest_ledger")) == "typed"
+    origin = connection.scalar(text("SELECT origin FROM append_only_manifest_ledger"))
+    assert origin == ("typed" if status == "accepted" else None)
     connection.commit()
-    with pytest.raises(Exception, match="Cannot downgrade 20261020_0002: typed ledger rows exist"):
+    with pytest.raises(Exception, match="Cannot downgrade 20261020_0002: typed audit evidence exists"):
         command.downgrade(config, "20260510_0001")
     connection.rollback()
     assert connection.scalar(text("SELECT version_num FROM alembic_version")) == revision
@@ -253,7 +268,7 @@ def test_live_migration_refuses_downgrade_when_typed_rows_exist(isolated_migrati
 def test_populated_0002_upgrade_downgrade_upgrade_through_0003_preserves_history(isolated_migrations):
     config, connection = isolated_migrations
     command.upgrade(config, "20261020_0002")
-    target_id = seed_legacy_history(connection)
+    target_id = seed_legacy_history(connection, origin="typed")
     baseline = snapshot(connection)
     connection.commit()
     command.upgrade(config, "head")
@@ -369,4 +384,164 @@ def test_live_0004_downgrade_refuses_when_scope_observations_exist(isolated_migr
     with pytest.raises(Exception, match="Cannot downgrade 20261026_0004: recorded scope observations exist"):
         command.downgrade(config, "20261022_0003")
     connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
+
+
+
+def _base_migration_config(connection, tmp_path):
+    """Use the immutable base 0002, not the migration file being tested.
+
+    The other four migrations are unchanged from base 56d3545d9f4369bc1e57f593dbb71bbd37128b9e.
+    Keeping the old revision here prevents a rewritten historical migration from
+    making an existing-installation regression pass as a fresh-schema test.
+    """
+    original = tmp_path / "base_migrations"
+    shutil.copytree(MIGRATIONS, original, ignore=shutil.ignore_patterns("__pycache__"))
+    (original / "versions" / "20261105_0006_typed_origin.py").unlink()
+    shutil.copyfile(ROOT / "backend/tests/fixtures/migrations/20261020_0002_base.py",
+                    original / "versions/20261020_0002_typed_ledger.py")
+    config = Config(str(original / "alembic.ini"))
+    config.set_main_option("script_location", str(original))
+    config.attributes["connection"] = connection
+    return config
+
+
+def _origin_schema(connection):
+    return (
+        connection.scalar(text(
+            "SELECT column_default FROM information_schema.columns "
+            "WHERE table_schema=current_schema() AND table_name='append_only_manifest_ledger' "
+            "AND column_name='origin'")),
+        connection.scalar(text(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conrelid='append_only_manifest_ledger'::regclass "
+            "AND conname='ck_append_only_manifest_ledger_origin'")),
+    )
+
+
+@pytest.mark.parametrize("intermediate_candidate", [False, True])
+def test_live_additive_origin_migration_upgrades_base_typed_history_and_roundtrips(
+    isolated_migrations, tmp_path, monkeypatch, intermediate_candidate,
+):
+    from app.storage import db
+
+    config, connection = isolated_migrations
+    command.upgrade(_base_migration_config(connection, tmp_path), "head")
     assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261027_0005"
+    assert _origin_schema(connection) == ("'pdcp_manifest'::text", None)
+    connection.commit()
+    with Session(bind=connection) as session:
+        target = initialize_target(session, filename="old-install.txt", content="alpha", target_type="text/plain")
+        accepted = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=0,
+                                intent="Preserve typed accepted evidence", edits=[{"match": "alpha", "replace": "beta"}],
+                                client_request_id="old-install-accepted")
+        rejected = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=1,
+                                intent="Preserve typed rejected evidence", edits=[{"match": "absent", "replace": "beta"}],
+                                client_request_id="old-install-rejected")
+        assert accepted.status == "accepted" and rejected.status == "rejected"
+    if intermediate_candidate:
+        # Also accept databases initialized from the unreleased pre-fix candidate.
+        connection.execute(text("ALTER TABLE append_only_manifest_ledger ALTER COLUMN origin SET DEFAULT 'typed'"))
+        connection.execute(text("ALTER TABLE append_only_manifest_ledger ADD CONSTRAINT ck_append_only_manifest_ledger_origin CHECK (origin = 'typed')"))
+        connection.commit()
+    baseline = snapshot(connection)
+    monkeypatch.setattr(db, "engine", SimpleNamespace(connect=lambda: nullcontext(connection)))
+    assert not db.database_schema_is_current()
+    connection.commit()
+
+    command.upgrade(config, "head")
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
+    expected_schema = ("'typed'::text", "CHECK ((origin = 'typed'::text))")
+    assert _origin_schema(connection) == expected_schema
+    assert snapshot(connection) == baseline
+    assert db.database_schema_is_current()
+    connection.commit()
+    with Session(bind=connection) as session:
+        replay = replay_target(session, target_file_id=target.target_file_id)
+        assert replay.status == "success" and replay.materialized_state_matches
+        recovered = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=0,
+                                 intent="Preserve typed accepted evidence", edits=[{"match": "alpha", "replace": "beta"}],
+                                 client_request_id="old-install-accepted")
+        assert recovered.status == "accepted" and recovered.deduplicated
+        assert recovered.pdcp_log_id == accepted.pdcp_log_id
+        recovered_rejection = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=1,
+                                 intent="Preserve typed rejected evidence", edits=[{"match": "absent", "replace": "beta"}],
+                                 client_request_id="old-install-rejected")
+        assert recovered_rejection.status == "rejected" and recovered_rejection.deduplicated
+        assert recovered_rejection.pdcp_log_id == rejected.pdcp_log_id
+    connection.commit()
+    assert snapshot(connection) == baseline
+    connection.commit()
+
+    command.downgrade(config, "20261027_0005")
+    assert _origin_schema(connection) == ("'pdcp_manifest'::text", None)
+    assert snapshot(connection) == baseline
+    connection.commit()
+    command.upgrade(config, "head")
+    assert _origin_schema(connection) == expected_schema
+    assert snapshot(connection) == baseline
+    connection.commit()
+    with Session(bind=connection) as session:
+        replay = replay_target(session, target_file_id=target.target_file_id)
+        assert replay.status == "success" and replay.materialized_state_matches
+
+
+@pytest.mark.parametrize("origin", ["pdcp_manifest", "unrecognized_origin"])
+def test_live_origin_upgrade_refuses_incompatible_history_without_relabeling(
+    isolated_migrations, tmp_path, origin,
+):
+    config, connection = isolated_migrations
+    command.upgrade(_base_migration_config(connection, tmp_path), "head")
+    seed_legacy_history(connection, origin=origin)
+    baseline = snapshot(connection)
+    schema_before = _origin_schema(connection)
+    connection.commit()
+    with pytest.raises(Exception, match="Cannot upgrade 20261105_0006: non-typed ledger origins exist; audit history was not changed"):
+        command.upgrade(config, "head")
+    connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261027_0005"
+    assert _origin_schema(connection) == schema_before
+    assert snapshot(connection) == baseline
+    assert connection.scalar(text("SELECT origin FROM append_only_manifest_ledger")) == origin
+
+
+def test_live_empty_base_install_upgrade_downgrade_upgrade(isolated_migrations, tmp_path):
+    config, connection = isolated_migrations
+    command.upgrade(_base_migration_config(connection, tmp_path), "head")
+    connection.commit()
+    command.upgrade(config, "head")
+    assert _origin_schema(connection) == ("'typed'::text", "CHECK ((origin = 'typed'::text))")
+    connection.commit()
+    command.downgrade(config, "20260510_0001")
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20260510_0001"
+    connection.commit()
+    command.upgrade(config, "head")
+    assert _origin_schema(connection) == ("'typed'::text", "CHECK ((origin = 'typed'::text))")
+    assert all(not rows for rows in snapshot(connection).values())
+
+
+def test_live_0002_downgrade_preserves_origin_even_without_other_typed_facts(isolated_migrations):
+    config, connection = isolated_migrations
+    command.upgrade(config, "20261020_0002")
+    seed_legacy_history(connection, origin="typed")
+    baseline = snapshot(connection)
+    connection.commit()
+    with pytest.raises(Exception, match="Cannot downgrade 20261020_0002: typed audit evidence exists"):
+        command.downgrade(config, "20260510_0001")
+    connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261020_0002"
+    assert snapshot(connection) == baseline
+
+
+def test_live_fresh_head_enforces_typed_only_origin(isolated_migrations):
+    from sqlalchemy.exc import IntegrityError
+
+    config, connection = isolated_migrations
+    command.upgrade(config, "head")
+    assert _origin_schema(connection) == ("'typed'::text", "CHECK ((origin = 'typed'::text))")
+    connection.commit()
+    with pytest.raises(IntegrityError, match="ck_append_only_manifest_ledger_origin"):
+        seed_legacy_history(connection, origin="pdcp_manifest")
+    connection.rollback()
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
+    assert all(not rows for rows in snapshot(connection).values())

@@ -4,18 +4,18 @@ from app.mcp import tools
 from app.mcp.server import registry
 from app.storage.db import SessionLocal
 from app.storage.models import CloudTargetFiles, CurrentPdcpFiles
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import edit_pairs
 
 
 def test_required_tool_names_are_registered() -> None:
     assert set(registry.names()) == {
         "patchdiff_handle_upload",
         "patchdiff_initialize_target",
-        "patchdiff_build_prompt_context",
-        "patchdiff_submit_pdcp",
-        "patchdiff_get_regeneration_context",
-        "patchdiff_build_regeneration_prompt",
-        "patchdiff_request_regeneration",
+
+
+
+
+
         "patchdiff_get_target",
         "patchdiff_export_target",
         "patchdiff_save",
@@ -50,7 +50,7 @@ def test_upload_initializes_target_through_service() -> None:
         assert target.current_content == "old\n"
 
 
-def test_submit_valid_pdcp_returns_accepted_result_and_current_pdcp_row() -> None:
+def test_submit_valid_edits_returns_accepted_result_and_current_pdcp_row() -> None:
     upload = registry.call(
         "patchdiff_initialize_target",
         filename="example.txt",
@@ -58,9 +58,9 @@ def test_submit_valid_pdcp_returns_accepted_result_and_current_pdcp_row() -> Non
         content_type="text/plain",
     )
     submit = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=upload["target_file_id"],
-        pdcp_content=pdcp_for(upload["target_file_id"], ("old", "new")),
+        intent="Update text", edits=edit_pairs(("old", "new")),
         expected_target_version=0,
     )
     assert submit["status"] == "accepted"
@@ -73,7 +73,7 @@ def test_submit_valid_pdcp_returns_accepted_result_and_current_pdcp_row() -> Non
         assert current.status == "accepted"
 
 
-def test_submit_invalid_pdcp_returns_rejected_diagnostics() -> None:
+def test_submit_invalid_edits_returns_rejected_diagnostics() -> None:
     upload = registry.call(
         "patchdiff_initialize_target",
         filename="example.txt",
@@ -81,14 +81,14 @@ def test_submit_invalid_pdcp_returns_rejected_diagnostics() -> None:
         content_type="text/plain",
     )
     rejected = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=upload["target_file_id"],
-        pdcp_content=pdcp_for(upload["target_file_id"], ("missing", "new")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("missing", "new")),
     )
     assert rejected["status"] == "rejected"
     assert rejected["failure_reason"] == "match_absent"
     assert rejected["after_hash"] is None
-    assert rejected["diagnostic"]["requires_new_pdcp"] is True
+    assert rejected["diagnostic"]["requires_new_submission"] is True
 
 
 def test_export_save_and_replay_call_services() -> None:
@@ -99,9 +99,9 @@ def test_export_save_and_replay_call_services() -> None:
         content_type="text/plain",
     )
     registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=upload["target_file_id"],
-        pdcp_content=pdcp_for(upload["target_file_id"], ("old", "new")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")),
     )
     exported = registry.call("patchdiff_export_target", target_file_id=upload["target_file_id"])
     assert exported["content"] == "new"

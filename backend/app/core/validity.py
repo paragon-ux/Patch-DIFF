@@ -4,7 +4,7 @@ Separates four orthogonal questions so callers cannot conflate "the edit applied
 with "the edit solved the user's task":
 
 * ``protocol_valid``: input parsed and satisfied the structural contract of its
-  submitted format (PDCP v0.2.3 or ``patchdiff-tx/1``).
+  submitted transaction format.
 * ``transaction_valid``: every ``MATCH`` resolved unambiguously in sequential
   in-memory simulation and all target guards held.
 * ``task_correct``: did the edit satisfy the user's request? PatchDIFF does not
@@ -48,7 +48,6 @@ PROTOCOL_FAILURE_REASONS: frozenset[str] = frozenset(
         FailureReason.CONTEXT_MISSING.value,
         FailureReason.CONTEXT_INVALID.value,
         FailureReason.DISAMBIGUATION_INVALID.value,
-        FailureReason.EXECUTABLE_LOGIC_DETECTED.value,
     }
 )
 

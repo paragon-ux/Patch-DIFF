@@ -2,27 +2,29 @@ import copy
 import json
 import uuid
 from dataclasses import FrozenInstanceError
+from io import StringIO
 
 import pytest
 from jsonschema import Draft202012Validator
 
+from app.mcp import external_adapter
 from app.mcp.external_adapter import ExternalMCPAdapter, MCP_PROFILES
 from app.mcp.server import registry
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("full", 22)])
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("workspace", 5), ("observed_workspace", 7), ("full", 17)])
 def test_profiles_filter_advertisement_and_dispatch(profile, count, monkeypatch):
     adapter = ExternalMCPAdapter(profile=profile)
     assert len(adapter.list_tools()) == count
     assert {tool["name"] for tool in adapter.list_tools()} == MCP_PROFILES[profile]
-    assert len(registry.names()) == 22
+    assert len(registry.names()) == 17
     invoked = []
     monkeypatch.setattr(type(registry), "call", lambda self, name, **kw: invoked.append(name) or {"status": "ok"})
     for name in registry.names():
         result = adapter.call_tool(name, {})
         if name not in MCP_PROFILES[profile]:
             assert result["isError"] and name not in invoked
-    # Explicit legacy and administrative calls succeed under full through the actual dispatch path.
+    # Administrative calls succeed under full through the actual dispatch path.
     result = adapter.call_tool("patchdiff_get_target", {"target_file_id": str(uuid.uuid4())})
     assert bool(result.get("isError")) == (profile != "full")
 
@@ -38,6 +40,40 @@ def test_default_startup_environment_and_session_immutability(monkeypatch):
     monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "bad")
     with pytest.raises(ValueError): ExternalMCPAdapter()
     assert ExternalMCPAdapter(profile="observed").profile == "observed"
+
+
+def test_workspace_preflight_runs_before_mcp_replies(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "workspace")
+    monkeypatch.setenv("PATCHDIFF_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("PATCHDIFF_DATABASE_URL", "postgresql+psycopg://unused")
+    monkeypatch.setenv("PATCHDIFF_STRICT_OBSERVATION_MODE", "0")
+    monkeypatch.setattr(external_adapter, "database_schema_is_current", lambda: False)
+    request = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n'
+    stdout = StringIO()
+    with pytest.raises(SystemExit, match="apply the installed Alembic migrations"):
+        external_adapter.serve_stdio(StringIO(request), stdout)
+    assert stdout.getvalue() == ""
+
+
+def test_observed_workspace_profile_contract_and_strict_observation(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATCHDIFF_MCP_PROFILE", "observed_workspace")
+    monkeypatch.setenv("PATCHDIFF_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("PATCHDIFF_DATABASE_URL", "postgresql+psycopg://unused")
+    monkeypatch.setenv("PATCHDIFF_STRICT_OBSERVATION_MODE", "1")
+    monkeypatch.setattr(external_adapter, "database_schema_is_current", lambda: False)
+    request = '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n'
+    stdout = StringIO()
+    # Observed workspace permits strict observation mode (unlike workspace), but still fails on stale schema.
+    with pytest.raises(SystemExit, match="apply the installed Alembic migrations"):
+        external_adapter.serve_stdio(StringIO(request), stdout)
+
+    adapter = ExternalMCPAdapter(profile="observed_workspace")
+    tools_by_name = {tool["name"]: tool for tool in adapter.list_tools()}
+    assert len(tools_by_name) == 7
+    assert "Import an existing workspace file" in tools_by_name["patchdiff_initialize_target"]["description"]
+    assert "patchdiff_observe_scopes" in tools_by_name["patchdiff_initialize_target"]["description"]
+    assert "patchdiff_commit_bundle" in tools_by_name
+    assert "patchdiff_save" in tools_by_name
 
 
 def test_batch_schemas_are_typed_bounded_and_mutually_exclusive():

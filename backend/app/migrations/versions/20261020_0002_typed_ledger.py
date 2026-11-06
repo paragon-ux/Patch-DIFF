@@ -1,15 +1,15 @@
 """typed transaction ledger and request deduplication support
 
 Adds `origin` and `derived_json` to `append_only_manifest_ledger`, relaxes the
-NOT NULL constraint on the five legacy manifest columns (`input_state`,
+NOT NULL constraint on the five optional audit columns (`input_state`,
 `output_state`, `affected_region`, `user_visible_change`, `risk`), and adds
 `client_request_id`, `request_fingerprint`, and the partial unique index
 `uq_pdcp_logs_target_client_request_id` on `append_only_pdcp_logs` so callers can
 safely deduplicate transport retries and recover terminal outcomes after a lost
 response.
 
-Existing rows are unchanged (`origin = 'pdcp_manifest'`, `client_request_id = NULL`).
-No history is deleted or rewritten.
+The historical default is retained for existing revision compatibility. Migration
+20261105_0006 adopts the typed-only origin contract without relabeling audit rows.
 
 Revision ID: 20261020_0002
 Revises: 20260510_0001
@@ -60,14 +60,21 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Restoring NOT NULL is only possible when no typed rows exist. History is never
-    # deleted to make a downgrade succeed.
+    # Refuse any downgrade that would discard audit evidence or violate NOT NULL.
     op.execute(
         """
         DO $$
         BEGIN
-            IF EXISTS (SELECT 1 FROM append_only_manifest_ledger WHERE origin <> 'pdcp_manifest') THEN
-                RAISE EXCEPTION 'Cannot downgrade 20261020_0002: typed ledger rows exist';
+            IF EXISTS (
+                SELECT 1 FROM append_only_manifest_ledger
+                WHERE origin <> 'pdcp_manifest' OR derived_json IS NOT NULL
+                   OR input_state IS NULL OR output_state IS NULL
+                   OR affected_region IS NULL OR user_visible_change IS NULL OR risk IS NULL
+            ) OR EXISTS (
+                SELECT 1 FROM append_only_pdcp_logs
+                WHERE client_request_id IS NOT NULL OR request_fingerprint IS NOT NULL
+            ) THEN
+                RAISE EXCEPTION 'Cannot downgrade 20261020_0002: typed audit evidence exists';
             END IF;
         END $$;
         """

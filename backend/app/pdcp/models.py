@@ -7,29 +7,14 @@ from types import MappingProxyType
 from typing import Mapping
 
 
-SUPPORTED_PROTOCOL_VERSION = "0.2.3"
-REQUIRED_MANIFEST_FIELDS = frozenset(
-    {
-        "change_id",
-        "intent",
-        "input_state",
-        "output_state",
-        "affected_region",
-        "user_visible_change",
-        "risk",
-    }
-)
 OPTIONAL_DISAMBIGUATION_FIELDS = frozenset(
     {
         "anchor_before",
         "anchor_after",
         "occurrence_index",
-        "region_hint",
-        "target_hash",
     }
 )
 VALID_RISK_VALUES = frozenset({"low", "medium", "high"})
-SUPPORTED_MANIFEST_FIELDS = REQUIRED_MANIFEST_FIELDS | OPTIONAL_DISAMBIGUATION_FIELDS
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,17 +29,9 @@ class PDCPHeader:
 class PDCPManifest:
     fields: Mapping[str, str]
 
-    @classmethod
-    def from_fields(cls, fields: dict[str, str]) -> "PDCPManifest":
-        return cls(fields=MappingProxyType(dict(fields)))
-
     @property
     def change_id(self) -> str:
         return self.fields["change_id"]
-
-    @property
-    def risk(self) -> str:
-        return self.fields["risk"]
 
     @property
     def disambiguation(self) -> Mapping[str, str]:
@@ -85,4 +62,3 @@ class PDCPChange:
 class ParsedPDCP:
     header: PDCPHeader
     changes: tuple[PDCPChange, ...]
-    structural_lines: tuple[str, ...]

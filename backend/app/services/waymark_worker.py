@@ -21,11 +21,11 @@ import uuid
 from app.services.performance_events import (
     bridge_environment, collect_bridge_events, process_memory, span, track_child,
 )
-from app.services.waymark_adapter import resolve_node_executable
+from app.services.waymark_adapter import WAYMARK_INTEGRATION_DIR, resolve_node_executable
 
 PROTOCOL = "patchdiff-waymark-worker/1"
 ENGINE_VERSION = "4.1.0"
-BRIDGE = Path(__file__).resolve().parents[3] / "integrations" / "waymark"
+BRIDGE = WAYMARK_INTEGRATION_DIR
 RESULT_LIMIT = 2 * 1024 * 1024
 CONTROL_LIMIT = 4096
 STDERR_LIMIT = 65536

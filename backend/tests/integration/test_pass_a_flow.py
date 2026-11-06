@@ -17,12 +17,12 @@ from app.core.validity import ValidationStage
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, RUNTIME_VERSION
 from app.mcp.tools import _submit_result_to_payload
 from app.services import pdcp_service, near_miss_service
-from app.services.pdcp_service import submit_edits, submit_operations, submit_pdcp
+from app.services.pdcp_service import submit_edits, submit_operations
 from app.services.replay_service import replay_target
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
 from app.storage.repositories import select_target_for_update
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target, edit_pairs
 
 
 def span(start=0, end=1, expected_text="a", replace="A", **extra):
@@ -42,14 +42,12 @@ def counts(session, target_id):
 def make_call(format_, target_id, rejected=False):
     match = "absent" if rejected else "alpha"
     common = {"target_file_id": target_id, "expected_target_version": 0, "client_request_id": "pass-a-original"}
-    if format_ == "legacy":
-        return submit_pdcp, {**common, "pdcp_content": pdcp_for(target_id, (match, "beta"))}
     if format_ == "typed":
         return submit_edits, {**common, "intent": "Pass A", "edits": [{"match": match, "replace": "beta"}]}
     return submit_operations, {**common, "intent": "Pass A", "operations": [{"op": "match", "match": match, "replace": "beta"}]}
 
 
-@pytest.mark.parametrize("format_", ["legacy", "typed", "operations"])
+@pytest.mark.parametrize("format_", ["typed", "operations"])
 @pytest.mark.parametrize("rejected", [False, True])
 def test_correlation_defaults_fresh_uuid_recovery_and_fingerprint_exclusion(format_, rejected):
     target_id = create_target("alpha")
@@ -74,7 +72,7 @@ def test_correlation_defaults_fresh_uuid_recovery_and_fingerprint_exclusion(form
         assert log.client_request_id == arguments["client_request_id"]
 
 
-@pytest.mark.parametrize("format_", ["legacy", "typed", "operations"])
+@pytest.mark.parametrize("format_", ["typed", "operations"])
 @pytest.mark.parametrize("flag", [None, 0, 1, "true", [], {}])
 def test_invalid_correlation_type_is_explicit_no_admission(format_, flag):
     target_id = create_target("alpha")
@@ -166,13 +164,13 @@ def test_operations_respect_caller_transaction_commit_and_rollback(commit):
         assert session.get(CloudTargetFiles, target_id).current_content == ("A" if commit else "a")
 
 
-def test_mixed_historical_protocols_replay_and_new_profile_fail_closed():
+def test_mixed_typed_protocols_replay_and_unknown_runtime_fails_closed():
     target_id = create_target("a")
     with SessionLocal() as session:
         assert submit_edits(session, target_file_id=target_id, intent="old", edits=[{"match": "a", "replace": "b"}], expected_target_version=0).status == "accepted"
         current = submit_operations(session, **args(target_id, [span(0, 1, "b", "c")], expected_target_version=1, client_request_id="new"))
         assert current.status == "accepted"
-        assert submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("c", "d")), expected_target_version=2).status == "accepted"
+        assert submit_edits(session, target_file_id=target_id, intent="Update text", edits=edit_pairs(("c", "d")), expected_target_version=2).status == "accepted"
     with SessionLocal() as session:
         logs = session.scalars(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id).order_by(AppendOnlyPdcpLogs.log_sequence)).all()
         assert [log.runtime_version for log in logs] == [RUNTIME_VERSION, OPERATIONS_RUNTIME_VERSION, RUNTIME_VERSION]

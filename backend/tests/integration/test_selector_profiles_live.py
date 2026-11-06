@@ -19,36 +19,26 @@ from app.services import pdcp_service
 from app.services.replay_service import replay_target
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target
 
 
-def submit(session, target_id, format_, match="hello", replace="goodbye", version=0, **selectors):
-    if format_ == "typed":
-        return pdcp_service.submit_edits(
-            session, target_file_id=target_id, expected_target_version=version,
-            intent="Check singleton selectors", edits=[{
-                "match": match, "replace": replace, **selectors,
-            }],
-        )
-    content = pdcp_for(target_id, (match, replace))
-    content = content.replace("# risk: low", "# risk: low" + "".join(
-        f"\n# {key}: {value}" for key, value in selectors.items()
-    ))
-    return pdcp_service.submit_pdcp(
-        session, target_file_id=target_id, pdcp_content=content,
-        expected_target_version=version,
+def submit(session, target_id, match="hello", replace="goodbye", version=0, **selectors):
+    return pdcp_service.submit_edits(
+        session, target_file_id=target_id, expected_target_version=version,
+        intent="Check singleton selectors", edits=[{
+            "match": match, "replace": replace, **selectors,
+        }],
     )
 
 
-@pytest.mark.parametrize("format_", ["typed", "legacy"])
 @pytest.mark.parametrize("selectors", [
     {"occurrence_index": 2}, {"anchor_before": "missing"}, {"anchor_after": "missing"},
     {"occurrence_index": 1, "anchor_before": "missing", "anchor_after": "missing"},
 ])
-def test_singleton_constraint_rejection_is_durable_without_materialization(format_, selectors):
+def test_singleton_constraint_rejection_is_durable_without_materialization(selectors):
     target_id = create_target("hello")
     with SessionLocal() as session:
-        result = submit(session, target_id, format_, **selectors)
+        result = submit(session, target_id, **selectors)
         assert result.status == "rejected"
         assert result.failure_reason is FailureReason.DISAMBIGUATION_INVALID
     with SessionLocal() as session:
@@ -67,16 +57,15 @@ def test_singleton_constraint_rejection_is_durable_without_materialization(forma
         )) == 0
 
 
-@pytest.mark.parametrize("format_", ["typed", "legacy"])
 @pytest.mark.parametrize("historical_runtime", [
     LEGACY_RUNTIME_VERSION, PREVIOUS_RUNTIME_VERSION, PRE_SELECTOR_RUNTIME_VERSION,
 ])
-def test_ignored_selector_history_replays_under_its_recorded_profile(monkeypatch, format_, historical_runtime):
+def test_ignored_selector_history_replays_under_its_recorded_profile(monkeypatch, historical_runtime):
     target_id = create_target("hello")
     with SessionLocal() as session:
         with monkeypatch.context() as old:
             old.setattr(pdcp_service, "RUNTIME_VERSION", historical_runtime)
-            original = submit(session, target_id, format_, occurrence_index=2)
+            original = submit(session, target_id, occurrence_index=2)
         assert original.status == "accepted"
         log = session.get(AppendOnlyPdcpLogs, original.pdcp_log_id)
         recorded = (log.pdcp_content, log.pdcp_content_hash, log.request_fingerprint)
@@ -84,9 +73,9 @@ def test_ignored_selector_history_replays_under_its_recorded_profile(monkeypatch
         historical = replay_target(session, target_file_id=target_id)
         assert historical.status == "success" and historical.materialized_state_matches
         assert historical.reconstructed_content == "goodbye"
-        rejected = submit(session, target_id, format_, match="goodbye", version=1, occurrence_index=2)
+        rejected = submit(session, target_id, match="goodbye", version=1, occurrence_index=2)
         assert rejected.failure_reason is FailureReason.DISAMBIGUATION_INVALID
-        accepted = submit(session, target_id, format_, match="goodbye", replace="world", version=1)
+        accepted = submit(session, target_id, match="goodbye", replace="world", version=1)
         assert accepted.status == "accepted"
         session.commit()
         mixed = replay_target(session, target_file_id=target_id)

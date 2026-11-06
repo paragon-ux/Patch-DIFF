@@ -18,7 +18,7 @@ from backend.tests.integration.test_migrations_reachable import isolated_migrati
 def test_populated_historical_observation_upgrade_downgrade_upgrade(isolated_migrations):
     config, connection = isolated_migrations
     command.upgrade(config, "20261026_0004")
-    tid = seed_legacy_history(connection)
+    tid = seed_legacy_history(connection, origin="typed")
     log = connection.execute(text("SELECT * FROM append_only_pdcp_logs WHERE status='accepted'")).mappings().one()
     oid = uuid.uuid4()
     scope = Table("target_scope_observations", MetaData(), autoload_with=connection)
@@ -71,6 +71,6 @@ def test_downgrade_refuses_bundle_and_accepted_batch_evidence(isolated_migration
     with pytest.raises(Exception, match="Cannot downgrade 20261027_0005: bundled observations or accepted batch evidence exist"):
         command.downgrade(config, "20261026_0004")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261027_0005"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
     assert connection.scalar(text("SELECT count(*) FROM target_scope_observations")) == rows
     assert snapshot(connection) == before

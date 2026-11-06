@@ -23,7 +23,6 @@ from app.storage.models import (
     CloudTargetFiles,
     TargetScopeObservations,
 )
-from backend.tests.integration.helpers import pdcp_for
 
 
 def _init_tenants_target() -> dict:
@@ -555,7 +554,7 @@ def test_strict_observation_mode_blocks_all_unobserved_writes_and_allows_observe
     tid = py_init["target_file_id"]
     h0 = py_init["current_hash"]
 
-    # Seed one rejected attempt before strict mode so we have a valid parent log for request_regeneration
+    # Seed one rejected attempt before strict mode so we have a valid parent log for retry lineage
     seed_rej = registry.call(
         "patchdiff_submit_edits",
         target_file_id=tid,
@@ -564,7 +563,6 @@ def test_strict_observation_mode_blocks_all_unobserved_writes_and_allows_observe
         edits=[{"match": "nonexistent", "replace": "x"}],
     )
     assert seed_rej["status"] == "rejected"
-    rejected_log_id = seed_rej["pdcp_log_id"]
 
     with strict_observation_mode(True):
         # 1. patchdiff_submit_edits rejected with OBSERVATION_REQUIRED
@@ -606,30 +604,7 @@ def test_strict_observation_mode_blocks_all_unobserved_writes_and_allows_observe
         assert r_rep["code"] == "OBSERVATION_REQUIRED"
         assert r_rep["pdcp_log_id"] is not None
 
-        # 4. patchdiff_submit_pdcp rejected with OBSERVATION_REQUIRED
-        r_pdcp = registry.call(
-            "patchdiff_submit_pdcp",
-            target_file_id=tid,
-            pdcp_content=pdcp_for(tid, ('"legacy"', '"modern"')),
-            expected_target_version=0,
-            expected_current_hash=h0,
-        )
-        assert r_pdcp["status"] == "rejected"
-        assert r_pdcp["code"] == "OBSERVATION_REQUIRED"
-        assert r_pdcp["pdcp_log_id"] is not None
-
-        # 5. patchdiff_request_regeneration with regenerated_pdcp_content rejected with OBSERVATION_REQUIRED
-        r_regen = registry.call(
-            "patchdiff_request_regeneration",
-            pdcp_log_id=rejected_log_id,
-            regenerated_pdcp_content=pdcp_for(tid, ('"legacy"', '"modern"')),
-            expected_target_version=0,
-            expected_current_hash=h0,
-        )
-        assert r_regen["status"] == "rejected"
-        assert r_regen["result"]["code"] == "OBSERVATION_REQUIRED"
-
-        # 6. Observe + submit_observed_operations succeeds in strict mode!
+        # 4. Observe + submit_observed_operations succeeds in strict mode!
         obs = registry.call(
             "patchdiff_observe_scope",
             target_file_id=tid,

@@ -1,3 +1,4 @@
+from pathlib import Path
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, text
@@ -27,3 +28,14 @@ def check_database() -> bool:
     except SQLAlchemyError:
         return False
 
+
+
+def database_schema_is_current() -> bool:
+    """Check the database against the migrations shipped with this installation."""
+    from alembic.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    migrations = ScriptDirectory(str(Path(__file__).resolve().parents[1] / "migrations"))
+    with engine.connect() as connection:
+        installed_heads = MigrationContext.configure(connection).get_current_heads()
+    return set(installed_heads) == set(migrations.get_heads())

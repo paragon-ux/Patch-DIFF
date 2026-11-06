@@ -11,10 +11,9 @@ from app.core.hashing import canonical_sha256
 from app.core.validity import NOT_EVALUATED
 from app.core.versions import LEGACY_RUNTIME_VERSION, RUNTIME_VERSION
 from app.mcp import tools
-from app.pdcp.models import SUPPORTED_PROTOCOL_VERSION
 from app.pdcp.typed import ALLOWED_TYPED_EDIT_FIELDS, REQUIRED_TYPED_EDIT_FIELDS, TYPED_PROTOCOL_VERSION
-from app.services.pdcp_service import submit_edits, submit_pdcp
-from app.services.regeneration_service import request_regeneration
+from app.pdcp.typed import build_record, canonical_record_json
+from app.services.pdcp_service import submit_edits, submit_operations
 from app.services.replay_service import replay_target
 from app.storage.db import SessionLocal
 from app.storage.models import (
@@ -23,7 +22,7 @@ from app.storage.models import (
     CloudTargetFiles,
     TargetSnapshots,
 )
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target, edit_pairs
 
 
 def _edit(match: str, replace: str, **extra) -> dict:
@@ -55,13 +54,13 @@ def test_typed_accept_logs_typed_record_and_derived_ledger_row() -> None:
         assert session.get(CloudTargetFiles, target_id).current_content == "new text"
 
 
-def test_pdcp_and_typed_ledger_rows_both_carry_derived_facts_and_origin() -> None:
+def test_typed_ledger_rows_carry_derived_facts_and_origin() -> None:
     target_id = create_target("alpha beta")
     with SessionLocal() as session:
-        p_res = submit_pdcp(
+        p_res = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("alpha", "ALPHA")),
+            intent="Update text", edits=edit_pairs(("alpha", "ALPHA")),
             expected_target_version=0,
         )
         assert p_res.status == "accepted"
@@ -81,12 +80,12 @@ def test_pdcp_and_typed_ledger_rows_both_carry_derived_facts_and_origin() -> Non
         ).all()
         assert len(rows) == 2
 
-        pdcp_row, typed_row = rows
-        assert pdcp_row.origin == "pdcp_manifest"
-        assert pdcp_row.input_state is not None
-        assert pdcp_row.output_state is not None
-        assert pdcp_row.derived_json["span_start"] == 0
-        assert pdcp_row.derived_json["span_end"] == 5
+        first_row, typed_row = rows
+        assert first_row.origin == "typed"
+        assert first_row.input_state is None
+        assert first_row.output_state is None
+        assert first_row.derived_json["span_start"] == 0
+        assert first_row.derived_json["span_end"] == 5
 
         assert typed_row.origin == "typed"
         assert typed_row.intent == "Uppercase beta."
@@ -141,20 +140,8 @@ def test_format_specific_vs_format_neutral_diagnostics_and_no_pdcp_leakage_on_ty
         assert typed_absent.diagnostic["requires_new_submission"] is True
         assert "requires_new_pdcp" not in typed_absent.diagnostic
 
-        # Legacy PDCP rejection retains its PDCP-specific diagnostic fields:
-        pdcp_rej = submit_pdcp(
-            session,
-            target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("nonexistent", "new")),
-            expected_target_version=0,
-        )
-        assert pdcp_rej.failure_reason is FailureReason.MATCH_ABSENT
-        assert pdcp_rej.diagnostic["format"] == SUPPORTED_PROTOCOL_VERSION
-        assert pdcp_rej.diagnostic["requires_new_pdcp"] is True
-        assert pdcp_rej.diagnostic["requires_new_submission"] is True
 
-
-def test_validity_stages_across_typed_and_pdcp_paths_via_mcp_tools() -> None:
+def test_typed_validity_stages_via_mcp_tools() -> None:
     target_id = str(create_target("hello world"))
 
     # 1. Pre-parse guard failure (expected_current_hash mismatch) -> protocol_valid: None, transaction_valid: None
@@ -168,20 +155,6 @@ def test_validity_stages_across_typed_and_pdcp_paths_via_mcp_tools() -> None:
     assert pre_hash["validity"] == {
         "protocol_valid": None,
         "transaction_valid": None,
-        "task_correct": NOT_EVALUATED,
-        "semantic": NOT_EVALUATED,
-    }
-
-    # 2. In-core PDCP header target_hash mismatch (no pre-parse guard) -> protocol_valid: True, transaction_valid: False
-    bad_header_pdcp = pdcp_for(uuid.UUID(target_id), ("hello", "hi"), header_hash="0" * 64)
-    in_core_hash = tools.patchdiff_submit_pdcp(
-        target_file_id=target_id,
-        pdcp_content=bad_header_pdcp,
-    )
-    assert in_core_hash["failure_reason"] == "target_hash_mismatch"
-    assert in_core_hash["validity"] == {
-        "protocol_valid": True,
-        "transaction_valid": False,
         "task_correct": NOT_EVALUATED,
         "semantic": NOT_EVALUATED,
     }
@@ -462,10 +435,14 @@ def test_host_loop_reject_reread_revise_keeps_lineage_without_regeneration_tools
         assert session.get(AppendOnlyPdcpLogs, rejected.pdcp_log_id).status == "rejected"
 
 
-def test_mixed_pdcp_and_typed_history_replays_and_matches_materialized_state() -> None:
+def test_mixed_typed_formats_replay_and_match_materialized_state() -> None:
     target_id = create_target("one two")
     with SessionLocal() as session:
-        assert submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("one", "1"))).status == "accepted"
+        operated = submit_operations(
+            session, target_file_id=target_id, expected_target_version=0, intent="Update the first token.",
+            operations=[{"op": "span", "start": 0, "end": 3, "expected_text": "one", "replace": "1"}],
+        )
+        assert operated.status == "accepted"
         assert (
             submit_edits(session, target_file_id=target_id, intent="x", edits=[_edit("two", "2")], expected_target_version=1).status
             == "accepted"
@@ -548,22 +525,26 @@ def test_replay_detects_tampered_before_hash_broken_version_chain_and_unknown_pr
         session.rollback()
 
 
-def test_legacy_runtime_log_with_overlap_acceptance_still_replays() -> None:
+def test_typed_history_preserves_recorded_nonoverlapping_matching() -> None:
     target_id = create_target("aaa")
     with SessionLocal() as session:
-        result = submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("aa", "b")))
+        result = submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("aa", "b")))
         assert result.failure_reason is FailureReason.MATCH_AMBIGUOUS
     legacy_id = create_target("aaa")
+    record = canonical_record_json(build_record(
+        target_file_id=str(legacy_id), intent="Historical typed edit", edits=[_edit("aa", "b")],
+        expected_target_version=0, expected_current_hash=None,
+    ))
     with SessionLocal() as session:
         session.add(
             AppendOnlyPdcpLogs(
                 target_file_id=legacy_id,
                 editing_cycle_id=session.get(CloudTargetFiles, legacy_id).active_editing_cycle_id,
                 submission_source="model_response",
-                protocol_version="0.2.3",
+                protocol_version=TYPED_PROTOCOL_VERSION,
                 runtime_version=LEGACY_RUNTIME_VERSION,
-                pdcp_content=pdcp_for(legacy_id, ("aa", "b")),
-                pdcp_content_hash=canonical_sha256(pdcp_for(legacy_id, ("aa", "b"))),
+                pdcp_content=record,
+                pdcp_content_hash=canonical_sha256(record),
                 status="accepted",
                 before_version=0,
                 after_version=1,
@@ -627,23 +608,6 @@ def test_read_target_and_find_occurrences_pagination_and_argument_validation() -
         == "invalid_argument"
     )
     assert tools.patchdiff_get_pdcp_log(target_file_id=target_id, before_sequence=0)["status"] == "invalid_argument"
-
-
-def test_regeneration_wrapper_passes_guards_and_handles_missing_parent() -> None:
-    missing = request_regeneration(SessionLocal(), pdcp_log_id=uuid.uuid4(), regenerated_pdcp_content="x")
-    assert missing["status"] == "not_found"
-
-    target_id = create_target("old")
-    with SessionLocal() as session:
-        rejected = submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("zzz", "q")))
-        out = request_regeneration(
-            session,
-            pdcp_log_id=rejected.pdcp_log_id,
-            regenerated_pdcp_content=pdcp_for(target_id, ("old", "new")),
-            expected_target_version=99,
-        )
-        assert out["status"] == "rejected"
-        assert out["result"].failure_reason is FailureReason.TARGET_VERSION_MISMATCH
 
 
 def test_run_003_sanitize_guard_metadata_before_persistence() -> None:

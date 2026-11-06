@@ -7,7 +7,7 @@ from sqlalchemy.exc import OperationalError
 from app.core.failures import FailureReason
 from app.core.hashing import canonical_sha256
 from app.core.validity import ValidationStage
-from app.services.pdcp_service import submit_pdcp
+from app.services.pdcp_service import submit_edits
 from app.services.target_service import initialize_target
 from app.storage.db import SessionLocal
 from app.storage.models import (
@@ -18,36 +18,7 @@ from app.storage.models import (
     TargetSnapshots,
 )
 from app.storage.repositories import select_target_for_update
-
-
-def pdcp_for(
-    target_file_id: uuid.UUID,
-    *changes: tuple[str, str],
-    header_hash: str | None = None,
-) -> str:
-    header = f"PDCP 0.2.3\ntarget_file_id: {target_file_id}\ntarget_type: text/plain"
-    if header_hash is not None:
-        header += f"\ntarget_hash: {header_hash}"
-
-    sections = [header]
-    for index, (match, replace) in enumerate(changes, start=1):
-        sections.append(
-            f"""# MANIFEST
-# change_id: chg_{index:03d}
-# intent: Update text.
-# input_state: Old text exists.
-# output_state: New text exists.
-# affected_region: example
-# user_visible_change: Text changes.
-# risk: low
-
-<<<<<<< MATCH
-{match}
-=======
-{replace}
->>>>>>> REPLACE"""
-        )
-    return "\n\n".join(sections)
+from backend.tests.integration.helpers import edit_pairs
 
 
 def create_target(content: str = "old") -> uuid.UUID:
@@ -76,13 +47,13 @@ def test_initialize_target_creates_target_snapshot_and_active_cycle() -> None:
         assert snapshot_count == 1
 
 
-def test_accepted_pdcp_updates_target_log_and_manifest_ledger() -> None:
+def test_accepted_edits_updates_target_log_and_manifest_ledger() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        result = submit_pdcp(
+        result = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("old", "new")),
+            intent="Update text", edits=edit_pairs(("old", "new")),
             expected_target_version=0,
         )
 
@@ -103,13 +74,13 @@ def test_accepted_pdcp_updates_target_log_and_manifest_ledger() -> None:
         assert ledger_count == 1
 
 
-def test_rejected_pdcp_logs_rejection_and_does_not_mutate_target() -> None:
+def test_rejected_edits_logs_rejection_and_does_not_mutate_target() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        result = submit_pdcp(
+        result = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("missing", "new")),
+            intent="Update text", edits=edit_pairs(("missing", "new")),
             expected_target_version=0,
         )
 
@@ -134,10 +105,10 @@ def test_rejected_pdcp_logs_rejection_and_does_not_mutate_target() -> None:
 def test_failed_multi_change_transaction_does_not_partially_mutate() -> None:
     target_id = create_target("alpha beta")
     with SessionLocal() as session:
-        result = submit_pdcp(
+        result = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("alpha", "gamma"), ("alpha beta", "done")),
+            intent="Update text", edits=edit_pairs(("alpha", "gamma"), ("alpha beta", "done")),
             expected_target_version=0,
         )
 
@@ -152,10 +123,10 @@ def test_failed_multi_change_transaction_does_not_partially_mutate() -> None:
 def test_stale_expected_target_version_rejects() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        result = submit_pdcp(
+        result = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("old", "new")),
+            intent="Update text", edits=edit_pairs(("old", "new")),
             expected_target_version=99,
         )
     assert result.status == "rejected"
@@ -165,24 +136,11 @@ def test_stale_expected_target_version_rejects() -> None:
 def test_stale_expected_current_hash_rejects() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        result = submit_pdcp(
+        result = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("old", "new")),
+            intent="Update text", edits=edit_pairs(("old", "new")),
             expected_current_hash="a" * 64,
-        )
-    assert result.status == "rejected"
-    assert result.failure_reason is FailureReason.TARGET_HASH_MISMATCH
-
-
-def test_pdcp_target_hash_mismatch_rejects() -> None:
-    target_id = create_target("old")
-    with SessionLocal() as session:
-        result = submit_pdcp(
-            session,
-            target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("old", "new"), header_hash="b" * 64),
-            expected_target_version=0,
         )
     assert result.status == "rejected"
     assert result.failure_reason is FailureReason.TARGET_HASH_MISMATCH
@@ -191,9 +149,9 @@ def test_pdcp_target_hash_mismatch_rejects() -> None:
 def test_current_pdcp_file_is_mutable_not_authoritative_history() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")))
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("new", "latest")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=1, intent="Update text", edits=edit_pairs(("new", "latest")))
 
     with SessionLocal() as session:
         current_count = session.scalar(
@@ -211,10 +169,10 @@ def test_current_pdcp_file_is_mutable_not_authoritative_history() -> None:
 def test_target_diverged_rejects_and_does_not_mutate_target() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        result = submit_pdcp(
+        result = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("old", "new")),
+            intent="Update text", edits=edit_pairs(("old", "new")),
             expected_target_version=0,
             _before_final_guard=lambda target: setattr(target, "version", target.version + 1),
         )
@@ -239,10 +197,10 @@ def test_same_target_row_lock_blocks_concurrent_submit() -> None:
         tx2.__enter__()
         session2.execute(text("SET LOCAL lock_timeout = '250ms'"))
         with pytest.raises(OperationalError):
-            submit_pdcp(
+            submit_edits(
                 session2,
                 target_file_id=target_id,
-                pdcp_content=pdcp_for(target_id, ("old", "new")),
+                intent="Update text", edits=edit_pairs(("old", "new")),
                 expected_target_version=0,
             )
         tx2.__exit__(None, None, None)
@@ -265,10 +223,10 @@ def test_different_targets_are_independent_under_row_lock() -> None:
         tx2 = session2.begin()
         tx2.__enter__()
         session2.execute(text("SET LOCAL lock_timeout = '250ms'"))
-        result = submit_pdcp(
+        result = submit_edits(
             session2,
             target_file_id=free_target_id,
-            pdcp_content=pdcp_for(free_target_id, ("free", "updated")),
+            intent="Update text", edits=edit_pairs(("free", "updated")),
             expected_target_version=0,
         )
         assert result.status == "accepted"
@@ -285,10 +243,10 @@ def test_submit_rejects_pending_local_direct_modifications() -> None:
         target = session.get(CloudTargetFiles, target_id)
         assert target is not None
         target.current_content = "unauthorized local mutation"
-        result = submit_pdcp(
+        result = submit_edits(
             session,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("old", "new")),
+            intent="Update text", edits=edit_pairs(("old", "new")),
             expected_target_version=0,
         )
         assert result.status == "rejected"
@@ -308,10 +266,10 @@ def test_submit_retained_stale_target_reloaded_and_rejected_after_concurrent_com
         assert target_s1.version == 0
 
         # Session 2 concurrently updates target to version 1 and commits
-        res2 = submit_pdcp(
+        res2 = submit_edits(
             session2,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("v0_initial", "v1_committed")),
+            intent="Update text", edits=edit_pairs(("v0_initial", "v1_committed")),
             expected_target_version=0,
         )
         assert res2.status == "accepted"
@@ -319,10 +277,10 @@ def test_submit_retained_stale_target_reloaded_and_rejected_after_concurrent_com
 
         # Session 1 now submits expecting version 0
         # select_target_for_update with populate_existing=True refreshes target_s1 to version 1
-        res1 = submit_pdcp(
+        res1 = submit_edits(
             session1,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("v0_initial", "v1_stale_overwrite")),
+            intent="Update text", edits=edit_pairs(("v0_initial", "v1_stale_overwrite")),
             expected_target_version=0,
         )
         assert res1.status == "rejected"
@@ -339,86 +297,14 @@ def test_submit_preserves_caller_owned_transaction() -> None:
     with SessionLocal() as session:
         with session.begin():
             assert session.in_transaction()
-            result = submit_pdcp(
+            result = submit_edits(
                 session,
                 target_file_id=target_id,
-                pdcp_content=pdcp_for(target_id, ("alpha", "beta")),
+                intent="Update text", edits=edit_pairs(("alpha", "beta")),
                 expected_target_version=0,
             )
             assert result.status == "accepted"
             # Session must remain in transaction (service did not commit caller's transaction)
             assert session.in_transaction()
-
-
-def test_run_002_distinguish_protocol_hash_validation_from_target_hash_applicability() -> None:
-    target_id = create_target("hello world")
-    target_uuid = uuid.UUID(str(target_id))
-
-    with SessionLocal() as session:
-        # Case 1: Conflicting header and manifest target_hash within the PDCP document
-        # This is a protocol validation error (PROTOCOL_VALIDATION stage)
-        header_hash = "0" * 64
-        manifest_hash = "1" * 64
-        conflicting_pdcp = f"""PDCP 0.2.3
-target_file_id: {target_uuid}
-target_type: text/plain
-target_hash: {header_hash}
-
-# MANIFEST
-# change_id: chg_001
-# intent: update
-# input_state: exists
-# output_state: new
-# affected_region: all
-# user_visible_change: yes
-# risk: low
-# target_hash: {manifest_hash}
-
-<<<<<<< MATCH
-hello
-=======
-hi
->>>>>>> REPLACE"""
-
-        res_proto = submit_pdcp(
-            session,
-            target_file_id=target_id,
-            pdcp_content=conflicting_pdcp,
-        )
-        assert res_proto.status == "rejected"
-        assert res_proto.failure_reason is FailureReason.TARGET_HASH_MISMATCH
-        assert res_proto.validation_stage is ValidationStage.PROTOCOL_VALIDATION
-
-        # Case 2: Document is protocol-valid, but header target_hash does not match DB target state
-        # This is a transaction applicability error (TRANSACTION_APPLICABILITY stage)
-        mismatch_hash = "f" * 64
-        valid_doc_pdcp = f"""PDCP 0.2.3
-target_file_id: {target_uuid}
-target_type: text/plain
-target_hash: {mismatch_hash}
-
-# MANIFEST
-# change_id: chg_001
-# intent: update
-# input_state: exists
-# output_state: new
-# affected_region: all
-# user_visible_change: yes
-# risk: low
-
-<<<<<<< MATCH
-hello
-=======
-hi
->>>>>>> REPLACE"""
-
-        res_app = submit_pdcp(
-            session,
-            target_file_id=target_id,
-            pdcp_content=valid_doc_pdcp,
-        )
-        assert res_app.status == "rejected"
-        assert res_app.failure_reason is FailureReason.TARGET_HASH_MISMATCH
-        assert res_app.validation_stage is ValidationStage.TRANSACTION_APPLICABILITY
 
 

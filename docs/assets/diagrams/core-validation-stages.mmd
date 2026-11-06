@@ -1,0 +1,22 @@
+flowchart TD
+    A["Incoming transaction proposal<br/>tx/1, tx/2, tx/3, or observed bundle"] --> B{"Target exists?"}
+
+    B -- No --> R0["Reject: target_not_found<br/>No row lock; no attempt row"]
+    B -- Yes --> C["Acquire target row lock<br/>SELECT ... FOR UPDATE"]
+
+    C --> D{"Stage 1: Precondition guard<br/>Version/hash and request-key checks"}
+    D -- "Version or hash mismatch" --> R1["Reject: target_version_mismatch<br/>or target_hash_mismatch<br/>No target mutation; attempt logged"]
+    D -- "Guards hold" --> E{"Stage 2: Protocol validation<br/>Schema, format, and lineage"}
+
+    E -- "Malformed schema or syntax" --> R2A["Reject: invalid_argument<br/>or block_malformed<br/>No target mutation; attempt logged"]
+    E -- "Invalid retry lineage" --> R2B["Reject: context_invalid<br/>lineage_invalid<br/>No target mutation; attempt logged"]
+    E -- "Protocol valid" --> F{"Stage 3: Transaction applicability<br/>Sequential in-memory simulation<br/>Exact-match and span preconditions"}
+
+    F -- "Match absent" --> R3A["Reject: match_absent<br/>Near-miss diagnostics may be returned"]
+    F -- "Multiple matches" --> R3B["Reject: match_ambiguous<br/>Up to 5 exact candidates"]
+    F -- "Consumed by prior edit" --> R3C["Reject: sequential_match_invalid<br/>Consumed-by change ID may be returned"]
+    F -- "Span text mismatch" --> R3D["Reject: span_expected_text_mismatch<br/>Actual-text context may be returned"]
+    F -- "All operations succeed" --> G{"Stage 4: Commit guard<br/>Recheck target state before commit"}
+
+    G -- "Target state diverged" --> R4["Reject: target_diverged<br/>No target mutation; attempt logged"]
+    G -- "Commit guard passes" --> H["Stage 5: Accepted commit<br/>Advance canonical target state<br/>Append accepted attempt log<br/>Append manifest ledger with derived facts"]

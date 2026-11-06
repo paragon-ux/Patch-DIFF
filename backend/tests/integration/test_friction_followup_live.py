@@ -16,7 +16,7 @@ from app.services.replay_service import replay_target
 from app.services.save_service import save_target
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles, TargetSnapshots
-from backend.tests.integration.helpers import create_target
+from backend.tests.integration.helpers import create_target, edit_pairs
 
 
 def edits(target_id, items, version=0, **extra):
@@ -367,9 +367,8 @@ def test_fr20_save_accepts_a_version_guard():
 
 def test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content():
     from sqlalchemy import event, literal_column
-    from app.services.pdcp_service import submit_pdcp
     from app.storage.db import engine
-    from backend.tests.integration.helpers import pdcp_for
+    from backend.tests.integration.helpers import edit_pairs
 
     tx3_target = create_target("seed\n")
     payload = "z" * 600_000 + "\n"
@@ -416,9 +415,16 @@ def test_mcp001_large_tx3_ledger_and_attempt_pages_do_not_select_pdcp_content():
         assert submit_operations(session, **ops(mixed_target, [
             {**span(11, 16, "gamma", "GAMMA"), "rationale": "Span rationale"},
         ], version=1)).status == "accepted"
-        assert submit_pdcp(session, target_file_id=mixed_target,
-                           pdcp_content=pdcp_for(mixed_target, ("GAMMA", "delta")),
-                           expected_target_version=2).status == "accepted"
+        opaque = submit_edits(session, target_file_id=mixed_target,
+                              intent="Update text", edits=edit_pairs(("GAMMA", "delta")),
+                              expected_target_version=2)
+        assert opaque.status == "accepted"
+        # Exercise read-only projection of an opaque audit record without invoking a decoder.
+        log = session.get(AppendOnlyPdcpLogs, opaque.pdcp_log_id)
+        log.protocol_version = "opaque-fixture"
+        log.pdcp_content = "opaque historical evidence"
+        log.pdcp_content_hash = canonical_sha256(log.pdcp_content)
+        session.commit()
     bad_utf8 = tools.patchdiff_submit_edits(
         target_file_id=str(mixed_target), expected_target_version=3,
         intent="bad\x00intent", edits=[{"match": "delta", "replace": "epsilon"}],

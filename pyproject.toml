@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "patchdiff-mvp"
+name = "patchdiff-mcp"
 version = "0.1.0"
-description = "MCP-first PatchDIFF MVP backend"
+description = "MCP-first PatchDIFF backend"
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.11"
@@ -30,11 +30,12 @@ Repository = "https://github.com/paragon-ux/Patch-DIFF"
 Issues = "https://github.com/paragon-ux/Patch-DIFF/issues"
 
 [tool.setuptools.packages.find]
-where = ["backend"]
-include = ["app", "app.*"]
+where = ["backend", "."]
+include = ["app", "app.*", "integrations.waymark"]
 
 [tool.setuptools.package-data]
 app = ["migrations/alembic.ini", "migrations/script.py.mako"]
+"integrations.waymark" = ["*.mjs", "package.json", "package-lock.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["backend", "."]

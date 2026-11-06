@@ -14,41 +14,41 @@ nav = [
     { "Home" = "index.md" },
     { "Visual Architecture & Flow" = "architecture.md" },
     { "Specifications" = [
-        { "Core Runtime Spec" = "spec/PATCHDIFF_CORE_SPEC.md" },
-        { "MCP Tools" = "spec/MCP_TOOLS.md" },
-        { "Data Model" = "spec/DATA_MODEL.md" },
-        { "PDCP Format" = "spec/PDCP_FORMAT.md" },
-        { "Editor v2 Contract" = "spec/MCP_EDITOR_V2.md" },
-        { "Structural Batch Editing" = "spec/STRUCTURAL_BATCH_EDITING.md" },
-        { "Waymark Worker" = "spec/WAYMARK_WORKER.md" }
+        { "Core Runtime Spec" = "spec/core-runtime.md" },
+        { "MCP Tools" = "spec/mcp-tools.md" },
+        { "Data Model" = "spec/data-model.md" },
+        { "Transaction Formats" = "spec/transaction-formats.md" },
+        { "Structural Batch Editing" = "spec/structural-batch-editing.md" },
+        { "Waymark Worker" = "spec/waymark-worker.md" }
+    ]},
+    { "MCP Profiles" = [
+        { "Profile Catalog" = "spec/profiles/index.md" },
+        { "Workspace" = "spec/profiles/workspace-profile.md" },
+        { "Editing an Existing Target" = "spec/profiles/existing-target-editing.md" },
+        { "Delegated Editing and Lifecycle" = "spec/profiles/delegation-and-lifecycle.md" },
+        { "Observed Editor v2" = "spec/profiles/observed-editor-v2.md" }
     ]},
     { "Guides" = [
-        { "Host Integration Guide" = "guides/HOST_INTEGRATION_GUIDE.md" },
-        { "Claude Desktop Setup" = "guides/CLAUDE_DESKTOP_SETUP.md" },
-        { "Observed Editor Workflow" = "guides/OBSERVED_EDITOR_WORKFLOW.md" }
+        { "Workspace Editing" = "guides/workspace-quickstart.md" },
+        { "Host Integration Guide" = "guides/host-integration-guide.md" },
+        { "Claude Desktop Setup" = "guides/claude-desktop-setup.md" },
+        { "Observed Editor Workflow" = "guides/observed-editor-workflow.md" }
     ]},
     { "Benchmarks" = [
-        { "Modernized 2×2 Factorial Benchmark" = "benchmarks/modernized_benchmark_report.md" },
-        { "Verification Test Matrix" = "benchmarks/TEST_MATRIX.md" }
+        { "Workspace Editing Benchmark" = "benchmarks/workspace-e2e-benchmark.md" },
+        { "Verification Test Matrix" = "benchmarks/test-matrix.md" }
     ]},
     { "Papers" = [
-        { "Concept Paper v6" = "papers/PatchDIFF-Concept-Paper-6.md" },
-        { "Modernization Architecture" = "papers/MODERNIZATION_ARCHITECTURE.md" },
-        { "Modernization Change Record" = "papers/MODERNIZATION_CHANGE_DOC.md" }
+        { "Concept Paper v6" = "papers/concept-paper-v6.md" },
+        { "Formal Transaction Model" = "papers/formal-transaction-model.md" },
+        { "Modernization Architecture" = "papers/modernization-architecture.md" },
+        { "Modernization Change Record" = "papers/product-change-record.md" }
     ]},
     { "Standards" = [
-        { "PR Review Standard" = "standards/PR_REVIEW_STANDARD.md" },
-        { "Release Readiness" = "standards/RELEASE_READINESS.md" }
+        { "PR Review Standard" = "standards/pr-review-standard.md" },
+        { "Release Readiness" = "standards/release-readiness.md" }
     ]},
-    { "Legacy" = [
-        { "Legacy Compatibility" = "legacy/LEGACY_COMPATIBILITY.md" },
-        { "Historical Archive Index" = "legacy/ARCHIVE_INDEX.md" },
-        { "Legacy Benchmark Report" = "legacy/git_benchmark_report.md" },
-        { "Concept Paper v5" = "legacy/PatchDIFF-Concept-Paper-5.md" },
-        { "Protocol Spec v0.2.3" = "legacy/PatchDIFF-Protocol-Spec-v0.2.3.md" },
-        { "Implementation Spec v0.2.3" = "legacy/PatchDIFF-Implementation-Spec-v0.2.3.md" },
-        { "Snapshot v0.2.3" = "legacy/PatchDIFF-Snapshot.md" }
-    ]}
+    { "Roadmap" = "ROADMAP.md" }
 ]
 
 [project.theme]
@@ -116,3 +116,26 @@ pymdownx.tabbed.alternate_style = true
 pymdownx.tabbed.combine_header_slug = true
 pymdownx.tasklist.custom_checkbox = true
 pymdownx.tilde = {}
+
+# Preserve public links to the previous documentation filenames.
+[project.plugins.redirects.redirect_maps]
+"benchmarks/TEST_MATRIX.md" = "benchmarks/test-matrix.md"
+"benchmarks/modernized_benchmark_report.md" = "benchmarks/workspace-e2e-benchmark.md"
+"guides/CLAUDE_DESKTOP_SETUP.md" = "guides/claude-desktop-setup.md"
+"guides/HOST_INTEGRATION_GUIDE.md" = "guides/host-integration-guide.md"
+"guides/OBSERVED_EDITOR_WORKFLOW.md" = "guides/observed-editor-workflow.md"
+"guides/WORKSPACE_PUBLICATION.md" = "guides/workspace-quickstart.md"
+"papers/MODERNIZATION_ARCHITECTURE.md" = "papers/modernization-architecture.md"
+"papers/MODERNIZATION_CHANGE_DOC.md" = "papers/product-change-record.md"
+"papers/PatchDIFF-Concept-Paper-6.md" = "papers/concept-paper-v6.md"
+"spec/DATA_MODEL.md" = "spec/data-model.md"
+"spec/MCP_TOOLS.md" = "spec/mcp-tools.md"
+"spec/PATCHDIFF_CORE_SPEC.md" = "spec/core-runtime.md"
+"spec/PDCP_FORMAT.md" = "spec/transaction-formats.md"
+"spec/STRUCTURAL_BATCH_EDITING.md" = "spec/structural-batch-editing.md"
+"spec/WAYMARK_WORKER.md" = "spec/waymark-worker.md"
+"spec/profiles/MCP_EDITOR_V2.md" = "spec/profiles/observed-editor-v2.md"
+"spec/profiles/WORKSPACE.md" = "spec/profiles/workspace-profile.md"
+"standards/PR_REVIEW_STANDARD.md" = "standards/pr-review-standard.md"
+"standards/RELEASE_READINESS.md" = "standards/release-readiness.md"
+"spec/MCP_EDITOR_V2.md" = "spec/profiles/observed-editor-v2.md"

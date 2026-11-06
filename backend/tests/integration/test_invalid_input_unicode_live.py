@@ -21,7 +21,7 @@ from app.services import pdcp_service
 from app.services.replay_service import replay_target
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target
 
 
 def arguments(target_id, value="\ud800"):
@@ -30,7 +30,7 @@ def arguments(target_id, value="\ud800"):
 
 
 @pytest.mark.parametrize("bad", ["\ud800", "\udfff", "\x00"])
-@pytest.mark.parametrize("case", ["replace", "metadata", "nested_key", "legacy"])
+@pytest.mark.parametrize("case", ["replace", "metadata", "nested_key"])
 def test_invalid_strings_are_durable_safe_and_recoverable(bad, case):
     target_id = create_target("alpha")
     args = arguments(target_id, bad)
@@ -39,14 +39,8 @@ def test_invalid_strings_are_durable_safe_and_recoverable(bad, case):
                     expected_current_hash=bad, parent_pdcp_log_id=bad, attempt=bad)
     elif case == "nested_key":
         args["edits"] = [{"match": "alpha", "replace": "beta", "unknown": {bad: [bad]}}]
-    elif case == "legacy":
-        args = dict(target_file_id=target_id,
-                    pdcp_content=pdcp_for(target_id, ("alpha", bad)),
-                    expected_target_version=0, client_request_id="unicode-attempt",
-                    regeneration_source=bad)
-    submit = pdcp_service.submit_pdcp if case == "legacy" else pdcp_service.submit_edits
     with SessionLocal() as session:
-        result = submit(session, **args)
+        result = pdcp_service.submit_edits(session, **args)
         assert result.failure_reason is FailureReason.TARGET_ENCODING_INVALID
         assert result.validation_stage is ValidationStage.PROTOCOL_VALIDATION
         assert result.pdcp_log_id is not None
@@ -71,7 +65,7 @@ def test_invalid_strings_are_durable_safe_and_recoverable(bad, case):
             expected_target_version=0, intent="Real edit", edits=[{"match": "alpha", "replace": "gamma"}])
         assert good.status == "accepted"
     with SessionLocal() as session:
-        recovered = submit(session, **args)
+        recovered = pdcp_service.submit_edits(session, **args)
         assert recovered.deduplicated
         assert recovered.pdcp_log_id == result.pdcp_log_id
         assert recovered.failure_reason is FailureReason.TARGET_ENCODING_INVALID
@@ -281,8 +275,7 @@ def test_historical_rejected_invalid_parent_keeps_original_keyed_recovery(monkey
 
 @pytest.mark.parametrize("finish", ["commit", "rollback"])
 @pytest.mark.parametrize("replacement", ["beta", "\ud800"])
-def test_regeneration_wrapper_does_not_commit_the_callers_transaction(finish, replacement):
-    from app.services.regeneration_service import request_regeneration
+def test_linked_typed_submission_respects_caller_transaction(finish, replacement):
     target_id = create_target("alpha")
     with SessionLocal() as session:
         parent = pdcp_service.submit_edits(session, target_file_id=target_id,
@@ -290,12 +283,11 @@ def test_regeneration_wrapper_does_not_commit_the_callers_transaction(finish, re
             edits=[{"match": "absent", "replace": "unused"}])
     with SessionLocal() as owner:
         transaction = owner.begin()
-        output = request_regeneration(
-            owner, pdcp_log_id=parent.pdcp_log_id,
-            regenerated_pdcp_content=pdcp_for(target_id, ("alpha", replacement)),
-            expected_target_version=0,
+        result = pdcp_service.submit_edits(
+            owner, target_file_id=target_id, parent_pdcp_log_id=parent.pdcp_log_id,
+            intent="Revise rejected edit", edits=[{"match": "alpha", "replace": replacement}],
+            expected_target_version=0, attempt=1,
         )
-        result = output["result"]
         assert owner.in_transaction()
         with SessionLocal() as observer:
             assert observer.get(AppendOnlyPdcpLogs, result.pdcp_log_id) is None
@@ -311,17 +303,17 @@ def test_regeneration_wrapper_does_not_commit_the_callers_transaction(finish, re
             assert result.failure_reason is FailureReason.TARGET_ENCODING_INVALID
 
 
-def test_standalone_mcp_regeneration_wrapper_persists_its_own_transaction():
-    from app.mcp.tools import patchdiff_request_regeneration
+def test_mcp_linked_typed_submission_persists_its_own_transaction():
+    from app.mcp.tools import patchdiff_submit_edits
     target_id = create_target("alpha")
     with SessionLocal() as session:
         parent = pdcp_service.submit_edits(session, target_file_id=target_id,
             expected_target_version=0, intent="Rejected parent",
             edits=[{"match": "absent", "replace": "unused"}])
-    output = patchdiff_request_regeneration(
-        pdcp_log_id=str(parent.pdcp_log_id),
-        regenerated_pdcp_content=pdcp_for(target_id, ("alpha", "beta")),
-        expected_target_version=0,
+    output = patchdiff_submit_edits(
+        target_file_id=str(target_id), parent_pdcp_log_id=str(parent.pdcp_log_id),
+        intent="Revise rejected edit", edits=[{"match": "alpha", "replace": "beta"}],
+        expected_target_version=0, attempt=1,
     )
     assert output["status"] == "accepted"
     with SessionLocal() as observer:

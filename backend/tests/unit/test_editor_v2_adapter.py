@@ -23,7 +23,7 @@ def test_negotiated_contract_and_error_channels(revision):
     modern = revision != "2024-11-05"
     declarations = adapter.list_tools()
     assert {t["name"] for t in declarations} == EDITOR_V2_TOOLS
-    assert len(declarations) == 5 and len(registry.names()) == 22
+    assert len(declarations) == 5 and len(registry.names()) == 17
     for declaration in declarations:
         assert ("outputSchema" in declaration) == modern
         assert ("annotations" in declaration) == modern
@@ -79,8 +79,11 @@ def test_alias_routes_and_profile_denials_are_exact(monkeypatch):
     for name in ("patchdiff_read_observation", "patchdiff_observe_one", "patchdiff_commit_observation"):
         assert adapter.call_tool(name, {"target_file_id": "raw"})["isError"]
     assert len(seen) == count
-    for profile in MCP_PROFILES.keys() - {"observed_v2"}:
+    for profile in MCP_PROFILES.keys() - {"observed_v2", "observed_workspace"}:
         assert ExternalMCPAdapter(profile=profile).call_tool("patchdiff_commit_bundle", examples["patchdiff_commit_bundle"])["isError"]
+    obs_ws = ExternalMCPAdapter(profile="observed_workspace")
+    obs_ws.call_tool("patchdiff_commit_bundle", examples["patchdiff_commit_bundle"])
+    assert seen[-1][0] == "commit"
 
 
 def test_wire_receipt_is_bounded_and_infrastructure_failure_is_unknown(monkeypatch):

@@ -21,7 +21,6 @@ class FailureReason(StrEnum):
     TARGET_HASH_MISMATCH = "target_hash_mismatch"
     TARGET_VERSION_MISMATCH = "target_version_mismatch"
     TARGET_DIVERGED = "target_diverged"
-    EXECUTABLE_LOGIC_DETECTED = "executable_logic_detected"
     SEQUENTIAL_MATCH_INVALID = "sequential_match_invalid"
     TRANSACTION_INTERNAL_ERROR = "transaction_internal_error"
     REPLAY_HASH_MISMATCH = "replay_hash_mismatch"
@@ -46,7 +45,6 @@ PDCP_REJECTION_REASONS: frozenset[FailureReason] = frozenset(
         FailureReason.TARGET_HASH_MISMATCH,
         FailureReason.TARGET_VERSION_MISMATCH,
         FailureReason.TARGET_DIVERGED,
-        FailureReason.EXECUTABLE_LOGIC_DETECTED,
         FailureReason.SEQUENTIAL_MATCH_INVALID,
         FailureReason.TRANSACTION_INTERNAL_ERROR,
     }

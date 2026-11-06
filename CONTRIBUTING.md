@@ -12,7 +12,7 @@ Every change to PatchDIFF must preserve the core transactional boundary:
 
 ```text
 canonical UTF-8 target text (LF normalized)
-+ declarative non-executable transactions (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3, and legacy PDCP 0.2.3)
++ declarative non-executable transactions (patchdiff-tx/1, patchdiff-tx/2, patchdiff-tx/3)
 + exact deterministic MATCH (all exact occurrences counted)
 + immediate sequential in-memory REPLACE simulation
 + per-target atomic Postgres commit under SELECT ... FOR UPDATE
@@ -65,18 +65,18 @@ alembic -c backend/app/migrations/alembic.ini upgrade head
 Do not claim completion or submit a PR unless all relevant tests pass against live PostgreSQL:
 
 ```bash
-# 1. Pure runtime unit tests (1,020 tests)
+# 1. Pure runtime unit tests
 pytest backend/tests/unit -q
 
-# 2. Live PostgreSQL integration tests (561 tests)
+# 2. Live PostgreSQL integration tests
 export PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
-pytest backend/tests/integration -q
+PATCHDIFF_WAYMARK_MODE=resident pytest backend/tests/integration -q
 
 # 3. Offline evaluation (wire payload bytes and verdict equivalence)
-python backend/tests/verification/offline_eval.py
+PATCHDIFF_WAYMARK_MODE=resident python backend/tests/verification/offline_eval.py
 
 # 4. Five-file resident and versioned editor verification
-python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize
+PATCHDIFF_WAYMARK_MODE=resident python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-finalize
 ```
 
 ---
@@ -97,15 +97,15 @@ python backend/tests/verification/structural_batch/verify.py --editor-v2 --host-
 
 ## 5. PR Review Standard v1.1.0
 
-All pull requests must undergo a formal category review following [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_STANDARD.md):
+All pull requests must undergo a formal category review following [PR Review Standard v1.1.0](docs/standards/pr-review-standard.md):
 
-1. **Category Mapping:** Every changed file must map to one of the ten primary review categories defined in [PR Review Standard v1.1.0](docs/standards/PR_REVIEW_STANDARD.md): `ARCH`, `DOC`, `SKILL`, `MCP`, `RUN`, `SVC`, `DB`, `SCRIPT`, `TEST`, `DEP`.
+1. **Category Mapping:** Every changed file must map to one of the ten primary review categories defined in [PR Review Standard v1.1.0](docs/standards/pr-review-standard.md): `ARCH`, `DOC`, `SKILL`, `MCP`, `RUN`, `SVC`, `DB`, `SCRIPT`, `TEST`, `DEP`.
 2. **Category Coverage Statements:** Each category must have an explicit coverage statement detailing the scope of changes reviewed.
 3. **P1/P2/P3 Findings:** Any defect must be categorized by severity:
    - **P1 (Blocker):** State corruption, silent mutation, concurrency bug, broken replay.
    - **P2 (Major):** Contract violation, missing validation, inaccurate diagnostic.
    - **P3 (Minor):** Typo, doc drift, code formatting.
-4. **Permanent Review Records:** Completed review reports are committed to `docs/reviews/` and preserved at their reviewed revisions.
+4. **Review records.** Keep local reports under `docs/reviews/` and cite findings and evidence against the exact head in the PR.
 
 ---
 
@@ -114,4 +114,4 @@ All pull requests must undergo a formal category review following [PR Review Sta
 - Follow PEP 8 guidelines.
 - Use explicit type annotations for all function and method signatures.
 - Preserve all existing comments and docstrings unless explicitly changing behavior.
-- Use clickable file links (`file://...`) in documentation and commit messages where applicable.
+- Use repository-relative links for docs that readers can open from GitHub or the documentation site.

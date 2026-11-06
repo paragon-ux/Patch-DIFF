@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from app.core.canonicalization import canonicalize_text
+from app.core.config import get_workspace_root
 from app.core.hashing import canonical_sha256
 from app.core.line_endings import source_line_endings
+from app.services.workspace_sync_service import read_workspace_source_with_identity
 from app.storage.models import CloudTargetFiles, EditingCycles, Projects, TargetSnapshots
 
 
@@ -33,10 +36,14 @@ def initialize_target(
     content: str | bytes,
     target_type: str,
     project_id: uuid.UUID | None = None,
+    workspace_tracked: bool = False,
+    workspace_root_identity: str | None = None,
 ) -> InitializedTarget:
     """Create canonical target state, active editing cycle, and initial snapshot."""
 
     line_endings = source_line_endings(content)
+    if workspace_tracked:
+        line_endings = {**line_endings, "workspace_tracked": True, "workspace_root_identity": workspace_root_identity}
     canonical_content = canonicalize_text(content)
     current_hash = canonical_sha256(canonical_content)
     target_file_id = uuid.uuid4()
@@ -93,6 +100,28 @@ def initialize_target(
         active_editing_cycle_id=editing_cycle_id,
         initial_snapshot_id=snapshot_id,
         source_line_endings=line_endings,
+    )
+
+
+def initialize_target_from_workspace(
+    session: Session,
+    *,
+    filename: str,
+    target_type: str = "text/plain",
+    project_id: uuid.UUID | None = None,
+    workspace_root: str | os.PathLike[str] | None = None,
+) -> InitializedTarget:
+    """Initialize a canonical target directly from a validated file inside PATCHDIFF_WORKSPACE_ROOT."""
+    eff_root = workspace_root if workspace_root is not None else get_workspace_root()
+    raw_bytes, norm_rel, identity = read_workspace_source_with_identity(eff_root, filename)
+    return initialize_target(
+        session,
+        filename=norm_rel,
+        content=raw_bytes,
+        target_type=target_type,
+        project_id=project_id,
+        workspace_tracked=True,
+        workspace_root_identity=identity,
     )
 
 

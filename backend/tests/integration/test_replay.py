@@ -3,7 +3,8 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 
 from app.core.failures import FailureReason
-from app.services.pdcp_service import submit_pdcp
+from app.pdcp.typed import build_record, canonical_record_json
+from app.services.pdcp_service import submit_edits
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
 from app.storage.db import SessionLocal
@@ -14,14 +15,14 @@ from app.storage.models import (
     CurrentPdcpFiles,
     TargetSnapshots,
 )
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target, edit_pairs
 
 
 def test_replay_reconstructs_current_target_from_accepted_logs() -> None:
     target_id = create_target("alpha")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("alpha", "beta")))
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("beta", "gamma")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("alpha", "beta")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=1, intent="Update text", edits=edit_pairs(("beta", "gamma")))
         result = replay_target(session, target_file_id=target_id)
 
     assert result.status == "success"
@@ -33,7 +34,7 @@ def test_replay_reconstructs_current_target_from_accepted_logs() -> None:
 def test_replay_ignores_current_pdcp_manifest_ledger_and_save_snapshots_as_authoritative() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")))
         save_target(session, target_file_id=target_id)
         current_pdcp = session.scalar(select(CurrentPdcpFiles).where(CurrentPdcpFiles.target_file_id == target_id))
         current_pdcp.pdcp_content = "corrupted display state"
@@ -57,7 +58,7 @@ def test_replay_ignores_current_pdcp_manifest_ledger_and_save_snapshots_as_autho
 def test_replay_protocol_failure_for_corrupted_accepted_pdcp_log() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")))
         log = session.scalar(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id))
         log.pdcp_content = "not a pdcp"
         session.flush()
@@ -71,9 +72,12 @@ def test_replay_protocol_failure_for_corrupted_accepted_pdcp_log() -> None:
 def test_replay_transaction_failure_for_corrupted_accepted_pdcp_applicability() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")))
         log = session.scalar(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id))
-        log.pdcp_content = pdcp_for(target_id, ("missing", "new"))
+        log.pdcp_content = canonical_record_json(build_record(
+            target_file_id=str(target_id), expected_target_version=0, expected_current_hash=None,
+            intent="Tampered match", edits=[{"match": "missing", "replace": "new"}],
+        ))
         session.flush()
         result = replay_target(session, target_file_id=target_id)
 
@@ -85,7 +89,7 @@ def test_replay_transaction_failure_for_corrupted_accepted_pdcp_applicability() 
 def test_replay_hash_mismatch_for_corrupted_after_hash() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")))
         log = session.scalar(select(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == target_id))
         log.after_hash = "a" * 64
         session.flush()
@@ -99,7 +103,7 @@ def test_replay_hash_mismatch_for_corrupted_after_hash() -> None:
 def test_replay_does_not_depend_on_current_materialized_target() -> None:
     target_id = create_target("old")
     with SessionLocal() as session:
-        submit_pdcp(session, target_file_id=target_id, pdcp_content=pdcp_for(target_id, ("old", "new")))
+        submit_edits(session, target_file_id=target_id, expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")))
         target = session.get(CloudTargetFiles, target_id)
         target.current_content = "materialized corruption"
         target.current_hash = "b" * 64
@@ -122,10 +126,10 @@ def test_replay_coherent_cut_with_preloaded_target_after_concurrent_commit() -> 
         assert t1.version == 0
 
         # Session 2 commits edit (v0 -> v1)
-        res2 = submit_pdcp(
+        res2 = submit_edits(
             session2,
             target_file_id=target_id,
-            pdcp_content=pdcp_for(target_id, ("v0_initial", "v1_committed")),
+            intent="Update text", edits=edit_pairs(("v0_initial", "v1_committed")),
             expected_target_version=0,
         )
         assert res2.status == "accepted"
@@ -162,10 +166,10 @@ def test_replay_target_lock_blocks_concurrent_writer() -> None:
         tx2.__enter__()
         session2.execute(text("SET LOCAL lock_timeout = '250ms'"))
         with pytest.raises(OperationalError):
-            submit_pdcp(
+            submit_edits(
                 session2,
                 target_file_id=target_id,
-                pdcp_content=pdcp_for(target_id, ("base", "writer_update")),
+                intent="Update text", edits=edit_pairs(("base", "writer_update")),
                 expected_target_version=0,
             )
         tx2.__exit__(None, None, None)

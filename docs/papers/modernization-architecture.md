@@ -1,0 +1,329 @@
+# PatchDIFF Modernization Architecture
+
+This document records the design decisions that connect the MCP tools,
+deterministic runtime and PostgreSQL storage. Start with the workspace
+boundary for file editing or the structural batch contract for observed edits.
+
+The as-built record, compatibility details and verification scope are in [product change record](product-change-record.md).
+
+## Workspace file boundary
+
+The opt-in `workspace` profile exposes five tools for importing, reading,
+finding, editing and saving a workspace file. The seven-tool
+`observed_workspace` profile combines structural observation and guarded bundle
+commits with agent-owned import and SAVE publication. The stdio server checks
+the configured workspace and PostgreSQL migration revision before handshake.
+
+The service imports file bytes into a canonical LF working target in
+PostgreSQL. Guarded edits commit there through the shared deterministic
+applier. Explicit workspace SAVE stages and installs bytes under a lease on
+the physical destination directory, then commits the database checkpoint.
+Each outcome has its own evidence. A failure after installation can leave the
+file published with a partial result or an unknown checkpoint outcome. The
+operator inspects disk and database before reconciling.
+
+This boundary relies on a stable, cooperatively owned POSIX workspace and a
+service-owned database transaction. See the [workspace contract](../guides/workspace-quickstart.md).
+
+## Guarded operations, whole-document replacement, preview and diagnostics
+
+These native capabilities keep the core thesis unchanged: exact matching, sequential in-memory simulation, per-target atomic commit, append-only history and PostgreSQL authority. The normative specifications are defined in [MCP tool contracts](../spec/mcp-tools.md#guarded-editing-reads-preview-and-diagnostics) and [Transaction formats](../spec/transaction-formats.md).
+
+- **New formats, new immutable profiles.** `patchdiff-tx/2` (ordered match/span operations with exact `expected_text`, runtime `patchdiff-mvp-0.3.0`) and `patchdiff-tx/3` (one guarded `replace_all`, runtime `patchdiff-mvp-0.4.0`) lower into the shared transaction applier. tx/2 spans that carry `expected_before`/`expected_after` adjacency guards record the separate immutable runtime `patchdiff-mvp-0.5.0`.
+- **Admission is a service boundary.** tx/3 fresh size limits (1,000,000 code points and 1,048,576 UTF-8 bytes, raw and canonical) run after request-key recovery or conflict auditing and never during replay.
+- **Advisory reads are not authority.** `patchdiff_preview` and `patchdiff_read_lines` observe one committed row without locks or writes; submission always re-locks and rechecks guards. Preview evidence is projected into a 32,768-byte budget with explicit omission metadata, without changing shared results or stored history.
+- **Bounded failure evidence.** Rejections persist at most 256 code points of the actual failing buffer (a prefix, or a window around a known failure location), bounded exact candidates, consumed-match evidence and the bounded near-miss query. Near-miss ranking and `current_context` are response-only. Near misses run only after a service-owned commit releases the lock, never inside caller-owned transactions, over a bounded in-memory copy of the failing buffer, using an exact Ukkonen-banded Landau-Vishkin Levenshtein program with exact positional pigeonhole filtering within a fixed cell cap.
+- **Advisory warnings are not verdicts.** Accepted transactions can carry `no_op_change`, `no_op_transaction`, `occurrence_index_basis_shift` and `grapheme_boundary_split` warnings. They are computed by the pure applier, stored on accepted rows only when present, returned on exact recovery, and never evaluated by replay.
+- **Line endings are recorded, not stored.** Canonical LF content and hashes are unchanged. Migration `20261022_0003` records each new upload's line-ending facts so `patchdiff_export_target(format="original_eol")` can restore a uniform original style.
+- **Invocation metadata is not identity.** The optional `correlation_id` is never stored and never enters request keys or fingerprints.
+- **Evidence limits.** Discovery examples run over real stdio and PostgreSQL. No model-success or representative production-performance claim is made; measurements are local and synthetic.
+
+## 0. Reading guide and evidence limits
+
+The structural batch extension preserves per-target atomicity across multiple
+server-issued scopes. Its specification is defined in
+[structural batch contract](../spec/structural-batch-editing.md): one discovery per
+snapshot, per-group tx/2 evaluation through the existing applier, descending
+assembly, one locked commit, exact request recovery, and all-scope replay without
+Waymark.
+
+PatchDIFF organizes public tool access around three primary profiles aligned with its operational arms:
+1. **`observed_workspace` (Primary)**: The full 7-tool structural editing profile enabling autonomous agents to manage file import, AST scope discovery, observation, atomic bundle commits, and explicit SAVE publication.
+2. **`workspace`**: The 5-tool exact text file editing profile from import to SAVE publication.
+3. **`observed_v2`**: The 5-tool structural profile for host-managed lifecycle environments where pre-edit setup, checkpointing, and disk writes are orchestrated by the host.
+
+- **Conceptual design thesis** = [concept paper v6](concept-paper-v6.md).
+- **Active implementation contracts** = `docs/spec/core-runtime.md`, `docs/spec/mcp-tools.md`, `docs/spec/data-model.md`, `docs/spec/transaction-formats.md`, `docs/spec/profiles/index.md`, `docs/spec/structural-batch-editing.md`, `docs/benchmarks/test-matrix.md`, `docs/guides/host-integration-guide.md`, `docs/guides/claude-desktop-setup.md`, `README.md`.
+- **Historical design context (E1 to E8)**: External vendor tooling patterns surveyed during architectural formation (Section 3).
+- **Current empirical evidence**: The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) compares three complete workflows across 18 trials (90 exact files, 360 behavioral assertions passed). Workspace's mean verified flow duration and editor-call totals were 16.2% and 42.7% lower than Native. Preparation and owner connector handoffs are recorded separately as setup overhead.
+
+## 1. The thesis, restated
+
+External presentation can be selected independently with immutable startup
+`PATCHDIFF_MCP_RESPONSE_MODE=detailed|compact` (default detailed). Compact observed
+success results omit supplementary facts/metadata at the external MCP boundary;
+the registry, deterministic runtime, persistence and request identity remain
+unchanged. Detailed sessions retain full results. The trusted host may finalize
+edited targets using existing scalar SAVE/REPLAY/export rather than asking the
+model to manage lifecycle turns. SAVE remains non-idempotent; uncertain outcomes
+require explicit operator reconciliation. See the
+[representation contract](../spec/mcp-tools.md#external-response-representations) and
+[host recipe](../guides/host-integration-guide.md#trusted-scalar-finalization).
+
+From [concept paper v6](concept-paper-v6.md) (carrying forward the core thesis of [the earlier design paper](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/docs/legacy/PatchDIFF-Concept-Paper-5.md), abstract, Section 4, Section 9): PatchDIFF's core contribution is not textual diff syntax by itself, but *"the runtime and lifecycle semantics that make model-generated textual deltas safe to apply repeatedly to one cached authoritative document."*
+
+| Category | Items |
+| --- | --- |
+| **Properties worth preserving** | Explicit target authority in Postgres; checked state transitions (`expected_target_version` / `expected_current_hash`); all-or-nothing per-target atomic commit; durable append-only audit log of **both accepted and rejected** attempts with retry lineage (`parent_pdcp_log_id`) and idempotent request recovery (`client_request_id`); accepted-only manifest ledger; deterministic replay from initial snapshot + ordered accepted logs; non-executable declarative core; explicit separation of validity levels (`protocol_valid`, `transaction_valid`, `task_correct`, `semantic`). |
+| **Mechanisms reassessed** | Typed JSON proposals use a transaction intent and optional per-edit metadata. The host owns retries and obtains context with bounded reads and exact search. |
+| **Implementation defects remediated** | Overlapping-match enumeration bug (`matcher.py`); explicit replay profile dispatch (`protocol_version` + `runtime_version`) and component-level `materialized_state_checks`; stage-accurate `validity` reporting (`ValidationStage`); complete `TYPED_EDIT_JSON_SCHEMA` advertised in MCP `tools/list`; `client_request_id` idempotency and lost-response recovery; safe UUID and parent-lineage validation; stdio MCP adapter resilience against non-object `params`; `SVC-001` exact pigeonhole + Landau-Vishkin near-miss search (`1.7 ms` prose / `41.9 ms` repetitive log on 64K buffers); `MCP-001` PostgreSQL 16+ `LATERAL` history and ledger projection (`14.68 ms` / `22.85 ms` over 20 MB `tx/3` history). |
+
+### 1.1 Whitepaper Hypothesis & Limitation Reconciliation (`PatchDIFF-Concept-Paper-5.md` -> `concept-paper-v6.md`)
+
+The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md)
+documents the current comparative model experiments across Native, host-orchestrated structural editing,
+and agent-owned Workspace editing.
+
+| Structured Declarative Design | Current Modernized Implementation (`patchdiff-tx/1..3` + Profiles `0.1.0`..`0.5.0`) |
+| --- | --- |
+| Declarative JSON as primary model-facing transaction format | Structured JSON transactions (`patchdiff-tx/1`, `tx/2`, `tx/3`) |
+| Structured metadata per transaction | Required top-level transaction `intent`, optional per-edit `rationale`/`risk`, and runtime-derived `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests) |
+| Server-mediated context workflow | Host-owned planning, bounded reading (`patchdiff_read_target`, `patchdiff_read_lines`, `patchdiff_find_occurrences`), proposal, and retry loop over MCP |
+| Expressive edit representations | Exact match (`tx/1`/`tx/2`), guarded `[start, end)` code-point spans with `expected_text` and optional `expected_before`/`expected_after` adjacency checks (`tx/2`), and guarded whole-target replacement (`tx/3`) |
+| Structured recovery diagnostics | Stage-aware `ValidationStage`, bounded `failure_context` / `current_context` (`<= 256` code points), `exact_candidates` (up to 5), post-commit `near_misses` (up to 3), and read-only `patchdiff_preview` |
+| Idempotent keyed retries | Durable idempotent outcome recovery via `(target_file_id, client_request_id)` |
+| Immutable runtime behaviors | Versioned immutable replay profiles (`patchdiff-mvp-0.1.0` through `patchdiff-mvp-0.5.0`) dispatched per `(protocol_version, runtime_version)` |
+
+| Research Hypothesis / Architectural Mechanism | Modernized Mechanism (`patchdiff-tx/1..3`) | Measured / Verified Evidence |
+| --- | --- | --- |
+| **H1: Reduces full-document decoding & wire cost** | Typed JSON transactions (`patchdiff-tx/1`, `tx/2`) scale $O(\text{delta})$ with top-level `intent` + optional per-edit `rationale`. | [Deterministic byte accounting](https://github.com/paragon-ux/Patch-DIFF/blob/56d3545d9f4369bc1e57f593dbb71bbd37128b9e/backend/tests/verification/offline_eval.py): **`151 B`** wire (`206 B` stored) for 1 edit; **`259 B`** wire (`314 B` stored) for 5 edits. |
+| **H2: Reduces unintended mutation outside requested regions** | Exact LF-canonical code-point matching (`tx/1`), exact `expected_text` + optional `expected_before` / `expected_after` span adjacency guards (`tx/2`, profile `0.5.0`), and UAX #29 `grapheme_boundary_split` warnings. | Verified across **923** unit tests and **506** live PostgreSQL/stdio integration tests; unmatched spans are byte-for-byte invariant. |
+| **H3: Improves stale-context & concurrent divergence detection** | Required `expected_target_version` and/or `expected_current_hash` on all typed tools under PostgreSQL `SELECT ... FOR UPDATE`, plus `no_op_change` / `no_op_transaction` warnings for ABA/no-op detection. | Deterministic rejection (`target_version_mismatch`, `target_hash_mismatch`, `target_diverged`) with zero target mutation; `client_request_id` recovers lost responses (`deduplicated: true`). |
+| **H4: Supports multi-edit cached-document workflows** | Sequential in-memory simulation, SAVE cycle rotation (`patchdiff_save`), and PostgreSQL 16+ (`pg_input_is_valid`) `LATERAL` history/ledger projection (`MCP-001`). | Over a **20 MB** history substrate: **`14.68 ms`** ledger / **`22.85 ms`** log for `50 × 400 KB` `tx/3` (**16 to 19× faster**); **`136.72 ms`** log / **`221.59 ms`** ledger for `20 × 1 MB` `tx/1`. |
+| **H5: Preserves deterministic replay across protocol evolution** | Profile-dispatched replay (`(protocol_version, runtime_version)` across `0.1.0`..`0.5.0`) + 4-component `materialized_state_checks` (`content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, `version_matches`). | Live replay checks cover typed and observed histories, unknown profiles, and component-level divergence including raw CRLF. |
+| **H6: Improves reviewability & separates claims from facts** | Accepted-only `append_only_manifest_ledger` separates model-claimed `intent` / `rationale` from runtime-derived `derived_json` (`span_start`, `span_end`, char counts, SHA-256 digests). | Preview (`patchdiff_preview`, `<= 32,768 B`) and ledger entries expose exact runtime-computed spans and hashes without trusting model prose. |
+| **H7: LLMs can reliably generate valid PatchDIFF transactions** | Native MCP JSON tool schemas (`TYPED_EDIT_JSON_SCHEMA`, `TYPED_OPERATIONS_JSON_SCHEMA`, `TYPED_REPLACEMENT_JSON_SCHEMA` advertised in `tools/list`), 13 executable discovery examples (`<= 8,192 B`). | Automated tests cover schema and admission behavior. The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) independently reconstructed all 60 accepted guarded commits across 12 PatchDIFF trials. All 90 files across the 18 Native/Structural/Workspace trials matched the oracle and all 360 behavioral checks passed. Model selection is operator-attested. |
+| **Limitations Resolved: Delimiter collision & rich rejection diagnostics** | JSON-native `patchdiff-tx/1..3` eliminates text delimiter collisions while keeping JSON syntax protocol-validated; exact pigeonhole + Landau-Vishkin Levenshtein `near_misses` after lock release, plus bounded `failure_context`, `exact_candidates`, `patchdiff_preview`, and `client_request_id` idempotency. | Target content containing standalone delimiter lines is safely accepted as valid JSON strings. Local 5-run 65,536-code-point near-miss medians: **`1.7 ms`** on prose and **`41.9 ms`** on repetitive logs (100% scanned). |
+
+## 2. Responsibility map (modernized state)
+
+| Responsibility | Owner | Implementation / Contract |
+| --- | --- | --- |
+| User intent, planning, model selection, conversation compaction | **Host** | Host/client loop (`host-integration-guide.md`). PatchDIFF never calls an LLM or holds model credentials. |
+| Authoritative target reads and exact occurrence search | **PatchDIFF** | `patchdiff_read_target` (`start`, `length`, `next_start`, `truncated`) and `patchdiff_find_occurrences` (`text`, `context_chars`, `start_occurrence`, `max_results`, `next_occurrence_index`). |
+| Structural AST scope discovery & observation | **PatchDIFF (Waymark)** | `patchdiff_list_scopes` and `patchdiff_observe_scopes` in `observed_workspace` and `observed_v2`. |
+| Proposal generation & retry loop | **Host / Model** | Model emits a guarded typed proposal. On rejection, host inspects diagnostics, re-reads via `patchdiff_read_target` / `patchdiff_find_occurrences`, and resubmits with `parent_pdcp_log_id` and `attempt`. |
+| Precondition guards, applicability validation, sequential simulation | **PatchDIFF Core & Service** | Typed submission paths in `pdcp_service.py` share guards and `apply_pdcp_transaction` in `pdcp/applier.py`. |
+| Request idempotency & lost-response outcome recovery | **PatchDIFF Service & DB** | `client_request_id` + `request_fingerprint` on `append_only_pdcp_logs` (`uq_pdcp_logs_target_client_request_id`). |
+| Atomic persistence & append-only audit | **PatchDIFF Storage (Postgres)** | Row-locked `cloud_target_files`, `append_only_pdcp_logs`, `append_only_manifest_ledger`, `target_snapshots`, `editing_cycles`. |
+| Deterministic replay & materialized-state verification | **PatchDIFF Replay Service** | `replay_target` dispatches on `(protocol_version, runtime_version)` and reports `materialized_state_matches` and `materialized_state_checks`. |
+| **Agent-Owned Workspace Editing** (`observed_workspace` / `workspace`) | **Agent** | Agent imports project files via `patchdiff_initialize_target` (`from_workspace: true`), submits guarded edits or scope bundles, and directly publishes to disk via `patchdiff_save` (`sync_workspace: true`) with drift validation. |
+| **Host-Orchestrated Lifecycle Editing** (`observed_v2`) | **Host Harness** | Agent submits structural edits; host harness manages pre-edit target initialization, SAVE checkpointing, replay verification, and physical file export out-of-band. |
+
+## 3. Primary external evidence (E1 to E8, verified 2026-10-20)
+
+All eight external sources were fetched directly from their primary vendor pages on `2026-10-20`:
+
+| ID | Primary Source URL (Verified 2026-10-20) | Version / Identifier | Verified Capabilities & Guarantees | Relevance to PatchDIFF |
+| --- | --- | --- | --- | --- |
+| **E1** | `https://platform.claude.com/docs/en/agents-and-tools/tool-use/text-editor-tool` | `text_editor_20250728` (`str_replace_based_edit_tool`); legacy `text_editor_20250124`, `text_editor_20250429` | Built-in schema tool with commands `view` (supports `view_range`), `str_replace` (`old_str`, `new_str`), `create`, `insert` (`insert_line`). Requires exact unique match for `old_str`; returns tool error (`is_error: true`) when 0 or multiple matches exist. Client harness executes file I/O and backup/undo. | Confirms modern tool-use models natively emit structured JSON exact-string replacements (`old_str`/`new_str`) without bespoke text delimiters, and rely on bounded range reads (`view_range`) to recover from ambiguity. |
+| **E2** | `https://developers.openai.com/api/docs/guides/tools-apply-patch` | Responses API built-in tool `{"type": "apply_patch"}` (GA since GPT-5.1); `@openai/agents` `applyDiff` | Model emits `apply_patch_call` with `operation` (`create_file`, `update_file`, `delete_file`), `path`, and V4A diff hunks. Harness returns `apply_patch_call_output` with `status: "completed" \| "failed"` and `output`. Docs state atomicity and path-traversal validation must be implemented by the caller's harness. | Shows that even when a model emits structured tool calls, multi-edit atomicity, state precondition guards, and durable rejected-attempt logs are not provided by the model API, they must be enforced by the state authority. |
+| **E3** | `https://code.claude.com/docs/en/checkpointing` | Claude Code Checkpointing (`/rewind`, `Esc+Esc`, `cleanupPeriodDays=30`, max 100 checkpoints) | Tracks direct file edits made through Claude's editing tools per user prompt. Explicitly documented limitations: **Bash command changes (`rm`, `mv`, `cp`, scripts) are not tracked**; background subagent changes are not tracked; external concurrent changes are not tracked; symlinks/hard links are not followed; documented as *"not a replacement for version control"*. | Proves local IDE/CLI checkpointing is a convenience undo over direct tool writes, not an authoritative transactional ledger or deterministic replay engine. |
+| **E4** | `https://code.claude.com/docs/en/memory` | Claude Code Memory (`CLAUDE.md`, `.claude/rules/`, `AGENTS.md`, `MEMORY.md` first 200 lines / 25 KB) | Instruction files and auto-memory are loaded into the model context window. Vendor docs state explicitly: *"CLAUDE.md files are context, not enforced configuration... instructions in CLAUDE.md are advisory."* | Confirms that safety and state invariants cannot rely on prompt rules or `AGENTS.md` alone; invariants must be enforced deterministically by the server/runtime. |
+| **E5** | `https://code.claude.com/docs/en/hooks` | Claude Code Hooks (`PreToolUse`, `PostToolUse`, `PermissionRequest`, `Stop`, `UserPromptSubmit`) | Deterministic lifecycle hooks. `PreToolUse` can `allow`, `deny`, `ask`, `defer`, or rewrite `updatedInput` before a tool runs. `PostToolUse` runs *after* a tool has already executed and **cannot undo** a completed write. | Confirms pre-commit validation (`PreToolUse` / transaction pre-check) is the only point that can prevent partial or invalid mutation; post-hoc checks can only report or trigger follow-up turns. |
+| **E6** | `https://antigravity.google/docs/ide/review-changes-editor` | Google Antigravity IDE Review Changes Editor | Native IDE review pane presenting per-file diffs, inline comment threads, and accept/reject controls over workspace changes before or after agent turns. | Shows modern hosts already provide rich human diff-review UIs; PatchDIFF should supply machine-readable span/hash evidence (`evidence.changes`) rather than building a UI. |
+| **E7** | `https://antigravity.google/docs/mcp` | Google Antigravity MCP Integration (`mcp_config.json`, MCP 2.0) | Native MCP client supporting local `stdio` (`command`, `args`, `env`) and remote HTTP/SSE (`serverUrl`) MCP servers, exposing discovered tools and `inputSchema` directly to the agent loop. | Confirms `tools/list` JSON Schema is the primary contract discovered by the host agent; every required/optional field of `patchdiff_submit_edits` must be advertised in `inputSchema`. |
+| **E8** | `https://api.github.com/repos/modelcontextprotocol/python-sdk/releases/latest` | Official `modelcontextprotocol/python-sdk` `v2.3.0` (released `2026-10-02T22:02:27Z`) | Provides typed tool registration, JSON Schema generation from Pydantic/typed models, and stdio/SSE/StreamableHTTP transports. | PatchDIFF's thin stdio JSON-RPC adapter (`external_adapter.py`) explicitly advertises complete JSON Schemas (`TYPED_EDIT_JSON_SCHEMA`) and validates JSON-RPC `params` types without requiring an extra runtime dependency. |
+
+### 3.1 Where PatchDIFF provides distinct guarantees
+
+1. **Checked state transitions on a single authoritative target**: `expected_target_version` and/or `expected_current_hash` verified under Postgres `SELECT ... FOR UPDATE`, plus a post-simulation `TARGET_DIVERGED` guard.
+2. **All-or-nothing multi-edit atomicity per target**: Sequential in-memory simulation of `edits[]`; if edit $k$ fails, zero edits are committed.
+3. **Durable append-only history of both accepted and rejected attempts**: Every admitted target-linked attempt evaluated under a target row lock is persisted with its exact payload, hash, `failure_reason`, `diagnostic_json`, retry lineage (`parent_pdcp_log_id`), and `client_request_id`. Pre-admission errors (such as malformed transport envelopes, missing `target_file_id`, or unregistered targets) fail closed immediately without writing database rows.
+4. **Idempotent submission & lost-response outcome recovery**: Retrying a request with the same `(target_file_id, client_request_id)` returns the recorded terminal outcome (`deduplicated: true`) even after the target has advanced or returned to an earlier hash.
+5. **Deterministic replay & component-level materialized-state verification**: Reconstructs target state from `initial_upload` snapshot + ordered accepted logs, dispatching on `(protocol_version, runtime_version)` and verifying `content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, and `version_matches`.
+
+## 4. Architecture Decisions (A1 to A8) and Contract Specifications (C1 to C6)
+
+![Modernization Architecture and Service Flow](../assets/diagrams/modernization-architecture-flow.svg)
+
+### Summary of Decisions A1 to A8
+
+| Decision | Summary |
+| --- | --- |
+| **A1: Server Role & Host-Owned Retry** | PatchDIFF is a deterministic transaction service with authoritative read/search tools (`patchdiff_read_target`, `patchdiff_find_occurrences`). Planning and retry loops belong to the host. |
+| **A2: Typed input formats** | The three submission tools accept typed matches (`patchdiff-tx/1`), guarded match and span operations (`patchdiff-tx/2`), or a sole guarded replacement (`patchdiff-tx/3`). They lower to the same deterministic applier. |
+| **A3: Asserted vs. Derived Metadata** | Typed submissions require top-level `intent` and allow optional per-edit `change_id`, `rationale`, `risk`. The runtime computes `derived_json` (`span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`) for accepted ledger entries (`origin='typed'`). |
+| **A4: Managed Postgres Target Authority** | Workspace import reads the starting file bytes. The canonical working copy lives in Postgres (`cloud_target_files`) guarded by row-level locks (`SELECT ... FOR UPDATE` with `execution_options(populate_existing=True)`). Evaluates state guards against freshly loaded database state after acquiring the lock. Rejects pending direct in-memory mutations on the target before autoflush/refresh. The service does not commit caller-owned outer transactions. |
+| **A5: SAVE Checkpointing & Bounded History** | `patchdiff_save` creates a `save_checkpoint` snapshot and rotates the active editing cycle. Workspace SAVE can also publish bytes after checking the disk digest. Drift rejects SAVE. A failure after file installation can return a partial receipt with publication evidence and an unconfirmed checkpoint. Both `patchdiff_get_pdcp_log` and `patchdiff_get_manifest_ledger` provide bounded pagination (default 50, maximum 200, exclusive `before_sequence` over `log_sequence` / `ledger_sequence`, returning `has_more` and `next_sequence`). Omitted limit selects bounded default 50. |
+| **A6: Per-Target Atomicity, Required Guards & Idempotency** | `patchdiff_submit_edits` requires at least one of `expected_target_version` (`0..2^63-1`) or `expected_current_hash` (64 hex lowercase). Optional `client_request_id` provides deterministic deduplication and lost-response outcome recovery. A reused `client_request_id` recovers recorded outcome; a monotonic version guard prevents stale acceptance; a hash-only guard does not identify a request and can repeat across no-op or ABA histories. |
+| **A7: Stage-Based Validity & Evidence** | Submit responses include `validity` (`protocol_valid`, `transaction_valid`, `task_correct: "not_evaluated"`, `semantic: "not_evaluated"`) computed from the actual `ValidationStage` reached, plus `evidence.changes` on acceptance. |
+| **A8: Honest Evaluation Boundary** | Offline evaluation measures serialized bytes and deterministic verdicts. The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) measures one 18-trial live-model workload. Runtime tests, model/build attestation limits, timed intervals and owner setup delays remain distinct. |
+
+### Detailed Contract Specifications (C1 to C6)
+
+#### C1. Typed Transaction Contract (`patchdiff_submit_edits` / `patchdiff-tx/1`)
+
+- **Discovery Schema (`tools/list`)**: `external_adapter.py` advertises `TYPED_EDIT_JSON_SCHEMA` from `app.pdcp.typed` on `patchdiff_submit_edits.inputSchema.properties.edits`:
+  - Top-level properties: `target_file_id` (required `string`), `intent` (required non-blank `string`), `edits` (required `array`, `minItems: 1`), `expected_target_version` (`integer | null`, bounded `0..2^63-1`), `expected_current_hash` (`string | null`, 64-char lowercase hex), `source` (`string`, default `"model_response"`), `parent_pdcp_log_id` (`string | null`), `attempt` (`integer | null`, bounded `1..2^31-1`), `client_request_id` (`string | null`, `1..128` printable ASCII).
+  - Precondition rule: At least one of `expected_target_version` or `expected_current_hash` must be non-null; omitting both or supplying both as null rejects with `FailureReason.CONTEXT_MISSING`. An `anyOf` in the discovery schema reflects this requirement.
+  - Per-edit item schema (`additionalProperties: false`):
+    - Required: `match` (non-empty `string`), `replace` (`string`, empty string `""` deletes the matched span).
+    - Optional: `change_id` (`string | null`; defaults to `chg_001`, `chg_002`, ... by 1-based index when omitted or `null`; validated against `^[A-Za-z0-9_.:-]{1,64}$` and per-transaction uniqueness), `rationale` (`string | null`, non-blank if provided), `risk` (`"low" | "medium" | "high" | null`), `occurrence_index` (`integer >= 1 | null`), `anchor_before` (`string | null`, non-empty if provided), `anchor_after` (`string | null`, non-empty if provided).
+    - `region_hint` is **not** part of `patchdiff-tx/1` and is rejected as an unknown edit field (`FailureReason.MANIFEST_INVALID`).
+- **Canonical Persisted Record (ordinary input; invalid-text evidence exception below)**: Stored in `append_only_pdcp_logs.pdcp_content` with `protocol_version = "patchdiff-tx/1"`, serialized via `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` over the submitted record with raw decoded string values preserved. Canonical JSON normalizes object-key order and serialization, not newlines inside string values; runtime matching separately canonicalizes text. This follows the request identity contract and existing build_record/canonical_record_json behavior; it does not introduce a new normalized-identity alternative.
+
+Rejection context: newly recorded rejections for admitted target-linked attempts persist immutable `diagnostic.failure_context` bounded to at most 256 code points (prefix or window around the failure point); rejected submission responses also return separate response-only `current_context` from the refreshed locked canonical target. The full representation and numeric budgets are specified in [MCP tool contracts](../spec/mcp-tools.md). Applicability failures capture only a bounded prefix of the actual failing buffer, labeled `canonical_target` or `intermediate_buffer` with `prior_changes`. Observed version/hash always identify transaction-start canonical state, never an uncommitted intermediate hash. Pre-admission rejections (such as malformed envelopes or missing target IDs), unknown targets, and pending caller-local dirty state fail closed without database rows and return explicit unavailable contexts. Acceptance, exact matching, request identity and replay profiles are unchanged.
+
+#### C2. Validation Stage Model, Failure Mapping, and Format-Specific Diagnostics
+
+- **Validation Stages (`ValidationStage`)**:
+  1. `PRECONDITION_GUARD`: Target lookup (`TARGET_NOT_FOUND`), malformed target UUID (`CONTEXT_INVALID`), `client_request_id` conflict (`CONTEXT_INVALID`), or pre-parse `expected_target_version` / `expected_current_hash` mismatch against database (`TARGET_VERSION_MISMATCH`, `TARGET_HASH_MISMATCH`). Reports `protocol_valid: null, transaction_valid: null`.
+  2. `PROTOCOL_VALIDATION`: Structural/schema validation of the submitted format (`MANIFEST_MISSING`, `MANIFEST_INVALID`, `BLOCK_MALFORMED`, `CONTEXT_MISSING`, `CONTEXT_INVALID` and `DISAMBIGUATION_INVALID`). Reports `protocol_valid: false, transaction_valid: null`.
+  3. `TRANSACTION_APPLICABILITY`: Core applicability simulation (`MATCH_ABSENT`, `MATCH_AMBIGUOUS`, `DISAMBIGUATION_INVALID`, `SEQUENTIAL_MATCH_INVALID`, `SPAN_OUT_OF_BOUNDS`, `SPAN_EXPECTED_TEXT_MISMATCH`, and observed scope hash mismatch (`TARGET_HASH_MISMATCH`)). Reports `protocol_valid: true, transaction_valid: false`.
+  4. `COMMIT_GUARD`: Post-simulation re-check of `target.version` and `target.current_hash` (`TARGET_DIVERGED`). Reports `protocol_valid: true, transaction_valid: true`.
+  5. `ACCEPTED`: Transaction committed. Reports `protocol_valid: true, transaction_valid: true`.
+- **Format-Specific Diagnostics**:
+  - Durably recorded rejection diagnostics include `"format"` (`"patchdiff-tx/1"`, `"patchdiff-tx/2"`, `"patchdiff-tx/3"`), `"retryable"`, `"requires_new_submission": true`, and `"validation_stage"`. `retryable` comes from the single `RETRYABLE_FAILURE_REASONS` set shared by the applier and the service: a new proposal derived from a fresh read can succeed, the identical request cannot. Request-key conflicts and invalid keys add `diagnostic.code` (`request_key_conflict`, `invalid_client_request_id`). Unlinked precondition rejections (malformed/missing target or pending local direct modifications, with `pdcp_log_id: null`) retain their existing minimal diagnostic fields plus explicit unavailable failure context; their public validity fields still report the reached precondition stage.
+- **Lineage & UUID Safety**:
+  - Malformed `target_file_id` returns a clean rejection (`CONTEXT_INVALID`, `pdcp_log_id: null`) without DB crash.
+  - Nonexistent `target_file_id` returns `TARGET_NOT_FOUND` (`pdcp_log_id: null`).
+  - `parent_pdcp_log_id` must reference an existing attempt belonging to the same target with `parent.status == "rejected"`. An accepted parent, nonexistent parent, or cross-target parent produces a durable `CONTEXT_INVALID` rejection on the target with `parent_pdcp_log_id = null` on the log row to prevent DB FK violations.
+- **Safe Persistence Representation**:
+  - Malformed or out-of-range typed metadata (`expected_target_version`, `expected_current_hash`, `attempt`) are set to `NULL` in the constrained DB columns before flushing.
+  - Raw unvalidated input values are preserved in `diagnostic_json` (`raw_expected_target_version`, `raw_expected_current_hash`, `raw_attempt`) and in the canonical request record.
+
+#### Invalid Unicode input and rejected-attempt evidence
+
+Edit submissions and metadata must be representable as UTF-8/PostgreSQL text before normal hashing and binding. Unpaired surrogate code points and NUL are rejected, never repaired. For a known target, the shared locked submit path persists target_encoding_invalid at PROTOCOL_VALIDATION with no target/version/accepted-ledger mutation. Exact safe-key outcome recovery remains before state-guard checks; a conflicting existing key follows the fingerprint-conflict contract.
+
+The smallest safe representation uses existing fields: pdcp_content contains deterministic ASCII-escaped JSON with evidence_format=patchdiff-invalid-input/1 and the complete original inputs. Decoding this TEXT envelope reversibly recovers the invalid strings. PostgreSQL JSONB receives only safe marker/path/preview strings, never the decoded surrogate/NUL. The rejected envelope is evidence, not an accepted transaction format, and is never applied or replayed as accepted history. No schema migration, new runtime profile, or no-log exception is introduced.
+
+Valid input uses unchanged canonical serialization, hashing and fingerprints. Invalid-input fingerprints have an explicit evidence domain plus the safe evidence hash; otherwise-valid keys recover the original rejection without another row. Invalid/unencodable keys are not queried or stored as keys: their rejected row uses NULL and retains the submitted key in safe evidence. Any unpersistable metadata is represented in evidence rather than written raw to constrained TEXT/JSONB columns.
+
+Previously persisted non-evidence outcomes keep recovery compatibility: under the target lock, compare the original representable record and legacy fingerprint for that existing key before rejecting a new-input encoding violation. This lookup-only fallback can recover an old accepted/rejected escaped-NUL record or invalid-parent rejection; it does not admit a fresh invalid proposal, replace the keyed row, or rewrite historical fingerprints. The explicit invalid-evidence identity remains the rule for new invalid outcomes.
+
+Read/search string arguments return invalid_argument with safely serialized details and no edit-attempt row. Domain errors remain distinct from malformed JSON-RPC envelopes. Database/infrastructure errors are not converted to validation rejections.
+
+#### C3. Replay Contract, Runtime Profiles, and Materialized-State Verification
+
+- **Replay Observation Boundary**:
+  - Replay acquires and refreshes the target under `SELECT ... FOR UPDATE` with `execution_options(populate_existing=True)`.
+  - While holding that row lock, it reads the initial snapshot and all accepted history rows using fresh scalar projections / explicitly refreshed reads.
+  - Because all application mutation paths serialize through `select_target_for_update`, this establishes a point-in-time observation boundary relative to participating writers without phantom divergence.
+  - Caller transaction ownership is preserved: in a caller-owned transaction, the row lock remains held until that transaction ends.
+- **Explicit Profile Dispatch**:
+  - `protocol_version`: `"patchdiff-tx/1"` (decoded via `decode_record` + `to_parsed_transaction`). `"patchdiff-tx/2"` dispatches `decode_operations_record` + `to_parsed_operations` and requires a span-capable recorded profile. `"patchdiff-tx/3"` dispatches `decode_replacement_record` + `to_parsed_replacement` and requires replacement-capable 0.4.0; replay does not apply fresh size-admission limits. The internal `patchdiff-observed-batch/1` format dispatches only with `patchdiff-observed-batch-r1` and verifies every authoritative scope link before local application. Any other value fails replay with `FailureReason.REPLAY_PROTOCOL_INVALID`.
+  - The separate immutable `patchdiff-observed-batch-r1` profile enables scope-local grouped tx/2 evaluation and descending assembly; it never changes historical profiles.
+  - Runtime profiles are immutable execution settings, with separate overlap and singleton-selector flags:
+
+    | Runtime | Overlapping matches | Enforce singleton selectors | Typed change IDs |
+    | --- | --- | --- | --- |
+    | patchdiff-mvp-0.1.0 | false | false | Historical grammar |
+    | patchdiff-mvp-0.2.0 | true | false | Historical grammar |
+    | patchdiff-mvp-0.2.1 | true | false | Strict grammar |
+    | patchdiff-mvp-0.2.2 (tx/1) | true | true | Strict grammar; match only |
+    | patchdiff-mvp-0.3.0 (tx/2 operations) | true | true | Strict grammar; explicit match/span |
+    | patchdiff-mvp-0.4.0 (tx/3 sole replacement) | true | true | Strict grammar; prior capabilities plus sole replace_all |
+    | patchdiff-mvp-0.5.0 (tx/2 with span context) | true | true | Strict grammar; 0.3.0 capabilities plus span expected_before/expected_after |
+
+    Profile 0.2.2 enforces all supplied match selectors. Immutable 0.3.0 adds explicit guarded spans without replace_all. Separate immutable 0.4.0 supports tx/3 sole replacement. Immutable 0.5.0 adds only span context guards; a tx/2 record selects it exactly when a span operation contains `expected_before` or `expected_after`, so every record valid under 0.3.0 keeps 0.3.0. Submission and replay explicitly resolve all profile settings. Unknown or missing versions fail with UnsupportedRuntimeVersionError / REPLAY_PROTOCOL_INVALID. Never redefine a profile after it writes durable history.
+- **Typed decoder compatibility**: Current typed-match submissions record runtime version patchdiff-mvp-0.2.2. Strict full-string typed change-ID validation applies to typed matches and match/span operations. Guarded operations use 0.3.0, or 0.5.0 with span context; sole replacement uses 0.4.0. Recorded patchdiff-mvp-0.2.0 keeps overlapping matches and its original permissive typed change-ID grammar during replay only; supported 0.1.0 history also retains its old decoding and non-overlapping matching. Unknown runtime profiles fail explicitly. Existing recorded ID text is preserved byte-for-byte, never trimmed, and historical logs are not rewritten.
+- **Persisted request-key compatibility**: Under the target lock, exact existing string keys are looked up before enforcing new-key syntax. Only an already-persisted key can recover its recorded outcome or receive a fingerprint-conflict response. Fresh invalid keys reject; recovery does not normalize a legacy newline key.
+- **Integrity Checks per Replay Step**:
+  1. Initial snapshot exists, belongs to `target.target_file_id`, and `canonical_sha256(canonicalize_text(initial_snapshot.content)) == initial_snapshot.content_hash`.
+  2. Each accepted log row belongs to `target.target_file_id`, decodes cleanly under its recorded `protocol_version`, has a supported `runtime_version`, satisfies `before_version == expected_version` and `after_version == expected_version + 1`, and satisfies `before_hash == canonical_sha256(buffer)`.
+  3. `apply_pdcp_transaction` succeeds under the resolved `overlapping_matches` profile, `canonical_sha256(log.pdcp_content) == log.pdcp_content_hash`, and `result.after_hash == log.after_hash`.
+- **Materialized-State Health**:
+  - `materialized_state_checks` reports four booleans: `content_matches`, `stored_hash_matches`, `recomputed_hash_matches`, and `version_matches`.
+  - `materialized_state_matches` is `True` if and only if all four component checks are `True`.
+  - Materialized-state comparison: content_matches compares raw stored target.current_content directly with the reconstructed canonical buffer; do not normalize storage before this check. stored_hash_matches compares stored current_hash with reconstructed_hash; recomputed_hash_matches retains canonical_sha256(target.current_content) == reconstructed_hash; version_matches compares stored and reconstructed versions.
+  - A reconstructed history can return status=success with materialized_state_matches=false. Replay reports storage divergence without repairing or rewriting target/history. CRLF or bare CR corruption fails content_matches even when canonical hashes still agree.
+
+The lock-then-read outcome-recovery guarantee is supported and verified at PostgreSQL READ COMMITTED. A caller choosing stronger isolation may receive serialization/deadlock errors and owns any whole-transaction retry. The service never retries or commits an outer transaction or masks infrastructure errors. Concurrent tests must prove actual lock blocking and committed visibility using independent connections, not sequential calls or sleeps alone.
+
+#### C4. Request Idempotency and Lost-Response Recovery (`client_request_id`)
+
+- All three typed submission tools (`patchdiff_submit_edits`, `patchdiff_submit_operations` and `patchdiff_submit_replacement`) accept optional `client_request_id` (`^[\x21-\x7E]{1,128}$`).
+- `append_only_pdcp_logs` stores `client_request_id` and `request_fingerprint` (SHA-256 over canonical JSON of `{protocol_version, target_file_id, pdcp_content_hash, expected_target_version, expected_current_hash, parent_pdcp_log_id}`), enforced by partial unique index `uq_pdcp_logs_target_client_request_id ON append_only_pdcp_logs(target_file_id, client_request_id) WHERE client_request_id IS NOT NULL`.
+- Under the target's `FOR UPDATE` lock, **before** evaluating version/hash preconditions:
+  - If `(target_file_id, client_request_id)` exists with the **same** `request_fingerprint`, the service returns the recorded terminal outcome (`status: "accepted" | "rejected"`, `deduplicated: true`, original `pdcp_log_id`, `before_hash`, `after_hash`, `version`, `validity`, `evidence` / `diagnostic`) without re-applying the edit or inserting a new log row. This safely handles lost responses even after subsequent edits, no-op edits, or ABA hash transitions.
+  - If `(target_file_id, client_request_id)` exists with a **different** `request_fingerprint`, the service rejects with `FailureReason.CONTEXT_INVALID` (`deduplicated: false`, `diagnostic.existing_pdcp_log_id`) without mutating target state or overwriting the original log row. The same locked rejection path appends a separate rejected attempt with client_request_id=NULL and request_fingerprint equal to this submitted attempt's fingerprint. It returns the new pdcp_log_id; diagnostics link existing_pdcp_log_id and submitted_client_request_id (preview capped at 256 characters with an explicit truncation flag). The original keyed row remains unchanged and recovers its original outcome. Every separately admitted conflict, including repeated identical conflicts, creates a distinct immutable row; no collapse, cap, counter update or deletion.
+- `patchdiff_get_pdcp_log` supports filtering by `client_request_id` and `content_hash`.
+
+Parent identity: retain existing parent identity. Only a same-target rejected parent that passes lineage resolves to canonical UUID spelling; other supplied parent strings remain raw identity on rejection. Broader syntactic UUID normalization is not adopted; it would need separate historical-fingerprint compatibility. Request identity details are in [data model](../spec/data-model.md) and [host integration guide](../guides/host-integration-guide.md).
+
+For rejected exact recovery, the complete stored diagnostic (including original `failure_context`, when present) remains unchanged. Only top-level `current_context` and existing current identity fields reflect the newly locked target. Older rows without failure context are returned without retrofitting evidence. Context is cheap bounded capture inside the existing transaction; caller-owned locks and commit/rollback ownership are preserved.
+
+#### C5. Ledger and Schema Contract (Migrations `20261020_0002` and `20261105_0006`)
+
+- `append_only_manifest_ledger`:
+  - `origin`: `TEXT NOT NULL DEFAULT 'typed'` with `CHECK (origin = 'typed')`.
+  - `derived_json`: `JSONB NULL` (`span_start`, `span_end`, `matched_chars`, `replacement_chars`, `matched_sha256`, `replacement_sha256`), populated on accepted typed rows.
+  - `change_id`, `intent`: `TEXT NOT NULL` (for `'typed'`, `intent = edit.rationale or tx.intent`).
+  - `input_state`, `output_state`, `affected_region`, `user_visible_change`, `risk`: nullable `TEXT`. New rows may set `risk` when the proposal supplies it.
+- `append_only_pdcp_logs`:
+  - `client_request_id`: `TEXT NULL`.
+  - `request_fingerprint`: `VARCHAR(64) NULL`.
+  - Partial unique index `uq_pdcp_logs_target_client_request_id`.
+- Historical 0002 retains its original origin default. Additive 0006 adopts the
+  typed default/check for fresh and existing 0005 databases, refusing incompatible
+  non-typed origins before schema changes. Downgrade of 0006 restores the
+  historical default and removes its check without changing rows.
+- Downgrade refuses when it would discard typed audit facts or request identity, or when restored column constraints would reject stored rows.
+
+#### C5b. Source Line-Ending Metadata (Migration `20261022_0003`)
+
+- `cloud_target_files.source_line_endings`: `JSONB NULL`. New uploads record `{style, lf, crlf, cr, normalized, source_code_points, source_utf8_bytes, source_sha256}` from the raw upload before LF canonicalization. Existing targets keep NULL, meaning unknown; nothing is backfilled.
+- Export and workspace publication read the column. Workspace initialization records `workspace_tracked` and `workspace_root_identity`; publication checks the binding and expected raw disk digest, and successful workspace SAVE stores `last_synced_disk_sha256` and `last_synced_version`. These metadata facts do not alter canonical text or its hashes, and replay does not evaluate them.
+- Downgrade `20261022_0003 -> 20261020_0002` checks `IF EXISTS (SELECT 1 FROM cloud_target_files WHERE source_line_endings IS NOT NULL)` and raises an exception rather than discarding recorded facts.
+
+#### C6. Read, Search, and History Pagination Contract
+
+- `patchdiff_read_target(target_file_id, start=0, length=None)`:
+  - Validates `target_file_id` (UUID), `start >= 0`, `length >= 1` (when provided); returns `status: "invalid_argument"` on invalid inputs and `status: "not_found"` on unknown target.
+  - Defaults `length` to `DEFAULT_READ_CHARS = 4000` when omitted or `None`; clamps `length` to `MAX_READ_CHARS = 8000`.
+  - Returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `start`, `end`, `text`, `total_chars`, `truncated`, and `next_start` (`end` when `truncated` is `True`, else `None`).
+- `patchdiff_find_occurrences(target_file_id, text, context_chars=40, start_occurrence=1, max_results=200)`:
+  - Validates `target_file_id` (UUID), non-empty `text`, `context_chars` as a non-bool integer >=0 (default 40, clamped to 400), `start_occurrence >= 1`, `max_results >= 1`.
+  - Enumerates all exact occurrences (overlapping counted) over canonical content; returns `status: "ok"`, `target_file_id`, `version`, `current_hash`, `occurrence_count`, `returned_count`, `start_occurrence`, `occurrences` (each `{occurrence_index, start, end, before, after}`), `truncated`, and `next_occurrence_index` (`slice_end + 1` when `truncated` is `True`, else `None`).
+- Submission prefix context is diagnostic evidence, not a read/search cursor or a claim to locate an absent match. Fresh context describes the locked transaction view; caller-owned transactions can remain provisional until commit. Original failure context remains available in attempt history; history never adds a fresh target context to old diagnostics.
+
+- `patchdiff_get_pdcp_log(target_file_id, limit=50, before_sequence=None, status=None, content_hash=None, client_request_id=None, include_content=False)`:
+  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects 50; values above 200 clamp to 200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
+  - Returns newest-first `entries` including `pdcp_log_id`, `log_sequence`, `status`, `failure_reason`, `failure_detail`, `failed_change_id`, `before_hash`, `after_hash`, `before_version`, `after_version`, `pdcp_content_hash`, `protocol_version`, `runtime_version`, `submission_source`, `parent_pdcp_log_id`, `regeneration_attempt`, `regeneration_source`, `client_request_id`, `request_fingerprint`, `diagnostic`, `created_at`, and optional `pdcp_content`.
+  - Fetch limit+1 after target/status/content-hash/exact-request-key/exclusive-cursor filters, trim to limit and expose has_more and next_sequence (smallest returned sequence only when more rows exist; otherwise null). status is accepted/rejected/null, hash/key filters are safe strings or null, and include_content is boolean. History key filters retain exact safe legacy strings rather than imposing new-submission key syntax.
+- `patchdiff_get_manifest_ledger(target_file_id, include_previous_cycles=False, limit=50, before_sequence=None)`:
+  - Validates target UUID, optional before_sequence as a positive non-bool integer and limit as a positive non-bool integer or null. Omitted/null limit selects 50; values above 200 clamp to 200. Both history tools reject invalid argument types with entries=[], has_more=false and next_sequence=null; unknown targets return not_found with the same empty continuation fields.
+  - Filters `AppendOnlyManifestLedger.ledger_sequence < before_sequence` when `before_sequence` is supplied.
+  - Queries newest eligible entries up to `limit + 1` to compute `has_more = len(rows) > limit`, trims to `limit`, and presents oldest-first.
+  - Returns `entries` (including `ledger_sequence`), `has_more: bool`, and `next_sequence: int | None` (the smallest `ledger_sequence` in the returned page when `has_more` is `True`, else `None`).
+  - Caller note: Traversal must restart if `patchdiff_save` rotates the active editing cycle during an active-cycle-only traversal.
+  - include_previous_cycles must be boolean. Attempts remain newest-first; ledger selects the newest eligible page then renders it oldest-first. With sequences 1..10 and limit 3, attempts=[10,9,8], ledger=[8,9,10], both next_sequence=8; ledger before_sequence=8 gives [5,6,7]. Newer inserts do not enter a traversal continuing below its exclusive cursor.
+
+## 5. Documentation Architecture
+
+PatchDIFF documentation is organized into three distinct public collections:
+
+1. **Foundational Papers and Architecture** (`docs/papers/`):
+   - [Modernization Architecture](modernization-architecture.md): Architectural decisions A1 to A8, contracts C1 to C6, and empirical evidence E1 to E8.
+   - [Concept Paper v6](concept-paper-v6.md): Conceptual transaction model, comparative paradigm analysis, tradeoffs, and empirical research hypotheses.
+   - [Formal Transaction Model](formal-transaction-model.md): Mathematical state space, operational transition algebra, and formal invariant proofs.
+   - [Product Change Record](product-change-record.md): Authoritative ledger of capabilities, format evolution, migration integrity, and verified boundaries.
+
+2. **Normative Specifications** (`docs/spec/`):
+   - [MCP Tool Contracts](../spec/mcp-tools.md): Authoritative input schemas, parameter bounds, response envelopes, error codes, and failure contexts.
+   - [Core Runtime Specification](../spec/core-runtime.md): Pure deterministic matching, span calculation, and text transformation algorithms.
+   - [Data Model & Database Schema](../spec/data-model.md): PostgreSQL relational tables, row locking semantics, constraints, and audit log structures.
+   - [Transaction Formats](../spec/transaction-formats.md): Wire schemas and invariants for `patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`, and `patchdiff-observed-batch/1`.
+   - [Profiles Catalog](../spec/profiles/index.md): Standard tool profiles (`observed_workspace`, `workspace`, `observed_v2`).
+
+3. **Integration Guides and Operational Evidence**:
+   - [Host Integration Guide](../guides/host-integration-guide.md): Client-side orchestration patterns, tool filtering, and error handling.
+   - [Workspace Quickstart](../guides/workspace-quickstart.md): Getting started with agent-owned workspace editing.
+   - [Workspace E2E Benchmark Report](../benchmarks/workspace-e2e-benchmark.md): Verified 18-trial empirical evaluation across real-world editing workloads.
+   - [Verification Test Matrix](../benchmarks/test-matrix.md): Complete automated test suite coverage across unit, integration, migration, and audit suites.
+
+## 6. Verification Summary
+
+The [Product Change Record](product-change-record.md) records current product behavior and verification scope. The [Test Matrix](../benchmarks/test-matrix.md) maps unit, live PostgreSQL, real stdio subprocess, and isolated migration preservation coverage. Test and CI results identify the executed revision; historical suite totals do not certify later changes. Live-model performance across agent-owned and host-orchestrated workflows is established separately by the [Workspace E2E Benchmark](../benchmarks/workspace-e2e-benchmark.md).

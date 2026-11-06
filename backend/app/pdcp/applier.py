@@ -144,17 +144,6 @@ def apply_pdcp_transaction(
                     prior_changes=prior,
                 )
 
-            manifest_target_hash = change.manifest.fields.get("target_hash")
-            if manifest_target_hash is not None and manifest_target_hash != canonical_sha256(current):
-                return _rejected(
-                    FailureReason.TARGET_HASH_MISMATCH,
-                    "Manifest target_hash does not match the current target hash.",
-                    before_hash,
-                    change_id,
-                    buffer=current,
-                    prior_changes=prior,
-                )
-
             if running_scope is not None:
                 scope_start_cur, scope_end_cur = running_scope[0], running_scope[1]
                 scope_slice = current[scope_start_cur:scope_end_cur]
@@ -364,7 +353,6 @@ def _rejected(
     diagnostic = {
         "retryable": reason in RETRYABLE_FAILURE_REASONS,
         "requires_new_submission": True,
-        "requires_new_pdcp": True,
     }
     if extra_diagnostic:
         diagnostic.update(extra_diagnostic)

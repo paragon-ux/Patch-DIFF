@@ -22,11 +22,12 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 @contextmanager
-def peer(profile):
+def peer(profile, *, workspace_root=None):
+    workspace_env = {"PATCHDIFF_WORKSPACE_ROOT": str(workspace_root)} if workspace_root is not None else {}
     process = subprocess.Popen([sys.executable, "-m", "app.mcp.external_adapter"], cwd=ROOT,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env={**os.environ, "PYTHONPATH": str(ROOT / "backend"), "PATCHDIFF_DATABASE_URL": settings.database_url,
-             "PATCHDIFF_MCP_PROFILE": profile})
+             "PATCHDIFF_MCP_PROFILE": profile, **workspace_env})
     sequence = 0
     def send(method, params=None, *, read=True):
         nonlocal sequence
@@ -53,9 +54,9 @@ def peer(profile):
         process.stderr.close()
 
 
-@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("full", 22)])
-def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count):
-    with peer(profile) as (_, rpc):
+@pytest.mark.parametrize("profile,count", [("editor", 7), ("unobserved", 5), ("unobserved_editor", 3), ("hybrid_editor", 1), ("observed", 6), ("observed_editor", 4), ("observed_v2", 5), ("workspace", 5), ("observed_workspace", 7), ("full", 17)])
+def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count, tmp_path):
+    with peer(profile, workspace_root=tmp_path) as (_, rpc):
         listed = rpc("tools/list")["tools"]
         assert len(listed) == count and {item["name"] for item in listed} == MCP_PROFILES[profile]
         for name in ("patchdiff_initialize_target", "patchdiff_submit_pdcp", "patchdiff_get_pdcp_log"):
@@ -63,7 +64,7 @@ def test_real_stdio_profiles_advertise_and_enforce_same_tools(profile, count):
             if name == "patchdiff_initialize_target": args = {"filename": "profile.txt", "content": "alpha", "content_type": "text/plain"}
             if name == "patchdiff_submit_pdcp": args["pdcp_content"] = "PDCP invalid"
             result = rpc("tools/call", {"name": name, "arguments": args})
-            assert bool(result.get("isError")) == (profile != "full")
+            assert bool(result.get("isError")) == (name not in MCP_PROFILES[profile])
         override = rpc("tools/call", {"name": "patchdiff_read_target", "arguments": {"target_file_id": "x", "profile": "full"}})
         assert override["isError"]
 

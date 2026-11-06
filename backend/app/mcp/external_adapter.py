@@ -11,10 +11,14 @@ import inspect
 import json
 import os
 import sys
+from contextlib import nullcontext
 from dataclasses import dataclass
 from types import NoneType, UnionType
 from typing import Any, TextIO, get_args, get_origin, get_type_hints
 
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.core.config import get_workspace_root, is_strict_observation_mode_enabled
 from app.mcp import tools as _registered_tools  # noqa: F401 - imports register tool handlers
 from app.mcp.server import registry
 from app.mcp.editor_contracts import (
@@ -25,6 +29,8 @@ from app.pdcp.typed import TYPED_EDIT_JSON_SCHEMA
 from app.pdcp.operations import OPERATION_JSON_SCHEMA, OPERATIONS_PROTOCOL_VERSION
 from app.pdcp.replacement import MAX_REPLACEMENT_BYTES, MAX_REPLACEMENT_CHARS, REPLACEMENT_PROTOCOL_VERSION
 from app.core.line_endings import EXPORT_FORMATS
+from app.services.workspace_sync_service import WORKSPACE_EOL_FORMATS, WorkspaceSyncError, validate_workspace_root
+from app.storage.db import database_schema_is_current
 from app.core.versions import OPERATIONS_RUNTIME_VERSION, REPLACEMENT_RUNTIME_VERSION, SPAN_CONTEXT_RUNTIME_VERSION
 from app.pdcp.observed_batch import (SELECTION_JSON_SCHEMA, GROUP_JSON_SCHEMA, MAX_BATCH_SCOPES,
                                      MAX_BATCH_OPERATIONS, BATCH_ERROR_CODES, BATCH_PROTOCOL_VERSION, BATCH_RUNTIME_VERSION)
@@ -42,27 +48,31 @@ _CODE_POINTS = " Offsets are Unicode code points of canonical LF text; UTF-16 ho
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_handle_upload": "Initialize a canonical PatchDIFF target from uploaded document content.",
-    "patchdiff_initialize_target": "Initialize a canonical PatchDIFF target.",
-    "patchdiff_build_prompt_context": "Convenience: build prompt context (bounded target PREFIX, not retrieval; see context_truncated). Prefer patchdiff_read_target / patchdiff_find_occurrences.",
-    "patchdiff_submit_pdcp": "Submit untrusted legacy .pdcp (v0.2.3) content through deterministic validation and commit services.",
+    "patchdiff_initialize_target": (
+        "Start here to edit a document if you don't already have its target_file_id. For a workspace file, "
+        "pass its path relative to the workspace root as filename, set from_workspace=true, and omit content. "
+        "Use the returned target_file_id to read, search, submit edits, and save. For inline text, supply content instead."
+    ),
     "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. "
                                    "Spans refer to the text after earlier operations; for several edits, use descending offsets. "
                                    f"Uses immutable runtime {OPERATIONS_RUNTIME_VERSION}; no replace_all. Optional span expected_before/expected_after "
                                    f"check the exact adjacent text and record runtime {SPAN_CONTEXT_RUNTIME_VERSION}." + _GUARD_RULE + _CODE_POINTS,
     "patchdiff_submit_edits": "Submit a typed edit transaction (exact match/replace strings as fields). Edits apply sequentially: occurrence_index counts the text after earlier edits, so find_occurrences indexes are only valid for the first edit."
-                              + _GUARD_RULE + " Supports optional client_request_id idempotency. Same validation, atomic commit and logging as .pdcp.",
+                              + _GUARD_RULE + " Supports optional client_request_id idempotency. Commits atomically and records the attempt.",
     "patchdiff_read_target": "Authoritative bounded read of canonical target text by code-point offset, with version, hash, and next_start continuation." + _CODE_POINTS,
     "patchdiff_submit_replacement": f"Submit a sole guarded replace_all as {REPLACEMENT_PROTOCOL_VERSION}, immutable runtime "
                                     f"{REPLACEMENT_RUNTIME_VERSION}. Fresh raw and canonical replacement limits: "
                                     f"{MAX_REPLACEMENT_CHARS:,} code points and {MAX_REPLACEMENT_BYTES:,} UTF-8 bytes, inclusive. "
                                     "Empty text allowed. Existing-key recovery precedes admission." + _GUARD_RULE,
     "patchdiff_read_lines": "Read an inclusive one-based LF line range from one observed version/hash. Trailing LF creates a final empty line. offset/next_offset are code points within the selected range and next_start is the absolute continuation; include_line_starts lists absolute line offsets. Text defaults to 4000 and caps at 8000. Each page is a new observation." + _CODE_POINTS,
-    "patchdiff_preview": "Advisory fresh-proposal evaluation without audit, request keys, writes or row locks. Explicit format 0.2.3, patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3; submit must recheck guards. Prefer version guards to detect ABA changes.",
+    "patchdiff_preview": "Advisory fresh-proposal evaluation without audit, request keys, writes or row locks. Explicit format patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3; submit must recheck guards. Prefer version guards to detect ABA changes.",
     "patchdiff_find_occurrences": "List exact occurrences of a string (overlapping counted) with offsets, bounded context, 1-based occurrence_index, and start_occurrence/max_results pagination. Indexes describe the current target, which a transaction's first edit sees." + _CODE_POINTS,
-    "patchdiff_get_regeneration_context": "DEPRECATED: host-owned retry replaces this. Return regeneration context for a rejected attempt.",
-    "patchdiff_build_regeneration_prompt": "DEPRECATED: host-owned retry replaces this. Build a regeneration prompt from a rejected attempt.",
-    "patchdiff_request_regeneration": "DEPRECATED: use patchdiff_submit_edits with parent_pdcp_log_id. Submit regenerated .pdcp content as a new attempt (guards pass through when supplied).",
-    "patchdiff_save": "Create a SAVE snapshot and advance the editing cycle without mutating target content. Optional expected_target_version and expected_current_hash guards; prefer the version guard.",
+    "patchdiff_save": (
+        "Checkpoint the current target and advance its editing cycle. Set sync_workspace=true to also publish "
+        "the edited bytes to the workspace file. With workspace sync disabled, SAVE only checkpoints PostgreSQL. "
+        "Use the version returned by the edit as a guard. If SAVE reports partial, inspect the file and database "
+        "before reconciling either outcome."
+    ),
     "patchdiff_replay": "Replay accepted logs (dispatching on protocol_version and runtime_version), verify hash/version chain, and report component-level materialized_state_checks.",
     "patchdiff_export_target": "Export the current target content and metadata. format: original_text (default, legacy alias of canonical LF), canonical_lf, crlf, or original_eol (restore the uniform line endings recorded at upload).",
     "patchdiff_get_target": "Return the current canonical target state, including line endings recorded at upload.",
@@ -142,6 +152,16 @@ TOOL_EXAMPLES: dict[str, list[dict[str, Any]]] = {
 
 
 _BASE_EDITOR_TOOLS = frozenset({"patchdiff_read_target", "patchdiff_find_occurrences", "patchdiff_save", "patchdiff_replay"})
+_WORKSPACE_LIFECYCLE = frozenset({"patchdiff_initialize_target", "patchdiff_save"})
+_WORKSPACE_PROFILES = frozenset({"workspace", "observed_workspace"})
+_STRUCTURAL_PROFILES = frozenset({"observed_v2", "observed_workspace"})
+_OBSERVED_WORKSPACE_INITIALIZE = (
+    "Import an existing workspace file as a PatchDIFF working target. Pass its workspace-relative "
+    "path as filename, set from_workspace=true, and omit content. The result includes the target ID, "
+    "version, and hash. For structural edits, use the returned target ID with patchdiff_observe_scopes "
+    "before patchdiff_commit_bundle. Use patchdiff_list_scopes when you need help identifying scopes."
+)
+
 MCP_PROFILES = {
     "editor": _BASE_EDITOR_TOOLS | {"patchdiff_observe_scope", "patchdiff_submit_edits", "patchdiff_submit_observed_operations"},
     "unobserved": _BASE_EDITOR_TOOLS | {"patchdiff_submit_edits"},
@@ -151,6 +171,11 @@ MCP_PROFILES = {
     "observed_editor": frozenset({"patchdiff_read_target", "patchdiff_find_occurrences",
                                   "patchdiff_observe_scope", "patchdiff_submit_observed_operations"}),
     "observed_v2": EDITOR_V2_TOOLS,
+    "workspace": frozenset({
+        "patchdiff_initialize_target", "patchdiff_read_target", "patchdiff_find_occurrences",
+        "patchdiff_submit_edits", "patchdiff_save",
+    }),
+    "observed_workspace": EDITOR_V2_TOOLS | _WORKSPACE_LIFECYCLE,
     "full": frozenset(EXPECTED_TOOL_NAMES),
 }
 
@@ -163,12 +188,14 @@ class ExternalMCPAdapter:
     response_mode: str
     _tool_names: tuple[str, ...]
     _protocol_version: str
+    _workspace_declarations: list[dict[str, Any]] | None
     _initialized: bool
 
     def __init__(self, *, profile: str | None = None, response_mode: str | None = None):
         selected = os.getenv("PATCHDIFF_MCP_PROFILE", "editor") if profile is None else profile
         if selected not in MCP_PROFILES:
-            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected editor, unobserved, unobserved_editor, hybrid_editor, observed, observed_editor, observed_v2 or full.")
+            expected = ", ".join(sorted(MCP_PROFILES))
+            raise ValueError(f"Unknown PATCHDIFF_MCP_PROFILE: {selected!r}; expected one of {expected}.")
         object.__setattr__(self, "profile", selected)
         object.__setattr__(self, "_protocol_version", PROTOCOL_VERSION)
         object.__setattr__(self, "_initialized", False)
@@ -177,17 +204,29 @@ class ExternalMCPAdapter:
             raise ValueError(f"Unknown PATCHDIFF_MCP_RESPONSE_MODE: {mode!r}; expected detailed or compact.")
         object.__setattr__(self, "response_mode", mode)
         object.__setattr__(self, "_tool_names", tuple(sorted(MCP_PROFILES[selected])))
+        declarations = self._legacy_tool_declarations() if selected == "workspace" else None
+        object.__setattr__(self, "_workspace_declarations", declarations)
 
     def list_tools(self) -> list[dict[str, Any]]:
-        if self.profile == "observed_v2":
+        if self.profile in _STRUCTURAL_PROFILES:
             declarations = []
             for name in self._tool_names:
-                declaration = tool_declaration(name, _input_schema_for(EDITOR_V2_ROUTES[name]))
-                if self._protocol_version == PROTOCOL_VERSION:
-                    for key in ("outputSchema", "annotations", "_meta"):
-                        declaration.pop(key, None)
+                if name in EDITOR_V2_TOOLS:
+                    declaration = tool_declaration(name, _input_schema_for(EDITOR_V2_ROUTES[name]))
+                    if self._protocol_version == PROTOCOL_VERSION:
+                        for key in ("outputSchema", "annotations", "_meta"):
+                            declaration.pop(key, None)
+                else:
+                    description = (_OBSERVED_WORKSPACE_INITIALIZE if name == "patchdiff_initialize_target"
+                                   else TOOL_DESCRIPTIONS[name])
+                    declaration = {"name": name, "description": description, "inputSchema": _input_schema_for(name)}
                 declarations.append(declaration)
             return declarations
+        if self._workspace_declarations is not None:
+            return copy.deepcopy(self._workspace_declarations)
+        return self._legacy_tool_declarations()
+
+    def _legacy_tool_declarations(self) -> list[dict[str, Any]]:
         return [
             {
                 "name": name,
@@ -204,7 +243,7 @@ class ExternalMCPAdapter:
         if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
-        if self.profile == "observed_v2":
+        if self.profile in _STRUCTURAL_PROFILES and name in EDITOR_V2_TOOLS:
             return self._call_editor_tool(name, args)
         argument_error = _argument_error(name, args)
         if argument_error is not None:
@@ -294,12 +333,32 @@ class ExternalMCPAdapter:
         return _rpc_error(request_id, -32601, f"Unsupported MCP method: {method}")
 
 
+def _check_workspace_startup(profile: str) -> None:
+    try:
+        validate_workspace_root(get_workspace_root())
+    except WorkspaceSyncError as exc:
+        raise SystemExit(f"PatchDIFF workspace startup: {exc}") from None
+    if profile == "workspace" and is_strict_observation_mode_enabled():
+        raise SystemExit("PatchDIFF workspace startup: strict observation requires an observed profile.")
+    if not os.getenv("PATCHDIFF_DATABASE_URL", "").strip():
+        raise SystemExit("PatchDIFF workspace startup: set PATCHDIFF_DATABASE_URL explicitly.")
+    try:
+        current = database_schema_is_current()
+    except SQLAlchemyError:
+        raise SystemExit("PatchDIFF workspace startup: could not verify PostgreSQL. Check PATCHDIFF_DATABASE_URL.") from None
+    if not current:
+        raise SystemExit("PatchDIFF workspace startup: apply the installed Alembic migrations before connecting.")
+
+
 def serve_stdio(input_stream: TextIO = sys.stdin, output_stream: TextIO = sys.stdout) -> None:
     """Serve newline-delimited JSON-RPC requests over stdio."""
 
     from app.services.waymark_worker import serving_worker_owner
-    with serving_worker_owner(prewarm=True):
-        adapter = ExternalMCPAdapter()
+    adapter = ExternalMCPAdapter()
+    if adapter.profile in _WORKSPACE_PROFILES:
+        _check_workspace_startup(adapter.profile)
+    worker_owner = nullcontext() if adapter.profile == "workspace" else serving_worker_owner(prewarm=True)
+    with worker_owner:
         for line in input_stream:
             if not line.strip():
                 continue
@@ -365,10 +424,7 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "source": "Advisory submission source label recorded on the attempt.",
     "parent_pdcp_log_id": "UUID of the rejected attempt this proposal retries (same target).",
     "attempt": "Your own 1-based retry counter, recorded as lineage.",
-    "regeneration_attempt": "Legacy retry counter, recorded as lineage.",
-    "regeneration_source": "Legacy retry source label.",
     "client_request_id": "Idempotency key: 1-128 printable ASCII characters without whitespace. Resend the identical proposal with it to recover a lost response.",
-    "pdcp_content": "Raw legacy PDCP 0.2.3 text.",
     "edits": "Ordered exact match/replace edits; each sees the text after earlier edits.",
     "operations": "Ordered match/span operations; span offsets refer to the text after earlier operations.",
     "replacement": "Complete replacement text for the whole target.",
@@ -384,18 +440,25 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "max_results": "Maximum occurrences to return (cap 200).",
     "format": "Explicit transaction format of the proposal.",
     "export_after_save": "Also return a default export after a successful SAVE.",
+    "sync_workspace": (
+        "True publishes the target to its workspace file during SAVE. False only checkpoints PostgreSQL. "
+        "Omit to use the server default (off unless PATCHDIFF_WORKSPACE_SYNC_ON_SAVE is enabled). "
+        "Inspect both outcomes if SAVE reports partial."
+    ),
+    "workspace_eol_format": "Line-ending format for workspace write-back: original_eol (default), canonical_lf, or crlf.",
+    "from_workspace": (
+        "True reads the UTF-8 file at filename relative to PATCHDIFF_WORKSPACE_ROOT. Omit content. "
+        "False initializes from inline content."
+    ),
     "include_previous_cycles": "Include ledger entries from editing cycles closed by SAVE (default: active cycle only).",
     "status": "Filter attempts by status.",
     "content_hash": "Filter attempts by pdcp_content_hash.",
     "include_content": "Return stored pdcp_content (bounded per page; the first entry is always whole).",
     "pdcp_log_id": "Attempt UUID.",
-    "user_request": "Original user request text.",
     "filename": "Document filename.",
     "content": "Initial document text; line endings are normalized to LF and recorded.",
     "content_type": "MIME type or language identifier.",
     "project_id": "Optional project UUID.",
-    "context_policy": "Context policy name.",
-    "regenerated_pdcp_content": "Regenerated legacy PDCP 0.2.3 text.",
     "query": "Optional case-insensitive substring filter over Waymark symbol names for candidate discovery, which issues no observation receipt.",
     "symbol_name": "Exact returned Waymark symbol name (or parent.name), including Markdown punctuation, to select uniquely and issue an observation_id. Ambiguity rejects.",
     "kind": "Optional Waymark symbol kind filter (e.g. function, class, method, variable, property, object, section, table_row, code_block).",
@@ -427,7 +490,6 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         "expected_target_version": {"minimum": 0, "maximum": 2**63 - 1},
         "expected_current_hash": {"pattern": r"^[0-9a-f]{64}(?![\s\S])"},
         "attempt": {"minimum": 1, "maximum": 2**31 - 1},
-        "regeneration_attempt": {"minimum": 1, "maximum": 2**31 - 1},
         "client_request_id": {"pattern": r"^[\x21-\x7e]{1,128}(?![\s\S])"},
     }.items():
         if field in properties:
@@ -475,10 +537,17 @@ def _input_schema_for(name: str) -> dict[str, Any]:
     if name == "patchdiff_export_target":
         properties["format"].update({"enum": list(EXPORT_FORMATS), "default": "original_text",
                                      "description": "original_text (legacy alias of canonical_lf), canonical_lf, crlf, or original_eol."})
+    if name == "patchdiff_initialize_target":
+        properties["from_workspace"]["default"] = False
+        properties["content_type"]["default"] = "text/plain"
     if name == "patchdiff_save":
         properties["export_after_save"]["default"] = False
+        properties["workspace_eol_format"].update({
+            "enum": list(WORKSPACE_EOL_FORMATS),
+            "default": "original_eol",
+        })
     if name == "patchdiff_preview":
-        properties["format"]["enum"] = ["0.2.3", "patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
+        properties["format"]["enum"] = ["patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
     if name in {"patchdiff_submit_edits", "patchdiff_submit_operations", "patchdiff_submit_observed_operations", "patchdiff_submit_replacement"}:
         properties["intent"].update({"minLength": 1, "pattern": r"\S"})
     schema: dict[str, Any] = {
@@ -505,7 +574,7 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         if field in _PARAMETER_DESCRIPTIONS and "description" not in schema_:
             schema_["description"] = _PARAMETER_DESCRIPTIONS[field]
     if name == "patchdiff_preview" and "format" in properties:
-        properties["format"]["description"] = "Explicit format: 0.2.3, patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3."
+        properties["format"]["description"] = "Explicit format: patchdiff-tx/1, patchdiff-tx/2 or patchdiff-tx/3."
     if name == "patchdiff_submit_operations":
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": OPERATIONS_PROTOCOL_VERSION, "runtime_version": OPERATIONS_RUNTIME_VERSION,
@@ -568,6 +637,12 @@ def _input_schema_for(name: str) -> dict[str, Any]:
             "not": {"anyOf": [{"required": [key]} for key in ("symbol_name", "query", "observation_id", "kind")]},
             "properties": {"offset": {"const": 0}},
         }}]
+    if name == "patchdiff_initialize_target":
+        schema["allOf"] = [{
+            "if": {"required": ["from_workspace"], "properties": {"from_workspace": {"const": True}}},
+            "then": {"properties": {"content": {"type": "null"}}},
+            "else": {"required": ["content"], "properties": {"content": {"type": "string"}}},
+        }]
     if name == "patchdiff_submit_replacement":
         schema["x-patchdiff-capabilities"] = {
             "protocol_version": REPLACEMENT_PROTOCOL_VERSION, "runtime_version": REPLACEMENT_RUNTIME_VERSION,
@@ -575,19 +650,20 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         }
     if name == "patchdiff_preview":
         schema["allOf"] = []
-        for format_, field in (("0.2.3", "pdcp_content"), ("patchdiff-tx/1", "edits"),
-                               ("patchdiff-tx/2", "operations"), ("patchdiff-tx/3", "replacement")):
-            branch = {"required": [field], "properties": {field: {"type": "array" if field in {"edits", "operations"} else "string"}}}
-            if format_ != "0.2.3":
-                branch["required"].append("intent")
-                branch["properties"]["intent"] = {"type": "string", "minLength": 1, "pattern": r"\S"}
-                branch["anyOf"] = [
+        for format_, field in (("patchdiff-tx/1", "edits"), ("patchdiff-tx/2", "operations"),
+                               ("patchdiff-tx/3", "replacement")):
+            branch = {
+                "required": [field, "intent"],
+                "properties": {
+                    field: {"type": "string" if field == "replacement" else "array"},
+                    "intent": {"type": "string", "minLength": 1, "pattern": r"\S"},
+                },
+                "anyOf": [
                     {"required": ["expected_target_version"], "properties": {"expected_target_version": {"type": "integer"}}},
                     {"required": ["expected_current_hash"], "properties": {"expected_current_hash": {"type": "string"}}},
-                ]
-            irrelevant = {"intent", "edits", "operations", "replacement", "pdcp_content"} - {field}
-            if format_ != "0.2.3":
-                irrelevant.remove("intent")
+                ],
+            }
+            irrelevant = {"edits", "operations", "replacement"} - {field}
             branch["not"] = {"anyOf": [{"required": [other]} for other in sorted(irrelevant)]}
             schema["allOf"].append({"if": {"properties": {"format": {"const": format_}}}, "then": branch})
     if name in TOOL_EXAMPLES:

@@ -1,0 +1,125 @@
+# Verification test matrix
+
+## Scope
+
+Use this matrix to find the tests for a specific PatchDIFF contract.
+It covers the pure runtime, PostgreSQL integration, real stdio MCP
+subprocesses and offline evaluation.
+
+Architecture decisions: [modernization architecture](../papers/modernization-architecture.md).
+As-built record and verification evidence: [product change record](../papers/product-change-record.md).
+
+## Global Test Invariants
+
+Workspace checks in `test_mcp_profiles.py` and
+`test_workspace_sync_service.py` cover the five-tool catalog, startup rejection,
+safe path resolution, drift, directory lease contention, line endings and
+partial SAVE receipts. Installed-wheel verification uses live MCP and
+PostgreSQL to check the working copy before SAVE and exact file bytes and
+checkpoint afterward. The seven-tool `observed_workspace` profile adds the
+observed v2 editing routes to agent-owned import and SAVE publication.
+
+The [PR #24 comparative benchmark](workspace-e2e-benchmark.md) records 18 live-model
+trials across Native, Structural and Workspace in Git and non-Git. Independent
+capture verification confirmed 90 exact files, 360 behavioral checks and
+reconstructed all 60 accepted guarded commits. The model experiment and its
+operator/build limitations are distinct from automated source conformance tests.
+
+Compact presentation is covered by `test_mcp_response_modes.py`,
+`test_host_finalize.py` and `test_compact_host_workflow.py`: immutable mode/default
+compatibility, preserved schemas/profiles/guards/warnings/source/paging, rich
+keyed recovery, exact per-target lifecycle effects, artifact-name isolation,
+SAVE uncertainty, evidence failures and bounded stdio failure cleanup. CI also
+runs the existing five-file oracle with compact editing and trusted scalar
+finalization. These checks do not invoke a model or establish host spill limits.
+
+Structural batch coverage additionally lives in `test_observed_batch_core.py`,
+`test_mcp_profiles.py`, `test_observed_batch.py`, `test_batch_stdio_profiles.py`,
+`test_batch_migrations.py`, `test_batch_documented_examples.py` and
+`test_structural_batch_oracle.py`. They cover 2/5/20/32 scopes, one discovery per
+snapshot, selection limits/geometry/paging, scope-local sequential operations,
+atomic rejection and rollback, concurrent writers, request recovery/conflicts,
+corrupted replay authority, populated 0004/0005 preservation/refusal and 0006 typed-origin adoption, enforced
+all ten MCP catalogs, including the 17-tool full profile, real response-loss recovery, Python/JSON/Markdown examples and
+the frozen five-file full-byte/20-check oracle. [Capability evidence](../spec/structural-batch-editing.md#deterministic-capability-evidence).
+
+- Postgres (`postgres:16.3-alpine`) is the required working substrate. SQLite must never be used to claim persistence, locking, migration, SAVE, or replay correctness.
+- The deterministic core runtime is pure and language-neutral; it must never import DB/ORM drivers, call MCP tools, or execute transaction payloads.
+- Atomicity is strictly per target: multi-edit transactions commit completely or leave target state untouched.
+- All transaction attempts (accepted and rejected) are logged append-only with lineage (`parent_pdcp_log_id`) and idempotency (`client_request_id`).
+- Manifest ledger entries are accepted-only and carry `origin` (`'typed'`) and `derived_json` facts.
+- Replay verifies history from initial snapshots independently of current materialized targets, dispatching explicitly on `(protocol_version, runtime_version)`.
+
+---
+
+Test counts are recorded with each exact executed revision in verification evidence; the matrix below describes coverage rather than a permanent total.
+
+## 1. Pure Unit Test Matrix (`backend/tests/unit/`)
+
+Run with: `pytest backend/tests/unit -q`
+
+| Module | Requirements / Capabilities Tested |
+| --- | --- |
+| `test_canonicalization.py` | LF line-ending normalization; preservation of exact whitespace, tabs, and trailing newlines; no Unicode normalization. |
+| `test_hashing.py` | Canonical SHA-256 computation over UTF-8 bytes. |
+| `test_failures.py` | Enum definitions and frozen failure reason sets. |
+| `test_matcher.py` | Exact matching; overlapping-match enumeration (`patchdiff-mvp-0.2.2`, advancing by 1 code point); legacy non-overlapping mode (`patchdiff-mvp-0.1.0`). |
+| `test_mcp_arguments_paging.py` | service context type/bounds, discovery/routing, filtered limit+1 continuation, defaults/caps, error shapes and invalid argument types. |
+| `test_conflict_audit.py` | bounded submitted-key diagnostic, NULL persisted key versus response echo, submitted fingerprint policy. |
+| `test_invalid_input_unicode.py` | all nested text/metadata fields, high/low surrogate and NUL, safe DB-bound diagnostics/read errors, valid-input hash identity and invalid-evidence domain separation. |
+| `test_selector_profiles.py` | singleton/multiple/overlapping/absent selectors across typed and sequential buffers across recorded runtime profiles. |
+| `test_disambiguation.py` | Resolution via `occurrence_index`, `anchor_before`, and `anchor_after`. |
+| `test_transaction_applier.py` | Sequential in-memory simulation; immediate buffer replacement; deletion (`replace=""`); sequential match invalidation; calculation of runtime-derived `change_facts`. |
+| `test_waymark_resources.py` | Packaged resident Waymark worker scripts, vendor dependencies, and lockfile integrity. |
+| `test_workspace_benchmark_audit.py` | Benchmark audit script guard regressions: enforces destination output path is outside private capture packet. |
+| `test_typed_transaction.py` | **C1, C4**: `patchdiff-tx/1` parsing; `build_record` and `canonical_record_json` determinism; default `change_id` generation; `validate_client_request_id` (ASCII printable, no whitespace, 1..128 chars); `TYPED_EDIT_JSON_SCHEMA` conformance; delimiter collision immunity; accepted verdicts and resulting hashes against an independent oracle. |
+| `test_modernization_contracts.py` | **C2, C3, C6**: Stage-aware `validity_levels` (`ValidationStage`); explicit runtime profile dispatch (`SUPPORTED_RUNTIME_PROFILES`); `slice_content` (`next_start`); `occurrence_report` (`start_occurrence`, `max_results`, `next_occurrence_index`, `returned_count`); host-loop inspect/revise simulation without server regeneration prompts. |
+| `test_stdio_adapter_subprocess.py` | **C1**: MCP `initialize` and `tools/list`; full `edits` item schema advertised in `patchdiff_submit_edits`; JSON-RPC `-32602` error response on non-object `params` of every JSON type; process survival. |
+| `test_friction_followup.py` | FR-1..FR-20 pure behavior: `occurrence_index` basis-shift warnings and selector details, grapheme boundary cases, span context guards and 0.3.0/0.5.0 profile selection, line-ending facts and export mapping, the shared retryable set, span evidence, near-miss scope and pruned-versus-unpruned equivalence over buffers beyond 256 code points, exact abandoning and pigeonhole/Landau-Vishkin work bounds on 65,536-code-point repetitive buffers, consumed sequential matches, failure windows and context elision, no-op warnings, candidate cursors and replacement numbers, `line_starts`, UTF-8 serialization fallback, structured argument errors and parameter descriptions. |
+| `test_migration_0003_offline.py` | **C5b**: SQL rendering of nullable `source_line_endings` without backfill; downgrade refusal precedes the column drop. |
+| `test_migration_0002_offline.py` | **C5**: historical 0002 sits between 0001 and 0003; SQL rendering of `origin`, `derived_json`, `client_request_id`, `request_fingerprint`, and partial unique index; downgrade safety check rendering. |
+
+---
+
+## 2. Postgres Integration Test Matrix (`backend/tests/integration/`)
+
+Run with: `export PATCHDIFF_DATABASE_URL="..." PATCHDIFF_WAYMARK_MODE="resident"; pytest backend/tests/integration -q`
+
+| Module | Requirements / Capabilities Tested |
+| --- | --- |
+| `test_conflict_audit_live.py` | distinct repeated conflict attempts; controlled real lock waits at READ COMMITTED; commit/rollback visibility; original full terminal recovery after later edits; actual stdio. |
+| `test_invalid_input_unicode_live.py` | actual PostgreSQL persistence/recovery, old accepted/rejected fingerprint compatibility, outer commit/rollback and caller transaction ownership, real stdio readable evidence. |
+| `test_selector_profiles_live.py` | durable rejection without materialization, all supported historical selector profiles in typed history, actual stdio rejection and replay. |
+| `test_friction_followup_live.py` | FR-1..FR-20 against live PostgreSQL: persisted and recovered warnings (SQL NULL when there are none), 0.5.0 rows replaying beside 0.3.0 history, recorded line endings and every export format, persisted retryable/span evidence and failure windows, near misses beyond 256 code points, consumed-match evidence, context elision, current state on recovery, key-conflict fields, ledger/attempt joins after SAVE (including pdcp_content-free SQL cursor verification over large tx/3 records), content page budget, line continuation, invalid-argument codes, replacement numbers, preview near misses and SAVE version guards. |
+| `test_friction_followup_stdio.py` | Real stdio subprocess: literal tool text inside pure-ASCII JSON-RPC lines (including U+2028/U+2029/U+0085), described schemas and new domains, CRLF upload and `original_eol` export, `line_starts`, span context rejection and 0.5.0 acceptance, warnings, preview near misses, structured unknown-argument errors, ledger joins, SAVE version guard and replay. |
+| `test_migrations_reachable.py` | **C5, C5b**: Alembic config presence; schema verification for migrations `0001`, `0002` and `0003`; populated `0002 -> 0003 -> 0002 -> 0003` preservation; 0003 downgrade refusal with recorded line endings; live Postgres column nullability and partial unique index `uq_pdcp_logs_target_client_request_id` verification; frozen original/intermediate 0005 to 0006 convergence, incompatible-origin refusal and typed audit/replay preservation through downgrade/re-upgrade. |
+| `test_typed_submit_flow.py` | **C1–C6**: Typed accept writes `append_only_pdcp_logs` (`protocol_version="patchdiff-tx/1"`) and `append_only_manifest_ledger` (`origin="typed"`, `derived_json`); format-specific diagnostics (no PDCP manifest leakage on typed rejections); stage-based validity across all 5 stages; safe UUID and parent-lineage error handling; `client_request_id` idempotency, lost-response outcome recovery, ABA sequence recovery, no-op edit recovery, and conflicting reuse rejection; typed replay; component-level `materialized_state_checks`; unknown profile rejection; read/search pagination. |
+| `test_pdcp_submit_flow.py` | Typed edit submission; atomic rollback on applicability failure; optimistic concurrency guards (`expected_target_version`, `expected_current_hash`); row locking independence across targets. |
+| `test_save.py` | `patchdiff_save` creates snapshots and cycle rotation without mutating target content; ledger reads filter to active cycle. |
+| `test_mcp_history_paging_live.py` | actual PostgreSQL multi-page attempt/ledger traversal, filters/gaps, inserted newer rows, empty/not-found targets and real stdio history. |
+| `test_replay.py` | Reconstructs state from initial upload snapshot + accepted logs; detects tampered logs and broken version chains. |
+| `integration/test_replay_materialized_integrity_live.py` | healthy,CRLF,bareCR,Unicode,hash-only,version-only storage; exact four checks/aggregate; reconstruction success; no target/history mutation; caller rollback and fresh healthy observer. |
+| `test_mcp_tool_contract.py` & `test_mcp_tools.py` | Tool wrappers route exclusively through services; tools do not mutate storage directly. |
+| `test_mcp_e2e_flows.py` | End-to-end upload -> context -> submit -> get -> save -> replay -> export workflows. |
+| `test_external_mcp_adapter.py` | External MCP stdio adapter JSON-RPC handling; tool discovery; argument routing. |
+| `test_external_mcp_e2e.py` | In-process adapter flows AND **`test_real_stdio_subprocess_mcp_full_modernized_workflow`**: real child-process `python -m app.mcp.external_adapter` communicating over stdin/stdout backed by live Postgres executing the full 8-step product workflow (initialize, upload, read/search, ambiguous reject, disambiguated accept with lineage & idempotency, SAVE, replay, and export). |
+
+---
+
+## 3. Offline Payload & Verdict Accounting Matrix (`backend/tests/verification/offline_eval.py`)
+
+Run with: `$env:PYTHONPATH="backend"; python backend/tests/verification/offline_eval.py`
+
+The evaluator checks both minimal and metadata-bearing `patchdiff-tx/1`
+proposals against accepted verdicts and expected hashes. It measures UTF-8
+bytes for the canonical stored record and the MCP argument JSON.
+
+Five additional guarded `patchdiff-tx/3` scenarios measure canonical record bytes and complete UTF-8 JSON-RPC request lines (fixed id=1 and one LF): whole-target rewrite, empty target, empty replacement, Unicode/quotes/CRLF and 2 KB rewrite. Accepted content/hash oracles use immutable 0.4.0; no cross-format replacement equivalence, live transport, persistence, timing or representative workload is measured.
+
+## Guarded replacement and advisory tool coverage
+
+Unit and live PostgreSQL/stdio coverage includes inclusive raw/result byte/code-point limits, invalid Unicode precedence, existing-key recovery before fresh admission, empty replacement, immutable profiles/replay, coherent LF line observations and continuation, pending local-state rejection, preview/submit parity and nonmutation of every managed table/caller transaction. Discovery executes every advertised example using returned IDs/guards/parents/cursors, including deduplication and complete history traversal. Preview evidence tests cover serialized per-field/whole-response budgets and complete identity retention or explicit omission.
+
+## Schema and migration regression coverage
+
+The submission schema domain tests validate actual tools/list schemas against live service results and durable audit rows, including null guards, whitespace prose, integer boundaries and newline-suffixed IDs/hashes. The migration tests independently create owned schemas for populated audit-record preservation and typed-history downgrade refusal, including unchanged rows/revision and replay after refusal.

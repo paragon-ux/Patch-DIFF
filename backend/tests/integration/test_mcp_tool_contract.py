@@ -13,7 +13,7 @@ from app.storage.models import (
     CurrentPdcpFiles,
     TargetSnapshots,
 )
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import edit_pairs
 
 
 def test_upload_initialize_routes_through_target_service_and_creates_canonical_state(monkeypatch) -> None:
@@ -47,14 +47,14 @@ def test_upload_initialize_routes_through_target_service_and_creates_canonical_s
 
 
 def test_submit_routes_through_deterministic_submit_service_and_persists_logs_and_ledger(monkeypatch) -> None:
-    calls = {"submit_pdcp": 0}
-    original = tools.submit_pdcp
+    calls = {"submit_edits": 0}
+    original = tools.submit_edits
 
-    def wrapped_submit_pdcp(*args, **kwargs):
-        calls["submit_pdcp"] += 1
+    def wrapped_submit_edits(*args, **kwargs):
+        calls["submit_edits"] += 1
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(tools, "submit_pdcp", wrapped_submit_pdcp)
+    monkeypatch.setattr(tools, "submit_edits", wrapped_submit_edits)
 
     upload = registry.call(
         "patchdiff_initialize_target",
@@ -65,19 +65,19 @@ def test_submit_routes_through_deterministic_submit_service_and_persists_logs_an
     target_id = upload["target_file_id"]
 
     accepted = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("old", "new")),
+        intent="Update text", edits=edit_pairs(("old", "new")),
         expected_target_version=0,
     )
     rejected = registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("missing", "ignored")),
+        intent="Update text", edits=edit_pairs(("missing", "ignored")),
         expected_target_version=1,
     )
 
-    assert calls["submit_pdcp"] == 2
+    assert calls["submit_edits"] == 2
     assert accepted["status"] == "accepted"
     assert accepted["version"] == 1
     assert rejected["status"] == "rejected"
@@ -139,9 +139,9 @@ def test_save_replay_and_export_route_through_services(monkeypatch) -> None:
     )
     target_id = upload["target_file_id"]
     registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("old", "new")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")),
     )
 
     saved = registry.call("patchdiff_save", target_file_id=target_id)
@@ -165,14 +165,14 @@ def test_log_and_manifest_ledger_tools_return_service_backed_current_state() -> 
     )
     target_id = upload["target_file_id"]
     registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("old", "new")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("old", "new")),
     )
     registry.call(
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         target_file_id=target_id,
-        pdcp_content=pdcp_for(target_id, ("missing", "ignored")),
+        expected_target_version=0, intent="Update text", edits=edit_pairs(("missing", "ignored")),
     )
 
     log_payload = registry.call("patchdiff_get_pdcp_log", target_file_id=target_id)

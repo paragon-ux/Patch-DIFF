@@ -11,12 +11,12 @@ from app.core.hashing import canonical_sha256
 from app.core.versions import REPLACEMENT_RUNTIME_VERSION
 from app.pdcp import replacement as replacement_runtime
 from app.services import pdcp_service
-from app.services.pdcp_service import preview, submit_edits, submit_operations, submit_pdcp, submit_replacement
+from app.services.pdcp_service import preview, submit_edits, submit_operations, submit_replacement
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
 from app.storage.db import SessionLocal
 from app.storage.models import Base, AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles, Projects
-from backend.tests.integration.helpers import create_target, pdcp_for
+from backend.tests.integration.helpers import create_target
 
 
 def table_snapshot():
@@ -170,16 +170,13 @@ def test_replacement_writer_waits_for_real_lock_then_rechecks_version():
     assert rejected.failure_reason.value == "target_version_mismatch" and counts(target_id) == (2, 1)
 
 
-FORMATS = ["0.2.3", "patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
+FORMATS = ["patchdiff-tx/1", "patchdiff-tx/2", "patchdiff-tx/3"]
 
 
 def proposal_for(format_, target_id, case):
     match, after = ("absent" if case == "absent" else "old"), ("\ud800" if case == "encoding" else "new")
     arguments = {"expected_target_version": 0}
-    if format_ == "0.2.3":
-        arguments["pdcp_content"] = pdcp_for(target_id, (match, after))
-        submit = submit_pdcp
-    elif format_ == "patchdiff-tx/1":
+    if format_ == "patchdiff-tx/1":
         arguments.update(intent="preview parity", edits=[{"match": match, "replace": after}])
         submit = submit_edits
     elif format_ == "patchdiff-tx/2":
@@ -197,9 +194,7 @@ def proposal_for(format_, target_id, case):
     elif case == "hash_guard":
         arguments["expected_current_hash"] = "0" * 64
     elif case == "malformed":
-        arguments[next(field for field in ("pdcp_content", "edits", "operations", "replacement") if field in arguments)] = 42
-        if format_ == "0.2.3":
-            arguments["pdcp_content"] = "malformed PDCP"
+        arguments[next(field for field in ("edits", "operations", "replacement") if field in arguments)] = 42
     return submit, arguments
 
 

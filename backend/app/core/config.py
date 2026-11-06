@@ -9,6 +9,14 @@ _STRICT_OBSERVATION_MODE_OVERRIDE: ContextVar[bool | None] = ContextVar(
     "patchdiff_strict_observation_mode_override",
     default=None,
 )
+_WORKSPACE_ROOT_OVERRIDE: ContextVar[str | None] = ContextVar(
+    "patchdiff_workspace_root_override",
+    default=None,
+)
+_WORKSPACE_SYNC_ON_SAVE_OVERRIDE: ContextVar[bool | None] = ContextVar(
+    "patchdiff_workspace_sync_on_save_override",
+    default=None,
+)
 
 
 def _parse_bool_env(raw: str | None) -> bool:
@@ -47,6 +55,53 @@ class Settings:
     @property
     def strict_observation_mode(self) -> bool:
         return is_strict_observation_mode_enabled()
+
+    @property
+    def workspace_root(self) -> str | None:
+        return get_workspace_root()
+
+    @property
+    def workspace_sync_on_save(self) -> bool:
+        return is_workspace_sync_on_save_enabled()
+
+
+def get_workspace_root() -> str | None:
+    """Return configured PATCHDIFF_WORKSPACE_ROOT when set and nonblank."""
+    override = _WORKSPACE_ROOT_OVERRIDE.get()
+    raw = override if override is not None else os.getenv("PATCHDIFF_WORKSPACE_ROOT")
+    if raw is None or not raw.strip():
+        return None
+    return raw.strip()
+
+
+def is_workspace_sync_on_save_enabled() -> bool:
+    """Return True when SAVE should request managed write-back to PATCHDIFF_WORKSPACE_ROOT by default."""
+    override = _WORKSPACE_SYNC_ON_SAVE_OVERRIDE.get()
+    if override is not None:
+        return override
+    return _parse_bool_env(os.getenv("PATCHDIFF_WORKSPACE_SYNC_ON_SAVE"))
+
+
+@contextmanager
+def workspace_root_context(
+    workspace_root: str | os.PathLike[str] | None,
+    *,
+    sync_on_save: bool | None = None,
+):
+    """Context-manager / test-fixture hook to configure workspace sync deterministically."""
+    root_val = os.fspath(workspace_root) if workspace_root is not None else ""
+    root_tok = _WORKSPACE_ROOT_OVERRIDE.set(root_val)
+    sync_tok = (
+        _WORKSPACE_SYNC_ON_SAVE_OVERRIDE.set(bool(sync_on_save))
+        if sync_on_save is not None
+        else None
+    )
+    try:
+        yield
+    finally:
+        if sync_tok is not None:
+            _WORKSPACE_SYNC_ON_SAVE_OVERRIDE.reset(sync_tok)
+        _WORKSPACE_ROOT_OVERRIDE.reset(root_tok)
 
 
 settings = Settings()

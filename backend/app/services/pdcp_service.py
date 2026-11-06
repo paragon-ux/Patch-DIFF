@@ -1,4 +1,4 @@
-"""Postgres-backed PDCP and typed transaction submission service."""
+"""PostgreSQL-backed typed transaction submission and preview."""
 
 from __future__ import annotations
 
@@ -31,15 +31,8 @@ from app.pdcp.operations import (OPERATIONS_PROTOCOL_VERSION, build_operations_r
                                  parse_operations_record, to_parsed_operations)
 from app.pdcp.replacement import (REPLACEMENT_PROTOCOL_VERSION, build_replacement_record, parse_replacement_record,
                                  to_parsed_replacement, replacement_size_evidence)
-from app.pdcp.models import (
-    REQUIRED_MANIFEST_FIELDS,
-    SUPPORTED_MANIFEST_FIELDS,
-    SUPPORTED_PROTOCOL_VERSION,
-    VALID_RISK_VALUES,
-    ParsedPDCP,
-)
-from app.pdcp.parser import PDCPParseError, parse_pdcp
-from app.pdcp.protocol_validator import ProtocolValidationError, validate_pdcp
+from app.pdcp.models import ParsedPDCP, VALID_RISK_VALUES
+from app.pdcp.protocol_validator import ProtocolValidationError
 from app.pdcp.typed import (
     ALLOWED_TYPED_EDIT_FIELDS,
     REQUIRED_TYPED_EDIT_FIELDS,
@@ -76,11 +69,6 @@ apply_pdcp_transaction = timed("applier")(apply_pdcp_transaction)
 apply_observed_batch = timed("applier")(apply_observed_batch)
 
 _HEX_64_RE = re.compile(r"^[0-9a-f]{64}$")
-
-
-class TargetHashApplicabilityError(ProtocolValidationError):
-    """Raised when a valid PDCP header target_hash does not match the target's current hash."""
-    pass
 
 
 def sanitize_expected_target_version(val: Any) -> tuple[int | None, bool]:
@@ -167,62 +155,6 @@ def _submission_response(submit):
 
 
 @_submission_response
-def submit_pdcp(
-    session: Session,
-    *,
-    target_file_id: uuid.UUID | str,
-    pdcp_content: str,
-    expected_target_version: int | None = None,
-    expected_current_hash: str | None = None,
-    submission_source: str = "model_response",
-    parent_pdcp_log_id: uuid.UUID | str | None = None,
-    regeneration_attempt: int | None = None,
-    regeneration_source: str | None = None,
-    client_request_id: str | None = None,
-    include_correlation_id: bool = False,
-    _before_final_guard=None,
-) -> SubmitPDCPResult:
-    """Submit a legacy PDCP v0.2.3 transaction through the deterministic runtime and Postgres commit."""
-
-    target_uuid = _try_coerce_uuid(target_file_id)
-    if target_uuid is None:
-        return _invalid_target_uuid_result(target_file_id)
-
-    def decode(target: CloudTargetFiles) -> tuple[ParsedPDCP, TypedTransaction | None]:
-        parsed = parse_pdcp(pdcp_content)
-        validate_pdcp(parsed)
-        if parsed.header.target_file_id != str(target_uuid):
-            raise ProtocolValidationError(
-                FailureReason.CONTEXT_INVALID,
-                "PDCP target_file_id does not match the submitted target.",
-            )
-        if parsed.header.target_hash is not None and parsed.header.target_hash != target.current_hash:
-            raise TargetHashApplicabilityError(
-                FailureReason.TARGET_HASH_MISMATCH,
-                "PDCP target_hash does not match the current target hash.",
-            )
-        return parsed, None
-
-    return _submit(
-        session,
-        target_uuid=target_uuid,
-        submitted_target_id=target_file_id,
-        record_content=pdcp_content,
-        decode=decode,
-        protocol_version=SUPPORTED_PROTOCOL_VERSION,
-        guard_required=False,
-        expected_target_version=expected_target_version,
-        expected_current_hash=expected_current_hash,
-        submission_source=submission_source,
-        parent_pdcp_log_id=parent_pdcp_log_id,
-        regeneration_attempt=regeneration_attempt,
-        regeneration_source=regeneration_source,
-        client_request_id=client_request_id,
-        _before_final_guard=_before_final_guard,
-    )
-
-
-@_submission_response
 def submit_edits(
     session: Session,
     *,
@@ -240,9 +172,9 @@ def submit_edits(
 ) -> SubmitPDCPResult:
     """Submit a typed ``patchdiff-tx/1`` transaction.
 
-    Same trusted path as ``submit_pdcp``: one row lock, one applier, one atomic commit.
+    Use one row lock, the shared applier and one atomic commit.
     At least one state guard is required. The durable record is the canonical JSON of
-    the submitted transaction; no textual PDCP is synthesized.
+    the submitted transaction.
     """
 
     target_uuid = _try_coerce_uuid(target_file_id)
@@ -270,7 +202,6 @@ def submit_edits(
         raw_record=record,
         decode=decode,
         protocol_version=TYPED_PROTOCOL_VERSION,
-        guard_required=True,
         expected_target_version=expected_target_version,
         expected_current_hash=expected_current_hash,
         submission_source=submission_source,
@@ -302,7 +233,6 @@ def submit_operations(
     return _submit(session, target_uuid=target_uuid, submitted_target_id=target_file_id,
                    record_content=canonical_record_json(record), raw_record=record, decode=decode,
                    protocol_version=OPERATIONS_PROTOCOL_VERSION, runtime_version=operations_runtime_version(record),
-                   guard_required=True,
                    expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
                    submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
                    regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
@@ -344,8 +274,7 @@ def submit_observed_operations(
         return _submit(
             session, target_uuid=target_uuid, submitted_target_id=target_file_id,
             record_content=canonical_record_json(record), raw_record=record, decode=lambda target: (None, None),
-            protocol_version=BATCH_PROTOCOL_VERSION, runtime_version=BATCH_RUNTIME_VERSION,
-            guard_required=True, expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+            protocol_version=BATCH_PROTOCOL_VERSION, runtime_version=BATCH_RUNTIME_VERSION, expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
             submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
             regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
             client_request_id=client_request_id, _before_final_guard=_before_final_guard, _batch_request=record)
@@ -372,7 +301,6 @@ def submit_observed_operations(
         decode=decode,
         protocol_version=OPERATIONS_PROTOCOL_VERSION,
         runtime_version=operations_runtime_version(record),
-        guard_required=True,
         expected_target_version=expected_target_version,
         expected_current_hash=expected_current_hash,
         submission_source=submission_source,
@@ -404,7 +332,7 @@ def submit_replacement(
         return to_parsed_replacement(typed, target_type=target.target_type), typed
     return _submit(session, target_uuid=target_uuid, submitted_target_id=target_file_id,
                    record_content=canonical_record_json(record), raw_record=record, decode=decode,
-                   protocol_version=REPLACEMENT_PROTOCOL_VERSION, guard_required=True,
+                   protocol_version=REPLACEMENT_PROTOCOL_VERSION,
                    expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
                    submission_source=submission_source, parent_pdcp_log_id=parent_pdcp_log_id,
                    regeneration_attempt=attempt, regeneration_source="host" if parent_pdcp_log_id is not None else None,
@@ -426,7 +354,6 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
     from app.services.read_service import observe_target
 
     fields = {
-        SUPPORTED_PROTOCOL_VERSION: {"pdcp_content"},
         TYPED_PROTOCOL_VERSION: {"intent", "edits"},
         OPERATIONS_PROTOCOL_VERSION: {"intent", "operations"},
         REPLACEMENT_PROTOCOL_VERSION: {"intent", "replacement"},
@@ -477,20 +404,7 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
     version, digest = proposal.get("expected_target_version"), proposal.get("expected_current_hash")
     record_args = {"target_file_id": str(target_uuid), "intent": proposal.get("intent"),
                    "expected_target_version": version, "expected_current_hash": digest}
-    if format == SUPPORTED_PROTOCOL_VERSION:
-        record = proposal.get("pdcp_content")
-        def decode(target):
-            if not isinstance(record, str):
-                raise ProtocolValidationError(FailureReason.CONTEXT_INVALID, "pdcp_content must be a string.")
-            parsed = parse_pdcp(record)
-            validate_pdcp(parsed)
-            if parsed.header.target_file_id != str(target_uuid):
-                raise ProtocolValidationError(FailureReason.CONTEXT_INVALID, "PDCP target_file_id does not match the submitted target.")
-            if parsed.header.target_hash is not None and parsed.header.target_hash != target.current_hash:
-                raise TargetHashApplicabilityError(FailureReason.TARGET_HASH_MISMATCH,
-                                                   "PDCP target_hash does not match the current target hash.")
-            return parsed, None
-    elif format == TYPED_PROTOCOL_VERSION:
+    if format == TYPED_PROTOCOL_VERSION:
         record = build_record(**record_args, edits=proposal.get("edits"))
         def decode(target):
             typed = parse_typed_record(record)
@@ -520,7 +434,7 @@ def _preview(session: Session, *, target_file_id: uuid.UUID | str, format: str, 
             return {**common, "status": "invalid_argument", "code": "replacement_too_large",
                     "failure_detail": "Replacement exceeds fresh admission limits.", "diagnostic": size_evidence}
     _, _, result, stage = _evaluate_proposal(
-        target=target, decode=decode, protocol_version=format, guard_required=format != SUPPORTED_PROTOCOL_VERSION,
+        target=target, decode=decode, protocol_version=format,
         expected_target_version=version, expected_current_hash=digest, encoding_diagnostic=encoding,
         runtime_version=runtime_version)
     common.update(status=result.status, current_hash=target.current_hash, current_version=target.version,
@@ -559,7 +473,6 @@ def _submit(
     raw_record: Any = None,
     decode: Callable[[CloudTargetFiles], tuple[ParsedPDCP, TypedTransaction | None]],
     protocol_version: str,
-    guard_required: bool,
     expected_target_version: int | None,
     expected_current_hash: str | None,
     submission_source: str,
@@ -853,7 +766,7 @@ def _submit(
 
         if encoding_paths:
             _, _, rejection, _ = _evaluate_proposal(
-                target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
+                target=target, decode=decode, protocol_version=protocol_version,
                 expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
                 encoding_diagnostic=encoding_diagnostic, runtime_version=runtime_version)
             return _persist_rejection(
@@ -975,7 +888,6 @@ def _submit(
                     target=target,
                     expected_target_version=expected_target_version,
                     expected_current_hash=expected_current_hash,
-                    guard_required=True,
                     protocol_version=protocol_version,
                 )
                 assert guard_rej is not None and guard_stg is not None
@@ -1055,7 +967,7 @@ def _submit(
                 current_pdcp.pdcp_content_hash = pdcp_content_hash
         else:
             parsed, typed, core_result, stage = _evaluate_proposal(
-                target=target, decode=decode, protocol_version=protocol_version, guard_required=guard_required,
+                target=target, decode=decode, protocol_version=protocol_version,
                 expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
                 runtime_version=runtime_version, scope_bounds=scope_bounds)
 
@@ -1140,7 +1052,6 @@ def _submit(
             regeneration_source=regeneration_source,
             protocol_version=parsed.header.protocol_version,
             typed=typed,
-            parsed=parsed,
             accepted=core_result,
             before_version=before_version,
             client_request_id=validated_req_id,
@@ -1159,8 +1070,7 @@ def _evaluate_locked_batch(session, *, target, record, client_request_id):
             raise BatchValidationError("INVALID_BATCH_REQUEST", "Batch submissions require client_request_id.")
         observation_ids = validate_batch_envelope(record)
         rejection, guard_stage = _guard_rejection(target=target,
-            expected_target_version=record["expected_target_version"], expected_current_hash=record["expected_current_hash"],
-            guard_required=True, protocol_version=BATCH_PROTOCOL_VERSION)
+            expected_target_version=record["expected_target_version"], expected_current_hash=record["expected_current_hash"], protocol_version=BATCH_PROTOCOL_VERSION)
         if rejection is not None:
             code = "BUNDLE_VERSION_MISMATCH" if rejection.failure_reason == FailureReason.TARGET_VERSION_MISMATCH else "BUNDLE_HASH_MISMATCH"
             rejection = replace(rejection, diagnostic={**rejection.diagnostic, "code": code},
@@ -1196,7 +1106,7 @@ def _evaluate_locked_batch(session, *, target, record, client_request_id):
 
 
 def _evaluate_proposal(
-    *, target, decode, protocol_version: str, guard_required: bool,
+    *, target, decode, protocol_version: str,
     expected_target_version, expected_current_hash, encoding_diagnostic: dict | None = None,
     runtime_version: str | None = None, scope_bounds: tuple[int, int] | None = None,
 ) -> tuple[ParsedPDCP | None, TypedTransaction | None, AcceptedCoreResult | RejectedCoreResult, ValidationStage]:
@@ -1208,7 +1118,7 @@ def _evaluate_proposal(
             diagnostic_extra=encoding_diagnostic), ValidationStage.PROTOCOL_VALIDATION
     guard_rejection, guard_stage = _guard_rejection(
         target=target, expected_target_version=expected_target_version,
-        expected_current_hash=expected_current_hash, guard_required=guard_required, protocol_version=protocol_version)
+        expected_current_hash=expected_current_hash, protocol_version=protocol_version)
     if guard_rejection is not None:
         return None, None, guard_rejection, guard_stage
     parsed: ParsedPDCP | None = None
@@ -1233,26 +1143,6 @@ def _evaluate_proposal(
                 protocol_version=protocol_version,
                 stage=ValidationStage.TRANSACTION_APPLICABILITY,
             )
-    except PDCPParseError as exc:
-        stage = ValidationStage.PROTOCOL_VALIDATION
-        core_result = _core_rejection(
-            exc.failure_reason,
-            exc.failure_detail,
-            target.current_hash,
-            exc.failed_change_id,
-            protocol_version=protocol_version,
-            stage=stage,
-        )
-    except TargetHashApplicabilityError as exc:
-        stage = ValidationStage.TRANSACTION_APPLICABILITY
-        core_result = _core_rejection(
-            exc.failure_reason,
-            exc.failure_detail,
-            target.current_hash,
-            exc.failed_change_id,
-            protocol_version=protocol_version,
-            stage=stage,
-        )
     except ProtocolValidationError as exc:
         stage = ValidationStage.PROTOCOL_VALIDATION
         core_result = _core_rejection(
@@ -1271,10 +1161,9 @@ def _guard_rejection(
     target: CloudTargetFiles,
     expected_target_version: int | None,
     expected_current_hash: str | None,
-    guard_required: bool = False,
-    protocol_version: str = SUPPORTED_PROTOCOL_VERSION,
+    protocol_version: str,
 ) -> tuple[RejectedCoreResult | None, ValidationStage | None]:
-    if guard_required and expected_target_version is None and expected_current_hash is None:
+    if expected_target_version is None and expected_current_hash is None:
         return (
             _core_rejection(
                 FailureReason.CONTEXT_MISSING,
@@ -1355,11 +1244,10 @@ def _persist_acceptance(
     parent_pdcp_log_id: uuid.UUID | None,
     regeneration_attempt: int | None,
     regeneration_source: str | None,
-    parsed: ParsedPDCP,
     accepted: AcceptedCoreResult,
     before_version: int,
-    protocol_version: str = SUPPORTED_PROTOCOL_VERSION,
-    typed: TypedTransaction | None = None,
+    protocol_version: str,
+    typed: TypedTransaction,
     client_request_id: str | None = None,
     request_fingerprint: str | None = None,
     runtime_version: str | None = None,
@@ -1416,47 +1304,26 @@ def _persist_acceptance(
         observation.accepted_pdcp_log_id = log.pdcp_log_id
 
     facts_by_id = {fact["change_id"]: fact for fact in accepted.change_facts}
-    if typed is None:
-        for change in parsed.changes:
-            fields = change.manifest.fields
-            session.add(
-                AppendOnlyManifestLedger(
-                    target_file_id=target.target_file_id,
-                    editing_cycle_id=target.active_editing_cycle_id,
-                    pdcp_log_id=log.pdcp_log_id,
-                    change_index=change.change_index,
-                    change_id=fields["change_id"],
-                    intent=fields["intent"],
-                    input_state=fields["input_state"],
-                    output_state=fields["output_state"],
-                    affected_region=fields["affected_region"],
-                    user_visible_change=fields["user_visible_change"],
-                    risk=fields["risk"],
-                    origin="pdcp_manifest",
-                    derived_json=facts_by_id.get(fields["change_id"]),
-                )
+    # Typed path: asserted text lives only in `intent` (advisory); everything the
+    # runtime knows for certain lives only in `derived_json`.
+    for index, edit in enumerate(typed.edits, start=1):
+        session.add(
+            AppendOnlyManifestLedger(
+                target_file_id=target.target_file_id,
+                editing_cycle_id=target.active_editing_cycle_id,
+                pdcp_log_id=log.pdcp_log_id,
+                change_index=index,
+                change_id=edit.change_id,
+                intent=edit.rationale or typed.intent,
+                input_state=None,
+                output_state=None,
+                affected_region=None,
+                user_visible_change=None,
+                risk=edit.risk,
+                origin="typed",
+                derived_json=facts_by_id.get(edit.change_id),
             )
-    else:
-        # Typed path: asserted text lives only in `intent` (advisory); everything the
-        # runtime knows for certain lives only in `derived_json`.
-        for index, edit in enumerate(typed.edits, start=1):
-            session.add(
-                AppendOnlyManifestLedger(
-                    target_file_id=target.target_file_id,
-                    editing_cycle_id=target.active_editing_cycle_id,
-                    pdcp_log_id=log.pdcp_log_id,
-                    change_index=index,
-                    change_id=edit.change_id,
-                    intent=edit.rationale or typed.intent,
-                    input_state=None,
-                    output_state=None,
-                    affected_region=None,
-                    user_visible_change=None,
-                    risk=edit.risk,
-                    origin="typed",
-                    derived_json=facts_by_id.get(edit.change_id),
-                )
-            )
+        )
 
     target.current_content = accepted.target_content
     target.current_hash = accepted.after_hash
@@ -1501,7 +1368,7 @@ def _persist_rejection(
     rejection: RejectedCoreResult,
     before_hash: str,
     before_version: int,
-    protocol_version: str = SUPPORTED_PROTOCOL_VERSION,
+    protocol_version: str,
     stage: ValidationStage = ValidationStage.PROTOCOL_VALIDATION,
     client_request_id: str | None = None,
     request_fingerprint: str | None = None,
@@ -1686,7 +1553,7 @@ def _upsert_current_pdcp(
     parent_pdcp_log_id: uuid.UUID | None,
     regeneration_attempt: int | None,
     regeneration_source: str | None,
-    protocol_version: str = SUPPORTED_PROTOCOL_VERSION,
+    protocol_version: str,
 ) -> CurrentPdcpFiles:
     sanitized_attempt, _ = sanitize_regeneration_attempt(regeneration_attempt)
     existing = session.execute(
@@ -1727,19 +1594,16 @@ def _core_rejection(
     before_hash: str,
     failed_change_id: str | None = None,
     *,
-    protocol_version: str = SUPPORTED_PROTOCOL_VERSION,
+    protocol_version: str,
     stage: ValidationStage = ValidationStage.PROTOCOL_VALIDATION,
     diagnostic_extra: dict[str, Any] | None = None,
 ) -> RejectedCoreResult:
-    is_typed = protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION, BATCH_PROTOCOL_VERSION)
     diagnostic: dict[str, Any] = {
         "format": protocol_version,
         "retryable": reason in RETRYABLE_FAILURE_REASONS,
         "requires_new_submission": True,
         "validation_stage": stage.value,
     }
-    if not is_typed:
-        diagnostic["requires_new_pdcp"] = True
 
     if reason in {FailureReason.MANIFEST_INVALID, FailureReason.MANIFEST_MISSING}:
         if protocol_version == REPLACEMENT_PROTOCOL_VERSION:
@@ -1750,21 +1614,12 @@ def _core_rejection(
                                "required_span_fields": ["op", "start", "end", "expected_text", "replace"],
                                "required_match_fields": ["op", "match", "replace"],
                                "valid_risk_values": sorted(VALID_RISK_VALUES)})
-        elif is_typed:
+        else:
             diagnostic.update(
                 {
                     "allowed_edit_fields": list(ALLOWED_TYPED_EDIT_FIELDS),
                     "required_edit_fields": list(REQUIRED_TYPED_EDIT_FIELDS),
                     "valid_risk_values": sorted(VALID_RISK_VALUES),
-                }
-            )
-        else:
-            diagnostic.update(
-                {
-                    "allowed_manifest_fields": sorted(SUPPORTED_MANIFEST_FIELDS),
-                    "required_manifest_fields": sorted(REQUIRED_MANIFEST_FIELDS),
-                    "valid_risk_values": sorted(VALID_RISK_VALUES),
-                    "manifest_line_format": "# field_name: value",
                 }
             )
     if diagnostic_extra:
@@ -1788,10 +1643,6 @@ def _enrich_diagnostic(
     diag["format"] = protocol_version
     diag["validation_stage"] = stage.value
     diag["requires_new_submission"] = True
-    if protocol_version in (TYPED_PROTOCOL_VERSION, OPERATIONS_PROTOCOL_VERSION, REPLACEMENT_PROTOCOL_VERSION, BATCH_PROTOCOL_VERSION):
-        diag.pop("requires_new_pdcp", None)
-    else:
-        diag["requires_new_pdcp"] = True
     return replace(rejection, diagnostic=diag)
 
 

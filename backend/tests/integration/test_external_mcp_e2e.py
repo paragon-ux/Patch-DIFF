@@ -12,7 +12,7 @@ from app.mcp.external_adapter import ExternalMCPAdapter
 from app.pdcp.typed import ALLOWED_TYPED_EDIT_FIELDS, REQUIRED_TYPED_EDIT_FIELDS
 from app.storage.db import SessionLocal
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs
-from backend.tests.integration.helpers import pdcp_for
+from backend.tests.integration.helpers import edit_pairs
 
 BACKEND = Path(__file__).resolve().parents[2]
 
@@ -41,21 +41,16 @@ def test_external_mcp_happy_path_matches_internal_product_flow() -> None:
     )
     target_id = upload["target_file_id"]
 
-    context = _call(
-        adapter,
-        "patchdiff_build_prompt_context",
-        {"target_file_id": target_id, "user_request": "Replace the old sentence."},
-    )
-    assert context["target_file_id"] == target_id
-    assert context["current_hash"] == upload["current_hash"]
-    assert "MATCH/REPLACE" in context["pdcp_rules"]
+    observed = _call(adapter, "patchdiff_read_target", {"target_file_id": target_id})
+    assert observed["current_hash"] == upload["current_hash"]
+    assert observed["text"] == "Title\n\nOld sentence.\n"
 
     accepted = _call(
         adapter,
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         {
             "target_file_id": target_id,
-            "pdcp_content": pdcp_for(target_id, ("Old sentence.", "New sentence.")),
+            "intent": "Update text", "edits": edit_pairs(("Old sentence.", "New sentence.")),
             "expected_target_version": 0,
         },
     )
@@ -76,7 +71,7 @@ def test_external_mcp_happy_path_matches_internal_product_flow() -> None:
     assert exported["hash"] == target["current_hash"]
 
 
-def test_external_mcp_rejects_invalid_and_malformed_pdcp_without_mutation() -> None:
+def test_external_mcp_rejects_invalid_and_malformed_edits_without_mutation() -> None:
     adapter = ExternalMCPAdapter(profile="full")
 
     upload = _call(
@@ -89,23 +84,18 @@ def test_external_mcp_rejects_invalid_and_malformed_pdcp_without_mutation() -> N
 
     rejected = _call(
         adapter,
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         {
             "target_file_id": target_id,
-            "pdcp_content": pdcp_for(target_id, ("Missing sentence.", "Ignored sentence.")),
+            "intent": "Update text", "edits": edit_pairs(("Missing sentence.", "Ignored sentence.")),
             "expected_target_version": 0,
         },
     )
     malformed = _call(
         adapter,
-        "patchdiff_submit_pdcp",
-        {
-            "target_file_id": target_id,
-            "pdcp_content": pdcp_for(target_id, ("Original sentence.", "New sentence.")).replace(
-                "=======", "================================================="
-            ),
-            "expected_target_version": 0,
-        },
+        "patchdiff_submit_edits",
+        {"target_file_id": target_id, "intent": "Update text",
+         "edits": [{"match": "Original sentence."}], "expected_target_version": 0},
     )
     after = _call(adapter, "patchdiff_get_target", {"target_file_id": target_id})
     ledger_payload = _call(adapter, "patchdiff_get_manifest_ledger", {"target_file_id": target_id})
@@ -122,7 +112,7 @@ def test_external_mcp_rejects_invalid_and_malformed_pdcp_without_mutation() -> N
     assert ledger_payload["entries"] == []
 
 
-def test_external_mcp_regeneration_save_replay_and_export_preserve_internal_semantics() -> None:
+def test_external_mcp_revision_save_replay_and_export_preserve_internal_semantics() -> None:
     adapter = ExternalMCPAdapter(profile="full")
 
     upload = _call(
@@ -134,30 +124,21 @@ def test_external_mcp_regeneration_save_replay_and_export_preserve_internal_sema
 
     rejected = _call(
         adapter,
-        "patchdiff_submit_pdcp",
+        "patchdiff_submit_edits",
         {
             "target_file_id": target_id,
-            "pdcp_content": pdcp_for(target_id, ("Missing sentence.", "Beta sentence.")),
+            "intent": "Update text", "edits": edit_pairs(("Missing sentence.", "Beta sentence.")),
             "expected_target_version": 0,
         },
     )
-    regen_context = _call(
+    observed = _call(adapter, "patchdiff_read_target", {"target_file_id": target_id})
+    revised = _call(
         adapter,
-        "patchdiff_get_regeneration_context",
-        {"pdcp_log_id": rejected["pdcp_log_id"], "user_request": "Replace Alpha with Beta."},
-    )
-    regenerated = _call(
-        adapter,
-        "patchdiff_request_regeneration",
-        {
-            "pdcp_log_id": rejected["pdcp_log_id"],
-            "user_request": "Replace Alpha with Beta.",
-            "regenerated_pdcp_content": pdcp_for(
-                target_id, ("Alpha sentence.", "Beta sentence."), change_id_prefix="external_regen"
-            ),
-            "regeneration_attempt": 1,
-            "regeneration_source": "external_mcp_e2e_test",
-        },
+        "patchdiff_submit_edits",
+        {"target_file_id": target_id, "expected_target_version": observed["version"],
+         "parent_pdcp_log_id": rejected["pdcp_log_id"], "attempt": 1,
+         "intent": "Replace Alpha with Beta",
+         "edits": edit_pairs(("Alpha sentence.", "Beta sentence."))},
     )
     before_save = _call(adapter, "patchdiff_get_target", {"target_file_id": target_id})
     saved = _call(
@@ -167,10 +148,8 @@ def test_external_mcp_regeneration_save_replay_and_export_preserve_internal_sema
     replayed = _call(adapter, "patchdiff_replay", {"target_file_id": target_id})
     exported = _call(adapter, "patchdiff_export_target", {"target_file_id": target_id})
 
-    assert regen_context["status"] == "ready"
-    assert regenerated["status"] == "accepted"
-    assert regenerated["parent_pdcp_log_id"] == rejected["pdcp_log_id"]
-    assert regenerated["new_pdcp_log_id"] != rejected["pdcp_log_id"]
+    assert revised["status"] == "accepted"
+    assert revised["pdcp_log_id"] != rejected["pdcp_log_id"]
     assert before_save["current_content"] == "Beta sentence."
     assert saved["status"] == "saved"
     assert after_save["current_content"] == before_save["current_content"]
@@ -192,7 +171,7 @@ def test_external_mcp_regeneration_save_replay_and_export_preserve_internal_sema
 
     assert [row.status for row in logs] == ["rejected", "accepted"]
     assert str(logs[1].parent_pdcp_log_id) == rejected["pdcp_log_id"]
-    assert logs[1].regeneration_source == "external_mcp_e2e_test"
+    assert logs[1].regeneration_source == "host"
     assert len(ledger_rows) == 1
     assert ledger_rows[0].pdcp_log_id == logs[1].pdcp_log_id
 
@@ -274,13 +253,8 @@ def test_real_stdio_subprocess_mcp_full_modernized_workflow() -> None:
         ):
             assert not Draft202012Validator(schema).is_valid(args)
             assert call_tool("patchdiff_submit_edits", args)["status"] == "rejected"
-        legacy_rejected = call_tool("patchdiff_submit_pdcp", {
-            "target_file_id": probe_id, "pdcp_content": pdcp_for(probe_id, ("alpha", "beta")),
-            "expected_current_hash": "a" * 64 + "\n",
-        })
-        assert legacy_rejected["failure_reason"] == "context_invalid"
         history = call_tool("patchdiff_get_pdcp_log", {"target_file_id": probe_id})
-        assert len(history["entries"]) == 4
+        assert len(history["entries"]) == 3
         assert all(row["status"] == "rejected" for row in history["entries"])
         assert call_tool("patchdiff_get_manifest_ledger", {"target_file_id": probe_id})["entries"] == []
         unchanged = call_tool("patchdiff_get_target", {"target_file_id": probe_id})
