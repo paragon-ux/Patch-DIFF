@@ -795,8 +795,8 @@ def _submit(
                     diagnostic=size_evidence, code=size_evidence["code"],
                     client_request_id=validated_req_id)
 
-        fence = workspace_write_fence(session, target)
-        if fence is not None and not encoding_paths:
+        fence = None if encoding_paths else workspace_write_fence(session, target)
+        if fence is not None:
             rejection = _core_rejection(
                 fence.reason, fence.detail, before_hash, protocol_version=protocol_version,
                 stage=ValidationStage.PRECONDITION_GUARD, diagnostic_extra={"code": fence.code, **fence.evidence},
