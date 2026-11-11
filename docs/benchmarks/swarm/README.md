@@ -3,6 +3,7 @@
 [PR #27](https://github.com/paragon-ux/Patch-DIFF/pull/27) makes workspace initialization reuse the active PostgreSQL target. This test checks that independent agents opening one path share its unpublished edits, contend on the same version, and recover from stale snapshots. Workers use strict `observed_workspace` with individual MCP calls and manual barriers.
 
 [Trial 1, wave 1 results](results/pr27-trial-1-wave-1.md) · [Read-only PostgreSQL audit](results/pr27-trial-1-wave-1-audit.txt)
+[DeepSeek onboarding and tool-call walkthrough](deepseek-handoff.md)
 
 ## Resume trial 1 with DeepSeek
 
