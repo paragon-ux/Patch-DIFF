@@ -2,12 +2,16 @@
 
 [PR #27](https://github.com/paragon-ux/Patch-DIFF/pull/27) makes workspace initialization reuse the active PostgreSQL target. This test checks that independent agents opening one path share its unpublished edits, contend on the same version, and recover from stale snapshots. Workers use strict `observed_workspace` with individual MCP calls and manual barriers.
 
+[Trial 3 results and publication](results/pr27-trial-3.md) · [Trial 2 results and publication](results/pr27-trial-2.md)
+
+[Trial 1, wave 2 results and publication](results/pr27-trial-1-wave-2.md) · [Wave 2 tool-call evidence](results/pr27-trial-1-wave-2-calls.json) · [Wave 2 read-only PostgreSQL audit](results/pr27-trial-1-wave-2-audit.txt)
+
 [Trial 1, wave 1 results](results/pr27-trial-1-wave-1.md) · [Read-only PostgreSQL audit](results/pr27-trial-1-wave-1-audit.txt)
 [DeepSeek onboarding and tool-call walkthrough](deepseek-handoff.md)
 
-## Resume trial 1 with DeepSeek
+## Trial 1: wave 2 resumed with DeepSeek
 
-Wave 1 used three live Sol 6.1 Extra High workers. All three opened one target and committed their edits. Trial 1 is paused before wave 2 and before SAVE.
+Wave 1 used three live Sol 6.1 Extra High workers. All three opened one target and committed their edits. Wave 2 resumed the paused container, database, and fixture root with three live DeepSeek workers, reached version 6, and published once with SAVE. Trial 1 is complete and labelled a mixed-model handoff; see the [wave 2 results](results/pr27-trial-1-wave-2.md). The recorded values below are the pre-wave-2 resume state.
 
 | State | Recorded value |
 | --- | --- |
@@ -40,10 +44,11 @@ Give three workers only the relative path `system_settings.py`, their own assign
 
 Use PatchDIFF for the workers' edits. Stop the affected trial if ordinary open reports external drift, a target ID differs, or disk bytes change before the coordinator publishes. Keep the evidence for diagnosis.
 
-## Remaining trials and reporting
+## Completed trials and reporting
 
-The existing `trial-2` and `trial-3` roots have baseline fixtures and have yet to be opened. After trial 1 passes, run two waves of three workers per root. Start each trial with the six baseline functions in `initial.py` from the run directory. The first wave changes functions 1–3 from 101–103 to 201–203. Require exactly one `created: true` receipt at version 0. Each first wave ends at version 3 with the disk baseline intact. Each second wave rediscovering the path must see the first wave's edits, change functions 4–6, and reach version 6 before the single coordinator SAVE.
+Trials 2 and 3 ran on 2026-11-11 with fresh DeepSeek workers in every wave. Each root opened once, reached version 3 in wave 1 with exactly one `created: true` receipt at version 0, rediscovered the unpublished target by path in wave 2, reached version 6, and published once with SAVE.
 
-The final LF fixture must match `expected.py`. Its SHA-256 is `1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd`. For each completed trial, use a read-only PostgreSQL transaction to verify one binding and target for the root/path, one `initial_upload` snapshot, six accepted edit transactions and ledger rows, and one `save_checkpoint` snapshot. Match the stale rejection IDs to the append-only attempt log.
+- [Trial 2](results/pr27-trial-2.md): wave 1 committed sequentially without stale rejections because the host driver re-observed before every attempt; wave 2 produced the expected two `BUNDLE_VERSION_MISMATCH` rejections with parent lineage. One genuine `workspace_busy` open retry occurred.
+- [Trial 3](results/pr27-trial-3.md): both waves produced two stale rejections with parent lineage. A host-side bridge relaunch was required before wave 2 phase 1; no target or disk state changed.
 
-Add each wave's evidence under `results/`. Record the runtime commit, host and actual model, root and database label, worker and connection IDs, request intervals, creation and reopen receipts, snapshot guards, request keys and log IDs, retries, and the SAVE outcome. Track the number of active workers and overlapping request intervals. Report Sol and DeepSeek results by wave and label trial 1 as a mixed-model handoff. The target workload is 18 worker turns across six waves, with three active workers per wave.
+All three trial fixtures now match `expected.py` with SHA-256 `1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd`. Each trial's read-only audit verifies one binding and target for its root/path, one `initial_upload` snapshot, six accepted edit transactions and ledger rows, one `save_checkpoint` snapshot, and the rejected attempt IDs. Per-call evidence (intervals, guards, keys, log IDs, parents) is in `results/pr27-trial-2-calls.json` and `results/pr27-trial-3-calls.json`.

@@ -1,0 +1,12 @@
+disk_path         /home/paragon-ux/patchdiff-external/workspace-init-verification/swarm-live.FEbQ59/trial-3/system_settings.py
+disk_bytes        197
+disk_sha256       1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd
+expected_sha256   1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd
+bytes_identical   True
+save_status       saved
+save_version      6
+save_snapshot_id  5d0de1d8-e6a0-4ae3-91dd-8234394be835
+save_current_hash 1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd
+sync_receipt      {"bytes_written": 197, "content_eol": "lf", "disk_sha256": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd", "durability": "confirmed", "publication": "installed", "synced_path": "system_settings.py"}
+receipt_sha_ok    True
+receipt_bytes_ok  True

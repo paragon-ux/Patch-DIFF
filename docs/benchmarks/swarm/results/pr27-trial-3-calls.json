@@ -1,0 +1,2787 @@
+{
+ "trial": "pr27-trial-3",
+ "runtime_commit": "52f19e213759e2664e3fa8f0c70f3930ca2a0ff6",
+ "database": "patchdiff_swarm_52f19e2 (PostgreSQL 16.3, migration 20261111_0007)",
+ "workspace_root": "/home/paragon-ux/patchdiff-external/workspace-init-verification/swarm-live.FEbQ59/trial-3",
+ "profile": "observed_workspace, strict observation, resident Waymark",
+ "model": "deepseek/deepseek-v4.1-flash-1017",
+ "calls": [
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:46:41.076+00:00",
+   "end_utc": "2026-11-11T22:46:41.152+00:00",
+   "start_epoch_s": 1794437201.076242,
+   "ms": 76.287,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 0,
+    "current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:46:43.387+00:00",
+   "end_utc": "2026-11-11T22:46:43.399+00:00",
+   "start_epoch_s": 1794437203.387657,
+   "ms": 12.09,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 0,
+    "current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1"
+   }
+  },
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:46:45.063+00:00",
+   "end_utc": "2026-11-11T22:46:45.169+00:00",
+   "start_epoch_s": 1794437205.063436,
+   "ms": 106.462,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_1"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "expected_target_version": 0,
+    "observation_bundle_id": "05a458ed-1b9f-4aa8-bff5-1cb51f703a19",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 31,
+     "end_line": 2,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "2671a579-6929-4aaf-92e3-011a60473aed",
+     "observed_scope_hash": "4dc3eccb079afdbf892d4720070c1e590201a34a2f640897fc7ba73f6b787c05",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 31,
+     "scope_start": 0,
+     "start": 0,
+     "start_line": 1,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_1",
+      "parent": null
+     },
+     "text": "def setting_1():\n    return 101",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:47:07.792+00:00",
+   "end_utc": "2026-11-11T22:47:07.870+00:00",
+   "start_epoch_s": 1794437227.792108,
+   "ms": 78.728,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+     "expected_target_version": 0,
+     "observation_bundle_id": "05a458ed-1b9f-4aa8-bff5-1cb51f703a19",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_1 to return 201",
+    "client_request_id": "t3-w1-a1",
+    "groups": [
+     {
+      "observation_id": "2671a579-6929-4aaf-92e3-011a60473aed",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 101",
+        "replace": "return 201"
+       }
+      ]
+     }
+    ]
+   },
+   "isError": true,
+   "status": "rejected",
+   "code": "BUNDLE_VERSION_MISMATCH",
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": null,
+     "version": null
+    },
+    "before": {
+     "hash": "1abbf9431f4ac2024f745969e8668085c6cb8c675c1fe5e225e9fd2d46bee351",
+     "version": 1
+    },
+    "client_request_id": "t3-w1-a1",
+    "deduplicated": false,
+    "pdcp_log_id": "f2fb4b7b-3523-4b3f-9065-75c3ebb80f42"
+   },
+   "current": {
+    "hash": "1abbf9431f4ac2024f745969e8668085c6cb8c675c1fe5e225e9fd2d46bee351",
+    "version": 1
+   },
+   "scopes": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": null,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": null
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": "expected_target_version does not match the current target version.",
+   "failure_reason": "target_version_mismatch",
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": {
+    "code": "BUNDLE_VERSION_MISMATCH",
+    "failure_context": {
+     "available": false,
+     "buffer_stage": null,
+     "end": null,
+     "observed_target_hash": null,
+     "observed_target_version": null,
+     "prior_changes": null,
+     "selection": null,
+     "start": null,
+     "text": null,
+     "total_chars": null,
+     "truncated": null,
+     "unavailable_reason": "batch_scope_not_evaluated"
+    },
+    "format": "patchdiff-observed-batch/1",
+    "requires_new_submission": true,
+    "retryable": true,
+    "validation_stage": "precondition_guard"
+   },
+   "visual": {
+    "failure_detail": "expected_target_version does not match the current target version."
+   }
+  },
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:47:07.874+00:00",
+   "end_utc": "2026-11-11T22:47:07.931+00:00",
+   "start_epoch_s": 1794437227.874976,
+   "ms": 56.377,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_1"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "1abbf9431f4ac2024f745969e8668085c6cb8c675c1fe5e225e9fd2d46bee351",
+    "expected_target_version": 1,
+    "observation_bundle_id": "8fc1f0ad-aa7d-40ac-b65e-de9fb7c41dca",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 31,
+     "end_line": 2,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "6246e6d8-174d-476a-a376-797c512e3e18",
+     "observed_scope_hash": "4dc3eccb079afdbf892d4720070c1e590201a34a2f640897fc7ba73f6b787c05",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 31,
+     "scope_start": 0,
+     "start": 0,
+     "start_line": 1,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_1",
+      "parent": null
+     },
+     "text": "def setting_1():\n    return 101",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:47:07.933+00:00",
+   "end_utc": "2026-11-11T22:47:08.046+00:00",
+   "start_epoch_s": 1794437227.933665,
+   "ms": 112.527,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "1abbf9431f4ac2024f745969e8668085c6cb8c675c1fe5e225e9fd2d46bee351",
+     "expected_target_version": 1,
+     "observation_bundle_id": "8fc1f0ad-aa7d-40ac-b65e-de9fb7c41dca",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_1 to return 201",
+    "client_request_id": "t3-w1-a2",
+    "groups": [
+     {
+      "observation_id": "6246e6d8-174d-476a-a376-797c512e3e18",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 101",
+        "replace": "return 201"
+       }
+      ]
+     }
+    ],
+    "parent_pdcp_log_id": "f2fb4b7b-3523-4b3f-9065-75c3ebb80f42",
+    "attempt": 2
+   },
+   "isError": false,
+   "status": "accepted",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": "e18c35e11b54b671f5141f1b256bafe04b1498c6d6e6812bf29bfb4fc04546b5",
+     "version": 2
+    },
+    "before": {
+     "hash": "1abbf9431f4ac2024f745969e8668085c6cb8c675c1fe5e225e9fd2d46bee351",
+     "version": 1
+    },
+    "client_request_id": "t3-w1-a2",
+    "deduplicated": false,
+    "group_count": 1,
+    "operation_count": 1,
+    "pdcp_log_id": "54ebf23e-f00c-4361-bdf6-e0db182bd525"
+   },
+   "current": {
+    "hash": "e18c35e11b54b671f5141f1b256bafe04b1498c6d6e6812bf29bfb4fc04546b5",
+    "version": 2
+   },
+   "scopes": {
+    "items": [
+     {
+      "group_index": 0,
+      "observation_id": "6246e6d8-174d-476a-a376-797c512e3e18",
+      "operation_count": 1
+     }
+    ],
+    "total": 1,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": true,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": true
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:47:27.976+00:00",
+   "end_utc": "2026-11-11T22:47:28.022+00:00",
+   "start_epoch_s": 1794437247.976915,
+   "ms": 45.754,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w1",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:47:30.426+00:00",
+   "end_utc": "2026-11-11T22:47:30.434+00:00",
+   "start_epoch_s": 1794437250.426171,
+   "ms": 8.369,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e"
+   }
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:46:40.912+00:00",
+   "end_utc": "2026-11-11T22:46:41.067+00:00",
+   "start_epoch_s": 1794437200.912417,
+   "ms": 155.023,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": true,
+    "version": 0,
+    "current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:46:43.563+00:00",
+   "end_utc": "2026-11-11T22:46:43.570+00:00",
+   "start_epoch_s": 1794437203.563239,
+   "ms": 7.616,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 0,
+    "current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1"
+   }
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:46:46.908+00:00",
+   "end_utc": "2026-11-11T22:46:46.987+00:00",
+   "start_epoch_s": 1794437206.908961,
+   "ms": 78.352,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_2"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "expected_target_version": 0,
+    "observation_bundle_id": "8a835c18-da5c-4896-bdfe-3131afb16352",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 64,
+     "end_line": 5,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "82b1ca1f-87f0-41cd-a80f-c11847726622",
+     "observed_scope_hash": "cd3704219e091857bbfbbb920a74f343ec94dedb19dded079dc6d8166db69f1f",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 64,
+     "scope_start": 33,
+     "start": 33,
+     "start_line": 4,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_2",
+      "parent": null
+     },
+     "text": "def setting_2():\n    return 102",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:47:09.047+00:00",
+   "end_utc": "2026-11-11T22:47:09.107+00:00",
+   "start_epoch_s": 1794437229.047619,
+   "ms": 59.755,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+     "expected_target_version": 0,
+     "observation_bundle_id": "8a835c18-da5c-4896-bdfe-3131afb16352",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_2 to return 202",
+    "client_request_id": "t3-w2-a1",
+    "groups": [
+     {
+      "observation_id": "82b1ca1f-87f0-41cd-a80f-c11847726622",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 102",
+        "replace": "return 202"
+       }
+      ]
+     }
+    ]
+   },
+   "isError": true,
+   "status": "rejected",
+   "code": "BUNDLE_VERSION_MISMATCH",
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": null,
+     "version": null
+    },
+    "before": {
+     "hash": "e18c35e11b54b671f5141f1b256bafe04b1498c6d6e6812bf29bfb4fc04546b5",
+     "version": 2
+    },
+    "client_request_id": "t3-w2-a1",
+    "deduplicated": false,
+    "pdcp_log_id": "800ad87d-0af4-4df7-9b1f-bbb2dfa9ba95"
+   },
+   "current": {
+    "hash": "e18c35e11b54b671f5141f1b256bafe04b1498c6d6e6812bf29bfb4fc04546b5",
+    "version": 2
+   },
+   "scopes": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": null,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": null
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": "expected_target_version does not match the current target version.",
+   "failure_reason": "target_version_mismatch",
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": {
+    "code": "BUNDLE_VERSION_MISMATCH",
+    "failure_context": {
+     "available": false,
+     "buffer_stage": null,
+     "end": null,
+     "observed_target_hash": null,
+     "observed_target_version": null,
+     "prior_changes": null,
+     "selection": null,
+     "start": null,
+     "text": null,
+     "total_chars": null,
+     "truncated": null,
+     "unavailable_reason": "batch_scope_not_evaluated"
+    },
+    "format": "patchdiff-observed-batch/1",
+    "requires_new_submission": true,
+    "retryable": true,
+    "validation_stage": "precondition_guard"
+   },
+   "visual": {
+    "failure_detail": "expected_target_version does not match the current target version."
+   }
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:47:09.108+00:00",
+   "end_utc": "2026-11-11T22:47:09.142+00:00",
+   "start_epoch_s": 1794437229.108796,
+   "ms": 33.612,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_2"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "e18c35e11b54b671f5141f1b256bafe04b1498c6d6e6812bf29bfb4fc04546b5",
+    "expected_target_version": 2,
+    "observation_bundle_id": "d1efb7d9-8458-4ce9-96b0-cd028368580d",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 64,
+     "end_line": 5,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "a8a967aa-eb46-4595-a292-2efd2ce692c9",
+     "observed_scope_hash": "cd3704219e091857bbfbbb920a74f343ec94dedb19dded079dc6d8166db69f1f",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 64,
+     "scope_start": 33,
+     "start": 33,
+     "start_line": 4,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_2",
+      "parent": null
+     },
+     "text": "def setting_2():\n    return 102",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:47:09.146+00:00",
+   "end_utc": "2026-11-11T22:47:09.256+00:00",
+   "start_epoch_s": 1794437229.146725,
+   "ms": 109.977,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "e18c35e11b54b671f5141f1b256bafe04b1498c6d6e6812bf29bfb4fc04546b5",
+     "expected_target_version": 2,
+     "observation_bundle_id": "d1efb7d9-8458-4ce9-96b0-cd028368580d",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_2 to return 202",
+    "client_request_id": "t3-w2-a2",
+    "groups": [
+     {
+      "observation_id": "a8a967aa-eb46-4595-a292-2efd2ce692c9",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 102",
+        "replace": "return 202"
+       }
+      ]
+     }
+    ],
+    "parent_pdcp_log_id": "800ad87d-0af4-4df7-9b1f-bbb2dfa9ba95",
+    "attempt": 2
+   },
+   "isError": false,
+   "status": "accepted",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+     "version": 3
+    },
+    "before": {
+     "hash": "e18c35e11b54b671f5141f1b256bafe04b1498c6d6e6812bf29bfb4fc04546b5",
+     "version": 2
+    },
+    "client_request_id": "t3-w2-a2",
+    "deduplicated": false,
+    "group_count": 1,
+    "operation_count": 1,
+    "pdcp_log_id": "988a68b3-adb2-4c6d-a3aa-dfdaf02c1587"
+   },
+   "current": {
+    "hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "version": 3
+   },
+   "scopes": {
+    "items": [
+     {
+      "group_index": 0,
+      "observation_id": "a8a967aa-eb46-4595-a292-2efd2ce692c9",
+      "operation_count": 1
+     }
+    ],
+    "total": 1,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": true,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": true
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:47:27.413+00:00",
+   "end_utc": "2026-11-11T22:47:27.440+00:00",
+   "start_epoch_s": 1794437247.413527,
+   "ms": 27.002,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w2",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:47:28.886+00:00",
+   "end_utc": "2026-11-11T22:47:28.891+00:00",
+   "start_epoch_s": 1794437248.886245,
+   "ms": 5.228,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e"
+   }
+  },
+  {
+   "worker": "t3w3",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:46:42.200+00:00",
+   "end_utc": "2026-11-11T22:46:42.247+00:00",
+   "start_epoch_s": 1794437202.200156,
+   "ms": 46.955,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 0,
+    "current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w3",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:46:44.053+00:00",
+   "end_utc": "2026-11-11T22:46:44.060+00:00",
+   "start_epoch_s": 1794437204.053646,
+   "ms": 7.194,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 0,
+    "current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1"
+   }
+  },
+  {
+   "worker": "t3w3",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:46:45.716+00:00",
+   "end_utc": "2026-11-11T22:46:45.808+00:00",
+   "start_epoch_s": 1794437205.716077,
+   "ms": 92.445,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_3"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "expected_target_version": 0,
+    "observation_bundle_id": "df42eae0-bebd-4419-9915-838e7da94709",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 97,
+     "end_line": 8,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "921502d7-babe-40ab-9f45-b782b4d9e3d6",
+     "observed_scope_hash": "819a78164489081e6fe3df6e17b543d38f76e85b4465c82dd9e7ebc42034565e",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 97,
+     "scope_start": 66,
+     "start": 66,
+     "start_line": 7,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_3",
+      "parent": null
+     },
+     "text": "def setting_3():\n    return 103",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w3",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:47:06.114+00:00",
+   "end_utc": "2026-11-11T22:47:06.251+00:00",
+   "start_epoch_s": 1794437226.114354,
+   "ms": 137.314,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+     "expected_target_version": 0,
+     "observation_bundle_id": "df42eae0-bebd-4419-9915-838e7da94709",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_3 to return 203",
+    "client_request_id": "t3-w3-a1",
+    "groups": [
+     {
+      "observation_id": "921502d7-babe-40ab-9f45-b782b4d9e3d6",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 103",
+        "replace": "return 203"
+       }
+      ]
+     }
+    ]
+   },
+   "isError": false,
+   "status": "accepted",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": "1abbf9431f4ac2024f745969e8668085c6cb8c675c1fe5e225e9fd2d46bee351",
+     "version": 1
+    },
+    "before": {
+     "hash": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+     "version": 0
+    },
+    "client_request_id": "t3-w3-a1",
+    "deduplicated": false,
+    "group_count": 1,
+    "operation_count": 1,
+    "pdcp_log_id": "18c6a3ea-6430-4c4a-86e2-2227323352cd"
+   },
+   "current": {
+    "hash": "1abbf9431f4ac2024f745969e8668085c6cb8c675c1fe5e225e9fd2d46bee351",
+    "version": 1
+   },
+   "scopes": {
+    "items": [
+     {
+      "group_index": 0,
+      "observation_id": "921502d7-babe-40ab-9f45-b782b4d9e3d6",
+      "operation_count": 1
+     }
+    ],
+    "total": 1,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": true,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": true
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w3",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:47:27.702+00:00",
+   "end_utc": "2026-11-11T22:47:27.737+00:00",
+   "start_epoch_s": 1794437247.702681,
+   "ms": 34.498,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w3",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:47:29.471+00:00",
+   "end_utc": "2026-11-11T22:47:29.477+00:00",
+   "start_epoch_s": 1794437249.471132,
+   "ms": 6.382,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e"
+   }
+  },
+  {
+   "worker": "t3w4",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:49:02.004+00:00",
+   "end_utc": "2026-11-11T22:49:02.092+00:00",
+   "start_epoch_s": 1794437342.00443,
+   "ms": 88.197,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w4",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:49:04.508+00:00",
+   "end_utc": "2026-11-11T22:49:04.521+00:00",
+   "start_epoch_s": 1794437344.50813,
+   "ms": 13.064,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e"
+   }
+  },
+  {
+   "worker": "t3w4",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:49:06.297+00:00",
+   "end_utc": "2026-11-11T22:49:06.470+00:00",
+   "start_epoch_s": 1794437346.297345,
+   "ms": 172.863,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_4"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "expected_target_version": 3,
+    "observation_bundle_id": "2ef06745-72d8-4d72-9da7-72c57d28d8ad",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 130,
+     "end_line": 11,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "b2477b57-8c59-43f3-a731-4dcced008dcc",
+     "observed_scope_hash": "dc40d04cafad99eb2e0841ca6b25662e5d0508fb8b0525fb029d17f8b45bbe20",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 130,
+     "scope_start": 99,
+     "start": 99,
+     "start_line": 10,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_4",
+      "parent": null
+     },
+     "text": "def setting_4():\n    return 104",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w4",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:49:30.780+00:00",
+   "end_utc": "2026-11-11T22:49:30.858+00:00",
+   "start_epoch_s": 1794437370.780684,
+   "ms": 78.243,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+     "expected_target_version": 3,
+     "observation_bundle_id": "2ef06745-72d8-4d72-9da7-72c57d28d8ad",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_4 to return 204",
+    "client_request_id": "t3-w4-a1",
+    "groups": [
+     {
+      "observation_id": "b2477b57-8c59-43f3-a731-4dcced008dcc",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 104",
+        "replace": "return 204"
+       }
+      ]
+     }
+    ]
+   },
+   "isError": false,
+   "status": "accepted",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": "673693966e05c94b20fd643ac5e6a7d13d0d184c29d79f10c1b457dc70d4a9c9",
+     "version": 4
+    },
+    "before": {
+     "hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+     "version": 3
+    },
+    "client_request_id": "t3-w4-a1",
+    "deduplicated": false,
+    "group_count": 1,
+    "operation_count": 1,
+    "pdcp_log_id": "606ebae9-2c78-45e4-aa09-cc6fc8b68d2f"
+   },
+   "current": {
+    "hash": "673693966e05c94b20fd643ac5e6a7d13d0d184c29d79f10c1b457dc70d4a9c9",
+    "version": 4
+   },
+   "scopes": {
+    "items": [
+     {
+      "group_index": 0,
+      "observation_id": "b2477b57-8c59-43f3-a731-4dcced008dcc",
+      "operation_count": 1
+     }
+    ],
+    "total": 1,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": true,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": true
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w4",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:49:53.824+00:00",
+   "end_utc": "2026-11-11T22:49:53.844+00:00",
+   "start_epoch_s": 1794437393.824696,
+   "ms": 19.57,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w4",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:49:53.917+00:00",
+   "end_utc": "2026-11-11T22:49:53.924+00:00",
+   "start_epoch_s": 1794437393.917761,
+   "ms": 6.659,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd"
+   }
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:49:02.735+00:00",
+   "end_utc": "2026-11-11T22:49:02.812+00:00",
+   "start_epoch_s": 1794437342.735831,
+   "ms": 76.623,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:49:05.826+00:00",
+   "end_utc": "2026-11-11T22:49:05.835+00:00",
+   "start_epoch_s": 1794437345.826076,
+   "ms": 9.862,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e"
+   }
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:49:07.866+00:00",
+   "end_utc": "2026-11-11T22:49:07.971+00:00",
+   "start_epoch_s": 1794437347.866975,
+   "ms": 104.074,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_5"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "expected_target_version": 3,
+    "observation_bundle_id": "b948ee89-6cdc-460b-aeea-8a9460236d1e",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 163,
+     "end_line": 14,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "4ca90134-bfc5-451f-9870-bb23abb6ceee",
+     "observed_scope_hash": "00c363765d66042b5b96de2573a31a6f911e620bf3d5e64e1a60b718b12f97ba",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 163,
+     "scope_start": 132,
+     "start": 132,
+     "start_line": 13,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_5",
+      "parent": null
+     },
+     "text": "def setting_5():\n    return 105",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:49:32.113+00:00",
+   "end_utc": "2026-11-11T22:49:32.157+00:00",
+   "start_epoch_s": 1794437372.113423,
+   "ms": 43.672,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+     "expected_target_version": 3,
+     "observation_bundle_id": "b948ee89-6cdc-460b-aeea-8a9460236d1e",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_5 to return 205",
+    "client_request_id": "t3-w5-a1",
+    "groups": [
+     {
+      "observation_id": "4ca90134-bfc5-451f-9870-bb23abb6ceee",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 105",
+        "replace": "return 205"
+       }
+      ]
+     }
+    ]
+   },
+   "isError": true,
+   "status": "rejected",
+   "code": "BUNDLE_VERSION_MISMATCH",
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": null,
+     "version": null
+    },
+    "before": {
+     "hash": "673693966e05c94b20fd643ac5e6a7d13d0d184c29d79f10c1b457dc70d4a9c9",
+     "version": 4
+    },
+    "client_request_id": "t3-w5-a1",
+    "deduplicated": false,
+    "pdcp_log_id": "38be40c1-b2a2-4b13-9615-9670f2fd736a"
+   },
+   "current": {
+    "hash": "673693966e05c94b20fd643ac5e6a7d13d0d184c29d79f10c1b457dc70d4a9c9",
+    "version": 4
+   },
+   "scopes": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": null,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": null
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": "expected_target_version does not match the current target version.",
+   "failure_reason": "target_version_mismatch",
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": {
+    "code": "BUNDLE_VERSION_MISMATCH",
+    "failure_context": {
+     "available": false,
+     "buffer_stage": null,
+     "end": null,
+     "observed_target_hash": null,
+     "observed_target_version": null,
+     "prior_changes": null,
+     "selection": null,
+     "start": null,
+     "text": null,
+     "total_chars": null,
+     "truncated": null,
+     "unavailable_reason": "batch_scope_not_evaluated"
+    },
+    "format": "patchdiff-observed-batch/1",
+    "requires_new_submission": true,
+    "retryable": true,
+    "validation_stage": "precondition_guard"
+   },
+   "visual": {
+    "failure_detail": "expected_target_version does not match the current target version."
+   }
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:49:32.158+00:00",
+   "end_utc": "2026-11-11T22:49:32.188+00:00",
+   "start_epoch_s": 1794437372.158607,
+   "ms": 30.188,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_5"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "673693966e05c94b20fd643ac5e6a7d13d0d184c29d79f10c1b457dc70d4a9c9",
+    "expected_target_version": 4,
+    "observation_bundle_id": "2e81e81d-ca48-4b4c-a33f-ecdc8e9551f8",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 163,
+     "end_line": 14,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "ffef179c-ebdf-4e28-8ead-712fcf98efb3",
+     "observed_scope_hash": "00c363765d66042b5b96de2573a31a6f911e620bf3d5e64e1a60b718b12f97ba",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 163,
+     "scope_start": 132,
+     "start": 132,
+     "start_line": 13,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_5",
+      "parent": null
+     },
+     "text": "def setting_5():\n    return 105",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:49:32.190+00:00",
+   "end_utc": "2026-11-11T22:49:32.269+00:00",
+   "start_epoch_s": 1794437372.190122,
+   "ms": 78.885,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "673693966e05c94b20fd643ac5e6a7d13d0d184c29d79f10c1b457dc70d4a9c9",
+     "expected_target_version": 4,
+     "observation_bundle_id": "2e81e81d-ca48-4b4c-a33f-ecdc8e9551f8",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_5 to return 205",
+    "client_request_id": "t3-w5-a2",
+    "groups": [
+     {
+      "observation_id": "ffef179c-ebdf-4e28-8ead-712fcf98efb3",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 105",
+        "replace": "return 205"
+       }
+      ]
+     }
+    ],
+    "parent_pdcp_log_id": "38be40c1-b2a2-4b13-9615-9670f2fd736a",
+    "attempt": 2
+   },
+   "isError": false,
+   "status": "accepted",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": "3c4321295a439afafa0b25b1606af9c20c961147aa0042eacce722be3ecf25c9",
+     "version": 5
+    },
+    "before": {
+     "hash": "673693966e05c94b20fd643ac5e6a7d13d0d184c29d79f10c1b457dc70d4a9c9",
+     "version": 4
+    },
+    "client_request_id": "t3-w5-a2",
+    "deduplicated": false,
+    "group_count": 1,
+    "operation_count": 1,
+    "pdcp_log_id": "e071e4c4-d9b6-4a60-aef4-71855d847b4d"
+   },
+   "current": {
+    "hash": "3c4321295a439afafa0b25b1606af9c20c961147aa0042eacce722be3ecf25c9",
+    "version": 5
+   },
+   "scopes": {
+    "items": [
+     {
+      "group_index": 0,
+      "observation_id": "ffef179c-ebdf-4e28-8ead-712fcf98efb3",
+      "operation_count": 1
+     }
+    ],
+    "total": 1,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": true,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": true
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:49:54.211+00:00",
+   "end_utc": "2026-11-11T22:49:54.236+00:00",
+   "start_epoch_s": 1794437394.211311,
+   "ms": 24.873,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w5",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:49:56.270+00:00",
+   "end_utc": "2026-11-11T22:49:56.275+00:00",
+   "start_epoch_s": 1794437396.270119,
+   "ms": 5.101,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd"
+   }
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:49:02.471+00:00",
+   "end_utc": "2026-11-11T22:49:02.539+00:00",
+   "start_epoch_s": 1794437342.471171,
+   "ms": 68.51,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:49:06.210+00:00",
+   "end_utc": "2026-11-11T22:49:06.219+00:00",
+   "start_epoch_s": 1794437346.210221,
+   "ms": 9.457,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 3,
+    "current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e"
+   }
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:49:08.555+00:00",
+   "end_utc": "2026-11-11T22:49:08.631+00:00",
+   "start_epoch_s": 1794437348.555665,
+   "ms": 75.689,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_6"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+    "expected_target_version": 3,
+    "observation_bundle_id": "486e642c-8f4e-47ad-b564-6ae0db7fa669",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 196,
+     "end_line": 17,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "c52518c9-ce55-465c-9551-18f7c4738555",
+     "observed_scope_hash": "0f67120cb9a94925c1676bc4f5d1ba16f6ac4ceb49a957865f9c134f6cc25b2a",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 196,
+     "scope_start": 165,
+     "start": 165,
+     "start_line": 16,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_6",
+      "parent": null
+     },
+     "text": "def setting_6():\n    return 106",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:49:33.293+00:00",
+   "end_utc": "2026-11-11T22:49:33.357+00:00",
+   "start_epoch_s": 1794437373.293332,
+   "ms": 64.002,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "0149f73a9b82d9408a78ee09d8cb0c2aaccb25294a0218e11f57e857f04a4e7e",
+     "expected_target_version": 3,
+     "observation_bundle_id": "486e642c-8f4e-47ad-b564-6ae0db7fa669",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_6 to return 206",
+    "client_request_id": "t3-w6-a1",
+    "groups": [
+     {
+      "observation_id": "c52518c9-ce55-465c-9551-18f7c4738555",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 106",
+        "replace": "return 206"
+       }
+      ]
+     }
+    ]
+   },
+   "isError": true,
+   "status": "rejected",
+   "code": "BUNDLE_VERSION_MISMATCH",
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": null,
+     "version": null
+    },
+    "before": {
+     "hash": "3c4321295a439afafa0b25b1606af9c20c961147aa0042eacce722be3ecf25c9",
+     "version": 5
+    },
+    "client_request_id": "t3-w6-a1",
+    "deduplicated": false,
+    "pdcp_log_id": "a93ad2c0-5e5e-4ec1-a85c-969cb6d83a14"
+   },
+   "current": {
+    "hash": "3c4321295a439afafa0b25b1606af9c20c961147aa0042eacce722be3ecf25c9",
+    "version": 5
+   },
+   "scopes": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": null,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": null
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": "expected_target_version does not match the current target version.",
+   "failure_reason": "target_version_mismatch",
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": {
+    "code": "BUNDLE_VERSION_MISMATCH",
+    "failure_context": {
+     "available": false,
+     "buffer_stage": null,
+     "end": null,
+     "observed_target_hash": null,
+     "observed_target_version": null,
+     "prior_changes": null,
+     "selection": null,
+     "start": null,
+     "text": null,
+     "total_chars": null,
+     "truncated": null,
+     "unavailable_reason": "batch_scope_not_evaluated"
+    },
+    "format": "patchdiff-observed-batch/1",
+    "requires_new_submission": true,
+    "retryable": true,
+    "validation_stage": "precondition_guard"
+   },
+   "visual": {
+    "failure_detail": "expected_target_version does not match the current target version."
+   }
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_observe_scopes",
+   "start_utc": "2026-11-11T22:49:33.358+00:00",
+   "end_utc": "2026-11-11T22:49:33.406+00:00",
+   "start_epoch_s": 1794437373.358863,
+   "ms": 47.654,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "selections": [
+     {
+      "symbol_name": "setting_6"
+     }
+    ]
+   },
+   "isError": false,
+   "status": "observed_batch",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": {
+    "expected_current_hash": "3c4321295a439afafa0b25b1606af9c20c961147aa0042eacce722be3ecf25c9",
+    "expected_target_version": 5,
+    "observation_bundle_id": "dc77fa90-f471-4522-a84f-d55c8a9554a2",
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+   },
+   "transaction": null,
+   "current": null,
+   "scopes": [
+    {
+     "end": 196,
+     "end_line": 17,
+     "max_chars": 4000,
+     "next_offset": null,
+     "next_start": null,
+     "observation_id": "5cf349bc-1877-48f0-99c4-d67a470b4126",
+     "observed_scope_hash": "0f67120cb9a94925c1676bc4f5d1ba16f6ac4ceb49a957865f9c134f6cc25b2a",
+     "offset": 0,
+     "ordinal": 0,
+     "scope_chars": 31,
+     "scope_end": 196,
+     "scope_start": 165,
+     "start": 165,
+     "start_line": 16,
+     "symbol": {
+      "kind": "function",
+      "name": "setting_6",
+      "parent": null
+     },
+     "text": "def setting_6():\n    return 106",
+     "truncated": false
+    }
+   ],
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_commit_bundle",
+   "start_utc": "2026-11-11T22:49:33.408+00:00",
+   "end_utc": "2026-11-11T22:49:33.523+00:00",
+   "start_epoch_s": 1794437373.408597,
+   "ms": 114.59,
+   "arguments": {
+    "snapshot": {
+     "expected_current_hash": "3c4321295a439afafa0b25b1606af9c20c961147aa0042eacce722be3ecf25c9",
+     "expected_target_version": 5,
+     "observation_bundle_id": "dc77fa90-f471-4522-a84f-d55c8a9554a2",
+     "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72"
+    },
+    "intent": "Set setting_6 to return 206",
+    "client_request_id": "t3-w6-a2",
+    "groups": [
+     {
+      "observation_id": "5cf349bc-1877-48f0-99c4-d67a470b4126",
+      "operations": [
+       {
+        "op": "match",
+        "match": "return 106",
+        "replace": "return 206"
+       }
+      ]
+     }
+    ],
+    "parent_pdcp_log_id": "a93ad2c0-5e5e-4ec1-a85c-969cb6d83a14",
+    "attempt": 2
+   },
+   "isError": false,
+   "status": "accepted",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": {
+    "after": {
+     "hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+     "version": 6
+    },
+    "before": {
+     "hash": "3c4321295a439afafa0b25b1606af9c20c961147aa0042eacce722be3ecf25c9",
+     "version": 5
+    },
+    "client_request_id": "t3-w6-a2",
+    "deduplicated": false,
+    "group_count": 1,
+    "operation_count": 1,
+    "pdcp_log_id": "815081a5-2c9d-4c50-b49b-f3814f9558ea"
+   },
+   "current": {
+    "hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "version": 6
+   },
+   "scopes": {
+    "items": [
+     {
+      "group_index": 0,
+      "observation_id": "5cf349bc-1877-48f0-99c4-d67a470b4126",
+      "operation_count": 1
+     }
+    ],
+    "total": 1,
+    "truncated": false
+   },
+   "workspace_sync": null,
+   "validity": {
+    "protocol_valid": true,
+    "semantic": "not_evaluated",
+    "task_correct": "not_evaluated",
+    "transaction_valid": true
+   },
+   "warnings": {
+    "items": [],
+    "total": 0,
+    "truncated": false
+   },
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": {
+    "max_bytes": 8192,
+    "omitted_fields": [],
+    "truncated": false
+   },
+   "diagnostic": null,
+   "visual": {}
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:49:53.667+00:00",
+   "end_utc": "2026-11-11T22:49:53.693+00:00",
+   "start_epoch_s": 1794437393.667515,
+   "ms": 25.557,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3w6",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:49:55.668+00:00",
+   "end_utc": "2026-11-11T22:49:55.676+00:00",
+   "start_epoch_s": 1794437395.668468,
+   "ms": 7.934,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd"
+   }
+  },
+  {
+   "worker": "t3save",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:50:08.417+00:00",
+   "end_utc": "2026-11-11T22:50:08.463+00:00",
+   "start_epoch_s": 1794437408.417964,
+   "ms": 45.247,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "disk_sha256": "a233713f22ccab19a7473e84696f1fe94205a9aca04239ea3c52bf694c8dd6a1",
+    "active_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e"
+   }
+  },
+  {
+   "worker": "t3save",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:50:08.505+00:00",
+   "end_utc": "2026-11-11T22:50:08.512+00:00",
+   "start_epoch_s": 1794437408.505433,
+   "ms": 7.343,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd"
+   }
+  },
+  {
+   "worker": "t3save",
+   "tool": "patchdiff_save",
+   "start_utc": "2026-11-11T22:50:08.617+00:00",
+   "end_utc": "2026-11-11T22:50:08.716+00:00",
+   "start_epoch_s": 1794437408.617103,
+   "ms": 99.023,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "expected_target_version": 6,
+    "expected_current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "sync_workspace": true
+   },
+   "isError": false,
+   "status": "saved",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": {
+    "bytes_written": 197,
+    "content_eol": "lf",
+    "disk_sha256": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "durability": "confirmed",
+    "publication": "installed",
+    "synced_path": "system_settings.py"
+   },
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "snapshot_id": "5d0de1d8-e6a0-4ae3-91dd-8234394be835",
+    "closed_editing_cycle_id": "ff8a71b2-d1ba-4749-8b53-ac913dc3cb8e",
+    "new_editing_cycle_id": "a8d63046-4594-4890-8254-63f6cacd0d9f",
+    "failure_detail": null
+   }
+  },
+  {
+   "worker": "t3save2",
+   "tool": "patchdiff_initialize_target",
+   "start_utc": "2026-11-11T22:50:19.156+00:00",
+   "end_utc": "2026-11-11T22:50:19.199+00:00",
+   "start_epoch_s": 1794437419.156621,
+   "ms": 43.263,
+   "arguments": {
+    "filename": "system_settings.py",
+    "from_workspace": true
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "created": false,
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "disk_sha256": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd",
+    "active_editing_cycle_id": "a8d63046-4594-4890-8254-63f6cacd0d9f"
+   }
+  },
+  {
+   "worker": "t3save2",
+   "tool": "patchdiff_read_target",
+   "start_utc": "2026-11-11T22:50:19.246+00:00",
+   "end_utc": "2026-11-11T22:50:19.253+00:00",
+   "start_epoch_s": 1794437419.246743,
+   "ms": 7.072,
+   "arguments": {
+    "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+    "start": 0,
+    "length": 400
+   },
+   "isError": false,
+   "status": "ok",
+   "code": null,
+   "target_file_id": "05cb629b-7099-45b7-ba02-69f31570fb72",
+   "snapshot": null,
+   "transaction": null,
+   "current": null,
+   "scopes": null,
+   "workspace_sync": null,
+   "validity": null,
+   "warnings": null,
+   "failure_detail": null,
+   "failure_reason": null,
+   "retryable": null,
+   "requires_new_submission": null,
+   "validation_stage": null,
+   "format": null,
+   "presentation": null,
+   "diagnostic": null,
+   "visual": {
+    "version": 6,
+    "current_hash": "1d188dfc94c659b568211e599f0f1e64029bc7d8c86525781b484c820d5120fd"
+   }
+  }
+ ],
+ "cross_worker_overlaps": [],
+ "coordinator_timeline": [
+  {
+   "at": "2026-11-11T22:42:34.505+00:00",
+   "event": "TRIAL 2 WAVE 1 START: fresh workers t2w1/t2w2/t2w3 on trial-2 root; baseline a233713f, database has 1 binding (trial 1)"
+  },
+  {
+   "at": "2026-11-11T22:42:50.208+00:00",
+   "event": "TRIAL 2 WAVE 1 OPEN BARRIER RELEASED: three fresh workers open system_settings.py from_workspace"
+  },
+  {
+   "at": "2026-11-11T22:43:17.476+00:00",
+   "event": "TRIAL 2 WAVE 1 OPEN PASSED: target b79ea267 v0 hash a233713f; created true on t2w1 only; bundles fe4ffca8/ccd111ab/657e131b"
+  },
+  {
+   "at": "2026-11-11T22:43:17.522+00:00",
+   "event": "TRIAL 2 WAVE 1 COMMIT BARRIER RELEASED: t2-w1/t2-w2/t2-w3 a1 at v0 with host-owned recovery"
+  },
+  {
+   "at": "2026-11-11T22:43:59.116+00:00",
+   "event": "TRIAL 2 WAVE 1 PASSED: reopen v3 hash 0149f73a, disk a233713f; wave 2 open barrier released for fresh t2w4/t2w5/t2w6"
+  },
+  {
+   "at": "2026-11-11T22:44:27.366+00:00",
+   "event": "TRIAL 2 WAVE 2 OPEN: t2w6 hit one workspace_busy then retried OK; all three at v3 hash 0149f73a"
+  },
+  {
+   "at": "2026-11-11T22:44:29.466+00:00",
+   "event": "TRIAL 2 WAVE 2 COMMIT BARRIER RELEASED: attempt 1 pinned to each phase-1 v3 snapshot, recovery after rejection"
+  },
+  {
+   "at": "2026-11-11T22:45:13.647+00:00",
+   "event": "TRIAL 2 WAVE 2 COMMITS: accepted w4 v4 (db26b1b4), rejected w6 a1 (9a4ff429) then w6 a2 v5 (512d15d5), rejected w5 a1 (5f97f41e) then w5 a2 v6 (b14bc3ac); target v6 hash 1d188dfc"
+  },
+  {
+   "at": "2026-11-11T22:45:54.643+00:00",
+   "event": "TRIAL 2 COORDINATOR open+read v6 six values; issuing the single SAVE"
+  },
+  {
+   "at": "2026-11-11T22:46:04.287+00:00",
+   "event": "TRIAL 2 SAVED: snapshot 47da6fe7, cycle 632e0dad closed -> 958dbedb; disk 197 bytes sha 1d188dfc; fresh open confirms v6 + new cycle"
+  },
+  {
+   "at": "2026-11-11T22:46:17.764+00:00",
+   "event": "TRIAL 3 WAVE 1 START: fresh t3w1/t3w2/t3w3 on trial-3 root; baseline a233713f; commits pinned to phase-1 v0 snapshots"
+  },
+  {
+   "at": "2026-11-11T22:46:26.706+00:00",
+   "event": "TRIAL 3 WAVE 1 OPEN BARRIER RELEASED: three fresh workers open system_settings.py from_workspace"
+  },
+  {
+   "at": "2026-11-11T22:46:59.461+00:00",
+   "event": "TRIAL 3 WAVE 1 OPEN PASSED: target 05cb629b v0 hash a233713f; created true on t3w2 only; commits pinned to v0"
+  },
+  {
+   "at": "2026-11-11T22:47:19.053+00:00",
+   "event": "TRIAL 3 WAVE 1 COMMITS: accepted w3 v1 (18c6a3ea), rejected w1 (f2fb4b7b) then w1 a2 v2 (54ebf23e), rejected w2 (800ad87d) then w2 a2 v3 (988a68b3); target v3"
+  },
+  {
+   "at": "2026-11-11T22:47:35.521+00:00",
+   "event": "TRIAL 3 WAVE 1 REOPENED v3 hash 0149f73a; wave 2 open barrier released for fresh t3w4/t3w5/t3w6"
+  },
+  {
+   "at": "2026-11-11T22:49:24.720+00:00",
+   "event": "TRIAL 3 WAVE 2 OPEN: all three created:false v3 hash 0149f73a; bundles 2ef06745/486e642c and t3w5; commit barrier released pinned to v3"
+  },
+  {
+   "at": "2026-11-11T22:49:45.437+00:00",
+   "event": "TRIAL 3 WAVE 2 COMMITS: accepted w4 v4 (606ebae9), rejected w5 (38be40c1) then w5 a2 v5 (e071e4c4), rejected w6 (a93ad2c0) then w6 a2 v6 (815081a5); target v6"
+  },
+  {
+   "at": "2026-11-11T22:50:08.575+00:00",
+   "event": "TRIAL 3 COORDINATOR open+read v6 six values; issuing the single SAVE"
+  },
+  {
+   "at": "2026-11-11T22:50:19.431+00:00",
+   "event": "TRIAL 3 SAVED: snapshot 5d0de1d8, cycle ff8a71b2 closed -> a8d63046; disk 197 bytes sha 1d188dfc; fresh open confirms v6 + new cycle"
+  }
+ ]
+}
