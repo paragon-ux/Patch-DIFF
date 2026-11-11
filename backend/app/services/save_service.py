@@ -16,7 +16,7 @@ from app.storage.models import CloudTargetFiles, EditingCycles, TargetSnapshots
 from app.storage.repositories import select_target_for_update
 from app.services.performance_events import timed
 from app.services.workspace_binding_service import (
-    bind_workspace_target, lock_workspace_destination, lock_workspace_path, workspace_write_fence,
+    active_binding_evidence, bind_workspace_target, lock_workspace_destination, lock_workspace_path, workspace_write_fence,
 )
 from app.services.workspace_sync_service import WorkspaceSyncError, sync_target_file_to_workspace
 
@@ -124,7 +124,7 @@ def save_target(
                     failure_detail="Target file was not found.",
                 )
 
-            fence = workspace_write_fence(session, target.target_file_id)
+            fence = workspace_write_fence(session, target)
             if fence is not None:
                 return SaveResult(
                     "rejected", target.target_file_id, None, None, None, target.current_hash, target.version,
@@ -185,6 +185,7 @@ def save_target(
                         raise WorkspaceSyncError(
                             FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
                             "This target does not own the workspace destination.",
+                            evidence=active_binding_evidence(binding),
                         )
 
                 def lock_destination(opened):
@@ -208,6 +209,11 @@ def save_target(
                     if err.receipt is not None:
                         sync_payload = err.receipt
                         raise
+                    evidence = err.evidence
+                    metadata = target.source_line_endings
+                    if (err.code == "workspace_binding_mismatch" and not evidence
+                            and isinstance(metadata, dict) and metadata.get("workspace_tracked") is True):
+                        evidence = {"active_target_file_id": str(target.target_file_id)}
                     return SaveResult(
                         status="rejected",
                         target_file_id=target.target_file_id,
@@ -219,6 +225,7 @@ def save_target(
                         failure_reason=err.reason,
                         failure_detail=err.detail,
                         code=err.code,
+                        workspace_evidence=evidence,
                     )
 
             snapshot = TargetSnapshots(

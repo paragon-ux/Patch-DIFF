@@ -7,6 +7,7 @@ import json
 import os
 import re
 import uuid
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, replace
 
 from sqlalchemy import func, select
@@ -22,7 +23,8 @@ from app.pdcp.protocol_validator import ProtocolValidationError
 from app.pdcp.typed import validate_client_request_id
 from app.services.workspace_binding_service import bind_workspace_target, lock_workspace_destination, lock_workspace_path
 from app.services.workspace_sync_service import (
-    WorkspaceDestination, WorkspaceSyncError, read_workspace_bytes, validate_workspace_source, workspace_file,
+    WorkspaceDestination, WorkspaceSyncError, pinned_workspace_path, read_workspace_bytes,
+    valid_workspace_metadata, validate_workspace_source, workspace_baseline, workspace_destination,
 )
 from app.storage.models import (
     CloudTargetFiles, EditingCycles, Projects, TargetSnapshots, WorkspaceBinding, WorkspaceBindingMember,
@@ -184,26 +186,62 @@ def initialize_target_from_workspace(
     if target_type is not None and (not isinstance(target_type, str) or not is_persistable_text(target_type)):
         raise ValueError("content_type must be valid UTF-8 text without NUL.")
     root = workspace_root if workspace_root is not None else get_workspace_root()
-    binding = None
-
-    def lock_path(identity, relative):
-        nonlocal binding
-        binding = lock_workspace_path(session, identity, relative)
-
-    with _transaction(session):
-        with workspace_file(root, filename, before_traverse=lock_path) as destination:
-            physical = lock_workspace_destination(session, destination, binding)
-            if recovery is None:
-                result = _open_workspace_target(session, destination, binding, physical, project_id, target_type)
-            else:
+    with _transaction(session), session.no_autoflush:
+        with pinned_workspace_path(root, filename) as path:
+            binding = lock_workspace_path(session, path.root_identity, path.relative_path)
+            result = None
+            if recovery is not None:
                 if binding is None:
                     raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_binding_not_found",
                                              "Open the workspace path before requesting recovery.")
-                result = _recover_workspace_target(session, destination, binding, physical, project_id, target_type, recovery)
-            session.flush()
+                fingerprint = recovery.fingerprint(project_id, target_type)
+                result = _recorded_workspace_recovery(session, binding, recovery.client_request_id, fingerprint)
+            if result is None:
+                with _destination_or_missing(path) as destination:
+                    physical = lock_workspace_destination(session, destination, binding) if destination else None
+                    claim_legacy = binding is not None and binding.physical_destination is None and physical is not None
+                    try:
+                        if recovery is None:
+                            result = _open_workspace_target(session, destination, binding, physical, project_id, target_type)
+                        else:
+                            result = _recover_workspace_target(
+                                session, destination, binding, project_id, target_type, recovery, fingerprint,
+                            )
+                    except WorkspaceSyncError as err:
+                        if not claim_legacy or err.code == "workspace_pending_target_changes":
+                            raise
+                        result = err
+                    if claim_legacy:
+                        binding.physical_destination = physical
+                session.flush()
     if isinstance(result, WorkspaceSyncError):
         raise result
     return result
+
+
+@contextmanager
+def _destination_or_missing(path):
+    # Failure to open a missing parent is equivalent to an absent leaf for
+    # drift reporting. Descriptor teardown still precedes any database commit.
+    with ExitStack() as stack:
+        try:
+            destination = stack.enter_context(workspace_destination(path))
+        except WorkspaceSyncError as err:
+            if err.code != "workspace_parent_not_found":
+                raise
+            destination = None
+        yield destination
+
+
+def _locked_workspace_targets(session, target_ids):
+    for target_id in target_ids:
+        existing = session.identity_map.get(session.identity_key(CloudTargetFiles, target_id))
+        if existing is not None and (existing in session.dirty or session.is_modified(existing)):
+            raise WorkspaceSyncError(
+                FailureReason.CONTEXT_INVALID, "workspace_pending_target_changes",
+                "Pending local direct modifications on workspace targets are not permitted.",
+            )
+    return session.scalars(select_targets_for_update_ordered(target_ids)).all()
 
 
 def _open_workspace_target(session, destination, binding, physical, project_id, target_type) -> InitializedTarget:
@@ -211,7 +249,7 @@ def _open_workspace_target(session, destination, binding, physical, project_id, 
         if project_id is not None and session.get(Projects, project_id) is None:
             raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_project_conflict",
                                      "The supplied project_id does not exist.")
-        raw = validate_workspace_source(read_workspace_bytes(destination))
+        raw = validate_workspace_source(read_workspace_bytes(destination) if destination else None)
         target = _import_workspace_target(session, destination, raw, project_id,
                                           "text/plain" if target_type is None else target_type)
         bind_workspace_target(session, destination, physical, target.target_file_id)
@@ -222,7 +260,7 @@ def _open_workspace_target(session, destination, binding, physical, project_id, 
             WorkspaceBindingMember.binding_id == binding.binding_id)
         candidate_ids = session.scalars(members.order_by(WorkspaceBindingMember.target_file_id).limit(_MAX_CANDIDATES)).all()
         total = session.scalar(select(func.count()).select_from(members.subquery()))
-        raw = read_workspace_bytes(destination)
+        raw = read_workspace_bytes(destination) if destination else None
         raise WorkspaceSyncError(
             FailureReason.CONTEXT_INVALID, "workspace_binding_ambiguous",
             "Select a legacy target explicitly before opening this workspace path.",
@@ -231,38 +269,41 @@ def _open_workspace_target(session, destination, binding, physical, project_id, 
                       "disk_sha256": hashlib.sha256(raw).hexdigest() if raw is not None else None},
         )
 
-    target = session.scalars(select_targets_for_update_ordered([binding.active_target_file_id])).one()
+    target, = _locked_workspace_targets(session, [binding.active_target_file_id])
     _check_workspace_metadata(target, project_id, target_type)
-    raw = read_workspace_bytes(destination)
+    raw = read_workspace_bytes(destination) if destination else None
     disk_sha256 = hashlib.sha256(raw).hexdigest() if raw is not None else None
     _check_workspace_baseline(target, disk_sha256)
-    binding.physical_destination = physical
     return _workspace_result(_initialized_target(target), created=False, disk_sha256=disk_sha256)
 
 
-def _recover_workspace_target(session, destination, binding, physical, project_id, target_type, recovery):
-    fingerprint = recovery.fingerprint(project_id, target_type)
-    prior = session.get(WorkspaceRecoveryReceipt, (binding.binding_id, recovery.client_request_id))
-    if prior is not None:
-        if prior.request_fingerprint != fingerprint:
-            raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_recovery_key_conflict",
-                                     "This recovery request ID was already used with different arguments.")
-        outcome = prior.outcome
-        if outcome["status"] == "rejected":
-            return WorkspaceSyncError(
-                FailureReason(outcome["reason"]), outcome["code"], outcome["detail"],
-                evidence={**outcome["evidence"], "deduplicated": True,
-                          "active_target_file_id": str(binding.active_target_file_id) if binding.active_target_file_id else None},
-            )
-        fields = dict(outcome["target"])
-        for field in ("target_file_id", "project_id", "initial_snapshot_id", "active_editing_cycle_id"):
-            fields[field] = uuid.UUID(fields[field])
-        fields.update(deduplicated=True, active_target_file_id=binding.active_target_file_id)
-        return InitializedTarget(**fields)
+def _recorded_workspace_recovery(session, binding, request_id, fingerprint):
+    prior = session.get(WorkspaceRecoveryReceipt, (binding.binding_id, request_id))
+    if prior is None:
+        return None
+    if prior.request_fingerprint != fingerprint:
+        raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "request_key_conflict",
+                                 "This recovery request ID was already used with different arguments.")
+    outcome = prior.outcome
+    if outcome["status"] == "rejected":
+        return WorkspaceSyncError(
+            FailureReason(outcome["reason"]), outcome["code"], outcome["detail"],
+            evidence={**outcome["evidence"], "deduplicated": True,
+                      "active_target_file_id": str(binding.active_target_file_id) if binding.active_target_file_id else None},
+        )
+    fields = dict(outcome["target"])
+    for field in ("target_file_id", "project_id", "initial_snapshot_id", "active_editing_cycle_id"):
+        fields[field] = uuid.UUID(fields[field])
+    fields.update(deduplicated=True, active_target_file_id=binding.active_target_file_id)
+    return InitializedTarget(**fields)
 
+
+def _recover_workspace_target(session, destination, binding, project_id, target_type, recovery, fingerprint):
     try:
-        result = _apply_workspace_recovery(session, destination, binding, physical, project_id, target_type, recovery)
+        result = _apply_workspace_recovery(session, destination, binding, project_id, target_type, recovery)
     except WorkspaceSyncError as err:
+        if err.code == "workspace_pending_target_changes":
+            raise
         result = err
         result.evidence = {**err.evidence, "deduplicated": False, "recovery_action": recovery.action,
                            "active_target_file_id": str(binding.active_target_file_id) if binding.active_target_file_id else None}
@@ -275,7 +316,7 @@ def _recover_workspace_target(session, destination, binding, physical, project_i
     return result
 
 
-def _apply_workspace_recovery(session, destination, binding, physical, project_id, target_type, recovery):
+def _apply_workspace_recovery(session, destination, binding, project_id, target_type, recovery):
     active = binding.active_target_file_id
     selecting = recovery.action == "select_existing"
     if active is not None and (selecting or active != recovery.target_file_id):
@@ -293,7 +334,7 @@ def _apply_workspace_recovery(session, destination, binding, physical, project_i
     if recovery.target_file_id not in member_ids:
         raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_recovery_target_conflict",
                                  "The selected target is not a member of this workspace binding.")
-    locked = session.scalars(select_targets_for_update_ordered(member_ids)).all()
+    locked = _locked_workspace_targets(session, member_ids)
     target = next(row for row in locked if row.target_file_id == recovery.target_file_id)
     _check_workspace_metadata(target, project_id, target_type)
     if target.version != recovery.expected_target_version:
@@ -302,7 +343,7 @@ def _apply_workspace_recovery(session, destination, binding, physical, project_i
     if target.current_hash != recovery.expected_current_hash:
         raise WorkspaceSyncError(FailureReason.TARGET_HASH_MISMATCH, "target_hash_mismatch",
                                  "The recovery canonical hash guard does not match.", evidence=_target_evidence(target))
-    raw = read_workspace_bytes(destination)
+    raw = read_workspace_bytes(destination) if destination else None
     disk_sha256 = hashlib.sha256(raw).hexdigest() if raw is not None else None
     if disk_sha256 != recovery.expected_disk_sha256:
         raise WorkspaceSyncError(
@@ -320,7 +361,6 @@ def _apply_workspace_recovery(session, destination, binding, physical, project_i
         if member.target_file_id != result.target_file_id:
             member.superseded_by_target_file_id = result.target_file_id
     binding.active_target_file_id = result.target_file_id
-    binding.physical_destination = physical
     return _workspace_result(result, created=not selecting, disk_sha256=disk_sha256, recovery_action=recovery.action)
 
 
@@ -357,9 +397,14 @@ def _check_workspace_metadata(target, project_id, target_type):
 
 
 def _check_workspace_baseline(target, disk_sha256):
-    metadata = target.source_line_endings if isinstance(target.source_line_endings, dict) else {}
-    expected = metadata.get("last_synced_disk_sha256", metadata.get("source_sha256"))
-    if disk_sha256 is None or disk_sha256 != expected:
+    metadata = target.source_line_endings
+    if not valid_workspace_metadata(target.filename, metadata):
+        raise WorkspaceSyncError(
+            FailureReason.CONTEXT_INVALID, "workspace_binding_metadata_invalid",
+            "The bound target's workspace tracking metadata is invalid.",
+            evidence={**_target_evidence(target), "disk_sha256": disk_sha256},
+        )
+    if disk_sha256 is None or disk_sha256 != workspace_baseline(metadata):
         raise WorkspaceSyncError(
             FailureReason.TARGET_DIVERGED, "external_disk_drift",
             "Workspace bytes differ from the target's recorded disk baseline. Use guarded recovery to reimport.",

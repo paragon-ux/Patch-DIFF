@@ -106,7 +106,7 @@ def submit_coordinated_transactions(
         tid = _coerce_uuid(entry["target_file_id"])
         target = locked_by_id[tid]
 
-        fence = workspace_write_fence(session, tid)
+        fence = workspace_write_fence(session, target)
         if fence is not None:
             return {
                 "status": "rejected",

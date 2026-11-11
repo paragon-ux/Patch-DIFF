@@ -80,7 +80,8 @@ def _mock_save_session(target):
     session.no_autoflush.__exit__.return_value = None
     def execute(statement):
         if "workspace_binding_members" in str(statement):
-            return SimpleNamespace(one_or_none=lambda: None)
+            state = (target.target_file_id, None) if target.source_line_endings.get("workspace_tracked") else None
+            return SimpleNamespace(one_or_none=lambda: state)
         return SimpleNamespace(scalar_one_or_none=lambda: target)
 
     session.execute.side_effect = execute
@@ -161,7 +162,8 @@ def test_external_disk_drift_and_deletion_reject_before_db_checkpoint_mutation(t
     initial = b"VALUE = 1\r\n"
     src.write_bytes(initial)
     target = _fake_target("service.py", initial, version=1, edited_canonical="VALUE = 2\n")
-    target.source_line_endings["workspace_tracked"] = True
+    st = tmp_path.stat()
+    target.source_line_endings.update(workspace_tracked=True, workspace_root_identity=f"{st.st_dev}:{st.st_ino}")
 
     # Simulate external editor modifying disk outside PatchDIFF
     external_bytes = b"VALUE = 999\r\n"

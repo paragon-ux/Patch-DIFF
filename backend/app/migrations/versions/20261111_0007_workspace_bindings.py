@@ -60,7 +60,7 @@ def upgrade() -> None:
         FROM cloud_target_files
         WHERE source_line_endings->'workspace_tracked' = 'true'::jsonb
           AND jsonb_typeof(source_line_endings->'workspace_root_identity') = 'string'
-          AND source_line_endings->>'workspace_root_identity' ~ '^[0-9]+:[0-9]+$'
+          AND source_line_endings->>'workspace_root_identity' ~ '^[0-9]{1,20}:[0-9]{1,20}$'
           AND filename <> ''
     """)
     op.execute("""

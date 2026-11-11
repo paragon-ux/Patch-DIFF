@@ -784,7 +784,18 @@ def _submit(
                 return replace(result, client_request_id=validated_req_id)
 
 
-        fence = workspace_write_fence(session, target.target_file_id)
+        if not encoding_paths and _fresh_admission is not None:
+            size_evidence = _fresh_admission()
+            if size_evidence is not None:
+                return SubmitPDCPResult(
+                    status="invalid_argument", target_file_id=target_uuid, pdcp_log_id=None,
+                    before_hash=before_hash, after_hash=None, before_version=before_version, after_version=None,
+                    current_hash=before_hash, current_version=before_version,
+                    failure_detail="Replacement exceeds fresh admission limits.",
+                    diagnostic=size_evidence, code=size_evidence["code"],
+                    client_request_id=validated_req_id)
+
+        fence = workspace_write_fence(session, target)
         if fence is not None and not encoding_paths:
             rejection = _core_rejection(
                 fence.reason, fence.detail, before_hash, protocol_version=protocol_version,
@@ -806,17 +817,6 @@ def _submit(
                 before_hash=before_hash, before_version=before_version, stage=ValidationStage.PRECONDITION_GUARD,
                 client_request_id=validated_req_id, request_fingerprint=fingerprint,
             )
-
-        if not encoding_paths and _fresh_admission is not None:
-            size_evidence = _fresh_admission()
-            if size_evidence is not None:
-                return SubmitPDCPResult(
-                    status="invalid_argument", target_file_id=target_uuid, pdcp_log_id=None,
-                    before_hash=before_hash, after_hash=None, before_version=before_version, after_version=None,
-                    current_hash=before_hash, current_version=before_version,
-                    failure_detail="Replacement exceeds fresh admission limits.",
-                    diagnostic=size_evidence, code=size_evidence["code"],
-                    client_request_id=validated_req_id)
 
         current_pdcp = _upsert_current_pdcp(
             session,

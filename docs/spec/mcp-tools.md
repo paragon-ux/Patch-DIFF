@@ -235,8 +235,9 @@ Tool results are JSON text in `content[0].text` with literal characters (not `\u
 A binding is global to a PostgreSQL database for the configured root's
 directory device and inode plus the validated, normalized relative path.
 The physical parent directory device and inode plus the final filename also
-have one owner. An overlapping root that reaches the same destination returns
-`workspace_binding_mismatch`. Identical bytes in separate destinations are
+have one owner. An overlapping root that reaches an already claimed destination
+returns `workspace_binding_mismatch`. A legacy binding can claim its physical
+destination at first access. Identical bytes in separate destinations are
 independent.
 
 An ordinary open returns `status: "ok"`, `created` (true on first import),
@@ -248,7 +249,9 @@ original import digest. A changed or deleted file returns
 `external_disk_drift` with the target ID, version, canonical hash, and observed
 raw disk digest (null for a missing file). Explicit project and content type
 values must agree with the bound target. A conflict returns
-`workspace_project_conflict` or `workspace_content_type_conflict`. Inline
+`workspace_project_conflict` or `workspace_content_type_conflict`. Malformed
+tracking metadata on a bound target or a known workspace target without a
+binding returns `workspace_binding_metadata_invalid` on write. Inline
 initialization and upload continue to create independent targets.
 
 An unresolved legacy binding returns `workspace_binding_ambiguous`, up to 20
@@ -279,7 +282,7 @@ target or disk guards. A recovered success preserves its recorded
 `target_file_id`, version, hash and cycle. `active_target_file_id` reports the
 current binding owner, which can have changed since the recorded outcome.
 Reusing the key with different arguments returns
-`workspace_recovery_key_conflict`. Malformed inputs, unavailable bindings and
+`request_key_conflict`. Malformed inputs, unavailable bindings and
 destination contention leave the key available for a later request.
 
 ### `patchdiff_get_target`
@@ -525,8 +528,9 @@ an advisory exclusive lease on the pinned physical destination directory.
 This serializes the same destination across processes, target IDs, overlapping
 configured roots and path aliases. Different destination directories can run
 independently. A conflicting operation rejects with `workspace_busy`.
-When a target's baseline diverges, reinitialize from the file before
-publishing again.
+When the disk baseline diverges, use the current target and raw disk evidence
+for [guarded recovery](#workspace-initialization-and-recovery) before publishing
+from a successor.
 
 Workspace imports bind the working target to the root's device and inode.
 Moving the same directory preserves that identity. A different directory

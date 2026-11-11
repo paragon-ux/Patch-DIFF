@@ -9,8 +9,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.failures import FailureReason
-from app.services.workspace_sync_service import WorkspaceDestination, WorkspaceSyncError
-from app.storage.models import WorkspaceBinding, WorkspaceBindingMember
+from app.services.workspace_sync_service import (
+    WorkspaceDestination, WorkspaceSyncError, has_workspace_tracking, valid_workspace_metadata,
+)
+from app.storage.models import CloudTargetFiles, WorkspaceBinding, WorkspaceBindingMember
 
 
 def _try_lock(session: Session, namespace: str, identity: str) -> None:
@@ -40,14 +42,17 @@ def lock_workspace_destination(
 ) -> str:
     physical = destination.physical_identity
     _try_lock(session, "physical", physical)
-    other_binding_id = session.scalar(
-        select(WorkspaceBinding.binding_id).where(WorkspaceBinding.physical_destination == physical)
-    )
-    if (other_binding_id is not None and (binding is None or other_binding_id != binding.binding_id)) or (
+    owner = session.scalar(select(WorkspaceBinding).where(WorkspaceBinding.physical_destination == physical)
+                           .execution_options(populate_existing=True))
+    if (owner is not None and (binding is None or owner.binding_id != binding.binding_id)) or (
         binding is not None and binding.physical_destination not in (None, physical)
     ):
-        raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
-                                 "The physical destination conflicts with the pinned workspace binding.")
+        conflicting_binding = owner if owner is not None else binding
+        raise WorkspaceSyncError(
+            FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
+            "The physical destination conflicts with the pinned workspace binding.",
+            evidence=active_binding_evidence(conflicting_binding),
+        )
     return physical
 
 
@@ -66,22 +71,37 @@ def bind_workspace_target(
     return binding
 
 
-def workspace_write_fence(session: Session, target_file_id: uuid.UUID) -> WorkspaceSyncError | None:
+def active_binding_evidence(binding: WorkspaceBinding) -> dict[str, str]:
+    if binding.active_target_file_id is None:
+        return {}
+    return {"active_target_file_id": str(binding.active_target_file_id)}
+
+
+def workspace_write_fence(session: Session, target: CloudTargetFiles) -> WorkspaceSyncError | None:
     """Check write admission while the caller holds this target's row lock."""
     state = session.execute(
         select(WorkspaceBinding.active_target_file_id, WorkspaceBindingMember.superseded_by_target_file_id)
         .join(WorkspaceBindingMember, WorkspaceBindingMember.binding_id == WorkspaceBinding.binding_id)
-        .where(WorkspaceBindingMember.target_file_id == target_file_id)
+        .where(WorkspaceBindingMember.target_file_id == target.target_file_id)
     ).one_or_none()
+    metadata = target.source_line_endings
     if state is None:
-        return None
-    active, successor = state
-    if active is None:
-        return WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_binding_ambiguous",
-                                  "Select the active target for this workspace path before writing.")
-    if active != target_file_id:
-        return WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_target_superseded",
-                                  "This target has been superseded. Reopen its workspace path.",
-                                  evidence={"active_target_file_id": str(active),
-                                            "superseded_by_target_file_id": str(successor) if successor else None})
-    return None
+        if not has_workspace_tracking(metadata):
+            return None
+    else:
+        active, successor = state
+        if active is None:
+            return WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_binding_ambiguous",
+                                      "Select the active target for this workspace path before writing.")
+        if active != target.target_file_id:
+            return WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_target_superseded",
+                                      "This target has been superseded. Reopen its workspace path.",
+                                      evidence={"active_target_file_id": str(active),
+                                                "superseded_by_target_file_id": str(successor) if successor else None})
+        if valid_workspace_metadata(target.filename, metadata):
+            return None
+    return WorkspaceSyncError(
+        FailureReason.CONTEXT_INVALID, "workspace_binding_metadata_invalid",
+        "This target's workspace tracking metadata is invalid or has no binding.",
+        evidence={"active_target_file_id": str(target.target_file_id)} if state is not None else {},
+    )

@@ -21,6 +21,8 @@ _WIN_RESERVED_RE = re.compile(
     r"^(?:con|prn|aux|nul|com[1-9\xb9\xb2\xb3]|lpt[1-9\xb9\xb2\xb3])(?:\..*)?$",
     re.IGNORECASE,
 )
+_ROOT_IDENTITY = re.compile(r"[0-9]{1,20}:[0-9]{1,20}")
+_DISK_SHA256 = re.compile(r"[0-9a-f]{64}")
 _ILLEGAL_SEGMENT_CHARS = frozenset('<>:"|?*')
 
 
@@ -86,7 +88,11 @@ def resolve_workspace_file(
     filename: str,
 ) -> tuple[Path, Path, str]:
     root_real = _resolve_workspace_root(workspace_root)
+    relative = _normalize_workspace_filename(filename)
+    return root_real, _validate_workspace_components(root_real, relative), relative
 
+
+def _normalize_workspace_filename(filename: str) -> str:
     if not isinstance(filename, str) or not filename:
         raise WorkspaceSyncError(
             FailureReason.CONTEXT_INVALID,
@@ -128,6 +134,11 @@ def resolve_workspace_file(
                 f"Target path segment {seg!r} is not permitted.",
             )
 
+    return "/".join(segments)
+
+
+def _validate_workspace_components(root_real: Path, relative: str) -> Path:
+    segments = relative.split("/")
     cur = root_real
     for idx, seg in enumerate(segments):
         cur = cur / seg
@@ -150,7 +161,7 @@ def resolve_workspace_file(
             "workspace_path_invalid",
             "Resolved target path escapes PATCHDIFF_WORKSPACE_ROOT.",
         )
-    return root_real, cur, "/".join(segments)
+    return cur
 
 
 
@@ -187,33 +198,53 @@ class WorkspaceDestination:
         return f"{parent.st_dev}:{parent.st_ino}/{self.name}"
 
 
+@dataclass(frozen=True, slots=True)
+class WorkspacePath:
+    root: Path
+    root_fd: int
+    root_identity: str
+    relative_path: str
+
+
 @contextmanager
-def workspace_file(workspace_root, filename: str, *, create_parents: bool = False, before_traverse=None):
-    """Pin directory handles and lease the physical destination directory for IO.
-
-    The lease is advisory. Other writers must cooperate, and the configured root
-    and opened directories must not be moved out of the workspace during IO.
-    """
+def pinned_workspace_path(workspace_root, filename: str):
+    """Pin the configured root and validate the logical path without traversing it."""
     _require_workspace_io()
-    import fcntl
-
-    root, _, relative = resolve_workspace_file(workspace_root, filename)
+    root = _resolve_workspace_root(workspace_root)
+    relative = _normalize_workspace_filename(filename)
     try:
         with ExitStack() as stack:
             root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             stack.callback(os.close, root_fd)
             st = os.fstat(root_fd)
-            identity = f"{st.st_dev}:{st.st_ino}"
-            if before_traverse is not None:
-                before_traverse(identity, relative)
-            parent_fd = root_fd
-            parts = relative.split("/")
+            yield WorkspacePath(root, root_fd, f"{st.st_dev}:{st.st_ino}", relative)
+    except OSError as exc:
+        raise _workspace_io_error(exc) from exc
+
+
+@contextmanager
+def workspace_destination(path: WorkspacePath, *, create_parents: bool = False):
+    """Pin directory handles and lease the physical destination directory for IO.
+
+    The lease is advisory. Other writers must cooperate, and the configured root
+    and opened directories must not be moved out of the workspace during IO.
+    """
+    import fcntl
+
+    _validate_workspace_components(path.root, path.relative_path)
+    parts = path.relative_path.split("/")
+    try:
+        with ExitStack() as stack:
+            parent_fd = path.root_fd
             for part in parts[:-1]:
                 try:
                     child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
-                except FileNotFoundError:
+                except FileNotFoundError as exc:
                     if not create_parents:
-                        raise
+                        raise WorkspaceSyncError(
+                            FailureReason.TARGET_NOT_FOUND, "workspace_parent_not_found",
+                            "The workspace destination directory does not exist.",
+                        ) from exc
                     os.mkdir(part, dir_fd=parent_fd)
                     os.fsync(parent_fd)
                     child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
@@ -224,13 +255,24 @@ def workspace_file(workspace_root, filename: str, *, create_parents: bool = Fals
             except BlockingIOError as exc:
                 raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_busy",
                                          "Another managed operation owns the destination directory; no file was published.") from exc
-            yield WorkspaceDestination(parent_fd, parts[-1], relative, identity)
-    except WorkspaceSyncError:
-        raise
+            yield WorkspaceDestination(parent_fd, parts[-1], path.relative_path, path.root_identity)
     except OSError as exc:
-        code = "workspace_symlink_escape" if exc.errno in (errno.ELOOP, errno.ENOTDIR) else "workspace_io_error"
-        raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, code,
-                                 "Workspace IO failed before a confirmed publication.") from exc
+        raise _workspace_io_error(exc) from exc
+
+
+def _workspace_io_error(exc: OSError) -> WorkspaceSyncError:
+    code = "workspace_symlink_escape" if exc.errno in (errno.ELOOP, errno.ENOTDIR) else "workspace_io_error"
+    return WorkspaceSyncError(FailureReason.CONTEXT_INVALID, code,
+                              "Workspace IO failed before a confirmed publication.")
+
+
+@contextmanager
+def workspace_file(workspace_root, filename: str, *, create_parents: bool = False, before_traverse=None):
+    with pinned_workspace_path(workspace_root, filename) as path:
+        if before_traverse is not None:
+            before_traverse(path.root_identity, path.relative_path)
+        with workspace_destination(path, create_parents=create_parents) as destination:
+            yield destination
 
 
 def _read_regular(parent_fd: int, name: str) -> tuple[bytes, int]:
@@ -277,6 +319,33 @@ def read_workspace_source(workspace_root, filename: str) -> tuple[bytes, str]:
     return raw, relative
 
 
+def has_workspace_tracking(recorded: object) -> bool:
+    return isinstance(recorded, dict) and any(
+        key in recorded for key in ("workspace_tracked", "workspace_root_identity",
+                                     "last_synced_disk_sha256", "last_synced_version")
+    )
+
+
+def workspace_baseline(recorded: object) -> str | None:
+    if not isinstance(recorded, dict):
+        return None
+    digest = recorded.get("last_synced_disk_sha256", recorded.get("source_sha256"))
+    return digest if isinstance(digest, str) and _DISK_SHA256.fullmatch(digest) else None
+
+
+def valid_workspace_metadata(filename: str, recorded: object) -> bool:
+    if not isinstance(recorded, dict) or recorded.get("workspace_tracked") is not True:
+        return False
+    root = recorded.get("workspace_root_identity")
+    if not isinstance(root, str) or not _ROOT_IDENTITY.fullmatch(root) or workspace_baseline(recorded) is None:
+        return False
+    try:
+        _normalize_workspace_filename(filename)
+    except WorkspaceSyncError:
+        return False
+    return True
+
+
 def sync_target_file_to_workspace(
     target: Any, *, workspace_root, eol_format: str = "original_eol",
     before_traverse=None, before_publish=None,
@@ -296,8 +365,8 @@ def sync_target_file_to_workspace(
     rendered = apply_eol(target.current_content, eol).encode("utf-8")
     digest = hashlib.sha256(rendered).hexdigest()
     recorded = dict(target.source_line_endings) if isinstance(target.source_line_endings, dict) else {}
-    expected = recorded.get("last_synced_disk_sha256", recorded.get("source_sha256"))
-    tracked = bool(recorded.get("workspace_tracked") or "last_synced_disk_sha256" in recorded)
+    expected = workspace_baseline(recorded)
+    tracked = has_workspace_tracking(recorded)
     installed = durable = False
     receipt = None
     try:
@@ -370,6 +439,11 @@ def sync_target_file_to_workspace(
             return receipt
 
     except Exception as exc:
+        if tracked and isinstance(exc, WorkspaceSyncError) and exc.code == "workspace_parent_not_found":
+            raise WorkspaceSyncError(
+                FailureReason.TARGET_DIVERGED, "external_disk_drift",
+                "Workspace destination directory is missing. Reopen the path to inspect the active target.",
+            ) from exc
         # Directory-handle teardown runs after the yielded body. Its errors must
         # preserve installation facts just like errors during directory fsync.
         if installed and not (isinstance(exc, WorkspaceSyncError) and exc.receipt is not None):

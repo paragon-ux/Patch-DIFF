@@ -3,7 +3,9 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 import hashlib
 import json
+from queue import Queue
 from threading import Barrier, Event
+import time
 import uuid
 
 import pytest
@@ -14,10 +16,15 @@ from sqlalchemy.orm import Session
 from app.core.config import workspace_root_context
 from app.mcp import tools
 from app.services import target_service
+from app.services.coordinated_transaction_service import submit_coordinated_transactions
+from app.services.pdcp_service import submit_edits
 from app.services.save_service import save_target
-from app.services.target_service import initialize_target
+from app.services.target_service import WorkspaceRecovery, initialize_target, initialize_target_from_workspace
+from app.services.workspace_sync_service import WorkspaceSyncError
 from app.storage.db import SessionLocal
-from app.storage.models import CloudTargetFiles, EditingCycles, Projects, TargetSnapshots, WorkspaceBindingMember
+from app.storage.models import (
+    AppendOnlyPdcpLogs, CloudTargetFiles, CurrentPdcpFiles, EditingCycles, Projects, TargetSnapshots, WorkspaceBindingMember,
+)
 from backend.tests.integration.test_batch_stdio_profiles import peer
 from backend.tests.integration.test_migrations_reachable import isolated_migrations, snapshot
 
@@ -82,6 +89,10 @@ def test_four_stdio_processes_reuse_one_history_and_publish_both_edits(tmp_path)
         assert file.read_bytes() == b"a b\r\n"
         read = rpc_call(clients[2], "patchdiff_read_target", target_file_id=target_id)
         assert read["text"] == "X b\n"
+        stale = rpc_call(clients[1], "patchdiff_submit_edits", target_file_id=target_id,
+                         intent="Apply stale Y", expected_target_version=opened["version"],
+                         edits=[{"match": "b", "replace": "stale"}])
+        assert stale["failure_reason"] == "target_version_mismatch"
         second = rpc_call(clients[0], "patchdiff_submit_edits", target_file_id=target_id,
                           intent="Apply Y", expected_target_version=reopened["version"],
                           edits=[{"match": "b", "replace": "Y"}])
@@ -122,7 +133,13 @@ def test_root_path_aliases_and_explicit_metadata_conflicts(tmp_path):
     assert open_path(tmp_path, "pkg/target.txt", project_id=project_id)["target_file_id"] == opened["target_file_id"]
     assert open_path(tmp_path, "pkg/target.txt", project_id=str(uuid.uuid4()))["code"] == "workspace_project_conflict"
     assert open_path(tmp_path, "pkg/target.txt", content_type="text/plain")["code"] == "workspace_content_type_conflict"
-    assert open_path(nested)["code"] == "workspace_binding_mismatch"
+    alias = open_path(nested)
+    assert alias["code"] == "workspace_binding_mismatch" and alias["active_target_file_id"] == opened["target_file_id"]
+    inline = tools.patchdiff_initialize_target(filename="target.txt", content="initial")
+    with workspace_root_context(nested):
+        publication = tools.patchdiff_save(target_file_id=inline["target_file_id"], sync_workspace=True)
+    assert publication["code"] == "workspace_binding_mismatch"
+    assert publication["active_target_file_id"] == opened["target_file_id"]
     assert open_path(independent)["target_file_id"] != opened["target_file_id"]
 
 
@@ -158,9 +175,20 @@ def test_guarded_reimport_drift_outcomes_and_fences(tmp_path):
     assert rejected_again["target_file_id"] == target["target_file_id"]
     assert rejected_again["active_target_file_id"] == successor["target_file_id"]
     conflict = open_path(tmp_path, workspace_recovery={**request, "expected_target_version": 2})
-    assert conflict["code"] == "workspace_recovery_key_conflict"
+    assert conflict["code"] == "request_key_conflict"
 
     old_id = target["target_file_id"]
+    with SessionLocal() as session:
+        tid = uuid.UUID(old_id)
+        log_count = select(func.count()).select_from(AppendOnlyPdcpLogs).where(AppendOnlyPdcpLogs.target_file_id == tid)
+        current_attempt = select(CurrentPdcpFiles.pdcp_content_hash).where(CurrentPdcpFiles.target_file_id == tid)
+        state = session.scalar(log_count), session.scalar(current_attempt)
+        oversized = tools.patchdiff_submit_replacement(
+            target_file_id=old_id, intent="Oversized obsolete replacement", expected_target_version=1,
+            replacement="é" * 524_289,
+        )
+        assert oversized["status"] == "invalid_argument" and oversized["code"] == "replacement_too_large"
+        assert (session.scalar(log_count), session.scalar(current_attempt)) == state
     prior = submit(target, "initial", "working", key="original-edit")
     assert prior["deduplicated"] is True and prior["pdcp_log_id"] == accepted["pdcp_log_id"]
     assert submit(version_one, "working", "obsolete")["code"] == "workspace_target_superseded"
@@ -230,7 +258,10 @@ def test_inline_save_holds_destination_through_checkpoint_and_handles_partial(tm
         assert result.status == "saved"
         assert open_path(tmp_path)["target_file_id"] == inline["target_file_id"]
     with workspace_root_context(tmp_path):
-        assert tools.patchdiff_save(target_file_id=other["target_file_id"], sync_workspace=True)["code"] == "workspace_binding_mismatch"
+        competing = tools.patchdiff_save(target_file_id=other["target_file_id"], sync_workspace=True)
+    assert competing["code"] == "workspace_binding_mismatch"
+    owner = opened["target_file_id"] if fail_checkpoint else inline["target_file_id"]
+    assert competing["active_target_file_id"] == owner
 
 
 def test_reimport_fences_waiting_single_and_coordinated_submissions(tmp_path, monkeypatch):
@@ -249,25 +280,50 @@ def test_reimport_fences_waiting_single_and_coordinated_submissions(tmp_path, mo
         assert finish_reimport.wait(10)
         return real_import(*args)
 
+    pids = Queue()
+
+    def in_transaction(operation, **kwargs):
+        with SessionLocal.begin() as session:
+            pids.put(session.scalar(select(func.pg_backend_pid())))
+            return operation(session, **kwargs)
+
     monkeypatch.setattr(target_service, "_import_workspace_target", pause_import)
     with ThreadPoolExecutor(max_workers=4) as workers:
         pending_reimport = workers.submit(open_path, tmp_path, workspace_recovery=recovery(target, disk))
         try:
             assert locked.wait(10)
-            pending_edit = workers.submit(submit, target, "initial", "obsolete")
-            pending_coordinated = workers.submit(tools.patchdiff_commit_multi_target,
+            competing_request = recovery(target, disk, key="competing")
+            assert open_path(tmp_path, workspace_recovery=competing_request)["code"] == "workspace_busy"
+            pending_edit = workers.submit(in_transaction, submit_edits,
+                target_file_id=target["target_file_id"], expected_target_version=0,
+                intent="Edit stale target", edits=[{"match": "initial", "replace": "obsolete"}])
+            pending_coordinated = workers.submit(in_transaction, submit_coordinated_transactions,
                 intent="Edit both", targets=[
                     {"target_file_id": companion["target_file_id"], "expected_target_version": 0,
                      "edits": [{"match": "companion", "replace": "changed"}]},
                     {"target_file_id": target["target_file_id"], "expected_target_version": 0,
                      "edits": [{"match": "initial", "replace": "obsolete"}]},
                 ])
-            pending_save = workers.submit(tools.patchdiff_save, target_file_id=target["target_file_id"], sync_workspace=False)
+            pending_save = workers.submit(in_transaction, save_target,
+                target_file_id=target["target_file_id"], sync_workspace=False)
+            waiting_pids = [pids.get(timeout=5) for _ in range(3)]
+            statement = text("""
+                SELECT count(*) FROM unnest(CAST(:pids AS integer[])) AS backend(pid)
+                WHERE cardinality(pg_blocking_pids(backend.pid)) > 0
+            """)
+            with SessionLocal() as session:
+                deadline = time.monotonic() + 5
+                while session.scalar(statement, {"pids": waiting_pids}) < 3:
+                    assert time.monotonic() < deadline, "Expected all three writers to wait for row locks"
+                    time.sleep(0.01)
         finally:
             finish_reimport.set()
         assert pending_reimport.result(timeout=10)["created"] is True
-        for pending in (pending_edit, pending_coordinated, pending_save):
-            assert pending.result(timeout=10)["code"] == "workspace_target_superseded"
+        assert pending_edit.result(timeout=10).code == "workspace_target_superseded"
+        assert pending_coordinated.result(timeout=10)["code"] == "workspace_target_superseded"
+        assert pending_save.result(timeout=10).code == "workspace_target_superseded"
+    competing = open_path(tmp_path, workspace_recovery=competing_request)
+    assert competing["code"] == "workspace_recovery_target_conflict" and not competing["deduplicated"]
     assert tools.patchdiff_read_target(target_file_id=companion["target_file_id"])["version"] == 0
     assert file.read_bytes() == disk
 
@@ -282,6 +338,9 @@ def test_migration_preserves_legacy_histories_and_selects_duplicate_explicitly(t
     raw = b"legacy\r\n"
     file.write_bytes(raw)
     (tmp_path / "singleton.txt").write_bytes(raw)
+    changed = b"changed legacy disk"
+    (directory / "drifted.txt").write_bytes(changed)
+    (directory / "reimport.txt").write_bytes(changed)
     stat = tmp_path.stat()
     identity = f"{stat.st_dev}:{stat.st_ino}"
     with Session(bind=connection) as session:
@@ -289,23 +348,53 @@ def test_migration_preserves_legacy_histories_and_selects_duplicate_explicitly(t
                                   workspace_tracked=True, workspace_root_identity=identity)
         second = initialize_target(session, filename="pkg/target.txt", content=raw, target_type="text/plain",
                                    workspace_tracked=True, workspace_root_identity=identity)
+        duplicates = [
+            initialize_target(session, filename="pkg/target.txt", content=raw, target_type="text/plain",
+                              workspace_tracked=True, workspace_root_identity=identity)
+            for _ in range(19)
+        ]
         singleton = initialize_target(session, filename="singleton.txt", content=raw, target_type="text/plain",
                                       workspace_tracked=True, workspace_root_identity=identity)
+        drifted = initialize_target(session, filename="pkg/drifted.txt", content=raw, target_type="text/plain",
+                                    workspace_tracked=True, workspace_root_identity=identity)
+        reimport_members = [
+            initialize_target(session, filename="pkg/reimport.txt", content=raw, target_type="text/plain",
+                              workspace_tracked=True, workspace_root_identity=identity)
+            for _ in range(2)
+        ]
         malformed = initialize_target(session, filename="pkg/target.txt", content=raw, target_type="text/plain",
                                       workspace_tracked=True, workspace_root_identity="malformed:identity")
     before = snapshot(connection)
     connection.commit()
     command.upgrade(config, "head")
     assert snapshot(connection) == before
-    assert connection.scalar(select(func.count()).select_from(WorkspaceBindingMember)) == 3
+    assert connection.scalar(select(func.count()).select_from(WorkspaceBindingMember)) == 25
     connection.commit()
     monkeypatch.setattr(tools, "SessionLocal", lambda: Session(bind=connection, expire_on_commit=False))
 
     assert open_path(tmp_path, "singleton.txt")["target_file_id"] == str(singleton.target_file_id)
+    drift = open_path(tmp_path, "pkg/drifted.txt")
+    assert drift["code"] == "external_disk_drift" and drift["target_file_id"] == str(drifted.target_file_id)
+    alias = open_path(directory, "drifted.txt")
+    assert alias["code"] == "workspace_binding_mismatch" and alias["active_target_file_id"] == str(drifted.target_file_id)
     ambiguous = open_path(tmp_path, "pkg/target.txt")
-    assert ambiguous["code"] == "workspace_binding_ambiguous" and ambiguous["candidate_count"] == 2
-    assert set(ambiguous["candidate_target_file_ids"]) == {str(first.target_file_id), str(second.target_file_id)}
+    assert ambiguous["code"] == "workspace_binding_ambiguous" and ambiguous["candidate_count"] == 21
+    candidates = sorted(str(item.target_file_id) for item in [first, second, *duplicates])
+    assert ambiguous["candidate_target_file_ids"] == candidates[:20] and ambiguous["candidates_truncated"]
+    assert open_path(directory)["code"] == "workspace_binding_mismatch"
     assert str(malformed.target_file_id) not in ambiguous["candidate_target_file_ids"]
+    malformed_state = {"target_file_id": malformed.target_file_id, "version": 0, "current_hash": malformed.current_hash}
+    assert submit(malformed_state, "legacy", "unsafe")["code"] == "workspace_binding_metadata_invalid"
+    coordinated = tools.patchdiff_commit_multi_target(intent="Invalid legacy binding", targets=[{
+        "target_file_id": str(malformed.target_file_id), "expected_target_version": 0,
+        "edits": [{"match": "legacy", "replace": "unsafe"}],
+    }])
+    assert coordinated["code"] == "workspace_binding_metadata_invalid"
+    for sync in (False, True):
+        with workspace_root_context(tmp_path):
+            refused = tools.patchdiff_save(target_file_id=str(malformed.target_file_id), sync_workspace=sync)
+        assert refused["code"] == "workspace_binding_metadata_invalid"
+    assert file.read_bytes() == raw
     first_state = {"target_file_id": first.target_file_id, "version": first.version, "current_hash": first.current_hash}
     assert submit(first_state, "legacy", "early")["code"] == "workspace_binding_ambiguous"
     assert tools.patchdiff_save(target_file_id=str(second.target_file_id))["code"] == "workspace_binding_ambiguous"
@@ -316,6 +405,18 @@ def test_migration_preserves_legacy_histories_and_selects_duplicate_explicitly(t
     assert open_path(tmp_path, "pkg/target.txt")["target_file_id"] == str(first.target_file_id)
     assert tools.patchdiff_save(target_file_id=str(second.target_file_id))["code"] == "workspace_target_superseded"
     assert tools.patchdiff_replay(target_file_id=str(second.target_file_id))["materialized_state_matches"]
+
+    member = reimport_members[0]
+    member_state = {"target_file_id": member.target_file_id, "version": 0, "current_hash": member.current_hash}
+    refused = open_path(tmp_path, "pkg/reimport.txt", workspace_recovery=recovery(
+        member_state, changed, action="select_existing", key="drifted-selection",
+    ))
+    assert refused["code"] == "external_disk_drift"
+    successor = open_path(tmp_path, "pkg/reimport.txt", workspace_recovery=recovery(member_state, changed))
+    assert successor["created"] and successor["target_file_id"] != str(member.target_file_id)
+    for old in reimport_members:
+        assert tools.patchdiff_save(target_file_id=str(old.target_file_id))["code"] == "workspace_target_superseded"
+
     with pytest.raises(Exception, match="Cannot downgrade 20261111_0007: workspace binding evidence exists"):
         command.downgrade(config, "20261105_0006")
     connection.rollback()
@@ -346,3 +447,145 @@ def test_failed_reimport_rolls_back_successor_and_leaves_request_key_available(t
             CloudTargetFiles.project_id == original.project_id)) == 1
     retry = open_path(tmp_path, workspace_recovery=request)
     assert retry["status"] == "ok" and retry["created"] and not retry["deduplicated"]
+
+
+def test_lost_stdio_open_and_recovery_responses_resume_recorded_history(tmp_path):
+    file = tmp_path / "target.txt"
+    file.write_bytes(b"initial")
+    arguments = {"filename": file.name, "from_workspace": True}
+
+    def drop_response(rpc, **fields):
+        rpc("tools/call", {"name": "patchdiff_initialize_target", "arguments": {**arguments, **fields}}, read=False)
+
+    with peer("workspace", workspace_root=tmp_path) as (process, rpc):
+        drop_response(rpc)
+    assert process.returncode == 0
+    with peer("workspace", workspace_root=tmp_path) as (_, rpc):
+        opened = rpc_call(rpc, "patchdiff_initialize_target", **arguments)
+        assert opened["created"] is False and opened["version"] == 0
+
+    disk = b"external"
+    file.write_bytes(disk)
+    request = recovery(opened, disk)
+    with peer("workspace", workspace_root=tmp_path) as (process, rpc):
+        drop_response(rpc, workspace_recovery=request)
+    assert process.returncode == 0
+    successor = open_path(tmp_path)
+    assert successor["target_file_id"] != opened["target_file_id"]
+    assert submit(successor, "external", "updated")["status"] == "accepted"
+    with peer("workspace", workspace_root=tmp_path) as (_, rpc):
+        replayed = rpc_call(rpc, "patchdiff_initialize_target", **arguments, workspace_recovery=request)
+    assert replayed["deduplicated"] and replayed["target_file_id"] == successor["target_file_id"]
+    assert replayed["version"] == 0 and replayed["current_hash"] == successor["current_hash"]
+    assert open_path(tmp_path)["version"] == 1
+
+
+def test_recorded_recovery_precedes_missing_or_unsafe_destination(tmp_path):
+    directory = tmp_path / "sub"
+    directory.mkdir()
+    file = directory / "target.txt"
+    name = "sub/target.txt"
+    file.write_bytes(b"initial")
+    opened = open_path(tmp_path, name)
+    disk = b"external"
+    file.write_bytes(disk)
+    request = recovery(opened, disk)
+    successor = open_path(tmp_path, name, workspace_recovery=request)
+    assert successor["created"] is True
+
+    file.unlink()
+    directory.rmdir()
+    drift = open_path(tmp_path, name)
+    assert drift["code"] == "external_disk_drift" and drift["disk_sha256"] is None
+    assert (drift["target_file_id"], drift["version"], drift["current_hash"]) == (
+        successor["target_file_id"], successor["version"], successor["current_hash"])
+    recovered = open_path(tmp_path, name, workspace_recovery=request)
+    assert recovered["deduplicated"] and recovered["target_file_id"] == successor["target_file_id"]
+    with workspace_root_context(tmp_path):
+        assert tools.patchdiff_save(target_file_id=successor["target_file_id"], sync_workspace=True)["code"] == "external_disk_drift"
+
+    directory.mkdir()
+    other = tmp_path / "other.txt"
+    other.write_bytes(b"unrelated")
+    file.symlink_to(other)
+    assert open_path(tmp_path, name)["code"] == "workspace_symlink_escape"
+    assert open_path(tmp_path, name, workspace_recovery=request)["deduplicated"]
+    assert open_path(tmp_path, name, workspace_recovery={
+        **request, "expected_target_version": 1,
+    })["code"] == "request_key_conflict"
+
+
+@pytest.mark.parametrize("autoflush", [True, False])
+@pytest.mark.parametrize("explicit_recovery", [True, False])
+def test_workspace_open_preserves_pending_local_orm_changes(tmp_path, autoflush, explicit_recovery):
+    file = tmp_path / "target.txt"
+    file.write_bytes(b"initial")
+    opened = open_path(tmp_path)
+    request = WorkspaceRecovery.parse(recovery(opened, b"initial")) if explicit_recovery else None
+    with SessionLocal(autoflush=autoflush) as session:
+        target = session.get(CloudTargetFiles, uuid.UUID(opened["target_file_id"]))
+        target.current_content = "pending local write"
+        with pytest.raises(WorkspaceSyncError) as rejected:
+            initialize_target_from_workspace(session, filename=file.name, workspace_root=tmp_path, recovery=request)
+        assert rejected.value.code == "workspace_pending_target_changes"
+        assert target in session.dirty and target.current_content == "pending local write"
+        session.rollback()
+    assert tools.patchdiff_read_target(target_file_id=opened["target_file_id"])["text"] == "initial"
+    if request is not None:
+        valid = open_path(tmp_path, workspace_recovery=recovery(opened, b"initial"))
+        assert valid["created"] and not valid["deduplicated"]
+
+
+def test_bound_invalid_disk_encoding_and_malformed_baseline_preserve_target(tmp_path):
+    file = tmp_path / "target.txt"
+    file.write_bytes(b"initial")
+    opened = open_path(tmp_path)
+    disk = b"\xff\x00"
+    file.write_bytes(disk)
+    assert open_path(tmp_path)["code"] == "external_disk_drift"
+    invalid = open_path(tmp_path, workspace_recovery=recovery(opened, disk))
+    assert invalid["code"] == "target_encoding_invalid"
+    assert open_path(tmp_path, workspace_recovery=recovery(opened, disk))["deduplicated"]
+
+    file.write_bytes(b"initial")
+    with SessionLocal.begin() as session:
+        target = session.get(CloudTargetFiles, uuid.UUID(opened["target_file_id"]))
+        target.source_line_endings = {**target.source_line_endings, "last_synced_disk_sha256": ["bad"]}
+    assert open_path(tmp_path)["code"] == "workspace_binding_metadata_invalid"
+    assert submit(opened, "initial", "updated")["code"] == "workspace_binding_metadata_invalid"
+    repaired = open_path(tmp_path, workspace_recovery=recovery(opened, b"initial", key="repair-baseline"))
+    assert repaired["created"] and repaired["target_file_id"] != opened["target_file_id"]
+
+
+def test_publication_keeps_recovery_out_until_checkpoint(tmp_path):
+    file = tmp_path / "target.txt"
+    file.write_bytes(b"initial")
+    target = open_path(tmp_path)
+    assert submit(target, "initial", "published")["status"] == "accepted"
+    working = open_path(tmp_path)
+    request = recovery(working, b"published")
+    installed = Event()
+    finish_checkpoint = Event()
+
+    def pause_checkpoint():
+        installed.set()
+        assert finish_checkpoint.wait(10)
+
+    def save():
+        with SessionLocal() as session:
+            return save_target(session, target_file_id=target["target_file_id"], expected_target_version=1,
+                               sync_workspace=True, workspace_root=tmp_path, _after_snapshot=pause_checkpoint)
+
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        pending_save = workers.submit(save)
+        try:
+            assert installed.wait(10)
+            assert file.read_bytes() == b"published"
+            assert open_path(tmp_path, workspace_recovery=request)["code"] == "workspace_busy"
+        finally:
+            finish_checkpoint.set()
+        assert pending_save.result(timeout=10).status == "saved"
+
+    reimported = open_path(tmp_path, workspace_recovery=request)
+    assert reimported["created"] and not reimported["deduplicated"]
+    assert file.read_bytes() == b"published"
