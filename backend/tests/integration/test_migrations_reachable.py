@@ -384,7 +384,7 @@ def test_live_0004_downgrade_refuses_when_scope_observations_exist(isolated_migr
     with pytest.raises(Exception, match="Cannot downgrade 20261026_0004: recorded scope observations exist"):
         command.downgrade(config, "20261022_0003")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261111_0007"
 
 
 
@@ -398,6 +398,7 @@ def _base_migration_config(connection, tmp_path):
     original = tmp_path / "base_migrations"
     shutil.copytree(MIGRATIONS, original, ignore=shutil.ignore_patterns("__pycache__"))
     (original / "versions" / "20261105_0006_typed_origin.py").unlink()
+    (original / "versions" / "20261111_0007_workspace_bindings.py").unlink()
     shutil.copyfile(ROOT / "backend/tests/fixtures/migrations/20261020_0002_base.py",
                     original / "versions/20261020_0002_typed_ledger.py")
     config = Config(str(original / "alembic.ini"))
@@ -430,15 +431,17 @@ def test_live_additive_origin_migration_upgrades_base_typed_history_and_roundtri
     assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261027_0005"
     assert _origin_schema(connection) == ("'pdcp_manifest'::text", None)
     connection.commit()
-    with Session(bind=connection) as session:
-        target = initialize_target(session, filename="old-install.txt", content="alpha", target_type="text/plain")
-        accepted = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=0,
-                                intent="Preserve typed accepted evidence", edits=[{"match": "alpha", "replace": "beta"}],
-                                client_request_id="old-install-accepted")
-        rejected = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=1,
-                                intent="Preserve typed rejected evidence", edits=[{"match": "absent", "replace": "beta"}],
-                                client_request_id="old-install-rejected")
-        assert accepted.status == "accepted" and rejected.status == "rejected"
+    with monkeypatch.context() as old_runtime:
+        old_runtime.setattr("app.services.pdcp_service.workspace_write_fence", lambda *_: None)
+        with Session(bind=connection) as session:
+            target = initialize_target(session, filename="old-install.txt", content="alpha", target_type="text/plain")
+            accepted = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=0,
+                                    intent="Preserve typed accepted evidence", edits=[{"match": "alpha", "replace": "beta"}],
+                                    client_request_id="old-install-accepted")
+            rejected = submit_edits(session, target_file_id=target.target_file_id, expected_target_version=1,
+                                    intent="Preserve typed rejected evidence", edits=[{"match": "absent", "replace": "beta"}],
+                                    client_request_id="old-install-rejected")
+            assert accepted.status == "accepted" and rejected.status == "rejected"
     if intermediate_candidate:
         # Also accept databases initialized from the unreleased pre-fix candidate.
         connection.execute(text("ALTER TABLE append_only_manifest_ledger ALTER COLUMN origin SET DEFAULT 'typed'"))
@@ -450,7 +453,7 @@ def test_live_additive_origin_migration_upgrades_base_typed_history_and_roundtri
     connection.commit()
 
     command.upgrade(config, "head")
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261111_0007"
     expected_schema = ("'typed'::text", "CHECK ((origin = 'typed'::text))")
     assert _origin_schema(connection) == expected_schema
     assert snapshot(connection) == baseline
@@ -543,5 +546,5 @@ def test_live_fresh_head_enforces_typed_only_origin(isolated_migrations):
     with pytest.raises(IntegrityError, match="ck_append_only_manifest_ledger_origin"):
         seed_legacy_history(connection, origin="pdcp_manifest")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261111_0007"
     assert all(not rows for rows in snapshot(connection).values())

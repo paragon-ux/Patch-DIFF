@@ -13,7 +13,10 @@ Follow the [installed workspace quickstart](workspace-quickstart.md). Set
 `PATCHDIFF_MCP_PROFILE=workspace` and the server workspace root before
 connecting. For file editing, initialize from the workspace, read or search
 the returned target ID, submit guarded edits and explicitly SAVE with
-`sync_workspace: true`. Check publication and checkpoint results separately.
+`sync_workspace: true`. Reopening the same path returns the active target,
+including unpublished edits. Check publication and checkpoint results separately.
+For drift or legacy duplicate bindings, use
+[explicit guarded recovery](../spec/mcp-tools.md#workspace-initialization-and-recovery).
 
 The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) compares this
 agent-owned lifecycle with Native and host-orchestrated structural editing.
@@ -227,7 +230,7 @@ With `core.autocrlf=true`, git converts line endings on checkout and on commit, 
 
 ## What is outside the guarantee
 
-PatchDIFF's guarantees cover the managed target in Postgres. An exported file edited elsewhere, a shell, another database writer, or another editor can change content PatchDIFF never sees. A skill or instruction asking the model to "use PatchDIFF" is guidance, not enforcement. Re-importing an edited export is a **new upload and a new target**; nothing is merged or synchronized.
+PatchDIFF's guarantees cover the managed target in Postgres. An exported file edited elsewhere, a shell, another database writer, or another editor can change content PatchDIFF never sees. A skill or instruction asking the model to "use PatchDIFF" is guidance, not enforcement. Uploading an edited export as inline content creates an independent target. For a workspace path, ordinary initialization resumes its bound target and reports external disk drift when the baseline changes.
 
 Guarded commits update PostgreSQL. In a workspace profile, the editor publishes each file with explicit SAVE. In a delegated structural profile, the trusted host publishes after editing. Git working-tree commands show disk bytes at the latest publication point. Use current target receipts for the canonical working state.
 

@@ -25,12 +25,14 @@ _ILLEGAL_SEGMENT_CHARS = frozenset('<>:"|?*')
 
 
 class WorkspaceSyncError(Exception):
-    def __init__(self, reason: FailureReason, code: str, detail: str, *, receipt: dict[str, Any] | None = None) -> None:
+    def __init__(self, reason: FailureReason, code: str, detail: str, *,
+                 receipt: dict[str, Any] | None = None, evidence: dict[str, Any] | None = None) -> None:
         super().__init__(detail)
         self.reason = reason
         self.code = code
         self.detail = detail
         self.receipt = receipt
+        self.evidence = evidence or {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,8 +174,21 @@ def validate_workspace_root(workspace_root: str | None) -> None:
                                  "Cannot open the configured PATCHDIFF_WORKSPACE_ROOT directory.") from exc
 
 
+@dataclass(frozen=True, slots=True)
+class WorkspaceDestination:
+    parent_fd: int
+    name: str
+    relative_path: str
+    root_identity: str
+
+    @property
+    def physical_identity(self) -> str:
+        parent = os.fstat(self.parent_fd)
+        return f"{parent.st_dev}:{parent.st_ino}/{self.name}"
+
+
 @contextmanager
-def _workspace_file(workspace_root, filename: str, *, create_parents: bool = False):
+def workspace_file(workspace_root, filename: str, *, create_parents: bool = False, before_traverse=None):
     """Pin directory handles and lease the physical destination directory for IO.
 
     The lease is advisory. Other writers must cooperate, and the configured root
@@ -189,6 +204,8 @@ def _workspace_file(workspace_root, filename: str, *, create_parents: bool = Fal
             stack.callback(os.close, root_fd)
             st = os.fstat(root_fd)
             identity = f"{st.st_dev}:{st.st_ino}"
+            if before_traverse is not None:
+                before_traverse(identity, relative)
             parent_fd = root_fd
             parts = relative.split("/")
             for part in parts[:-1]:
@@ -207,7 +224,7 @@ def _workspace_file(workspace_root, filename: str, *, create_parents: bool = Fal
             except BlockingIOError as exc:
                 raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_busy",
                                          "Another managed operation owns the destination directory; no file was published.") from exc
-            yield parent_fd, parts[-1], relative, identity
+            yield WorkspaceDestination(parent_fd, parts[-1], relative, identity)
     except WorkspaceSyncError:
         raise
     except OSError as exc:
@@ -226,16 +243,18 @@ def _read_regular(parent_fd: int, name: str) -> tuple[bytes, int]:
         return stream.read(), stat.S_IMODE(st.st_mode)
 
 
-def read_workspace_source_with_identity(workspace_root, filename: str) -> tuple[bytes, str, str]:
+def read_workspace_bytes(destination: WorkspaceDestination) -> bytes | None:
     try:
-        with _workspace_file(workspace_root, filename) as (parent, name, relative, identity):
-            try:
-                raw, _ = _read_regular(parent, name)
-            except FileNotFoundError as exc:
-                raise WorkspaceSyncError(FailureReason.TARGET_NOT_FOUND, "workspace_file_not_found",
-                                         "Workspace source does not exist.") from exc
-    except WorkspaceSyncError:
-        raise
+        raw, _ = _read_regular(destination.parent_fd, destination.name)
+        return raw
+    except FileNotFoundError:
+        return None
+
+
+def validate_workspace_source(raw: bytes | None) -> bytes:
+    if raw is None:
+        raise WorkspaceSyncError(FailureReason.TARGET_NOT_FOUND, "workspace_file_not_found",
+                                 "Workspace source does not exist.")
     if b"\x00" in raw:
         raise WorkspaceSyncError(FailureReason.TARGET_ENCODING_INVALID, "target_encoding_invalid",
                                  "Workspace file must not contain NUL bytes.")
@@ -244,7 +263,13 @@ def read_workspace_source_with_identity(workspace_root, filename: str) -> tuple[
     except UnicodeDecodeError as exc:
         raise WorkspaceSyncError(FailureReason.TARGET_ENCODING_INVALID, "target_encoding_invalid",
                                  "Workspace file must be valid UTF-8 text.") from exc
-    return raw, relative, identity
+    return raw
+
+
+def read_workspace_source_with_identity(workspace_root, filename: str) -> tuple[bytes, str, str]:
+    with workspace_file(workspace_root, filename) as destination:
+        raw = validate_workspace_source(read_workspace_bytes(destination))
+        return raw, destination.relative_path, destination.root_identity
 
 
 def read_workspace_source(workspace_root, filename: str) -> tuple[bytes, str]:
@@ -252,7 +277,10 @@ def read_workspace_source(workspace_root, filename: str) -> tuple[bytes, str]:
     return raw, relative
 
 
-def sync_target_file_to_workspace(target: Any, *, workspace_root, eol_format: str = "original_eol") -> WorkspaceSyncReceipt:
+def sync_target_file_to_workspace(
+    target: Any, *, workspace_root, eol_format: str = "original_eol",
+    before_traverse=None, before_publish=None,
+) -> WorkspaceSyncReceipt:
     """Publish under a cooperative destination-directory lease; never claim a PG/file transaction.
 
     On failure after installation, the exception carries the installed receipt.
@@ -268,22 +296,27 @@ def sync_target_file_to_workspace(target: Any, *, workspace_root, eol_format: st
     rendered = apply_eol(target.current_content, eol).encode("utf-8")
     digest = hashlib.sha256(rendered).hexdigest()
     recorded = dict(target.source_line_endings) if isinstance(target.source_line_endings, dict) else {}
-    expected = recorded.get("last_synced_disk_sha256") or recorded.get("source_sha256")
+    expected = recorded.get("last_synced_disk_sha256", recorded.get("source_sha256"))
     tracked = bool(recorded.get("workspace_tracked") or "last_synced_disk_sha256" in recorded)
     installed = durable = False
     receipt = None
     try:
-        with _workspace_file(workspace_root, target.filename, create_parents=not tracked) as (parent, name, relative, identity):
+        with workspace_file(workspace_root, target.filename, create_parents=not tracked,
+                            before_traverse=before_traverse) as destination:
+            parent, name = destination.parent_fd, destination.name
+            relative, identity = destination.relative_path, destination.root_identity
             if recorded.get("workspace_root_identity") not in (None, identity):
                 raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
-                                         "Target belongs to a different workspace; initialize a new target explicitly.")
+                                         "Target belongs to a different workspace.")
+            if before_publish is not None:
+                before_publish(destination)
             try:
                 before, mode = _read_regular(parent, name)
             except FileNotFoundError:
                 before, mode = None, None
             if (before is None and tracked) or (before is not None and hashlib.sha256(before).hexdigest() != expected):
                 raise WorkspaceSyncError(FailureReason.TARGET_DIVERGED, "external_disk_drift",
-                                         "Workspace baseline differs; re-read and initialize a new target explicitly.")
+                                         "Workspace baseline differs. Reopen the path to inspect the active target and disk evidence.")
             receipt = WorkspaceSyncReceipt(relative, digest, len(rendered), eol_name(eol))
             tmp = f".patchdiff-{uuid.uuid4().hex}.tmp"
             created = installed = False

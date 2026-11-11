@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Identity, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, ForeignKeyConstraint, Identity, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -309,3 +309,48 @@ class TargetScopeObservations(TimestampMixin, Base):
     accepted_pdcp_log_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("append_only_pdcp_logs.pdcp_log_id")
     )
+
+
+class WorkspaceBinding(Base):
+    __tablename__ = "workspace_bindings"
+    __table_args__ = (
+        UniqueConstraint("root_identity", "path_sha256", name="uq_workspace_bindings_root_path"),
+        ForeignKeyConstraint(
+            ["binding_id", "active_target_file_id"],
+            ["workspace_binding_members.binding_id", "workspace_binding_members.target_file_id"],
+            name="fk_workspace_bindings_active_member", use_alter=True, deferrable=True, initially="DEFERRED",
+        ),
+    )
+
+    binding_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    root_identity: Mapped[str] = mapped_column(Text, nullable=False)
+    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    path_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    physical_destination: Mapped[str | None] = mapped_column(Text, unique=True)
+    active_target_file_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cloud_target_files.target_file_id"))
+
+
+class WorkspaceBindingMember(Base):
+    __tablename__ = "workspace_binding_members"
+    __table_args__ = (
+        UniqueConstraint("binding_id", "target_file_id", name="uq_workspace_binding_members_binding_target"),
+        CheckConstraint("superseded_by_target_file_id <> target_file_id", name="ck_workspace_binding_members_successor"),
+        ForeignKeyConstraint(
+            ["binding_id", "superseded_by_target_file_id"],
+            ["workspace_binding_members.binding_id", "workspace_binding_members.target_file_id"],
+            name="fk_workspace_binding_members_successor", deferrable=True, initially="DEFERRED",
+        ),
+    )
+
+    target_file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cloud_target_files.target_file_id"), primary_key=True)
+    binding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspace_bindings.binding_id"), nullable=False)
+    superseded_by_target_file_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+
+
+class WorkspaceRecoveryReceipt(Base):
+    __tablename__ = "workspace_recovery_receipts"
+
+    binding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspace_bindings.binding_id"), primary_key=True)
+    client_request_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[dict] = mapped_column(JSONB, nullable=False)

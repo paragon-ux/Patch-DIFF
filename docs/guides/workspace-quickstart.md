@@ -1,8 +1,9 @@
 # Workspace editing quickstart
 
 Use the `workspace` MCP profile when a host needs to edit an existing file in
-one project directory. PatchDIFF imports the file into a PostgreSQL working
-target, applies guarded edits there, then publishes the file on explicit SAVE.
+one project directory. PatchDIFF opens the active PostgreSQL working target,
+importing the file on first use, applies guarded edits there, then publishes
+the file on explicit SAVE. Reopening a path resumes the same working history.
 File publication and the database checkpoint have separate outcomes.
 
 ## Setup

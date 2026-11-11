@@ -19,6 +19,11 @@ PostgreSQL to check the working copy before SAVE and exact file bytes and
 checkpoint afterward. The seven-tool `observed_workspace` profile adds the
 observed v2 editing routes to agent-owned import and SAVE publication.
 
+`test_workspace_initialization.py` exercises four real stdio processes sharing
+one target, sequential edits across reopen, restart and SAVE, guarded drift
+recovery and request-key outcomes, overlapping roots, migration of legacy
+paths and duplicates, and races with publication and coordinated submissions.
+
 The [PR #24 comparative benchmark](workspace-e2e-benchmark.md) records 18 live-model
 trials across Native, Structural and Workspace in Git and non-Git. Independent
 capture verification confirmed 90 exact files, 360 behavioral checks and

@@ -275,6 +275,7 @@ For rejected exact recovery, the complete stored diagnostic (including original 
 #### C5b. Source Line-Ending Metadata (Migration `20261022_0003`)
 
 - `cloud_target_files.source_line_endings`: `JSONB NULL`. New uploads record `{style, lf, crlf, cr, normalized, source_code_points, source_utf8_bytes, source_sha256}` from the raw upload before LF canonicalization. Existing targets keep NULL, meaning unknown; nothing is backfilled.
+- Migration `20261111_0007` binds each workspace path to one active PostgreSQL target. Reopening returns the current working history. Explicit recovery guards the member and the observed raw bytes, records the outcome by request key, and fences superseded targets while preserving historical replay. Directory-entry ownership and transaction advisory locks coordinate first import, recovery and SAVE. See the [workspace storage contract](../spec/data-model.md#active-workspace-bindings-migration-0007).
 - Export and workspace publication read the column. Workspace initialization records `workspace_tracked` and `workspace_root_identity`; publication checks the binding and expected raw disk digest, and successful workspace SAVE stores `last_synced_disk_sha256` and `last_synced_version`. These metadata facts do not alter canonical text or its hashes, and replay does not evaluate them.
 - Downgrade `20261022_0003 -> 20261020_0002` checks `IF EXISTS (SELECT 1 FROM cloud_target_files WHERE source_line_endings IS NOT NULL)` and raises an exception rather than discarding recorded facts.
 

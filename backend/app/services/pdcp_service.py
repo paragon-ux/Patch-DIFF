@@ -47,6 +47,7 @@ from app.pdcp.typed import (
 from app.services.rejection_context import (available_context, unavailable_context, bound_candidates, context_identity,
                                             response_current_context)
 from app.services.near_miss_service import near_misses
+from app.services.workspace_binding_service import workspace_write_fence
 from app.core.config import is_strict_observation_mode_enabled
 from app.services.preview_evidence import bound_preview
 from app.services.scope_observation_service import (
@@ -782,6 +783,29 @@ def _submit(
                 # Response echoes the submitted key, while the new audit row has a NULL key.
                 return replace(result, client_request_id=validated_req_id)
 
+
+        fence = workspace_write_fence(session, target.target_file_id)
+        if fence is not None and not encoding_paths:
+            rejection = _core_rejection(
+                fence.reason, fence.detail, before_hash, protocol_version=protocol_version,
+                stage=ValidationStage.PRECONDITION_GUARD, diagnostic_extra={"code": fence.code, **fence.evidence},
+            )
+            current_pdcp = _upsert_current_pdcp(
+                session, target=target, pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
+                status="pending_validation", protocol_version=protocol_version, submission_source=submission_source,
+                parent_pdcp_log_id=parent_uuid, regeneration_attempt=regeneration_attempt,
+                regeneration_source=regeneration_source,
+            )
+            return _persist_rejection(
+                session, runtime_version=runtime_version, target=target, current_pdcp=current_pdcp,
+                pdcp_content=pdcp_content, pdcp_content_hash=pdcp_content_hash,
+                expected_target_version=expected_target_version, expected_current_hash=expected_current_hash,
+                submission_source=submission_source, parent_pdcp_log_id=parent_uuid,
+                regeneration_attempt=regeneration_attempt, regeneration_source=regeneration_source,
+                protocol_version=protocol_version, parsed=None, rejection=rejection,
+                before_hash=before_hash, before_version=before_version, stage=ValidationStage.PRECONDITION_GUARD,
+                client_request_id=validated_req_id, request_fingerprint=fingerprint,
+            )
 
         if not encoding_paths and _fresh_admission is not None:
             size_evidence = _fresh_admission()

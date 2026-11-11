@@ -33,7 +33,7 @@ from app.services.read_service import (
 )
 from app.services.replay_service import replay_target
 from app.services.save_service import save_target
-from app.services.target_service import initialize_target, initialize_target_from_workspace
+from app.services.target_service import WorkspaceRecovery, initialize_target, initialize_target_from_workspace
 from app.services.workspace_sync_service import WorkspaceSyncError
 from app.storage.db import SessionLocal
 from app.storage.models import (
@@ -70,15 +70,18 @@ def patchdiff_initialize_target(
     *,
     filename: str,
     content: str | None = None,
-    content_type: str = "text/plain",
+    content_type: str | None = None,
     project_id: str | None = None,
     from_workspace: bool = False,
+    workspace_recovery: dict | None = None,
 ) -> dict[str, Any]:
     if not isinstance(from_workspace, bool):
         return {
             "status": "invalid_argument",
             "failure_detail": "from_workspace must be a boolean.",
         }
+    if workspace_recovery is not None and not from_workspace:
+        return {"status": "invalid_argument", "failure_detail": "workspace_recovery requires from_workspace=true."}
     project_uuid: uuid.UUID | None = None
     if project_id is not None:
         project_uuid = _try_coerce_uuid(project_id)
@@ -95,19 +98,24 @@ def patchdiff_initialize_target(
                 "failure_detail": "Omit content when from_workspace is true.",
             }
         try:
+            recovery = WorkspaceRecovery.parse(workspace_recovery) if workspace_recovery is not None else None
             with SessionLocal() as session:
                 result = initialize_target_from_workspace(
                     session,
                     filename=filename,
                     target_type=content_type,
                     project_id=project_uuid,
+                    recovery=recovery,
                 )
+        except ValueError as err:
+            return {"status": "invalid_argument", "failure_detail": str(err)}
         except WorkspaceSyncError as err:
             return {
                 "status": "rejected",
                 "code": err.code,
                 "failure_reason": err.reason.value,
                 "failure_detail": err.detail,
+                **err.evidence,
             }
     else:
         if content is None or not isinstance(content, str):
@@ -120,7 +128,7 @@ def patchdiff_initialize_target(
                 session,
                 filename=filename,
                 content=content,
-                target_type=content_type,
+                target_type="text/plain" if content_type is None else content_type,
                 project_id=project_uuid,
             )
     return {
@@ -132,6 +140,15 @@ def patchdiff_initialize_target(
         "current_hash": result.current_hash,
         "active_editing_cycle_id": str(result.active_editing_cycle_id),
         "source_line_endings": result.source_line_endings,
+        **({
+            "created": result.created,
+            "disk_sha256": result.disk_sha256,
+            "active_target_file_id": str(result.active_target_file_id),
+        } if result.created is not None else {}),
+        **({
+            "recovery_action": result.recovery_action,
+            "deduplicated": result.deduplicated,
+        } if result.recovery_action is not None else {}),
     }
 
 
@@ -388,6 +405,8 @@ def patchdiff_save(
     }
     if result.code is not None:
         payload["code"] = result.code
+    if result.workspace_evidence is not None:
+        payload.update(result.workspace_evidence)
     if result.workspace_sync is not None:
         payload["workspace_sync"] = result.workspace_sync
     if export_after_save and result.status == "saved":

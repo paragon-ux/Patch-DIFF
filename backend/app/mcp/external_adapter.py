@@ -75,7 +75,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "patchdiff_initialize_target": (
         "Start here to edit a document if you don't already have its target_file_id. For a workspace file, "
         "pass its path relative to the workspace root as filename, set from_workspace=true, and omit content. "
-        "Use the returned target_file_id to read, search, submit edits, and save. For inline text, supply content instead."
+        "Reopening the same workspace path reuses the active target and its unsaved edits. Use workspace_recovery "
+        "only for guarded legacy selection or explicit reimport. For inline text, supply content instead."
     ),
     "patchdiff_submit_operations": "Submit guarded patchdiff-tx/2 ordered match/span operations, using sequential canonical code-point spans and exact expected_text. Empty spans insert with empty expected_text. "
                                    "Spans refer to the text after earlier operations; for several edits, use descending offsets. "
@@ -193,7 +194,7 @@ _WAYMARK_PROFILES = frozenset({
     "full",
 })
 _OBSERVED_WORKSPACE_INITIALIZE = (
-    "Import an existing workspace file as a PatchDIFF working target. Pass its workspace-relative "
+    "Open the active PatchDIFF target for a workspace file, importing it on first use. Pass its workspace-relative "
     "path as filename, set from_workspace=true, and omit content. The result includes the target ID, "
     "version, and hash. For structural edits, use the returned target ID with patchdiff_observe_scopes "
     "before patchdiff_commit_bundle. Use patchdiff_list_scopes when you need help identifying scopes."
@@ -692,7 +693,7 @@ _PARAMETER_DESCRIPTIONS: dict[str, str] = {
     ),
     "workspace_eol_format": "Line-ending format for workspace write-back: original_eol (default), canonical_lf, or crlf.",
     "from_workspace": (
-        "True reads the UTF-8 file at filename relative to PATCHDIFF_WORKSPACE_ROOT. Omit content. "
+        "True opens or imports the workspace file at filename relative to PATCHDIFF_WORKSPACE_ROOT. Omit content. "
         "False initializes from inline content."
     ),
     "include_previous_cycles": "Include ledger entries from editing cycles closed by SAVE (default: active cycle only).",
@@ -787,7 +788,22 @@ def _input_schema_for(name: str) -> dict[str, Any]:
                                      "description": "original_text (legacy alias of canonical_lf), canonical_lf, crlf, or original_eol."})
     if name == "patchdiff_initialize_target":
         properties["from_workspace"]["default"] = False
-        properties["content_type"]["default"] = "text/plain"
+        properties["content_type"]["description"] = "MIME type or language identifier. Omit or pass null to inherit the bound type, or default to text/plain for a new target."
+        recovery_fields = {
+            "action": {"enum": ["select_existing", "reimport"]},
+            "target_file_id": {"type": "string", "format": "uuid"},
+            "expected_target_version": {"type": "integer", "minimum": 0, "maximum": 2**63 - 1},
+            "expected_current_hash": {"type": "string", "pattern": r"^[0-9a-f]{64}(?![\s\S])"},
+            "expected_disk_sha256": {"type": "string", "pattern": r"^[0-9a-f]{64}(?![\s\S])"},
+            "client_request_id": {"type": "string", "pattern": r"^[\x21-\x7e]{1,128}(?![\s\S])"},
+        }
+        properties["workspace_recovery"] = {
+            "type": ["object", "null"],
+            "description": "Guarded recovery only. Select a legacy member or explicitly reimport current disk bytes into a successor.",
+            "properties": recovery_fields,
+            "required": list(recovery_fields),
+            "additionalProperties": False,
+        }
     if name == "patchdiff_save":
         properties["export_after_save"]["default"] = False
         properties["workspace_eol_format"].update({
@@ -889,7 +905,8 @@ def _input_schema_for(name: str) -> dict[str, Any]:
         schema["allOf"] = [{
             "if": {"required": ["from_workspace"], "properties": {"from_workspace": {"const": True}}},
             "then": {"properties": {"content": {"type": "null"}}},
-            "else": {"required": ["content"], "properties": {"content": {"type": "string"}}},
+            "else": {"required": ["content"], "properties": {"content": {"type": "string"},
+                                                             "workspace_recovery": {"type": "null"}}},
         }]
     if name == "patchdiff_submit_replacement":
         schema["x-patchdiff-capabilities"] = {

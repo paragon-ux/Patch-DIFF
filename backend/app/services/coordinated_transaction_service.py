@@ -22,6 +22,7 @@ from app.pdcp.typed import (
     parse_typed_record,
     to_parsed_transaction as to_parsed_typed,
 )
+from app.services.workspace_binding_service import workspace_write_fence
 from app.storage.models import AppendOnlyManifestLedger, AppendOnlyPdcpLogs, CloudTargetFiles
 from app.storage.repositories import select_targets_for_update_ordered
 
@@ -104,6 +105,18 @@ def submit_coordinated_transactions(
     for entry in targets:
         tid = _coerce_uuid(entry["target_file_id"])
         target = locked_by_id[tid]
+
+        fence = workspace_write_fence(session, tid)
+        if fence is not None:
+            return {
+                "status": "rejected",
+                "code": fence.code,
+                "failure_detail": fence.detail,
+                "failed_target_file_id": str(tid),
+                "coordinated_transaction_id": None,
+                "targets": [],
+                **fence.evidence,
+            }
 
         exp_version = entry.get("expected_target_version")
         if exp_version is not None and target.version != exp_version:
