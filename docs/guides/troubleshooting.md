@@ -116,7 +116,7 @@ before running the migration.
 ```bash
 sudo systemctl stop postgresql
 sudo systemctl disable postgresql
-docker compose up -d
+docker compose up -d --wait postgres
 patchdiff-mcp --migrate
 ```
 

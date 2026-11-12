@@ -283,7 +283,7 @@ For rejected exact recovery, the complete stored diagnostic (including original 
 A workspace binding identifies the active PostgreSQL target for a pinned
 root and normalized path. A successful ordinary open resumes that target
 after checking the recorded disk baseline. Changed or missing files on an
-otherwise valid active binding return `external_disk_drift`. Guarded
+otherwise valid active binding return `external_disk_drift`. Fresh guarded
 recovery checks the selected member and present raw bytes, records the
 outcome by request key, and fences superseded targets while preserving
 historical replay. Directory-entry ownership and transaction advisory locks

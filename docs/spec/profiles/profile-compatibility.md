@@ -78,7 +78,7 @@ This configuration runs the PatchDIFF server inside WSL2 while PostgreSQL runs i
 #### Step 2: Start PostgreSQL Container
 From PowerShell or inside your WSL terminal in the repository root:
 ```bash
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 Verify the container is healthy:
 ```bash
@@ -117,7 +117,7 @@ When running directly on Windows without WSL2, workspace filesystem sync is disa
 #### Step 1: Start PostgreSQL via Docker Desktop
 In PowerShell from the repository root:
 ```powershell
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 
 #### Step 2: Set Environment Variables in PowerShell
@@ -141,7 +141,7 @@ Full native Linux deployment with zero translation overhead.
 
 #### Step 1: Start PostgreSQL
 ```bash
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 
 #### Step 2: Set Environment Variables
@@ -165,7 +165,7 @@ macOS supports POSIX file locking natively, allowing `observed_workspace` to run
 
 #### Step 1: Start PostgreSQL
 ```bash
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 
 #### Step 2: Configure Environment
