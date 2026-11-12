@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.failures import FailureReason
 from app.services.workspace_sync_service import (
-    WorkspaceDestination, WorkspaceSyncError, has_workspace_tracking, valid_workspace_metadata,
+    WorkspaceDestination, WorkspaceSyncError, has_workspace_tracking, legacy_workspace_parent_matches,
+    valid_workspace_metadata, workspace_entry_stat,
 )
 from app.storage.models import CloudTargetFiles, WorkspaceBinding, WorkspaceBindingMember
 
@@ -53,7 +55,56 @@ def lock_workspace_destination(
             "The physical destination conflicts with the pinned workspace binding.",
             evidence=active_binding_evidence(conflicting_binding),
         )
+    _check_workspace_entry(session, destination, physical, binding)
     return physical
+
+
+def _check_workspace_entry(session, destination, physical, binding) -> None:
+    entry = workspace_entry_stat(destination.parent_fd, destination.name)
+    if entry is None:
+        # With no entry to resolve, publication uses the existing no-clobber link.
+        return
+    claiming = binding is None or binding.physical_destination is None
+    with os.scandir(destination.parent_fd) as entries:
+        names = {item.name for item in entries} if claiming else None
+        exact = destination.name in names if names is not None else any(item.name == destination.name for item in entries)
+    if not exact:
+        raise WorkspaceSyncError(
+            FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
+            "Use the exact filename listed in the workspace directory.",
+        )
+    if not claiming:
+        return
+
+    parent_prefix = physical.split("/", 1)[0] + "/"
+    # Only claims need to look for a legacy spelling or a renamed pinned entry.
+    candidates = select(
+        WorkspaceBinding.relative_path,
+        WorkspaceBinding.physical_destination,
+        WorkspaceBinding.active_target_file_id,
+    ).where(or_(
+        WorkspaceBinding.physical_destination.startswith(parent_prefix),
+        and_(WorkspaceBinding.root_identity == destination.root_identity,
+             WorkspaceBinding.physical_destination.is_(None)),
+    )).order_by(WorkspaceBinding.binding_id)
+    if binding is not None:
+        candidates = candidates.where(WorkspaceBinding.binding_id != binding.binding_id)
+    with session.no_autoflush:
+        recorded_paths = session.execute(candidates).all()
+    for relative_path, pinned_path, active_id in recorded_paths:
+        leaf = relative_path.rsplit("/", 1)[-1] if pinned_path is None else pinned_path[len(parent_prefix):]
+        if leaf in names and leaf != destination.name:
+            continue
+        alias = workspace_entry_stat(destination.parent_fd, leaf)
+        if alias is None or not os.path.samestat(entry, alias):
+            continue
+        if pinned_path is None and not legacy_workspace_parent_matches(destination, relative_path):
+            continue
+        raise WorkspaceSyncError(
+            FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
+            "The destination resolves to a different recorded workspace path.",
+            evidence={"active_target_file_id": str(active_id)} if active_id else {},
+        )
 
 
 def bind_workspace_target(

@@ -236,9 +236,11 @@ A binding is global to a PostgreSQL database for the configured root's
 directory device and inode plus the validated, normalized relative path.
 The physical parent directory device and inode plus the final filename also
 have one owner. An overlapping root that reaches an already claimed destination
-returns `workspace_binding_mismatch`. A legacy binding can claim its physical
-destination at first access. Identical bytes in separate destinations are
-independent.
+returns `workspace_binding_mismatch`. Use the exact listed spelling of an
+existing filename. A spelling that resolves to the same entry as a different
+recorded path also returns `workspace_binding_mismatch`. A legacy binding can
+claim its physical destination at first access. Separate listed entries have
+independent histories.
 
 An ordinary open returns `status: "ok"`, `created` (true on first import),
 `target_file_id`, `active_target_file_id`, current canonical `version` and

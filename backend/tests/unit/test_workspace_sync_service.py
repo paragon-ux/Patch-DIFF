@@ -79,9 +79,12 @@ def _mock_save_session(target):
     session.no_autoflush.__enter__.return_value = None
     session.no_autoflush.__exit__.return_value = None
     def execute(statement):
-        if "workspace_binding_members" in str(statement):
+        sql = str(statement)
+        if "workspace_binding_members" in sql:
             state = (target.target_file_id, None) if target.source_line_endings.get("workspace_tracked") else None
             return SimpleNamespace(one_or_none=lambda: state)
+        if "workspace_bindings" in sql:
+            return SimpleNamespace(all=lambda: [])
         return SimpleNamespace(scalar_one_or_none=lambda: target)
 
     session.execute.side_effect = execute

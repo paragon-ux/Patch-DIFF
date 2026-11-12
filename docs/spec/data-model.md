@@ -351,13 +351,20 @@ Migration `20261111_0007_workspace_bindings.py` adds three tables.
 - `workspace_recovery_receipts` stores the canonical request fingerprint and
   terminal outcome under the binding ID and client request ID.
 
+Drain and stop all old PatchDIFF writers before applying this migration.
+Restart writers on the updated runtime after it succeeds so workspace imports
+go through binding ownership.
+
 The migration groups tracked legacy rows with a valid root identity by root and
 normalized filename. It activates singleton groups and retains duplicate
 members for explicit recovery. It does not read the filesystem. The physical
 destination is established from pinned directory handles on first access to
 the legacy binding, including an open that reports drift or duplicate
 ambiguity. Before that access the database knows only the logical path.
-Downgrade refuses while any workspace binding evidence exists.
+When claiming a present entry, the server checks for conflicting spellings
+among pinned entries in its parent directory and unclaimed legacy paths
+under the configured root. Downgrade refuses while any workspace binding
+evidence exists.
 
 The service takes nonblocking PostgreSQL transaction advisory locks for the
 logical path and physical directory entry in that order. These locks survive

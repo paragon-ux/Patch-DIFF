@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 import hashlib
 import json
+import os
 from queue import Queue
 from threading import Barrier, Event
 import time
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import workspace_root_context
 from app.mcp import tools
-from app.services import target_service
+from app.services import target_service, workspace_binding_service, workspace_sync_service
 from app.services.coordinated_transaction_service import submit_coordinated_transactions
 from app.services.pdcp_service import submit_edits
 from app.services.save_service import save_target
@@ -23,7 +24,8 @@ from app.services.target_service import WorkspaceRecovery, initialize_target, in
 from app.services.workspace_sync_service import WorkspaceSyncError
 from app.storage.db import SessionLocal
 from app.storage.models import (
-    AppendOnlyPdcpLogs, CloudTargetFiles, CurrentPdcpFiles, EditingCycles, Projects, TargetSnapshots, WorkspaceBindingMember,
+    AppendOnlyPdcpLogs, CloudTargetFiles, CurrentPdcpFiles, EditingCycles, Projects, TargetSnapshots, WorkspaceBinding,
+    WorkspaceBindingMember,
 )
 from backend.tests.integration.test_batch_stdio_profiles import peer
 from backend.tests.integration.test_migrations_reachable import isolated_migrations, snapshot
@@ -56,6 +58,125 @@ def submit(target, match, replacement, *, key=None):
 
 def rpc_call(rpc, name, **arguments):
     return json.loads(rpc("tools/call", {"name": name, "arguments": arguments})["content"][0]["text"])
+
+
+@pytest.fixture
+def alternate_spelling_lookup(monkeypatch):
+    """Simulate case-insensitive leaf lookup when CI uses a case-sensitive filesystem."""
+    stat_entry = workspace_binding_service.workspace_entry_stat
+
+    def lookup(parent_fd, name):
+        entry = stat_entry(parent_fd, name)
+        if entry is not None:
+            return entry
+        for exact in os.listdir(parent_fd):
+            if exact.casefold() == name.casefold():
+                return stat_entry(parent_fd, exact)
+        return None
+
+    monkeypatch.setattr(workspace_binding_service, "workspace_entry_stat", lookup)
+
+
+def test_alternate_spelling_cannot_claim_or_publish(tmp_path, alternate_spelling_lookup):
+    listed = tmp_path / "Report.txt"
+    listed.write_bytes(b"original")
+    assert open_path(tmp_path, "report.txt")["code"] == "workspace_binding_mismatch"
+    opened = open_path(tmp_path, listed.name)
+    assert opened["created"]
+    assert submit(opened, "original", "pending")["status"] == "accepted"
+    assert open_path(tmp_path, "report.txt")["code"] == "workspace_binding_mismatch"
+    assert open_path(tmp_path, listed.name)["version"] == 1
+
+    inline = tools.patchdiff_initialize_target(filename="report.txt", content="original")
+    with workspace_root_context(tmp_path):
+        assert tools.patchdiff_save(target_file_id=inline["target_file_id"], sync_workspace=True)[
+            "code"
+        ] == "workspace_binding_mismatch"
+    assert listed.read_bytes() == b"original"
+
+    renamed = tmp_path / "report.txt"
+    listed.rename(renamed)
+    collision = open_path(tmp_path, renamed.name)
+    assert collision["code"] == "workspace_binding_mismatch"
+    assert collision["active_target_file_id"] == opened["target_file_id"]
+    with workspace_root_context(tmp_path):
+        assert tools.patchdiff_save(target_file_id=inline["target_file_id"], sync_workspace=True)[
+            "code"
+        ] == "workspace_binding_mismatch"
+    assert renamed.read_bytes() == b"original"
+    renamed.rename(listed)
+    assert open_path(tmp_path, listed.name)["target_file_id"] == opened["target_file_id"]
+
+
+def test_exact_distinct_entries_and_hard_links_get_separate_histories(tmp_path):
+    upper = tmp_path / "Report.txt"
+    lower = tmp_path / "report.txt"
+    upper.write_bytes(b"upper")
+    if lower.exists():
+        pytest.skip("The test requires separate case-sensitive entries.")
+    lower.write_bytes(b"lower")
+    os.link(upper, tmp_path / "copy.txt")
+    target_ids = {open_path(tmp_path, name)["target_file_id"] for name in ("Report.txt", "report.txt", "copy.txt")}
+    assert len(target_ids) == 3
+
+
+def test_exact_spelling_cannot_fork_an_unclaimed_legacy_alias(
+    tmp_path, isolated_migrations, monkeypatch, alternate_spelling_lookup,
+):
+    config, connection = isolated_migrations
+    command.upgrade(config, "20261105_0006")
+    connection.commit()
+    raw = b"original"
+    listed = tmp_path / "Report.txt"
+    listed.write_bytes(raw)
+    root = tmp_path.stat()
+    with Session(bind=connection) as session:
+        old = initialize_target(
+            session, filename="report.txt", content=raw, target_type="text/plain",
+            workspace_tracked=True, workspace_root_identity=f"{root.st_dev}:{root.st_ino}",
+        )
+    connection.commit()
+    command.upgrade(config, "head")
+    connection.commit()
+    monkeypatch.setattr(tools, "SessionLocal", lambda: Session(bind=connection, expire_on_commit=False))
+
+    collision = open_path(tmp_path, listed.name)
+    assert collision["code"] == "workspace_binding_mismatch"
+    assert collision["active_target_file_id"] == str(old.target_file_id)
+    assert open_path(tmp_path, "report.txt")["code"] == "workspace_binding_mismatch"
+    assert connection.scalar(select(func.count()).select_from(WorkspaceBinding)) == 1
+    connection.commit()
+
+    recorded = tmp_path / "report.txt"
+    listed.rename(recorded)
+    resumed = open_path(tmp_path, recorded.name)
+    assert resumed["target_file_id"] == str(old.target_file_id)
+    assert resumed["created"] is False
+
+
+def test_recovery_leaf_read_error_records_same_key_rejection(tmp_path, monkeypatch):
+    file = tmp_path / "target.txt"
+    file.write_bytes(b"original")
+    opened = open_path(tmp_path)
+    disk = b"changed"
+    file.write_bytes(disk)
+    request = recovery(opened, disk)
+
+    def denied(*_args):
+        raise PermissionError("simulated unreadable workspace leaf")
+
+    with monkeypatch.context() as unreadable:
+        unreadable.setattr(workspace_sync_service, "_read_regular", denied)
+        rejected = open_path(tmp_path, workspace_recovery=request)
+    assert rejected["code"] == "workspace_io_error"
+    assert rejected["deduplicated"] is False
+    replayed = open_path(tmp_path, workspace_recovery=request)
+    assert replayed["code"] == "workspace_io_error"
+    assert replayed["deduplicated"] is True
+    assert replayed["active_target_file_id"] == opened["target_file_id"]
+    successor = open_path(tmp_path, workspace_recovery=recovery(opened, disk, key="new-key"))
+    assert successor["created"] is True
+    assert successor["target_file_id"] != opened["target_file_id"]
 
 
 def test_four_stdio_processes_reuse_one_history_and_publish_both_edits(tmp_path):

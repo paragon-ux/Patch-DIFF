@@ -181,9 +181,20 @@ the database. If you omit the field or pass null, the process default applies.
 | Initialization or SAVE returns `workspace_busy` | Another managed operation owns the destination. Wait for it to settle, then reopen and verify the working version before proceeding. |
 | Initialization or SAVE returns `external_disk_drift` | Inspect the actual file and current target. If the disk bytes should start a fresh history, use guarded `workspace_recovery` with action `reimport`. |
 | Initialization returns `workspace_binding_ambiguous` | Inspect the listed legacy members and use guarded `select_existing` to choose the active history. |
-| Initialization or SAVE returns `workspace_binding_mismatch` | Check the configured root and path. Another pinned binding can already own the destination. |
+| Initialization or SAVE returns `workspace_binding_mismatch` | Check the configured root, parent directory and exact listed spelling. The destination can resolve to a different recorded path. |
 | SAVE returns `partial` | The file was installed. Use the included `workspace_sync` receipt to inspect the actual file and check the database snapshot and cycle. The response leaves checkpoint and cycle IDs empty. |
 | The SAVE response is lost | Treat both outcomes as unknown. Compare the file bytes and the database checkpoint before choosing what to do next. |
+
+If the destination parent directory was replaced, restore the original
+directory at the recorded path before retrying. Guarded reimport recovers disk
+content within the pinned destination. If the original directory is unavailable,
+read, replay or export the retained history by target ID. Choose a separate
+workspace path or root to start another history explicitly.
+
+If a recorded legacy or active filename differs only in spelling from the
+listed entry, restore the recorded spelling on disk before reopening that
+history. Inspect the retained target by ID first and coordinate the rename
+with other workspace writers.
 
 A SAVE can install file bytes before the database checkpoint succeeds.
 On a partial result, inspect whether the checkpoint actually committed

@@ -191,6 +191,7 @@ class WorkspaceDestination:
     name: str
     relative_path: str
     root_identity: str
+    root_fd: int
 
     @property
     def physical_identity(self) -> str:
@@ -222,6 +223,45 @@ def pinned_workspace_path(workspace_root, filename: str):
         raise _workspace_io_error(exc) from exc
 
 
+def _open_workspace_parent(root_fd, parts, stack, *, create_parents=False):
+    parent_fd = root_fd
+    for part in parts:
+        try:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+        except FileNotFoundError:
+            if not create_parents:
+                raise
+            os.mkdir(part, dir_fd=parent_fd)
+            os.fsync(parent_fd)
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+        stack.callback(os.close, child)
+        parent_fd = child
+    return parent_fd
+
+
+def workspace_entry_stat(parent_fd: int, name: str) -> os.stat_result | None:
+    try:
+        return os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+
+
+def legacy_workspace_parent_matches(destination: WorkspaceDestination, relative_path: str) -> bool:
+    """Resolve a legacy parent under the pinned root without following symlinks."""
+    try:
+        parts = _normalize_workspace_filename(relative_path).split("/")
+    except WorkspaceSyncError:
+        return False
+    with ExitStack() as stack:
+        try:
+            parent_fd = _open_workspace_parent(destination.root_fd, parts[:-1], stack)
+        except OSError as exc:
+            if exc.errno in (errno.ENOENT, errno.ENOTDIR, errno.ELOOP):
+                return False
+            raise
+        return os.path.samestat(os.fstat(parent_fd), os.fstat(destination.parent_fd))
+
+
 @contextmanager
 def workspace_destination(path: WorkspacePath, *, create_parents: bool = False):
     """Pin directory handles and lease the physical destination directory for IO.
@@ -235,27 +275,21 @@ def workspace_destination(path: WorkspacePath, *, create_parents: bool = False):
     parts = path.relative_path.split("/")
     try:
         with ExitStack() as stack:
-            parent_fd = path.root_fd
-            for part in parts[:-1]:
-                try:
-                    child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
-                except FileNotFoundError as exc:
-                    if not create_parents:
-                        raise WorkspaceSyncError(
-                            FailureReason.TARGET_NOT_FOUND, "workspace_parent_not_found",
-                            "The workspace destination directory does not exist.",
-                        ) from exc
-                    os.mkdir(part, dir_fd=parent_fd)
-                    os.fsync(parent_fd)
-                    child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
-                stack.callback(os.close, child)
-                parent_fd = child
+            try:
+                parent_fd = _open_workspace_parent(path.root_fd, parts[:-1], stack, create_parents=create_parents)
+            except FileNotFoundError as exc:
+                if create_parents:
+                    raise
+                raise WorkspaceSyncError(
+                    FailureReason.TARGET_NOT_FOUND, "workspace_parent_not_found",
+                    "The workspace destination directory does not exist.",
+                ) from exc
             try:
                 fcntl.flock(parent_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as exc:
                 raise WorkspaceSyncError(FailureReason.CONTEXT_INVALID, "workspace_busy",
                                          "Another managed operation owns the destination directory; no file was published.") from exc
-            yield WorkspaceDestination(parent_fd, parts[-1], path.relative_path, path.root_identity)
+            yield WorkspaceDestination(parent_fd, parts[-1], path.relative_path, path.root_identity, path.root_fd)
     except OSError as exc:
         raise _workspace_io_error(exc) from exc
 
@@ -291,6 +325,8 @@ def read_workspace_bytes(destination: WorkspaceDestination) -> bytes | None:
         return raw
     except FileNotFoundError:
         return None
+    except OSError as exc:
+        raise _workspace_io_error(exc) from exc
 
 
 def validate_workspace_source(raw: bytes | None) -> bytes:

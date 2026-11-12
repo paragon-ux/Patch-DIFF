@@ -26,6 +26,11 @@ export PATCHDIFF_DATABASE_URL='postgresql+psycopg://patchdiff@localhost:5432/pat
 patchdiff-mcp --migrate
 ```
 
+When upgrading an existing database to migration `20261111_0007`, drain and
+stop every old PatchDIFF process that can write to it. Apply the migration,
+then restart writers with the updated package. Reopen a known workspace file
+and confirm its existing target ID before resuming edits.
+
 ### Seven-tool structural setup
 
 The five-tool `workspace` profile needs no Node.js installation. For the
