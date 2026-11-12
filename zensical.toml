@@ -8,6 +8,7 @@ site_dir = "site"
 exclude_docs = """
 reviews/**
 usability/**
+benchmarks/swarm/**
 """
 
 nav = [
