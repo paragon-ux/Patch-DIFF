@@ -231,7 +231,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U patchdiff -d patchdiff"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U patchdiff -d patchdiff"]
       interval: 5s
       timeout: 5s
       retries: 10
