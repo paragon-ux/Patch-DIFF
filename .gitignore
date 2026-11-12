@@ -11,6 +11,8 @@ dist/
 integrations/waymark/node_modules/
 # Internal experiments, transcripts, exports and benchmark captures stay local.
 /evaluation/
+/results/
+/docs/benchmarks/swarm/
 /.tmp/
 /.ci-results/
 /site/

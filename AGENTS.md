@@ -28,7 +28,7 @@ Read project artifacts in this order:
 3. `docs/papers/product-change-record.md` (current product change record: formats, compatibility and verification scope)
 4. `docs/spec/mcp-tools.md` (MCP tool schemas and request/response contracts)
 5. `docs/spec/core-runtime.md` (deterministic runtime, validation stages, replay profiles)
-6. `docs/spec/data-model.md` (Postgres schema and migrations `0001` through `0006`)
+6. `docs/spec/data-model.md` (Postgres schema and migrations `0001` through `0007`)
 7. `docs/spec/transaction-formats.md` (`patchdiff-tx/1` typed edits, `patchdiff-tx/2` guarded operations, `patchdiff-tx/3` sole replacement)
 8. `docs/spec/profiles/index.md` and its linked profile contracts (startup selection, tool sets, workspace and observed editor v2)
 9. `docs/guides/host-integration-guide.md` (host-owned loop, prompt hygiene rules, and usage guide)
@@ -156,6 +156,16 @@ editing with initialize and SAVE on the same connection. It permits strict
 observation and requires the pinned Waymark installation. The frozen comparative
 Gate 2 stays closed.
 
+A successful ordinary workspace open reuses the active PostgreSQL target for
+the pinned root and normalized path after checking the recorded disk baseline. Restoring the baseline
+at the pinned destination lets an ordinary open resume the same target. Use
+guarded reimport when present disk bytes should start a successor. Migration `20261111_0007` preserves existing histories, leaves legacy
+duplicates unresolved for explicit selection, and persists recovery receipts.
+Only the active member can submit edits or SAVE. A superseded member retains
+read, replay, export, and existing-key submission recovery. Workspace
+publication must own the physical destination. See the
+[workspace initialization contract](docs/spec/mcp-tools.md#workspace-initialization-and-recovery).
+
 PatchDIFF must always preserve:
 
 ```text
@@ -178,7 +188,7 @@ Use:
 - FastAPI
 - Postgres (`postgres:16.3-alpine` via Docker Compose)
 - SQLAlchemy 2.x
-- Alembic migrations (`20260510_0001` through `20261105_0006`)
+- Alembic migrations (`20260510_0001` through `20261111_0007`)
 - pytest
 - Stdio MCP JSON-RPC adapter (`backend/app/mcp/external_adapter.py`)
 

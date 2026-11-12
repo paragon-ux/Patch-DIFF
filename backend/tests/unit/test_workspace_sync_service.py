@@ -25,7 +25,6 @@ from app.core.line_endings import source_line_endings
 from app.mcp import tools
 from app.mcp.external_adapter import ExternalMCPAdapter
 from app.services.save_service import save_target
-from app.services.target_service import initialize_target_from_workspace
 from app.services import workspace_sync_service as workspace_io
 from app.services.workspace_sync_service import (
     WorkspaceSyncError,
@@ -51,6 +50,18 @@ def _fake_target(filename: str, raw_bytes: bytes, *, version: int = 1, edited_ca
     )
 
 
+def _mock_workspace_queries(session):
+    def scalar(statement):
+        sql = str(statement)
+        if "pg_try_advisory_xact_lock" in sql:
+            return True
+        if "workspace_bindings" in sql:
+            return None
+        return 0
+
+    session.scalar.side_effect = scalar
+
+
 def _mock_save_session(target):
     old_cycle = SimpleNamespace(
         editing_cycle_id=target.active_editing_cycle_id,
@@ -67,9 +78,18 @@ def _mock_save_session(target):
     session.identity_map = {}
     session.no_autoflush.__enter__.return_value = None
     session.no_autoflush.__exit__.return_value = None
-    session.execute.return_value.scalar_one_or_none.return_value = target
+    def execute(statement):
+        sql = str(statement)
+        if "workspace_binding_members" in sql:
+            state = (target.target_file_id, None) if target.source_line_endings.get("workspace_tracked") else None
+            return SimpleNamespace(one_or_none=lambda: state)
+        if "workspace_bindings" in sql:
+            return SimpleNamespace(all=lambda: [])
+        return SimpleNamespace(scalar_one_or_none=lambda: target)
+
+    session.execute.side_effect = execute
     session.get.return_value = old_cycle
-    session.scalar.return_value = 0
+    _mock_workspace_queries(session)
 
     def _add(obj):
         if getattr(obj, "snapshot_id", None) is None and hasattr(obj, "snapshot_reason"):
@@ -145,7 +165,8 @@ def test_external_disk_drift_and_deletion_reject_before_db_checkpoint_mutation(t
     initial = b"VALUE = 1\r\n"
     src.write_bytes(initial)
     target = _fake_target("service.py", initial, version=1, edited_canonical="VALUE = 2\n")
-    target.source_line_endings["workspace_tracked"] = True
+    st = tmp_path.stat()
+    target.source_line_endings.update(workspace_tracked=True, workspace_root_identity=f"{st.st_dev}:{st.st_ino}")
 
     # Simulate external editor modifying disk outside PatchDIFF
     external_bytes = b"VALUE = 999\r\n"
@@ -253,6 +274,7 @@ def test_mcp_from_workspace_and_sync_save_emit_compact_receipts_without_full_tex
         ctx = MagicMock()
         session = MagicMock()
         session.in_transaction.return_value = True
+        _mock_workspace_queries(session)
 
         def _add_all(objs):
             captured["target"] = objs[0]
@@ -546,3 +568,31 @@ def test_workspace_lease_also_excludes_another_process(tmp_path):
 def test_initialization_schema_represents_inline_and_workspace_alternatives(arguments, valid):
     tool = next(t for t in ExternalMCPAdapter(profile="full").list_tools() if t["name"] == "patchdiff_initialize_target")
     assert Draft202012Validator(tool["inputSchema"]).is_valid(arguments) is valid
+
+
+def test_recovery_schema_and_runtime_reject_invalid_cross_fields():
+    recovery = {
+        "action": "reimport",
+        "target_file_id": str(uuid.uuid4()),
+        "expected_target_version": 0,
+        "expected_current_hash": "0" * 64,
+        "expected_disk_sha256": "1" * 64,
+        "client_request_id": "recovery-1",
+    }
+    arguments = {"filename": "sample.txt", "from_workspace": True, "workspace_recovery": recovery}
+    for profile in ("workspace", "observed_workspace", "full"):
+        declaration = next(tool for tool in ExternalMCPAdapter(profile=profile).list_tools()
+                           if tool["name"] == "patchdiff_initialize_target")
+        validator = Draft202012Validator(declaration["inputSchema"])
+        assert validator.is_valid(arguments)
+        assert validator.is_valid({**arguments, "content_type": None})
+        invalid = [
+            {**arguments, "from_workspace": False, "content": "inline"},
+            {**arguments, "workspace_recovery": {**recovery, "extra": 1}},
+            {**arguments, "workspace_recovery": {**recovery, "expected_target_version": True}},
+            {**arguments, "workspace_recovery": {**recovery, "expected_disk_sha256": "1" * 64 + "\n"}},
+            {**arguments, "workspace_recovery": {**recovery, "client_request_id": "bad\x00key"}},
+        ]
+        for case in invalid:
+            assert not validator.is_valid(case)
+            assert tools.patchdiff_initialize_target(**case)["status"] == "invalid_argument"

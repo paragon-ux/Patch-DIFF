@@ -1,6 +1,8 @@
 # Workstation and LAN Hub Reference Architecture
 
-This document specifies the deployment architecture for running PatchDIFF as a shared concurrency hub across multiple autonomous agents operating on a single developer workstation or local area network (LAN).
+This reference architecture describes a workstation deployment and proposed
+extensions for a shared LAN hub. The current MCP adapter uses stdio. A LAN
+gateway would be supplied and operated separately.
 
 ---
 
@@ -49,7 +51,7 @@ In this architecture, one machine (the developer workstation or a shared team ho
 
 - **Zero client footprint**: Client agents require no PostgreSQL, no Alembic migrations, and no Node.js runtime. To the agent, PatchDIFF is simply an MCP toolset configured in its host settings.
 - **Physical working tree isolation**: The physical Git repository remains clean during multi-agent drafting. Edits live entirely within PostgreSQL working copies until an authorized agent executes `patchdiff_save`.
-- **Granular row-level OCC**: PostgreSQL locks only the specific row of the file being committed (`SELECT ... FOR UPDATE`). Agents working on disjoint files commit simultaneously with zero contention. If two agents touch the same file, the second transaction fails immediately with an OCC version guard error and retry lineage.
+- **Granular row-level OCC**: PostgreSQL locks only the specific row of the file being committed (`SELECT ... FOR UPDATE`). Agents working on disjoint files can commit independently. Same-target writers serialize on the row lock. A later writer with a stale version guard is rejected after it acquires the lock.
 
 ---
 
@@ -57,9 +59,10 @@ In this architecture, one machine (the developer workstation or a shared team ho
 
 Agents prefer explicit, deterministic command-line operations over interactive wizards or manual configuration files. The CLI serves as the authoritative interface for automated startup, migrations, and health checks.
 
-### 3.1 One-Step Migration and Startup
+### 3.1 Migration and startup
 
-An agent provisioning or inspecting the hub runs two commands:
+Apply migrations before the MCP host starts its stdio connection. For an
+existing database, follow the [0007 cutover procedure](../guides/workspace-quickstart.md#upgrade-an-existing-database-to-0007).
 
 ```bash
 # 1. Apply database migrations to the latest head
@@ -78,17 +81,18 @@ The CLI enforces strict exit codes for automated agent recovery:
 
 ---
 
-## 4. Storage Compaction and Log Pruning on N SAVEs
+## 4. SAVE retention and proposed archival
 
-PatchDIFF records every accepted and rejected transaction in `append_only_pdcp_logs` and `manifest_ledger`. During active multi-agent drafting, retry loops and exploratory edits can produce high log volumes.
+The current service retains admitted attempts in `append_only_pdcp_logs` and
+accepted changes in `append_only_manifest_ledger`. A successful SAVE records
+a checkpoint and rotates the editing cycle. With `sync_workspace: true`,
+it can also publish file bytes. The service retains prior attempts and ledger
+rows for audit and replay.
 
-To keep PostgreSQL storage bounded and query latencies predictable, the hub uses epoch-based compaction tied to the publication lifecycle.
+### Proposed archival policy
 
-### 4.1 Publication Epochs
-
-Every call to `patchdiff_save` with `sync_workspace=true` writes canonical text to disk and rotates the target editing cycle. This rotation establishes a clean epoch boundary.
-
-### 4.2 Compaction Policy
+The following design is exploratory and has no current runtime or storage
+contract. Any future pruning proposal must preserve audit and replay guarantees.
 
 ```text
 [Active Cycle 1..N in Postgres]
@@ -104,9 +108,12 @@ Every call to `patchdiff_save` with `sync_workspace=true` writes canonical text 
 [PostgreSQL Retains Bounded Hot Working Set]
 ```
 
-1. **Hot working set**: PostgreSQL retains only the active cycle and the most recent $N$ completed cycles (default: 3). This preserves sufficient retry lineage and diff context for active agents.
-2. **Cold archive**: Older attempt logs and intermediate span facts are streamed to compressed append-only files (`.patchdiff/archive/cycle-<id>.jsonl.gz`) before deletion from PostgreSQL.
-3. **Database health**: Indexes and table working sets fit entirely inside database shared memory, keeping OCC row-lock evaluation fast regardless of project age.
+1. **Hot working set**. The proposal would retain the active cycle and the
+   most recent $N$ completed cycles in PostgreSQL.
+2. **Cold archive**. The proposal would archive older attempts and span facts
+   before removing their database rows.
+3. **Verification**. Storage and query costs, archive durability and replay
+   from archived history would need independent validation.
 
 ---
 
@@ -116,10 +123,10 @@ A common confusion in transactional editing is whether the transaction service s
 
 | Responsibility | Owner | Mechanism |
 | :--- | :--- | :--- |
-| **Syntactic boundary scoping** | Waymark Engine (AST Parser) | Resolves function, class, and method bounds with code-point spans. Prevents the model from corrupting surrounding file syntax. |
-| **Transaction atomicity & OCC** | PatchDIFF Server | Evaluates version guards, SHA-256 hashes, row locks (`SELECT ... FOR UPDATE`), and atomic rollback across multiple targets. |
+| **Syntactic boundary scoping** | Waymark Engine (AST Parser) | Resolves function, class, and method bounds with code-point spans. Observed edits are constrained to their selected scopes. |
+| **Transaction atomicity & OCC** | PatchDIFF Server | Evaluates version guards, SHA-256 hashes, row locks (`SELECT ... FOR UPDATE`), and atomic application per target. |
 | **Lineage & Idempotency** | PatchDIFF Storage | Deduplicates client request keys and tracks parent-to-child retry attempt chains. |
-| **Physical File Publication** | Workspace Synchronizer | Writes canonical LF bytes to disk upon explicit `patchdiff_save` with drift detection. |
+| **Physical File Publication** | Workspace Synchronizer | Publishes on explicit workspace SAVE with drift detection and the selected line-ending format. |
 | **Task & Semantic Logic** | Autonomous Agent (Host) | Plans code changes, interprets diagnostics, and chooses retry strategies. |
 
 ---
@@ -127,5 +134,5 @@ A common confusion in transactional editing is whether the transaction service s
 ## 6. Security and Network Isolation
 
 When exposing PatchDIFF across a local area network:
-1. **Network binding**: Bind the MCP service and PostgreSQL exclusively to local interfaces (`127.0.0.1` for workstation-local, or private LAN subnets with pre-shared tokens).
+1. **Network binding**. Keep PostgreSQL on a private interface. If a separate LAN gateway is deployed, configure its network exposure and access controls independently of the PatchDIFF stdio adapter.
 2. **Filesystem path confinement**: The workspace synchronizer resolves canonical paths before opening file descriptors, rejecting directory traversal attempts and symbolic link escapes outside `PATCHDIFF_WORKSPACE_ROOT`.

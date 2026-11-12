@@ -13,7 +13,7 @@ When working in this repository, always consult documentation in the following o
 3. `docs/papers/product-change-record.md` (product change record and verification scope)
 4. `docs/spec/mcp-tools.md` (MCP tool contracts, schemas, byte budgets)
 5. `docs/spec/core-runtime.md` (deterministic core runtime specification)
-6. `docs/spec/data-model.md` (Postgres schema and migrations `20260510_0001` through `20261105_0006`)
+6. `docs/spec/data-model.md` (Postgres schema and migrations `20260510_0001` through `20261111_0007`)
 7. `docs/spec/transaction-formats.md` (`patchdiff-tx/1`, `patchdiff-tx/2`, `patchdiff-tx/3`)
 8. `docs/spec/profiles/index.md` (startup selection and profile contracts)
 9. `docs/spec/structural-batch-editing.md` (structural observation and batch transactions)
@@ -47,8 +47,14 @@ export PYTHONPATH=".:backend"
 ```
 
 ### Database & Migrations
+
+For an existing database, follow the
+[0007 cutover procedure](docs/guides/workspace-quickstart.md#upgrade-an-existing-database-to-0007)
+before upgrading.
+
 ```bash
-docker compose up -d postgres
+docker compose up -d --wait postgres
+export PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
 alembic -c backend/app/migrations/alembic.ini upgrade head
 ```
 

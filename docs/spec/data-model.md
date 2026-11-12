@@ -18,7 +18,7 @@ metadata used by export and workspace publication. See the
 ## Scope
 
 This document covers the PostgreSQL schema from the initial migration
-`20260510_0001` through typed-origin adoption migration `20261105_0006`.
+`20260510_0001` through workspace binding migration `20261111_0007`.
 
 The schema supports:
 - canonical target storage in Postgres (`cloud_target_files`)
@@ -334,3 +334,41 @@ without changing rows. The historical 0002 downgrade separately refuses to disca
 recorded origin/derived facts, nullable typed prose or request keys. Populated
 upgrade/downgrade/re-upgrade coverage includes a frozen copy of the original 0002
 migration and the intermediate candidate schema.
+
+
+## Active workspace bindings (migration 0007)
+
+Migration `20261111_0007_workspace_bindings.py` adds three tables.
+
+- `workspace_bindings` stores the root directory's device and inode, the
+  normalized relative path and its SHA-256, an optional unique physical
+  destination, and the active target ID. A deferred foreign key requires the
+  active target to belong to that binding. A null active target represents an
+  unresolved set of legacy duplicates.
+- `workspace_binding_members` assigns each workspace target ID to one binding.
+  A superseded member points to its successor in the same binding. Target
+  contents, cycles, snapshots, attempt logs and manifest rows retain their IDs.
+- `workspace_recovery_receipts` stores the canonical request fingerprint and
+  terminal outcome under the binding ID and client request ID.
+
+Drain and stop all old PatchDIFF writers before applying this migration.
+Restart writers on the updated runtime after it succeeds so workspace imports
+go through binding ownership.
+
+The migration groups tracked legacy rows with a valid root identity by root and
+normalized filename. It activates singleton groups and retains duplicate
+members for explicit recovery. It does not read the filesystem. The physical
+destination is established from pinned directory handles on first access to
+the legacy binding, including an open that reports drift or duplicate
+ambiguity. Before that access the database knows only the logical path.
+When claiming a present entry, the server checks for conflicting spellings
+among pinned entries in its parent directory and unclaimed legacy paths
+under the configured root. Downgrade refuses while any workspace binding
+evidence exists.
+
+The service takes nonblocking PostgreSQL transaction advisory locks for the
+logical path and physical directory entry in that order. These locks survive
+filesystem lease release through transaction completion. Recovery locks target
+rows in UUID order before switching ownership. SAVE locks its target row and
+fails fast on destination contention. See the
+[workspace tool contract](mcp-tools.md#workspace-initialization-and-recovery).

@@ -203,9 +203,10 @@ Tool results are JSON text in `content[0].text` with literal characters (not `\u
 - **Arguments**:
   - `filename` (`string`, required): document filename. With `from_workspace=true`, pass a safe path relative to `PATCHDIFF_WORKSPACE_ROOT`.
   - `content` (`string`): required for inline initialization; line endings are normalized to LF and recorded. For `patchdiff_initialize_target(from_workspace=true)`, omit content or pass null.
-  - `from_workspace` (`boolean`, default false, initialize only): read `filename` directly under the configured POSIX workspace and bind the target to that root identity. Conflicting non-null content rejects.
-  - `content_type` (`string`): MIME type or language identifier (e.g. `"text/markdown"`); defaults to `text/plain` for initialize. The upload wrapper keeps its existing required arguments.
+  - `from_workspace` (`boolean`, default false, initialize only): open the active target for `filename` under the configured POSIX workspace, importing on first use. Conflicting non-null content rejects.
+  - `content_type` (`string | null`): MIME type or language identifier (e.g. `"text/markdown"`). Omit or pass null to inherit a bound target’s type. A new target defaults to `text/plain`. The upload wrapper keeps its existing required arguments.
   - `project_id` (`string | null`, optional): project UUID.
+  - `workspace_recovery` (`object | null`, optional, initialize only): explicit recovery for `from_workspace: true`.
 - **Returns** (live output for a one-line CRLF upload; hashes shortened):
   ```json
   {
@@ -228,6 +229,68 @@ Tool results are JSON text in `content[0].text` with literal characters (not `\u
     }
   }
   ```
+
+#### Workspace initialization and recovery
+
+A binding is global to a PostgreSQL database for the configured root's
+directory device and inode plus the validated, normalized relative path.
+The physical parent directory device and inode plus the final filename also
+have one owner. An overlapping root that reaches an already claimed destination
+returns `workspace_binding_mismatch`. Use the exact listed spelling of an
+existing filename. A spelling that resolves to the same entry as a different
+recorded path also returns `workspace_binding_mismatch`. A legacy binding can
+claim its physical destination at first access. Separate listed entries have
+independent histories.
+
+An ordinary open returns `status: "ok"`, `created` (true on first import),
+`target_file_id`, `active_target_file_id`, current canonical `version` and
+`current_hash`, the current editing cycle, and raw `disk_sha256`. An open
+reuses the active target even while it has unpublished database edits. It
+checks disk bytes against the last successful workspace SAVE digest or the
+original import digest. A changed or deleted file returns
+`external_disk_drift` with the target ID, version, canonical hash, and observed
+raw disk digest (null for a missing file). Restore the recorded baseline at
+the pinned destination to resume the same history by ordinary open. Explicit
+project and content type values must agree with the bound target. A conflict returns
+`workspace_project_conflict` or `workspace_content_type_conflict`. Malformed
+tracking metadata on a bound target or a known workspace target without a
+binding returns `workspace_binding_metadata_invalid` on write. Inline
+initialization and upload continue to create independent targets.
+
+An unresolved legacy binding returns `workspace_binding_ambiguous`, up to 20
+ordered `candidate_target_file_ids`, `candidate_count`,
+`candidates_truncated`, and the observed raw `disk_sha256`. Use a target read
+to obtain the member's version and canonical hash, then provide all fields in
+`workspace_recovery`:
+
+| Field | Contract |
+| --- | --- |
+| `action` | `select_existing` picks a member of an unresolved binding whose recorded disk baseline still matches. `reimport` imports the guarded disk bytes into a fresh successor of the specified active target or unresolved legacy member. |
+| `target_file_id` | UUID of the active target or selected legacy member for this binding. |
+| `expected_target_version` | Current non-negative target version from the target read or drift receipt. |
+| `expected_current_hash` | Current canonical LF SHA-256 from the same observation. |
+| `expected_disk_sha256` | SHA-256 of the exact disk bytes, including their line endings. |
+| `client_request_id` | 1–128 printable ASCII characters without whitespace. |
+
+A fresh recovery needs a present file for the raw disk digest. Restore a
+missing file at the pinned destination before submitting a fresh recovery
+request. A recorded recovery can still be retrieved with its original key.
+
+Recovery selects or creates the active target and supersedes the other eligible
+members in one database transaction. It performs no workspace write. Fresh
+submissions and SAVE, including checkpoint-only SAVE, reject unresolved or
+superseded members. Keyed submission recovery, reads, export, replay and
+history remain available for old target IDs.
+
+Once a request is admitted to an existing binding, its terminal success or
+rejection is recorded. Resend the same request after a lost response. It
+returns the recorded outcome with `deduplicated: true` before checking fresh
+target or disk guards. A recovered success preserves its recorded
+`target_file_id`, version, hash and cycle. `active_target_file_id` reports the
+current binding owner, which can have changed since the recorded outcome.
+Reusing the key with different arguments returns
+`request_key_conflict`. Malformed inputs, unavailable bindings and
+destination contention leave the key available for a later request.
 
 ### `patchdiff_get_target`
 - **Arguments**: `target_file_id` (`string`, required).
@@ -457,8 +520,10 @@ Partial results report one of the following codes.
 - `workspace_post_install_error` means directory-handle cleanup failed after
   installation. The receipt retains the installation evidence.
 
-On partial results, inspect the file and database before reconciling or
-initializing a new target. The server leaves installed bytes in place.
+On partial results, inspect the file and database before reconciling.
+Reopen the active workspace target to obtain current guards and use
+[explicit recovery](#workspace-initialization-and-recovery) if the imported
+baseline differs and the observed disk bytes should become a new history. The server leaves installed bytes in place.
 A lost response or process termination can also leave an unknown outcome.
 The [workspace profile](profiles/workspace-profile.md#decide-what-to-do-after-a-failure)
 shows how to proceed in each case.
@@ -470,8 +535,10 @@ an advisory exclusive lease on the pinned physical destination directory.
 This serializes the same destination across processes, target IDs, overlapping
 configured roots and path aliases. Different destination directories can run
 independently. A conflicting operation rejects with `workspace_busy`.
-When a target's baseline diverges, reinitialize from the file before
-publishing again.
+When the disk baseline diverges, restore the recorded bytes at the pinned
+destination to resume the existing target. If the present disk bytes should
+start a successor, use the current target and raw disk evidence for
+[guarded reimport](#workspace-initialization-and-recovery).
 
 Workspace imports bind the working target to the root's device and inode.
 Moving the same directory preserves that identity. A different directory
@@ -485,7 +552,11 @@ owner's control during IO. A process with equivalent filesystem privileges can
 move an opened directory out of the workspace.
 
 The source byte hash is checked under the lease and checked again after staging.
-Unmanaged edits found at either check reject as `external_disk_drift` and remain
+Workspace publication must own the active binding. A successful first
+publication by an inline target claims a free destination. Transaction advisory
+locks hold the logical path and physical destination through the PostgreSQL
+commit. Unmanaged edits found at either disk check reject as
+`external_disk_drift` and remain
 intact. Non-cooperating writers can still race after the final check. Quiesce
 those writers during publication. Creation uses an atomic no-clobber link
 so a newly appeared file is preserved. Existing files keep their POSIX mode.

@@ -70,8 +70,10 @@ def test_observed_workspace_profile_contract_and_strict_observation(tmp_path, mo
     adapter = ExternalMCPAdapter(profile="observed_workspace")
     tools_by_name = {tool["name"]: tool for tool in adapter.list_tools()}
     assert len(tools_by_name) == 7
-    assert "Import an existing workspace file" in tools_by_name["patchdiff_initialize_target"]["description"]
-    assert "patchdiff_observe_scopes" in tools_by_name["patchdiff_initialize_target"]["description"]
+    description = tools_by_name["patchdiff_initialize_target"]["description"]
+    assert "Open the active PatchDIFF target" in description
+    assert "importing it on first use" in description
+    assert "patchdiff_observe_scopes" in description
     assert "patchdiff_commit_bundle" in tools_by_name
     assert "patchdiff_save" in tools_by_name
 

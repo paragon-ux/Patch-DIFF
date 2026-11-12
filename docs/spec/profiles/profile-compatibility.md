@@ -13,8 +13,8 @@ PatchDIFF profiles fall into two operational classes:
    - **POSIX Requirement:** Directory writebacks use descriptor-relative operations (`openat`, `O_NOFOLLOW`, `O_DIRECTORY`, and `fcntl.flock`) to guard against symlinks, path traversal, and race conditions.
    - Requires a POSIX environment: **Linux, WSL2, macOS, or Docker**. Bare Windows cmd/PowerShell lacks `fcntl.flock`.
 2. **Inline Ledger Profiles (`observed_v2`, `editor`, `unobserved_editor`, `hybrid_editor`, `full`, etc.):**
-   - Targets are initialized directly in memory and managed exclusively inside the PostgreSQL ledger.
-   - **Universal Support:** Runs natively across **all operating systems** (Bare Windows, WSL2, Linux, macOS) without filesystem lock requirements.
+   - Inline workflows operate on PostgreSQL targets. They run on native Windows, WSL2, Linux and macOS without workspace filesystem locks.
+   - The trusted `full` profile can also initialize and publish workspace files on supported POSIX filesystems.
 
 ---
 
@@ -56,6 +56,15 @@ PatchDIFF profiles fall into two operational classes:
 
 ## 4. Reproducible Setup Instructions by Environment
 
+Use the server version that matches your migrations. For host installs, see the
+[workspace setup](../../guides/workspace-quickstart.md#setup) and install
+[pinned Waymark dependencies](../../guides/workspace-quickstart.md#seven-tool-structural-setup)
+for profiles that use structural tools. Before running any migration command
+on an existing database, follow the
+[0007 cutover procedure](../../guides/workspace-quickstart.md#upgrade-an-existing-database-to-0007).
+PatchDIFF serves MCP over stdio. Configure the host to launch the server
+command shown in each recipe and exchange MCP messages over stdin/stdout.
+
 ### Configuration A: Windows with Docker Desktop (WSL2 Backend) (Recommended for Windows)
 
 This configuration runs the PatchDIFF server inside WSL2 while PostgreSQL runs in Docker Desktop, with full support for the default `observed_workspace` profile.
@@ -69,7 +78,7 @@ This configuration runs the PatchDIFF server inside WSL2 while PostgreSQL runs i
 #### Step 2: Start PostgreSQL Container
 From PowerShell or inside your WSL terminal in the repository root:
 ```bash
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 Verify the container is healthy:
 ```bash
@@ -108,7 +117,7 @@ When running directly on Windows without WSL2, workspace filesystem sync is disa
 #### Step 1: Start PostgreSQL via Docker Desktop
 In PowerShell from the repository root:
 ```powershell
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 
 #### Step 2: Set Environment Variables in PowerShell
@@ -132,7 +141,7 @@ Full native Linux deployment with zero translation overhead.
 
 #### Step 1: Start PostgreSQL
 ```bash
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 
 #### Step 2: Set Environment Variables
@@ -156,7 +165,7 @@ macOS supports POSIX file locking natively, allowing `observed_workspace` to run
 
 #### Step 1: Start PostgreSQL
 ```bash
-docker compose up -d
+docker compose up -d --wait postgres
 ```
 
 #### Step 2: Configure Environment
@@ -176,7 +185,9 @@ patchdiff-mcp
 
 ### Configuration E: Fully Containerized Deployment (Server + Database)
 
-To run both PatchDIFF MCP server and PostgreSQL inside containers (e.g. on Kubernetes, remote runners, or isolated CI):
+To run the PatchDIFF stdio server and PostgreSQL in containers, build the
+server image from the matching source checkout. The MCP host launches an
+attached server container for each connection.
 
 #### `Dockerfile` for PatchDIFF MCP Server
 ```dockerfile
@@ -220,7 +231,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U patchdiff -d patchdiff"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U patchdiff -d patchdiff"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -229,7 +240,6 @@ services:
 
   patchdiff:
     build: .
-    container_name: patchdiff-mcp
     depends_on:
       postgres:
         condition: service_healthy
@@ -245,6 +255,18 @@ services:
 volumes:
   patchdiff_postgres_data:
 ```
+
+Start PostgreSQL, build the server image, and apply migrations before the
+client launches an MCP connection.
+
+```bash
+docker compose -f docker-compose.server.yml up -d --wait postgres
+docker compose -f docker-compose.server.yml build patchdiff
+docker compose -f docker-compose.server.yml run --rm -T patchdiff --migrate
+```
+
+Configure the MCP client to launch `docker compose -f /absolute/path/to/docker-compose.server.yml run --rm -T patchdiff`
+with stdin and stdout attached.
 
 ---
 

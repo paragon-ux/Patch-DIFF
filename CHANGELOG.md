@@ -4,6 +4,16 @@ All notable features of `patchdiff-mcp` are documented in this file.
 
 The format follows Keep a Changelog.
 
+## [Unreleased]
+
+### Changed
+
+- Workspace initialization reuses the active PostgreSQL target, including unsaved edits, across sessions and processes when the recorded disk baseline matches. Guarded recovery can select a legacy duplicate or reimport disk bytes into a fresh successor while preserving old history.
+
+### Added
+
+- Migration `20261111_0007` persists workspace bindings, successor links and idempotent recovery receipts.
+
 ## [0.2.0] - 2026-11-06
 
 ### Changed

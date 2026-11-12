@@ -15,6 +15,9 @@ from app.core.failures import FailureReason
 from app.storage.models import CloudTargetFiles, EditingCycles, TargetSnapshots
 from app.storage.repositories import select_target_for_update
 from app.services.performance_events import timed
+from app.services.workspace_binding_service import (
+    active_binding_evidence, bind_workspace_target, lock_workspace_destination, lock_workspace_path, workspace_write_fence,
+)
 from app.services.workspace_sync_service import WorkspaceSyncError, sync_target_file_to_workspace
 
 
@@ -31,6 +34,7 @@ class SaveResult:
     failure_detail: str | None = None
     code: str | None = None
     workspace_sync: dict[str, Any] | None = None
+    workspace_evidence: dict[str, Any] | None = None
 
 
 @timed("task")
@@ -120,6 +124,13 @@ def save_target(
                     failure_detail="Target file was not found.",
                 )
 
+            fence = workspace_write_fence(session, target)
+            if fence is not None:
+                return SaveResult(
+                    "rejected", target.target_file_id, None, None, None, target.current_hash, target.version,
+                    fence.reason, fence.detail, fence.code, workspace_evidence=fence.evidence,
+                )
+
             if expected_target_version is not None and target.version != expected_target_version:
                 return SaveResult(
                     status="rejected",
@@ -163,16 +174,46 @@ def save_target(
 
             if should_sync:
                 eff_root = workspace_root if workspace_root is not None else get_workspace_root()
+                binding = None
+                destination = None
+                physical = None
+
+                def lock_path(identity, relative):
+                    nonlocal binding
+                    binding = lock_workspace_path(session, identity, relative)
+                    if binding is not None and binding.active_target_file_id != target.target_file_id:
+                        raise WorkspaceSyncError(
+                            FailureReason.CONTEXT_INVALID, "workspace_binding_mismatch",
+                            "This target does not own the workspace destination.",
+                            evidence=active_binding_evidence(binding),
+                        )
+
+                def lock_destination(opened):
+                    nonlocal destination, physical
+                    destination = opened
+                    physical = lock_workspace_destination(session, destination, binding)
+
                 try:
                     sync_payload = sync_target_file_to_workspace(
                         target,
                         workspace_root=eff_root,
                         eol_format=workspace_eol_format,
+                        before_traverse=lock_path,
+                        before_publish=lock_destination,
                     ).as_dict()
+                    if binding is None:
+                        bind_workspace_target(session, destination, physical, target.target_file_id)
+                    else:
+                        binding.physical_destination = physical
                 except WorkspaceSyncError as err:
                     if err.receipt is not None:
                         sync_payload = err.receipt
                         raise
+                    evidence = err.evidence
+                    metadata = target.source_line_endings
+                    if (err.code == "workspace_binding_mismatch" and not evidence
+                            and isinstance(metadata, dict) and metadata.get("workspace_tracked") is True):
+                        evidence = {"active_target_file_id": str(target.target_file_id)}
                     return SaveResult(
                         status="rejected",
                         target_file_id=target.target_file_id,
@@ -184,6 +225,7 @@ def save_target(
                         failure_reason=err.reason,
                         failure_detail=err.detail,
                         code=err.code,
+                        workspace_evidence=evidence,
                     )
 
             snapshot = TargetSnapshots(

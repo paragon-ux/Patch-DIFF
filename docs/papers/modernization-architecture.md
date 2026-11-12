@@ -278,6 +278,18 @@ For rejected exact recovery, the complete stored diagnostic (including original 
 - Export and workspace publication read the column. Workspace initialization records `workspace_tracked` and `workspace_root_identity`; publication checks the binding and expected raw disk digest, and successful workspace SAVE stores `last_synced_disk_sha256` and `last_synced_version`. These metadata facts do not alter canonical text or its hashes, and replay does not evaluate them.
 - Downgrade `20261022_0003 -> 20261020_0002` checks `IF EXISTS (SELECT 1 FROM cloud_target_files WHERE source_line_endings IS NOT NULL)` and raises an exception rather than discarding recorded facts.
 
+#### C5c. Workspace bindings (Migration `20261111_0007`)
+
+A workspace binding identifies the active PostgreSQL target for a pinned
+root and normalized path. A successful ordinary open resumes that target
+after checking the recorded disk baseline. Changed or missing files on an
+otherwise valid active binding return `external_disk_drift`. Fresh guarded
+recovery checks the selected member and present raw bytes, records the
+outcome by request key, and fences superseded targets while preserving
+historical replay. Directory-entry ownership and transaction advisory locks
+coordinate first import, recovery and SAVE. See the
+[workspace storage contract](../spec/data-model.md#active-workspace-bindings-migration-0007).
+
 #### C6. Read, Search, and History Pagination Contract
 
 - `patchdiff_read_target(target_file_id, start=0, length=None)`:

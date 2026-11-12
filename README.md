@@ -68,7 +68,7 @@ PatchDIFF supports multiple editing workflows by configuring the `PATCHDIFF_MCP_
 
 1. **Native Baseline**: Standard agent editing using native host filesystem tools (for example, direct file reads, whole-file rewrites, or unindexed search-and-replace). This approach uses no transaction engine, no AST indexing, and no rollback protections.
 2. **Host-Orchestrated Structural Editing (`observed_v2`)**: A 5-tool MCP profile providing Abstract Syntax Tree (AST) scope discovery and guarded atomic commits. The host environment retains lifecycle authority, executing separate orchestration calls to initialize targets, save revisions, export files to disk, and verify state.
-3. **Agent-Owned Workspace Editing (`observed_workspace`)**: A 7-tool MCP profile where the editing agent directly owns the complete lifecycle over MCP. The agent imports files (`initialize_target`), discovers and inspects AST scopes (`list_scopes`, `observe_scopes`), commits atomic bundles (`commit_bundle`), and publishes verified edits directly to disk (`save` with `sync_workspace: true`), requiring zero external host lifecycle calls.
+3. **Agent-Owned Workspace Editing (`observed_workspace`)**: A 7-tool MCP profile where the editing agent directly owns the complete lifecycle over MCP. The agent opens active file targets (`initialize_target`), discovers and inspects AST scopes (`list_scopes`, `observe_scopes`), commits atomic bundles (`commit_bundle`), and publishes verified edits directly to disk (`save` with `sync_workspace: true`), requiring zero external host lifecycle calls.
 
 Additional profiles include `workspace` (a 5-tool profile for exact text editing without Node.js AST dependencies), `editor` (the opt-in 7-tool profile for existing database targets), and `full` (an 18-tool trusted lifecycle catalog). See the [profile catalog](docs/spec/profiles/index.md) and the [Profile Compatibility & Deployment Matrix](docs/spec/profiles/profile-compatibility.md) for full details.
 
@@ -92,17 +92,21 @@ Follow the steps below to configure the default **`observed_workspace`** profile
 > **Environment Support & Prerequisites:**
 > The default `observed_workspace` quickstart requires a POSIX environment (**Linux, WSL2 on Windows, macOS, or Docker**) because directory writebacks and concurrent file updates enforce descriptor-relative operations and POSIX file locking (`fcntl.flock`). It also requires Python 3.11+, PostgreSQL 16+, and Node.js 22+ (for Waymark AST structural indexing).
 >
-> If you are running on **bare Windows** (cmd.exe or PowerShell), in an environment without Node.js, or prefer inline ledger editing without filesystem synchronization:
-> - Consult the [**Profile Compatibility & Deployment Matrix**](docs/spec/profiles/profile-compatibility.md) for OS-specific compatibility and reproducible Docker recipes.
-> - Use `--profile observed_v2` or `--profile editor` for zero-filesystem inline editing.
-> - If you run into port 5432 conflicts or WSL2 memory issues, see the [**Troubleshooting & Operations Guide**](docs/guides/troubleshooting.md).
+> On **bare Windows** (cmd.exe or PowerShell), choose an inline profile from the [**Profile Compatibility & Deployment Matrix**](docs/spec/profiles/profile-compatibility.md). Structural operations still require Node.js and Waymark.
+>
+> For Node-free exact-text editing, use `workspace` on a supported POSIX filesystem or `unobserved` with an existing target ID. For port 5432 conflicts or WSL2 memory issues, see the [**Troubleshooting & Operations Guide**](docs/guides/troubleshooting.md).
 
 ### 1. Install and Migrate
+
+Run these commands from the matching source checkout. Migration `20261111_0007`
+is an unreleased change in this checkout. For a PyPI installation, use the
+instructions for the installed release. Before migrating an existing database,
+follow the [0007 cutover procedure](docs/guides/workspace-quickstart.md#upgrade-an-existing-database-to-0007).
 
 ```bash
 python3.11 -m venv .venv
 . .venv/bin/activate
-pip install patchdiff-mcp
+pip install .
 export PATCHDIFF_DATABASE_URL='postgresql+psycopg://patchdiff@localhost:5432/patchdiff'
 patchdiff-mcp --migrate
 ```

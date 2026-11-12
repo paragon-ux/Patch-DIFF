@@ -8,7 +8,7 @@ deployment separately.
 
 | Identifier | Current value | Meaning |
 | --- | --- | --- |
-| Python distribution | `patchdiff-mvp` `0.1.0` | Package metadata; candidate first tag `v0.1.0` |
+| Python distribution | `patchdiff-mcp` `0.2.0` | Package metadata in this checkout |
 | MCP server advertisement | `patchdiff-mvp` `0.2.2` | Stdio server information |
 | MCP wire protocol | `2024-11-05`, `2025-06-18`, `2025-11-25` | Supported negotiated revisions (`2024-11-05` legacy default; `2025-11-25` latest). See negotiation fallback rules below. |
 | Typed matches | `patchdiff-tx/1` / runtime `patchdiff-mvp-0.2.2` | Existing guarded match submissions |
@@ -25,21 +25,24 @@ In `backend/app/mcp/external_adapter.py:262-265` (tested in `backend/tests/unit/
 - **Unsupported revision**: When a client provides an unsupported `protocolVersion` string, the server negotiates `2025-11-25` (`LATEST_PROTOCOL_VERSION`).
 - **Supported revisions**: The runtime strictly negotiates `2024-11-05`, `2025-06-18`, or `2025-11-25`.
 
-No remote tags or GitHub releases existed when checked on 2026-10-22. `v0.1.0` is a proposal derived from the current distribution version, not an existing or authorized tag. Confirm the final release version and merged revision before creating an annotated tag. If the package version changes, update metadata and release notes together. Tagging, GitHub release publication and package upload require separate explicit authorization.
+The `v0.2.0` tag predates migration `20261111_0007`. For a release containing
+0007, confirm a new package version and the final merged revision. Update
+the package metadata, release notes and docs together. Tagging, GitHub release
+publication and package upload require separate explicit authorization.
 
 ## Merge review
 
 - Review [release notes](https://github.com/paragon-ux/Patch-DIFF/blob/main/CHANGELOG.md), [README](https://github.com/paragon-ux/Patch-DIFF/blob/main/README.md), [tool contracts](../spec/mcp-tools.md) and [host guidance](../guides/host-integration-guide.md) against actual discovery and behavior.
 - Complete integration and release-readiness reviews. Recheck every confirmed finding at a fix revision; preserve historical results and evidence.
-- Check the exact current PR head and generated-merge CI checkout SHAs, test counts, migrations and offline results. A prior check on another revision is insufficient.
+- Record the exact commit each required CI job checked out, including the PR head or generated merge as applicable. Verify the test counts, migrations and offline results for that revision.
 - Verify a real stdio/PostgreSQL workflow outside existing tests, including guard/recovery, bounded preview, ledger, SAVE/replay/export and independent SQL assertions. Retain source and helper hashes.
-- Merge the dependency PR first, retarget its dependent PR to main, and verify its newly generated merge before any second merge. Keep review approval separate from owner merge authorization.
+- For stacked PRs, merge the dependency first, retarget the dependent PR, and verify it against the new base. Keep review approval separate from owner merge authorization.
 
 ## Publication checks
 
 - MIT license and package license/readme metadata must be present in source and built artifacts. Third-party dependency licenses are separate from the project license.
 - Resolve/install the exact reviewed dependency lock in an isolated environment; run dependency consistency, current advisory checks and the complete suite after implementation is finished. Include the Python/platform and exact lock hash in evidence.
-- Build and inspect a wheel without publishing. Smoke-test the installed artifact's MCP initialization/discovery and health endpoints from outside the source checkout. The five-tool `workspace` quickstart uses a wheel and its packaged migration configuration, with installed-wheel verification. For the seven-tool `observed_workspace` flow, verify the separately reviewed Waymark bridge packaging fix and the pinned npm dependencies using the complete [seven-tool structural setup](../guides/workspace-quickstart.md#seven-tool-structural-setup). An editable install alone does not certify wheel or PyPI deployment.
+- Build and inspect a wheel without publishing. Smoke-test the installed artifact's MCP initialization/discovery and health endpoints from outside the source checkout. For the five-tool `workspace` flow, install the built wheel and verify its packaged migration configuration and the operations in the [workspace quickstart](../guides/workspace-quickstart.md). For the seven-tool `observed_workspace` flow, verify the separately reviewed Waymark bridge packaging fix and the pinned npm dependencies using the complete [seven-tool structural setup](../guides/workspace-quickstart.md#seven-tool-structural-setup). An editable install alone does not certify wheel or PyPI deployment.
 - Verify a private security-reporting channel. It was disabled at review time; see [SECURITY.md](https://github.com/paragon-ux/Patch-DIFF/blob/main/SECURITY.md). This is a publication prerequisite, not an invitation to post sensitive reports publicly.
 - Reassess the pinned PostgreSQL container image and deployment configuration for the intended environment. A PyPI advisory check does not cover operating-system/container vulnerabilities. Bind development services to loopback; do not recreate existing data volumes as part of verification.
 - Use the final merged source revision for release artifacts and checksums, then attach those exact artifacts to any approved release. Do not copy source-tree test results to a different wheel or tag without checking identity.

@@ -101,16 +101,22 @@ Check if the native service is running:
 ```bash
 sudo systemctl status postgresql
 ```
-If running, ensure the `patchdiff` database and user exist, then run migrations:
+If running, ensure the `patchdiff` database and user exist. For an existing
+database, follow the [0007 cutover procedure](workspace-quickstart.md#upgrade-an-existing-database-to-0007)
+before running migrations:
 ```bash
 patchdiff-mcp --migrate
 ```
 
 **Solution 2: Stop the native PostgreSQL and use Docker**
+
+Point `PATCHDIFF_DATABASE_URL` at the Docker database. If it already contains
+PatchDIFF data, follow the same [0007 cutover procedure](workspace-quickstart.md#upgrade-an-existing-database-to-0007)
+before running the migration.
 ```bash
 sudo systemctl stop postgresql
 sudo systemctl disable postgresql
-docker compose up -d
+docker compose up -d --wait postgres
 patchdiff-mcp --migrate
 ```
 
@@ -132,12 +138,12 @@ export PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@localhos
 PatchDIFF supports two editing paradigms:
 
 1. **Workspace Profiles (`observed_workspace` / `workspace`):**
-   - Reads files directly from `PATCHDIFF_WORKSPACE_ROOT`, commits atomic AST-scoped edits to PostgreSQL, and flushes canonical checkpoint bytes back to disk during `patchdiff_save`.
+   - Opens files under `PATCHDIFF_WORKSPACE_ROOT`. Use exact text edits in `workspace` or AST-scoped bundles in `observed_workspace`. Both update PostgreSQL and can publish file bytes through explicit workspace SAVE.
    - **POSIX Requirement:** To prevent symlink attacks, directory traversal, and race conditions, the workspace synchronizer requires POSIX descriptor-relative operations (`openat`, `O_NOFOLLOW`, `O_DIRECTORY`, and `flock`).
    - On Windows, run the PatchDIFF server inside **WSL2** or a **Docker container** when using workspace synchronization.
 
 2. **Inline Profiles (`observed_v2`, `editor`, `full`):**
-   - Edit targets are initialized via direct content submission or upload, and changes are tracked entirely in the PostgreSQL append-only ledger without touching the host filesystem.
+   - Inline workflows edit PostgreSQL targets created from direct content or uploads. The trusted `full` profile can also initialize and publish workspace files on supported POSIX filesystems.
    - Compatible natively across Windows, macOS, and Linux without requiring POSIX file descriptor locks.
 
 ---

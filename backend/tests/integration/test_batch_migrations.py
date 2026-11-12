@@ -71,6 +71,6 @@ def test_downgrade_refuses_bundle_and_accepted_batch_evidence(isolated_migration
     with pytest.raises(Exception, match="Cannot downgrade 20261027_0005: bundled observations or accepted batch evidence exist"):
         command.downgrade(config, "20261026_0004")
     connection.rollback()
-    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261105_0006"
+    assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261111_0007"
     assert connection.scalar(text("SELECT count(*) FROM target_scope_observations")) == rows
     assert snapshot(connection) == before

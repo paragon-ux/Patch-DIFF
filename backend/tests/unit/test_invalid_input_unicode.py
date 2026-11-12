@@ -32,14 +32,21 @@ class FakeSession:
     identity_map = {}
     no_autoflush = nullcontext()
 
+    def __init__(self, *, allow_workspace_lookup=False):
+        self.allow_workspace_lookup = allow_workspace_lookup
+
     def identity_key(self, *args):
         return args
 
     def execute(self, statement):
         assert not invalid_text_paths(statement.compile().params)
+        if "workspace_binding_members" in str(statement):
+            assert self.allow_workspace_lookup
+            return SimpleNamespace(one_or_none=lambda: None)
         return SimpleNamespace(scalar_one_or_none=lambda: SimpleNamespace(
             target_file_id=uuid.UUID("11111111-1111-1111-1111-111111111111"),
             current_content="alpha", current_hash=canonical_sha256("alpha"), version=0,
+            source_line_endings=None,
         ))
 
     def scalar(self, statement):
@@ -168,7 +175,8 @@ def test_depth_500_json_is_checked_without_python_recursion(monkeypatch, leaf):
     monkeypatch.setattr(pdcp_service, "_resolve_parent_log", lambda *a: (None, None))
     monkeypatch.setattr(pdcp_service, "_upsert_current_pdcp", lambda *a, **kw: kw)
     monkeypatch.setattr(pdcp_service, "_persist_rejection", lambda *a, **kw: kw)
-    result = pdcp_service.submit_edits.__wrapped__(FakeSession(), **args)
+    session = FakeSession(allow_workspace_lookup=leaf not in BAD)
+    result = pdcp_service.submit_edits.__wrapped__(session, **args)
     expected = FailureReason.TARGET_ENCODING_INVALID if leaf in BAD else FailureReason.MANIFEST_INVALID
     assert result["rejection"].failure_reason is expected
     assert result["stage"] is ValidationStage.PROTOCOL_VALIDATION
