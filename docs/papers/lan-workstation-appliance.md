@@ -123,10 +123,10 @@ A common confusion in transactional editing is whether the transaction service s
 
 | Responsibility | Owner | Mechanism |
 | :--- | :--- | :--- |
-| **Syntactic boundary scoping** | Waymark Engine (AST Parser) | Resolves function, class, and method bounds with code-point spans. Prevents the model from corrupting surrounding file syntax. |
+| **Syntactic boundary scoping** | Waymark Engine (AST Parser) | Resolves function, class, and method bounds with code-point spans. Observed edits are constrained to their selected scopes. |
 | **Transaction atomicity & OCC** | PatchDIFF Server | Evaluates version guards, SHA-256 hashes, row locks (`SELECT ... FOR UPDATE`), and atomic application per target. |
 | **Lineage & Idempotency** | PatchDIFF Storage | Deduplicates client request keys and tracks parent-to-child retry attempt chains. |
-| **Physical File Publication** | Workspace Synchronizer | Writes canonical LF bytes to disk upon explicit `patchdiff_save` with drift detection. |
+| **Physical File Publication** | Workspace Synchronizer | Publishes on explicit workspace SAVE with drift detection and the selected line-ending format. |
 | **Task & Semantic Logic** | Autonomous Agent (Host) | Plans code changes, interprets diagnostics, and chooses retry strategies. |
 
 ---

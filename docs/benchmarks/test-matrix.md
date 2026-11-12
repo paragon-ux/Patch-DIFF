@@ -22,7 +22,8 @@ observed v2 editing routes to agent-owned import and SAVE publication.
 `test_workspace_initialization.py` exercises four real stdio processes sharing
 one target, sequential edits across reopen, restart and SAVE, guarded drift
 recovery and request-key outcomes, overlapping roots, migration of legacy
-paths and duplicates, and races with publication and coordinated submissions.
+paths and duplicates, alternate spellings and distinct directory entries,
+leaf read failure receipts, and races with publication and coordinated submissions.
 
 The [PR #24 comparative benchmark](workspace-e2e-benchmark.md) records 18 live-model
 trials across Native, Structural and Workspace in Git and non-Git. Independent
@@ -45,7 +46,7 @@ Structural batch coverage additionally lives in `test_observed_batch_core.py`,
 snapshot, selection limits/geometry/paging, scope-local sequential operations,
 atomic rejection and rollback, concurrent writers, request recovery/conflicts,
 corrupted replay authority, populated 0004/0005 preservation/refusal and 0006 typed-origin adoption, enforced
-all ten MCP catalogs, including the 17-tool full profile, real response-loss recovery, Python/JSON/Markdown examples and
+all ten MCP catalogs, including the 18-tool full profile, real response-loss recovery, Python/JSON/Markdown examples and
 the frozen five-file full-byte/20-check oracle. [Capability evidence](../spec/structural-batch-editing.md#deterministic-capability-evidence).
 
 - Postgres (`postgres:16.3-alpine`) is the required working substrate. SQLite must never be used to claim persistence, locking, migration, SAVE, or replay correctness.

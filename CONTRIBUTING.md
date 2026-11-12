@@ -40,6 +40,10 @@ The core runtime (`backend/app/core/`, `backend/app/pdcp/`) must remain pure and
 - Node.js 22+ (for external Waymark integrations)
 
 ### Local Environment Setup
+
+Use an isolated development database. Before upgrading an existing database,
+follow the [0007 cutover procedure](docs/guides/workspace-quickstart.md#upgrade-an-existing-database-to-0007).
+
 ```bash
 # 1. Create and activate virtual environment
 python -m venv .venv
@@ -51,10 +55,11 @@ pip install -r requirements.lock
 pip install --no-deps -e .
 
 # 3. Start PostgreSQL
-docker compose up -d postgres
+docker compose up -d --wait postgres
 
 # 4. Run database migrations through head
 export PYTHONPATH=".:backend"
+export PATCHDIFF_DATABASE_URL="postgresql+psycopg://patchdiff:patchdiff@127.0.0.1:5432/patchdiff"
 alembic -c backend/app/migrations/alembic.ini upgrade head
 ```
 
@@ -86,7 +91,7 @@ PATCHDIFF_WAYMARK_MODE=resident python backend/tests/verification/structural_bat
 - All database schema changes require an Alembic migration script under `backend/app/migrations/versions/`.
 - Migrations must be strictly additive.
 - Migration scripts must verify safe downgrade refusal when newer feature rows exist.
-- Always verify the migration cycle before opening a PR:
+- Verify the migration cycle on a fresh disposable database before opening a PR:
   ```bash
   alembic -c backend/app/migrations/alembic.ini upgrade head
   alembic -c backend/app/migrations/alembic.ini downgrade -1
