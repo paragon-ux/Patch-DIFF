@@ -1,4 +1,10 @@
-# DeepSeek handoff for the PatchDIFF swarm test
+# Archived DeepSeek handoff for the PatchDIFF swarm test
+
+This is the original coordinator handoff for trial 1, wave 2 on runtime
+`52f19e213759e2664e3fa8f0c70f3930ca2a0ff6`. All trials are complete.
+The instructions below refer to the historical version-3 state. See the
+[completed results](README.md#completed-trials-and-reporting). Use a fresh
+isolated database and fixture for any new run.
 
 Resume trial 1 at wave 2 using the existing test installation, PostgreSQL
 database, and fixture directory. Wave 1 has already passed. Your task is to
@@ -26,7 +32,7 @@ different functions and still receive stale-version rejections when they
 submit against the same starting version. This is expected. Re-observing
 gives the rejected worker current scope text and a fresh snapshot.
 
-## Connect to the paused run
+## Original connection instructions
 
 1. Open the [swarm runbook](README.md) and [wave 1 evidence](results/pr27-trial-1-wave-1.md). The repository worktree contains the instructions. The original `trial-1` directory under the run directory contains the fixture.
 2. Resume the existing PostgreSQL 16.3 test container. Use the isolated database `patchdiff_swarm_52f19e2` on loopback port 55437 and the original `trial-1` root. The stored binding includes the root directory's identity, so copying the file to a new directory would start a different test.
@@ -143,7 +149,7 @@ bytes, pause the trial and preserve the evidence. If SAVE returns a partial
 outcome or its response is lost, inspect the actual file and database
 checkpoint before issuing another SAVE.
 
-## Copyable coordinator brief
+## Original coordinator brief
 
 > Resume trial 1, wave 2 of the PatchDIFF swarm test. Read the swarm runbook
 > and this handoff. Keep the existing runtime, database, and original fixture

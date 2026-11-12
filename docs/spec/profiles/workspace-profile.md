@@ -48,6 +48,10 @@ changing its configuration.
 
 ## Import, edit and publish
 
+This walkthrough uses `workspace` and `patchdiff_submit_edits`. With
+`observed_workspace`, use the same open and SAVE calls and follow the
+[structural observation and commit contract](observed-editor-v2.md) for edits.
+
 This example moves a maintenance window in `ops/schedule.txt` from 09:00
 to 10:00. The file starts as a UTF-8 line ending in CRLF. Each request below
 shows the tool arguments and each receipt shows the fields needed for the
@@ -76,8 +80,9 @@ root. Leave out `content` when `from_workspace` is true.
 ```
 
 The first open creates the working target and records the source line endings
-and raw-byte digest. Subsequent opens return the same target ID with
-`created: false` and its current database version, including unpublished edits.
+and raw-byte digest. When the recorded disk baseline matches, subsequent
+opens return the same target ID with `created: false` and its current database
+version, including unpublished edits.
 The receipt does not include the document body.
 
 ### 2. Read the text and prepare the edit
@@ -179,8 +184,8 @@ the database. If you omit the field or pass null, the process default applies.
 | Initialization rejects the path or file | Use a valid relative path to a regular UTF-8 file. Check the root and file type. Paths that escape the root or traverse symlinks are rejected. |
 | An edit is rejected or a guard no longer matches | Read or search again. Rebuild the proposal from the current working version and verify that the user's requested change still applies. |
 | Initialization or SAVE returns `workspace_busy` | Another managed operation owns the destination. Wait for it to settle, then reopen and verify the working version before proceeding. |
-| Initialization or SAVE returns `external_disk_drift` | Inspect the actual file and current target. If the disk bytes should start a fresh history, use guarded `workspace_recovery` with action `reimport`. |
-| Initialization returns `workspace_binding_ambiguous` | Inspect the listed legacy members and use guarded `select_existing` to choose the active history. |
+| Initialization or SAVE returns `external_disk_drift` | Restore the recorded bytes at the pinned destination to resume the existing target. If present disk bytes should start a successor, use guarded `workspace_recovery` with action `reimport`. Restore a missing file before fresh recovery. |
+| Initialization returns `workspace_binding_ambiguous` | Inspect the listed members of this binding and use guarded `select_existing` to choose the active history. |
 | Initialization or SAVE returns `workspace_binding_mismatch` | Check the configured root, parent directory and exact listed spelling. The destination can resolve to a different recorded path. |
 | SAVE returns `partial` | The file was installed. Use the included `workspace_sync` receipt to inspect the actual file and check the database snapshot and cycle. The response leaves checkpoint and cycle IDs empty. |
 | The SAVE response is lost | Treat both outcomes as unknown. Compare the file bytes and the database checkpoint before choosing what to do next. |
@@ -191,10 +196,12 @@ content within the pinned destination. If the original directory is unavailable,
 read, replay or export the retained history by target ID. Choose a separate
 workspace path or root to start another history explicitly.
 
-If a recorded legacy or active filename differs only in spelling from the
-listed entry, restore the recorded spelling on disk before reopening that
-history. Inspect the retained target by ID first and coordinate the rename
-with other workspace writers.
+If exactly one recorded binding conflicts with the listed spelling, inspect
+its target by ID first. Coordinate with other writers and restore the
+recorded spelling if the filesystem permits it, then reopen. If multiple
+legacy bindings resolve to the same entry, restoring either spelling still
+leaves an ownership conflict. Access the retained histories by target ID.
+Choose a separate destination if an operator needs to start a new history.
 
 A SAVE can install file bytes before the database checkpoint succeeds.
 On a partial result, inspect whether the checkpoint actually committed

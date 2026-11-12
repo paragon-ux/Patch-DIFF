@@ -139,7 +139,7 @@ The core runtime (Layers 3 and 4) is a pure function of the target text, target 
 
 In agent-owned Workspace editing workflows, the boundary between the physical filesystem and the relational transaction authority operates across three phases:
 
-1. **Physical Import:** When `patchdiff_initialize_target` is called with workspace import enabled, the service imports physical workspace bytes into PostgreSQL, retaining source line endings and recording the initial file digest in `cloud_target_files`.
+1. **Physical Import:** On first workspace open, `patchdiff_initialize_target` imports the file into PostgreSQL, retaining source line endings and recording the initial file digest in `cloud_target_files`. Later opens resume the active working target when the recorded disk baseline matches.
 2. **Authoritative Relational Working Copy:** During multi-turn editing sessions, PostgreSQL serves as the authoritative working copy. All reads via `patchdiff_read_target`, searches via `patchdiff_find_occurrences`, AST scope observations via `patchdiff_observe_scopes`, and guarded mutations via `patchdiff_submit_edits` and `patchdiff_commit_bundle` operate strictly against locked database rows.
 3. **Guarded Workspace Publication:** When editing concludes, `patchdiff_save` writes canonical bytes to disk with workspace synchronization enabled. The service validates target version and hash guards, verifies that the physical file has not experienced external disk drift from its last observed digest, writes the updated content to disk, and commits a checkpoint snapshot. If physical disk installation succeeds but database checkpointing fails, `patchdiff_save` returns a partial status with publication evidence, signaling that the disk reflects the edit while the database checkpoint remains unconfirmed.
 
@@ -392,7 +392,7 @@ Multiple MCP hosts, background workers, or subagents may connect to the same Pat
 PatchDIFF structures its Model Context Protocol (MCP) tool exposure around three core operational profiles, corresponding directly to the experimental arms of empirical verification:
 
 1. **Observed Workspace Profile (`observed_workspace`):** The primary 7-tool structural editing profile enabling autonomous agents to manage the complete file lifecycle from physical import to disk publication:
-   - `patchdiff_initialize_target`: Imports a workspace file into the PostgreSQL working copy.
+   - `patchdiff_initialize_target`: Opens the active PostgreSQL target, importing a workspace file on first use.
    - `patchdiff_read_target`: Bounded Unicode code-point slice reads.
    - `patchdiff_find_occurrences`: Exact substring search with surrounding context.
    - `patchdiff_list_scopes`: Structural symbol candidate discovery via AST Waymark coordinates.
@@ -401,7 +401,7 @@ PatchDIFF structures its Model Context Protocol (MCP) tool exposure around three
    - `patchdiff_save`: Publishes canonical content to disk with drift detection and checkpoints the cycle.
 
 2. **Workspace Profile (`workspace`):** The 5-tool exact text editing profile for autonomous agents operating without AST structural parsing:
-   - `patchdiff_initialize_target`: Imports a workspace file into the PostgreSQL working copy.
+   - `patchdiff_initialize_target`: Opens the active PostgreSQL target, importing a workspace file on first use.
    - `patchdiff_read_target`: Bounded Unicode code-point slice reads.
    - `patchdiff_find_occurrences`: Exact substring search with surrounding context.
    - `patchdiff_submit_edits`: Submits ordered exact-match transactions under protocol `patchdiff-tx/1`.

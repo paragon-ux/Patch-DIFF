@@ -156,9 +156,10 @@ editing with initialize and SAVE on the same connection. It permits strict
 observation and requires the pinned Waymark installation. The frozen comparative
 Gate 2 stays closed.
 
-Workspace initialization always reuses the active PostgreSQL target for the
-pinned root and normalized path. External disk drift requires explicit guarded
-recovery. Migration `20261111_0007` preserves existing histories, leaves legacy
+A successful ordinary workspace open reuses the active PostgreSQL target for
+the pinned root and normalized path after checking the recorded disk baseline. Restoring the baseline
+at the pinned destination lets an ordinary open resume the same target. Use
+guarded reimport when present disk bytes should start a successor. Migration `20261111_0007` preserves existing histories, leaves legacy
 duplicates unresolved for explicit selection, and persists recovery receipts.
 Only the active member can submit edits or SAVE. A superseded member retains
 read, replay, export, and existing-key submission recovery. Workspace

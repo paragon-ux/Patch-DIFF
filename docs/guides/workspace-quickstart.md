@@ -3,8 +3,9 @@
 Use the `workspace` MCP profile when a host needs to edit an existing file in
 one project directory. PatchDIFF opens the active PostgreSQL working target,
 importing the file on first use, applies guarded edits there, then publishes
-the file on explicit SAVE. Reopening a path resumes the same working history.
-File publication and the database checkpoint have separate outcomes.
+the file on explicit SAVE. Reopening a bound path resumes its working
+history when the recorded disk baseline matches. File publication and the
+database checkpoint have separate outcomes.
 
 ## Setup
 
@@ -14,22 +15,28 @@ fails startup on native Windows, where inline upload, edit and export remain
 available through `full`. A Linux/WSL server
 can access a mounted project only if its filesystem supports these operations.
 
-Create a Python 3.11 virtual environment and install `patchdiff-mcp`.
-Provision a PostgreSQL 16 database and set `PATCHDIFF_DATABASE_URL` to its
-connection URL before applying the migrations shipped with the package.
+Run the setup commands from the matching source checkout. Migration
+`20261111_0007` is an unreleased change in this checkout. For a PyPI
+installation, follow the docs for the installed release. Provision a
+PostgreSQL 16 database and set `PATCHDIFF_DATABASE_URL` to its connection URL.
+Before migrating an existing database, follow the
+[0007 cutover procedure](#upgrade-an-existing-database-to-0007).
 
 ```bash
 python3.11 -m venv .venv
 . .venv/bin/activate
-pip install patchdiff-mcp
+pip install .
 export PATCHDIFF_DATABASE_URL='postgresql+psycopg://patchdiff@localhost:5432/patchdiff'
 patchdiff-mcp --migrate
 ```
 
-When upgrading an existing database to migration `20261111_0007`, drain and
-stop every old PatchDIFF process that can write to it. Apply the migration,
-then restart writers with the updated package. Reopen a known workspace file
-and confirm its existing target ID before resuming edits.
+### Upgrade an existing database to 0007
+
+1. Drain in-flight requests and stop every old PatchDIFF writer sharing the
+   database, including already-connected stdio servers.
+2. Run `patchdiff-mcp --migrate` using the matching updated installation.
+3. Restart the writers on the updated runtime. Reopen a known workspace file
+   and confirm its existing target ID before resuming edits.
 
 ### Seven-tool structural setup
 

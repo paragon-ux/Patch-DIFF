@@ -9,14 +9,17 @@ requests and responses.
 
 ## Start with a workspace file
 
-Follow the [installed workspace quickstart](workspace-quickstart.md). Set
+Follow the [workspace quickstart](workspace-quickstart.md). Set
 `PATCHDIFF_MCP_PROFILE=workspace` and the server workspace root before
 connecting. For file editing, initialize from the workspace, read or search
 the returned target ID, submit guarded edits and explicitly SAVE with
-`sync_workspace: true`. Reopening the same path returns the active target,
-including unpublished edits. Check publication and checkpoint results separately.
-For drift or legacy duplicate bindings, use
-[explicit guarded recovery](../spec/mcp-tools.md#workspace-initialization-and-recovery).
+`sync_workspace: true`. An ordinary open of the pinned path resumes the active
+target and its unpublished edits when the recorded disk baseline matches.
+Check publication and checkpoint results separately. On disk drift, restore
+the recorded bytes to resume the same history, or use guarded reimport when
+present disk bytes should start a successor. For unresolved members of one
+legacy binding, use guarded selection. See the
+[workspace recovery contract](../spec/mcp-tools.md#workspace-initialization-and-recovery).
 
 The [Workspace benchmark](../benchmarks/workspace-e2e-benchmark.md) compares this
 agent-owned lifecycle with Native and host-orchestrated structural editing.

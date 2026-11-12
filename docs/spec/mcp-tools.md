@@ -249,8 +249,9 @@ reuses the active target even while it has unpublished database edits. It
 checks disk bytes against the last successful workspace SAVE digest or the
 original import digest. A changed or deleted file returns
 `external_disk_drift` with the target ID, version, canonical hash, and observed
-raw disk digest (null for a missing file). Explicit project and content type
-values must agree with the bound target. A conflict returns
+raw disk digest (null for a missing file). Restore the recorded baseline at
+the pinned destination to resume the same history by ordinary open. Explicit
+project and content type values must agree with the bound target. A conflict returns
 `workspace_project_conflict` or `workspace_content_type_conflict`. Malformed
 tracking metadata on a bound target or a known workspace target without a
 binding returns `workspace_binding_metadata_invalid` on write. Inline
@@ -270,6 +271,10 @@ to obtain the member's version and canonical hash, then provide all fields in
 | `expected_current_hash` | Current canonical LF SHA-256 from the same observation. |
 | `expected_disk_sha256` | SHA-256 of the exact disk bytes, including their line endings. |
 | `client_request_id` | 1–128 printable ASCII characters without whitespace. |
+
+A fresh recovery needs a present file for the raw disk digest. Restore a
+missing file at the pinned destination before submitting a fresh recovery
+request. A recorded recovery can still be retrieved with its original key.
 
 Recovery selects or creates the active target and supersedes the other eligible
 members in one database transaction. It performs no workspace write. Fresh
@@ -530,9 +535,10 @@ an advisory exclusive lease on the pinned physical destination directory.
 This serializes the same destination across processes, target IDs, overlapping
 configured roots and path aliases. Different destination directories can run
 independently. A conflicting operation rejects with `workspace_busy`.
-When the disk baseline diverges, use the current target and raw disk evidence
-for [guarded recovery](#workspace-initialization-and-recovery) before publishing
-from a successor.
+When the disk baseline diverges, restore the recorded bytes at the pinned
+destination to resume the existing target. If the present disk bytes should
+start a successor, use the current target and raw disk evidence for
+[guarded reimport](#workspace-initialization-and-recovery).
 
 Workspace imports bind the working target to the root's device and inode.
 Moving the same directory preserves that identity. A different directory

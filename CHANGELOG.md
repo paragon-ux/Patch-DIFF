@@ -8,7 +8,7 @@ The format follows Keep a Changelog.
 
 ### Changed
 
-- Workspace initialization reuses the active PostgreSQL target, including unsaved edits, across sessions and processes. Guarded recovery can select a legacy duplicate or reimport disk bytes into a fresh successor while preserving old history.
+- Workspace initialization reuses the active PostgreSQL target, including unsaved edits, across sessions and processes when the recorded disk baseline matches. Guarded recovery can select a legacy duplicate or reimport disk bytes into a fresh successor while preserving old history.
 
 ### Added
 

@@ -170,7 +170,8 @@ key — that is the intended recovery path, and it terminated at attempt 3 of 5.
 
 Wave 2 passed every check. Trial 1 now has six accepted transactions, six
 ledger entries, one SAVE checkpoint, and a published file matching
-`expected.py`. Trials 2 and 3 were not started.
+`expected.py`. At this checkpoint, trials 2 and 3 had yet to start. See their
+[completed results](../README.md#completed-trials-and-reporting).
 
 Artifacts: [pr27-trial-1-wave-2-calls.json](pr27-trial-1-wave-2-calls.json)
 (all 32 tool calls with intervals, guards, keys, log IDs, and full rejection
