@@ -323,7 +323,8 @@ class ExternalMCPAdapter:
             for name in self._tool_names
         ]
 
-    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None, *,
+                  redact_internal_errors: bool = False) -> dict[str, Any]:
         if name not in self._tool_names:
             return _tool_error(f"Unknown PatchDIFF MCP tool: {name}")
         args = arguments or {}
@@ -339,8 +340,12 @@ class ExternalMCPAdapter:
         try:
             payload = registry.call(name, **args)
         except TypeError as exc:
+            if redact_internal_errors:
+                return _tool_error("Tool execution failed; transaction outcome is unknown.")
             return _tool_error(f"Invalid arguments for {name}: {exc}")
         except Exception as exc:  # pragma: no cover - defensive transport boundary
+            if redact_internal_errors:
+                return _tool_error("Tool execution failed; transaction outcome is unknown.")
             return _tool_error(f"PatchDIFF MCP tool failed: {exc}")
         if self.response_mode == "compact":
             projected = _compact_payload(name, payload)
@@ -425,7 +430,8 @@ class ExternalMCPAdapter:
             result["structuredContent"] = projected
         return result
 
-    def handle_request(self, request: dict[str, Any]) -> dict[str, Any] | None:
+    def handle_request(self, request: dict[str, Any], *,
+                       redact_internal_errors: bool = False) -> dict[str, Any] | None:
         request_id = request.get("id")
         method = request.get("method")
 
@@ -484,7 +490,7 @@ class ExternalMCPAdapter:
                 arguments = {}
             if not isinstance(name, str) or not isinstance(arguments, dict):
                 return _rpc_error(request_id, -32602, "tools/call requires name and object arguments.")
-            return _rpc_result(request_id, self.call_tool(name, arguments))
+            return _rpc_result(request_id, self.call_tool(name, arguments, redact_internal_errors=redact_internal_errors))
         if method == "resources/list":
             return _rpc_result(request_id, {"resources": []})
         if method == "prompts/list":
