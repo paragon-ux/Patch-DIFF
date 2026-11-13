@@ -20,7 +20,8 @@ nav = [
         { "Data Model" = "spec/data-model.md" },
         { "Transaction Formats" = "spec/transaction-formats.md" },
         { "Structural Batch Editing" = "spec/structural-batch-editing.md" },
-        { "Waymark Worker" = "spec/waymark-worker.md" }
+        { "Waymark Worker" = "spec/waymark-worker.md" },
+        { "LAN Hub and Editing Run Invariants" = "spec/lan-hub-and-run-lifecycle-invariants.md" }
     ]},
     { "MCP Profiles" = [
         { "Profile Catalog" = "spec/profiles/index.md" },

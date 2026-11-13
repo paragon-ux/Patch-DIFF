@@ -9,6 +9,8 @@ subprocesses and offline evaluation.
 Architecture decisions: [modernization architecture](../papers/modernization-architecture.md).
 As-built record and verification evidence: [product change record](../papers/product-change-record.md).
 
+The [LAN v1 invariants](../spec/lan-hub-and-run-lifecycle-invariants.md) distinguish the 24-trial live-model correctness canary from automated transport and operator checks. `test_lan_gateway_live.py` drives two independent network MCP clients against PostgreSQL, proves overlapping lock waits, and checks that close drains admitted writes. The test does not invoke Antigravity.
+
 ## Global Test Invariants
 
 Workspace checks in `test_mcp_profiles.py` and

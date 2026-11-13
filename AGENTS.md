@@ -34,6 +34,7 @@ Read project artifacts in this order:
 9. `docs/guides/host-integration-guide.md` (host-owned loop, prompt hygiene rules, and usage guide)
 10. `docs/papers/concept-paper-v6.md` (modernized conceptual whitepaper: theoretical model, edit-method comparison, design rationale, tradeoffs, and empirical research hypotheses)
 11. `docs/benchmarks/test-matrix.md`, `docs/benchmarks/workspace-e2e-benchmark.md` & `backend/tests/verification/README.md` (verification matrix, current comparative benchmark and offline evaluation methodology; the earlier modernization benchmark remains historical evidence)
+12. `docs/spec/lan-hub-and-run-lifecycle-invariants.md` (LAN v1 authority and run lifecycle), scoped to the [LAN reference](docs/papers/lan-workstation-appliance.md) and [operator plan](docs/plans/operator-managed-editing-run-lifecycle.md).
 
 Concept Paper v6 (`docs/papers/concept-paper-v6.md`) is the current explanation of PatchDIFF's theoretical model, design rationale, tradeoffs, and research claims. For executable API schemas, persistence behavior, runtime profiles, and exact limits, use the current normative specifications and implementation (`AGENTS.md` and the active specifications above).
 
