@@ -7,6 +7,10 @@ PostgreSQL owns the working target.
 
 Architecture and contracts: [architecture](modernization-architecture.md), [MCP tools](../spec/mcp-tools.md), [core runtime](../spec/core-runtime.md), [storage](../spec/data-model.md), [transaction formats](../spec/transaction-formats.md) and [host guide](../guides/host-integration-guide.md).
 
+## LAN editing runs
+
+The [LAN reference architecture](lan-workstation-appliance.md) and [run lifecycle invariants](../spec/lan-hub-and-run-lifecycle-invariants.md) define a centrally operated MCP endpoint and a dedicated database per run. Whole-database retirement belongs to the operator lifecycle. The concurrent LAN workload and the operator lifecycle have separate verification gates. See the [implementation plan](../plans/operator-managed-editing-run-lifecycle.md) for planned and verified scope.
+
 ## Workspace editing and publication
 
 The five-tool `workspace` and seven-tool `observed_workspace` profiles start with an eager validation of the project directory lease and database migration revision. Initialization opens the active target using a relative path within the workspace root (`from_workspace: true`), imports on first use, and returns the target ID without returning source text. Repeated opens resume unpublished PostgreSQL edits when the recorded disk baseline matches. Migration 0007 preserves legacy histories and adds binding ownership and idempotent guarded recovery for disk drift or duplicate histories. The editing agent submits guarded text edits through `workspace` (`patchdiff_submit_edits`) or guarded structural scope bundles through `observed_workspace` (`patchdiff_commit_bundle`) to update PostgreSQL as the authoritative working copy.
